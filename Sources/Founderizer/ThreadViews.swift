@@ -514,7 +514,8 @@ private struct SentMessageView: View {
             // and 29 from his next one. A message of files alone has no bubble, and keeps it under its files.
             if !message.text.isEmpty {
                 OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer), names: names,
-                            over: about ? AnyView(AboutBadgeView(store: store, message: message)) : nil)
+                            over: about ? AnyView(AboutBadgeView(store: store, message: message)) : nil,
+                            mentions: message.mentions?.tags)
             } else if about {
                 AboutBadgeView(store: store, message: message, alone: true)
             }

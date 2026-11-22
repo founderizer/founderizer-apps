@@ -102,5 +102,6 @@ extension OwnerMessage {
         attachments = nil
         asked = nil
         about = request.about.map { MessageAbout(place: $0, title: nil) }
+        mentions = request.mentions.map(MessageMentions.init)
     }
 }

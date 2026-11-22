@@ -36,6 +36,11 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// from a task's or a job's card names it, and the agent reads which page it was. nil on every other request, and on
     /// one that a version before it saved.
     public let about: MessagePlace?
+    /// **The @ tags of a message's words** (owner feature `agent_tags`, API 1.288): read from the words that go
+    /// (`AgentTags.mentions`), and sent with them, also again with a retry. [] says that the words have no tag, which
+    /// stops the hub's own reading of them; nil, on a hub without the feature and on every other request, sends no
+    /// field. A request that a version before it saved has none.
+    public fileprivate(set) var mentions: [AgentTags.Mention]?
     public fileprivate(set) var text: String
     public let createdAt: Date
     public let client: String
@@ -51,7 +56,7 @@ public struct PendingRequest: Codable, Equatable, Sendable {
     /// for one that an older version refused (its words are in `refusal`).
     public var hubRefusal: HubRefusal?
 
-    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, clarifies: Bool = false, about: MessagePlace? = nil, text: String) {
+    public init(hub: URL, database: String, client: String, needID: Int? = nil, choice: Int? = nil, choices: [Int]? = nil, recipient: String? = nil, replacesRequestID: String? = nil, command: OwnerCommand? = nil, attachments: [Int] = [], approval: (statement: String, signature: String)? = nil, ran: NeedRunResult? = nil, clarifies: Bool = false, about: MessagePlace? = nil, mentions: [AgentTags.Mention]? = nil, text: String) {
         requestID = UUID()
         // Only the words of a request's answer: no option, no ticked options, no run and no command are words about
         // it. Nor a request with files, a statement or a message that it replaces: the route of those words takes
@@ -72,6 +77,8 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         self.replacesRequestID = replacesRequestID
         // Only a message to a chat says what it is about: the hub refuses it on an answer and on a command.
         self.about = needID == nil && command == nil ? about : nil
+        // Only a message to a chat has tags: the hub refuses them on an answer.
+        self.mentions = needID == nil && command == nil ? mentions : nil
         self.text = text
         self.client = client
         createdAt = Date()
@@ -98,6 +105,8 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         clarifies = try saved.decodeIfPresent(Bool.self, forKey: .clarifies) ?? false
         // A request that a version before `about` saved names nothing.
         about = try? saved.decodeIfPresent(MessagePlace.self, forKey: .about)
+        // A request that a version before the tags saved has none, and sends no field.
+        mentions = (try? saved.decodeIfPresent([AgentTags.Mention].self, forKey: .mentions)) ?? nil
         text = try saved.decode(String.self, forKey: .text)
         createdAt = try saved.decode(Date.self, forKey: .createdAt)
         client = try saved.decode(String.self, forKey: .client)
@@ -165,6 +174,9 @@ public struct PendingRequest: Codable, Equatable, Sendable {
         if let recipient { fields["recipient"] = recipient }
         if let replacesRequestID { fields["replaces_request_id"] = replacesRequestID }
         if let about, needID == nil { fields["about"] = about.fields }
+        if let mentions, needID == nil {
+            fields["mentions"] = mentions.map { ["agent": $0.agent, "start": $0.start, "length": $0.length] as [String: Any] }
+        }
         if !attachments.isEmpty { fields["attachments"] = attachments }
         if let statement, let signature, needID != nil { fields["statement"] = statement; fields["signature"] = signature }
         return try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
@@ -219,7 +231,7 @@ public struct Outbox: Sendable {
             existing.command != request.command || existing.recipient != request.recipient || existing.replacesRequestID != request.replacesRequestID ||
             existing.attachments != request.attachments ||
             existing.statement != request.statement || existing.signature != request.signature ||
-            existing.ran != request.ran ||
+            existing.ran != request.ran || existing.mentions != request.mentions ||
             existing.text != request.text || existing.client != request.client {
             throw OutboxError.pendingRequest
         }
@@ -243,6 +255,7 @@ public struct Outbox: Sendable {
         drafts.synchronize()
         guard var request = try load(), request.requestID == id else { throw OutboxError.invalidRecord }
         request.text = ""
+        request.mentions = nil          // their places were in the words that are gone
         request.refusal = "The hub refused registered login text (422). Saved text and drafts were removed."
         do {
             try JSONEncoder().encode(request).write(to: file, options: [.atomic])

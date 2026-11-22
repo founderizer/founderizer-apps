@@ -274,6 +274,49 @@ private func coded(_ words: String) -> AttributedString {
     #expect(other.read !== old.read)
 }
 
+/// **A tag of his message is its agent's badge over the whole tag, "@" included** (owner feature `agent_tags`; his "Yes,
+/// as drawn": "in a sent message the tag is the chat's agent badge"; `AgentTags.Tagged`), with the glyph of the agent of
+/// now, and it wins over a name that the book finds inside it; a tag of an agent that the book does not know is plain
+/// words. **In an agent's reply, a name right after an "@" that starts a tag takes the "@" into its badge**, and a role
+/// of one word counts there as after a word; any other name after such an "@" stays words, as it was. The bug that this
+/// catches: his tag drawn as another agent's badge, a removed agent's tag drawn as the agent that now has its words,
+/// "@" left outside the badge, or "@app-1" a server's badge where it was words. Every character stays, in its order.
+@Test func aTagIsItsAgentsBadgeAndAnAtBeforeANameJoinsItsBadge() {
+    func tagged(_ text: String, _ agent: String, _ range: Range<Int>) -> AttributedString {
+        var words = AttributedString(text)
+        let start = words.characters.index(words.startIndex, offsetBy: range.lowerBound)
+        var tag = AttributeContainer()
+        tag[AgentTags.Tagged.self] = agent
+        words[start..<words.characters.index(start, offsetBy: range.count)].mergeAttributes(tag)
+        return words
+    }
+    func shown(_ text: AttributedString) -> [String] {
+        chat.pieces(text).map { piece in
+            let words = String(piece.words.characters)
+            guard case .agent(let agent)? = piece.badge else { return words }
+            #expect(piece.words.runs.allSatisfy { $0.link == CardNames.Target.agent(agent).url }, "\(words)")
+            return "[\(agent): \(words)]"
+        }
+    }
+    // his tag of kai over "@Customer Support", where the book finds nova's "Customer Support Lead": kai's badge
+    #expect(shown(tagged("Ask @Customer Support Lead now", "kai", 4..<21)) == ["Ask ", "[kai: @Customer Support]", " Lead now"])
+    #expect(chat.pieces(tagged("Ask @Customer Support Lead now", "kai", 4..<21)).last?.words.runs.allSatisfy { $0.link == nil } == true)
+    // a removed agent's tag is words, also where its words name another agent
+    #expect(shown(tagged("Ask @Marketing now", "gone", 4..<14)) == ["Ask @Marketing now"])
+    // an agent's reply: the name or the role after an "@" that starts a tag, with the "@"
+    #expect(shown(AttributedString("I asked @Leo, then (@Marketing): ok.")) ==
+            ["I asked ", "[leo: @Leo]", ", then (", "[kai: @Marketing]", "): ok."])
+    #expect(shown(AttributedString("@Marketing drafts it.")) == ["[kai: @Marketing]", " drafts it."])
+    #expect(shown(AttributedString("@Customer Support Lead answers.")) == ["[nova: @Customer Support Lead]", " answers."])
+    // no badge: a role of one word at a sentence's start with no "@", a server after "@", an email, a name in small letters
+    for text in ["Marketing drafts it.", "Ping @app-1 now.", "Write to pat@Leo.example today.", "Ask @leo now.",
+                 "Ask x@Leo now."] {
+        #expect(chat.pieces(AttributedString(text)).allSatisfy { $0.badge == nil }, "\(text)")
+        #expect(chat.pieces(AttributedString(text)).map { String($0.words.characters) }.joined() == text)
+    }
+    #expect(chat.words(AttributedString("I asked @Leo.")).badges.map(\.characters) == [8..<12])
+}
+
 /// **A secret of the fleet's is its name** (the owner, 21 November 2026: "task cards in both agents chat and needs you
 /// sohuld also have a badge for specific Credentials", and "Yes, both"): a key's variable name in words or as the whole
 /// of an inline code, with its kind for its mark and its own link. A name of words of letters only ("Stripe", "Google

@@ -13,6 +13,11 @@ struct FleetView: View {
     /// The correction's field has the keyboard. **A value of its own**: with the box's, the correction that took the
     /// box's place while the box had the keyboard set a value that was true already, and so took no keyboard.
     @FocusState private var correctionFocused: Bool
+    /// **The @ list of the chat's box** (owner feature `agent_tags`; `AgentTags`, `AgentTagList`): the box's selection,
+    /// the lighter row, and the "@" whose list he closed with Esc or ended with a pick, which stays closed for it.
+    @State private var tagCaret: TextSelection?
+    @State private var tagRow = 0
+    @State private var tagClosedAt: Int?
     /// The composers whose key the owner chose to keep in the message: no second question while it is there.
     @State private var keyAllowed: Set<String> = []
     /// The agent whose chat just took the place of its setup: its box takes the keyboard as it shows (the owner, 26
@@ -894,7 +899,26 @@ struct FleetView: View {
         let filesWaiting = store.filesAreWaiting(for: composer)
         let canSend = store.canWrite && routeAvailable && !filesWaiting && trimmed.count <= 16_000
             && (!trimmed.isEmpty || !files.isEmpty)
+        // **The @ list** (owner feature `agent_tags`): open while the box has the keyboard and one caret, after an "@"
+        // that he did not close, with rows for its letters (`AgentTags.query`, `rows(for:)`); its keys stand before
+        // the box's own, and a Backspace that ends a tag takes it whole (`afterDelete`).
+        let words = text.wrappedValue
+        let tags = words.contains("@") ? store.agentTags(except: store.chatAgent) : nil
+        let caret = Self.tagCaret(tagCaret, in: words)
+        let asked = composerFocused && routeAvailable ? caret.flatMap { tags?.query(in: words, caret: $0) } : nil
+        let tagged = asked.flatMap { $0.at == tagClosedAt ? nil : $0 }
+        let rows = tagged.map { tags?.rows(for: $0.letters) ?? [] } ?? []
+        // the one stop at the two ends: ↓ and ↑ move from it (`tagRow` may stand past an end)
+        let lighter = min(max(tagRow, 0), max(rows.count - 1, 0))
+        let pick: (AgentTags.Row) -> Void = { row in
+            guard let tags, let tagged, let caret else { return }
+            let edit = tags.pick(row, in: words, at: tagged.at, caret: caret)
+            tagClosedAt = tagged.at
+            text.wrappedValue = edit.text
+            tagCaret = TextSelection(insertionPoint: Self.tagIndex(edit.caret, in: edit.text))
+        }
         return ComposerCapsule(focus: $composerFocused) {
+            if !rows.isEmpty { AgentTagList(rows: rows, lighter: lighter, hover: { tagRow = $0 }, pick: pick) }
             // What the line needs said stands over it, inside the capsule, which grows upward for it: the files
             // that wait, why this chat takes no message, the guard of a pasted key, and what is wrong with the text.
             StagedFilesStrip(store: store, composer: composer)
@@ -917,7 +941,7 @@ struct FleetView: View {
             if store.supportsAttachments { AttachFilesButton(store: store, composer: composer) }
             // The placeholder names the agent it writes to, as the pill over the conversation does (D-6, his yes of
             // 28 October 2026 to keeping "Message Atlas").
-            TextField("Message \(store.chatAgent.agentLabel)", text: text, axis: .vertical)
+            TextField("Message \(store.chatAgent.agentLabel)", text: text, selection: $tagCaret, axis: .vertical)
                 .disabled(!routeAvailable)
                 .focused($composerFocused)
                 .task(id: focusChat) {
@@ -931,7 +955,8 @@ struct FleetView: View {
                 .accessibilityIdentifier("manager-message")
                 // Return sends, as in every chat; Shift+Return makes a new line. Command+Return still sends.
                 .onKeyPress(keys: [.return], phases: .down) { press in
-                    if press.modifiers.contains(.shift) { return .ignored }
+                    // Return of an input method's text in the making (Pinyin, Korean, Japanese) is the method's own
+                    if press.modifiers.contains(.shift) || Self.composing { return .ignored }
                     guard canSend else { return .handled }
                     sendChat(text.wrappedValue, composer: composer)
                     return .handled
@@ -946,8 +971,46 @@ struct FleetView: View {
                     store.beginEdit(newest)
                     return .handled
                 }
+                // While the @ list is open, and no input method has text in the making: ↓ and ↑ move its lighter row
+                // and stop at its ends, Return and Tab pick it, and Esc closes it and does nothing else; Shift+Return
+                // still makes a new line. **After the box's own
+                // keys in this chain, so before them in a press**: SwiftUI asks the last handler of a view first.
+                .onKeyPress(keys: [.downArrow, .upArrow, .return, .tab, .escape], phases: .down) { press in
+                    // the keys of an input method's text in the making are the method's: its candidates, its Esc
+                    guard let tagged, !rows.isEmpty, !Self.composing else { return .ignored }
+                    switch press.key {
+                    case .downArrow, .upArrow:
+                        guard press.modifiers.isDisjoint(with: [.shift, .control, .option, .command]) else { return .ignored }
+                        tagRow = press.key == .downArrow ? lighter + 1 : lighter - 1
+                    case .return, .tab:
+                        guard !press.modifiers.contains(.shift) else { return .ignored }
+                        pick(rows[lighter])
+                    case .escape: tagClosedAt = tagged.at
+                    default: return .ignored
+                    }
+                    return .handled
+                }
                 .composerField(alone: !store.supportsAttachments)
                 .onChange(of: text.wrappedValue) { _, now in heldKeyCheck(now, composer: composer) }
+                // One Backspace that takes a tag's last character, or the space after it, takes the whole tag
+                // (`AgentTags.afterDelete`); a closed list's "@" that goes, or a new "@", opens the list again.
+                .onChange(of: text.wrappedValue) { old, now in
+                    // the caret after the delete says which of two spaces went (`afterDelete(caret:)`)
+                    if composerFocused, now.utf8.count < old.utf8.count,
+                       let edit = tags?.afterDelete(old: old, new: now, caret: Self.tagCaret(tagCaret, in: now)) {
+                        text.wrappedValue = edit.text
+                        tagCaret = TextSelection(insertionPoint: Self.tagIndex(edit.caret, in: edit.text))
+                    }
+                    if let closed = tagClosedAt, Array(now.unicodeScalars).dropFirst(closed).first != "@"
+                        || now.unicodeScalars.count(where: { $0 == "@" }) > old.unicodeScalars.count(where: { $0 == "@" }) {
+                        tagClosedAt = nil
+                    }
+                }
+                // the row whose label his letters are, else the first (`AgentTags.start`)
+                .onChange(of: rows.map(\.agent) + [tagged?.letters ?? ""]) {
+                    tagRow = tagged.flatMap { tags?.start(for: $0.letters, in: rows) } ?? 0
+                }
+                .onChange(of: store.chatAgent) { tagCaret = nil; tagClosedAt = nil; tagRow = 0 }
             // No "Connection required" here (D-2, 28 October 2026): the notice over the page is the one sign of an
             // outage, and Send shows only while it can send.
             SendSlot(shows: canSend) {
@@ -969,6 +1032,26 @@ struct FleetView: View {
             // A file dropped on the composer is picked, as one chosen with the plus.
             .stageDroppedFiles(store: store, composer: composer)
             .chatColumn().padding(.top, 10).padding(.bottom, FleetSpace.under)
+    }
+
+    /// The caret of the box's selection in Unicode scalars, as `AgentTags` counts: nil for a selection of words, where
+    /// the @ list stays closed; the end of the words where the box gave none yet (a kept draft's caret is at its end).
+    private static func tagCaret(_ selection: TextSelection?, in text: String) -> Int? {
+        guard let selection else { return text.unicodeScalars.count }
+        guard case .selection(let range) = selection.indices, range.isEmpty else { return nil }
+        return text.unicodeScalars.distance(from: text.startIndex, to: min(range.lowerBound, text.endIndex))
+    }
+
+    /// **An input method has text in the making in the field that has the keys** (marked text: Pinyin, Korean, an
+    /// accent's dead key): its Return, Esc and arrows are the method's, as on Needs you (`PageKeys.leavesField`).
+    private static var composing: Bool {
+        (NSApp.windows.first { $0.identifier?.rawValue == SetupChannel.fleetWindow }?.firstResponder as? NSTextView)?
+            .hasMarkedText() == true
+    }
+
+    /// The place in `text` of a caret in Unicode scalars.
+    private static func tagIndex(_ caret: Int, in text: String) -> String.Index {
+        text.unicodeScalars.index(text.startIndex, offsetBy: min(max(caret, 0), text.unicodeScalars.count))
     }
 
     // MARK: the guard of a key in the chat's text

@@ -859,7 +859,29 @@ public struct OwnerMessage: Decodable, Identifiable, Sendable, Equatable {
     /// wrote it on, with its title as the hub gives it; nil for a message about nothing. Never strict: a shape that
     /// this app does not read is none, and nothing else of the reading is lost.
     public let about: MessageAbout?
+    /// **His @ tags in these words** (owner feature `agent_tags`, API 1.288): the list that the hub stored, from the
+    /// app's own reading or from the hub's; nil from a hub before it.
+    public let mentions: MessageMentions?
     public var id: String { request_id }
+}
+
+/// **The tags of one message of his, as the hub gives them** (`messages[].mentions`): each entry with its agent, its
+/// start and its length in Unicode scalars. Never strict: an entry of another shape is none, a value that is no list is
+/// an empty list, and the message and the rest of the reading stay. An entry whose agent left the team stays: the chat
+/// draws plain words for an agent that it does not know.
+public struct MessageMentions: Decodable, Equatable, Sendable {
+    public let tags: [AgentTags.Mention]
+
+    public init(_ tags: [AgentTags.Mention]) { self.tags = tags }
+
+    public init(from decoder: Decoder) throws {
+        tags = ((try? decoder.singleValueContainer().decode([Entry].self)) ?? []).compactMap(\.mention)
+    }
+
+    private struct Entry: Decodable {
+        let mention: AgentTags.Mention?
+        init(from decoder: Decoder) throws { mention = try? AgentTags.Mention(from: decoder) }
+    }
 }
 
 public struct ManagerReport: Decodable, Identifiable, Sendable, Equatable {

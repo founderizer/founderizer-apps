@@ -910,6 +910,25 @@ final class FleetStore {
     var supportsDirectChat: Bool { state?.ui_features?.contains("direct_chat") == true }
     func canChat(with agent: String) -> Bool { state?.supportsChat(with: agent) == true }
     var supportsCorrections: Bool { state?.ui_features?.contains("corrections") == true }
+    /// **The @ tags of a chat with `agent`** (owner feature `agent_tags`, API 1.288; `AgentTags`): every other agent of
+    /// the team, in the sidebar's order (`ChatList.order`). Nil on a hub without the feature, where the box opens no
+    /// list and a message sends no `mentions`. **Made again only when what it is made of changes** (`tagBook`): the box
+    /// asks for it at each key of words with an "@".
+    func agentTags(except agent: String) -> AgentTags? {
+        guard state?.ui_features?.contains(AgentTags.feature) == true, let agents = state?.agents else { return nil }
+        let order = ChatList.order(agents.map(\.name), pinned: pinned)
+        let titles = Dictionary(agents.map { ($0.name, $0.title) }, uniquingKeysWith: { first, _ in first })
+        var hasher = Hasher()
+        hasher.combine(agent)
+        for name in order { hasher.combine(name); hasher.combine(titles[name] ?? nil) }
+        let key = hasher.finalize()
+        if let kept = tagBook, kept.key == key { return kept.tags }
+        let tags = AgentTags(agents: order.map { (name: $0, role: titles[$0] ?? nil) }, except: agent)
+        tagBook = (key, tags)
+        return tags
+    }
+    /// The last table of `agentTags(except:)`, with the key of what it was made of.
+    @ObservationIgnored private var tagBook: (key: Int, tags: AgentTags)?
     func draft(for agent: String) -> String { agent == "manager" ? draft : agentDrafts[agent] ?? "" }
     func setDraft(_ text: String, for agent: String) {
         if agent == "manager" { draft = text } else { agentDrafts[agent] = text }
@@ -2751,9 +2770,13 @@ final class FleetStore {
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return }
         // `about` only on a hub that takes it: an older hub refuses a field that it does not know.
         let about = state.ui_features?.contains("message_about") == true ? about : nil
+        // The @ tags of the words that go, read from them now (`AgentTags.mentions`), a correction's too: the final
+        // words decide, so a tag typed in full counts and a broken one is words. [] stops the hub's own reading.
+        let mentions = needID == nil ? agentTags(except: recipient)?.mentions(in: text) : nil
         let request = PendingRequest(hub: hub, database: state.db, client: installation, needID: needID,
                                      recipient: needID == nil && supportsDirectChat ? recipient : nil,
-                                     replacesRequestID: replaces, attachments: files, about: about, text: text)
+                                     replacesRequestID: replaces, attachments: files, about: about, mentions: mentions,
+                                     text: text)
         do {
             try outbox.save(request)
             pending = request

@@ -31,6 +31,10 @@ struct MessageText: View, Equatable {
     /// drawn with the words in every row and pressed in the row under the pointer (`chatBadges`). A table's cells keep
     /// their words, and so does every text with none: a task's thread and a conversation he reads.
     var chatNames: ChatNames? = nil
+    /// **His @ tags in these words** (owner feature `agent_tags`; `OwnerBubble`): with `chatNames`, each tag is its
+    /// agent's badge over its whole range, "@" included (`ChatNames.pieces`). Their places are in his text, which the
+    /// blocks take from it with a mark for each tag (`AgentTags.marked`).
+    var mentions: [AgentTags.Mention]? = nil
     /// **Each block of the text, and each cell of a table, is a row of this selection** (a long file in the knowledge
     /// reader): only the row under the pointer and the row whose words he pressed last can be selected, as only two
     /// rows of a chat can (`ChatSelection`), and a block or a cell longer than `keepsFields` can always be selected.
@@ -77,25 +81,41 @@ struct MessageText: View, Equatable {
         return cache
     }()
     private var blocks: [Block] {
+        // his tags, only where the chat draws badges: the text with a mark for each (`AgentTags.marked`); a list,
+        // also an empty one, says that only its entries are tags (`AgentTags.Given`)
+        let given = chatNames != nil && mentions != nil
+        let marked = given ? mentions.flatMap { AgentTags.marked(text, mentions: $0) } : nil
         // The inline code of the chat is larger, so the two forms of one text have their own entries.
-        let key = ((step ? "step\u{0}" : chat ? "chat\u{0}" : "form\u{0}") + text) as NSString
+        let key = ((step ? "step\u{0}" : chat ? "chat\u{0}" : "form\u{0}") + (given ? "given\u{0}" : "")
+                   + (marked?.key ?? text)) as NSString
         if let cached = Self.cache.object(forKey: key) { return cached.blocks }
-        let parsed = Self.parse(text, code: step ? Self.stepCode : chat ? ChatStyle.code : FormMetrics.code)
+        let parsed = Self.parse(text, code: step ? Self.stepCode : chat ? ChatStyle.code : FormMetrics.code, marked: marked,
+                                given: given)
         Self.cache.setObject(Parsed(parsed), forKey: key, cost: text.utf8.count * 4)
         return parsed
     }
     /// The blocks of a text by the rules both apps share (`MessageBlock`, FleetCore), with their inline marks drawn in
-    /// this app's fonts.
-    private static func parse(_ text: String, code: Font) -> [Block] {
-        MessageBlock.parse(text).map { block in
-            var drawn = Block(kind: block.kind, text: block.text, marker: block.marker, level: block.level)
+    /// this app's fonts. `marked`: the text with the marks of its tags, which each block's words give back as "@" and
+    /// as the tag's words (`AgentTags.unmarked`).
+    private static func parse(_ text: String, code: Font, marked: AgentTags.Marked? = nil, given: Bool = false) -> [Block] {
+        MessageBlock.parse(marked?.text ?? text).map { block in
+            let words = marked.map { AgentTags.unmarked(block.text, by: $0) } ?? block.text
+            var drawn = Block(kind: block.kind, text: words, marker: block.marker, level: block.level)
             switch block.kind {
             case .code, .rule: break
             case .table:
-                drawn.cells = block.cells.map { $0.map { inline($0, code: code) } }
+                drawn.cells = block.cells.map { row in
+                    row.map { cell in inline(marked.map { AgentTags.unmarked(cell, by: $0) } ?? cell, code: code) }
+                }
                 drawn.links = drawn.cells.contains { $0.contains(where: LinkRun.has) }
             default:
                 drawn.formatted = inline(block.text, code: code)
+                if let marked { drawn.formatted = AgentTags.unmarked(drawn.formatted, by: marked) }
+                if given {
+                    var mark = AttributeContainer()
+                    mark[AgentTags.Given.self] = true
+                    drawn.formatted.mergeAttributes(mark)
+                }
                 drawn.links = LinkRun.has(drawn.formatted)
             }
             return drawn
@@ -450,6 +470,8 @@ struct OwnerBubble: View {
     /// What stands over his words, 6 points over them, inside the bubble and above its fold: the badge of the task or
     /// the job that the message is about (`SentMessageView`, `AboutBadgeView`).
     var over: AnyView? = nil
+    /// His @ tags in these words, each its agent's badge (`MessageText.mentions`).
+    var mentions: [AgentTags.Mention]? = nil
     @State private var expanded = false
     private var canCollapse: Bool { text.count > 420 || text.filter { $0 == "\n" }.count > 5 }
     /// A long message at rest: the height of its first six lines, the last of them fading into the bubble.
@@ -464,7 +486,8 @@ struct OwnerBubble: View {
             // **His words are drawn from their Markdown, as an agent's are** (3 November 2026: "chat messages dont
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
             // under them reads, where the literal text ran them all together.
-            MessageText(text: text, chat: true, chatNames: names, fold: folded ? Self.foldedHeight : nil).equatable()
+            MessageText(text: text, chat: true, chatNames: names, mentions: mentions, fold: folded ? Self.foldedHeight : nil)
+                .equatable()
                 .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
                 .mask {
                     VStack(spacing: 0) {

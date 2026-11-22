@@ -70,18 +70,45 @@ public struct ChatNames: Equatable, Sendable {
     /// **`text` in pieces, each name that it shows by the chat's rules a piece of its own with its link**, which a chat
     /// draws as a badge with its icon. The pieces hold every character of `text` once, in its order; a name that the
     /// card's rules find and the chat's do not stays words, with no link.
+    ///
+    /// **@ tags** (owner feature `agent_tags`; his "Yes, as drawn": "in a sent message the tag is the chat's agent
+    /// badge"): words that carry `AgentTags.Tagged` are a tag of his message, which is its agent's badge over the whole
+    /// tag, "@" included, and wins over a name that the book finds inside it; a tag of an agent that the book does not
+    /// know is plain words. **An agent's name or role right after an "@" that starts a tag** (an agent's reply, his own
+    /// words with no tag) is found as after a space, counts as after a word, and its badge takes the "@" too; any other
+    /// name after such an "@" stays words, as it was.
+    ///
+    /// **In his words whose tags the hub gave** (`AgentTags.Given`), only an entry is a tag: an "@" before a name
+    /// outside them stays words, as an email does.
     public func pieces(_ text: AttributedString) -> [CardNames.Piece] {
-        let found = book.pieces(text)
-        var pieces: [CardNames.Piece] = [], line = ""      // the words of the line before each piece
+        let given = text.runs[AgentTags.Given.self].contains { $0.0 == true }
+        let read = given ? (text: text, after: Set<Int>()) : Self.reading(text)
+        let found = read.after.isEmpty ? book.pieces(text) : Self.restored(book.pieces(read.text), in: text, at: read.after)
+        var pieces: [CardNames.Piece] = [], line = "", offset = 0     // the words of the line before each piece, its place
         for (index, piece) in found.enumerated() {
             var shown = piece
             let words = String(piece.words.characters)
-            defer { line = String((line + words).split(separator: "\n", omittingEmptySubsequences: false).last ?? "") }
+            let afterAt = read.after.contains(offset)
+            defer {
+                line = String((line + words).split(separator: "\n", omittingEmptySubsequences: false).last ?? "")
+                offset += piece.words.characters.count
+            }
             if let target = piece.badge, !counts(target, words: words) || besideItsName(index, in: found)
-                || (oneWord.contains(words) && !Self.followsAWord(line)) {
+                || (afterAt && !target.isAgent) || (oneWord.contains(words) && !afterAt && !Self.followsAWord(line)) {
                 var words = piece.words
                 words.link = nil        // the link that the card's book gave the name: no other link stands in a name
                 shown = CardNames.Piece(words: words, badge: nil)
+            }
+            if afterAt, let target = shown.badge, let last = pieces.last, last.badge == nil, last.words.characters.last == "@" {
+                // the "@" goes into the badge, with the name's link
+                let at = last.words.characters.index(before: last.words.endIndex)
+                var words = AttributedString(last.words[at...]) + shown.words
+                words.link = target.url
+                shown = CardNames.Piece(words: words, badge: target)
+                let before = AttributedString(last.words[..<at])
+                if before.characters.isEmpty { pieces.removeLast() } else {
+                    pieces[pieces.count - 1] = CardNames.Piece(words: before, badge: nil)
+                }
             }
             if shown.badge == nil, let last = pieces.last, last.badge == nil {
                 pieces[pieces.count - 1] = CardNames.Piece(words: last.words + shown.words, badge: nil)
@@ -89,7 +116,95 @@ public struct ChatNames: Equatable, Sendable {
                 pieces.append(shown)
             }
         }
-        return pieces
+        let tags = text.runs[AgentTags.Tagged.self].compactMap { agent, range -> (range: Range<Int>, agent: String)? in
+            guard let agent else { return nil }
+            let start = text.characters.distance(from: text.startIndex, to: range.lowerBound)
+            return (start..<start + text.characters.distance(from: range.lowerBound, to: range.upperBound), agent)
+        }
+        return tags.isEmpty ? pieces : tagged(pieces, tags: tags, in: text)
+    }
+
+    /// **The pieces with each tag of his message as its own**: its agent's badge where the book knows the agent, else
+    /// plain words; a piece that a tag cuts keeps its words outside the tag, as plain words.
+    private func tagged(_ pieces: [CardNames.Piece], tags: [(range: Range<Int>, agent: String)],
+                        in text: AttributedString) -> [CardNames.Piece] {
+        var out: [CardNames.Piece] = []
+        func add(_ piece: CardNames.Piece) {
+            if piece.badge == nil, let last = out.last, last.badge == nil {
+                out[out.count - 1] = CardNames.Piece(words: last.words + piece.words, badge: nil)
+            } else {
+                out.append(piece)
+            }
+        }
+        func words(_ range: Range<Int>) -> AttributedString {
+            let start = text.characters.index(text.startIndex, offsetBy: range.lowerBound)
+            return AttributedString(text[start..<text.characters.index(start, offsetBy: range.count)])
+        }
+        var at = 0
+        for piece in pieces {
+            let span = at..<(at + piece.words.characters.count)
+            var cursor = span.lowerBound
+            for tag in tags where tag.range.overlaps(span) {
+                if cursor < tag.range.lowerBound {
+                    let part = cursor..<tag.range.lowerBound
+                    add(part == span ? piece : CardNames.Piece(words: { var w = words(part); w.link = nil; return w }(), badge: nil))
+                }
+                if span.contains(tag.range.lowerBound) {
+                    var tagWords = words(tag.range)
+                    if named[tag.agent] != nil {
+                        let target = CardNames.Target.agent(tag.agent)
+                        tagWords.link = target.url
+                        add(CardNames.Piece(words: tagWords, badge: target))
+                    } else {
+                        add(CardNames.Piece(words: tagWords, badge: nil))
+                    }
+                }
+                cursor = max(cursor, min(tag.range.upperBound, span.upperBound))
+            }
+            if cursor < span.upperBound {
+                let part = cursor..<span.upperBound
+                add(part == span ? piece : CardNames.Piece(words: { var w = words(part); w.link = nil; return w }(), badge: nil))
+            }
+            at = span.upperBound
+        }
+        return out
+    }
+
+    /// **The words as the book reads them, where an "@" starts a tag before a name**: that "@" as a space, so that the
+    /// book finds the name after it (a name stands only between two word boundaries, and an "@" before a letter joins
+    /// it to the word before, as in an email), and the places of the characters right after each such "@". The "@"
+    /// starts a tag as in the hub's reading: at the start, after whitespace or after one of `( [ { " '`.
+    private static func reading(_ text: AttributedString) -> (text: AttributedString, after: Set<Int>) {
+        // most words have no "@": they cost one look at their scalars, and no copy
+        guard text.unicodeScalars.contains("@") else { return (text, []) }
+        let characters = Array(text.characters)
+        var read = text, after = Set<Int>()
+        for (offset, character) in characters.enumerated() where character == "@" && offset + 1 < characters.count {
+            let before = offset == 0 ? nil : characters[offset - 1]
+            guard before.map({ $0.isWhitespace || "([{\"'".contains($0) }) ?? true,
+                  characters[offset + 1].isLetter || characters[offset + 1].isNumber else { continue }
+            let at = read.characters.index(read.startIndex, offsetBy: offset)
+            let next = read.characters.index(after: at)
+            let kept = read[at..<next].runs.first?.attributes ?? AttributeContainer()
+            read.replaceSubrange(at..<next, with: AttributedString(" ", attributes: kept))
+            after.insert(offset + 1)
+        }
+        return (read, after)
+    }
+
+    /// The book's pieces of the words that it read (`reading`), with `text`'s own characters: words as `text` holds
+    /// them, "@" again, and a name as the book found it. A name over the place of such an "@" is words (none can be:
+    /// a name has no space at its start).
+    private static func restored(_ pieces: [CardNames.Piece], in text: AttributedString, at after: Set<Int>)
+        -> [CardNames.Piece] {
+        var start = text.startIndex, offset = 0
+        return pieces.map { piece in
+            let count = piece.words.characters.count
+            let end = text.characters.index(start, offsetBy: count)
+            defer { start = end; offset += count }
+            if piece.badge != nil, !(offset..<offset + count).contains(where: { after.contains($0 + 1) }) { return piece }
+            return CardNames.Piece(words: AttributedString(text[start..<end]), badge: nil)
+        }
     }
 
     /// The piece at `index` is an agent's role, with that agent's own name beside it, before it or after it, and only a
@@ -123,6 +238,13 @@ public struct ChatNames: Equatable, Sendable {
         case .knowledge, .secret: true
         case .page: false
         }
+    }
+}
+
+private extension CardNames.Target {
+    var isAgent: Bool {
+        if case .agent = self { return true }
+        return false
     }
 }
 
