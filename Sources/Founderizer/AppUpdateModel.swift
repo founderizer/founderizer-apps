@@ -58,6 +58,9 @@ final class AppAutoUpdate {
     @ObservationIgnored var setupAtRest = false
     /// The last read was made before any hub answered: our channel, with no fleet and no switch of a fleet.
     @ObservationIgnored private var readBeforeHub = false
+    /// **Each read of our channel, for the day's error report** (W17, `AppHealth.update`): what the last one that reached
+    /// it said, and since when reads fail. A failed install is kept apart, with its build (`AppUpdateTries`).
+    @ObservationIgnored private(set) var facts = AppUpdateFacts()
 
     /// The build kept with the fleet's last reading, as the store starts. Only a build that reads the channel draws
     /// from it: a development build never asks, so nothing would ever replace it.
@@ -159,6 +162,7 @@ final class AppAutoUpdate {
     private func askBeforeHub(store: FleetStore) async {
         defer { working = false }
         let reading = await AppUpdateChannel().read(installed: running)
+        facts.read(reading)
         guard !reading.unreachable else { failed(); return }
         automatic = true
         readBeforeHub = true
@@ -179,6 +183,7 @@ final class AppAutoUpdate {
         let reading = await AppUpdateChannel(channel: releases?.channel ?? AppUpdate.defaultChannel,
                                              fleet: releases?.entitlement.fleet, early: releases?.early ?? false)
             .read(installed: running)
+        facts.read(reading)
         if !reading.unreachable { reached(reading) }
         return reading
     }
@@ -198,6 +203,7 @@ final class AppAutoUpdate {
             AppAutoUpdate.relaunch(installer.bundle)
             return nil
         } catch {
+            AppUpdateTries.failed(build: build.build, error: error)
             return (error as? LocalizedError)?.errorDescription
                 ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
         }
@@ -211,6 +217,7 @@ final class AppAutoUpdate {
         let reading = await AppUpdateChannel(channel: releases.channel, fleet: releases.entitlement.fleet,
                                              early: releases.early ?? false)
             .read(installed: running)
+        facts.read(reading)
         guard !reading.unreachable else { failed(); return }
         reached(reading)
         waiting = reading.offered ? reading.manifest : nil
@@ -248,6 +255,7 @@ final class AppAutoUpdate {
             // keeps his keys; in front when he came back to this app during the install.
             AppAutoUpdate.relaunch(installer.bundle, front: NSApp.isActive)
         } catch {
+            AppUpdateTries.failed(build: build.build, error: error)
             failure = (error as? LocalizedError)?.errorDescription
                 ?? String(l10n: "The update stopped, and nothing on this Mac changed.")
             waiting = nil

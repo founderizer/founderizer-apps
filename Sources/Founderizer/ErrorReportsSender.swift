@@ -53,93 +53,39 @@ final class CrashSubscriber: NSObject, MXMetricManagerSubscriber, Sendable {
     }
 }
 
-/// **The crashes go to our own site only while the owner's switch is on, at that moment.** Before each send it asks
-/// the hub (`GET /ui/error-reports`): off, or a hub with no switch, drops them, and nothing of them is kept; on, they
-/// go to `<channel>/api/errors` with the fleet's id and the channel of `GET /ui/releases`, as Report a problem names
-/// them. A send that can still go (our site's 429 or 5xx, or no answer) keeps them in one small file
-/// (`ErrorReport.keptFile`, at most 20 entries), which the next start tries once and deletes after a 200, and which goes
-/// as soon as the switch is found off. Any other answer of the site (400, another 4xx) drops them and the file: the site
-/// will never take that payload (`ErrorReport.settle`).
-///
-/// It works under the hood, from the store's own loop (`tick`), and only while something waits: with no crash it asks
-/// nothing. A crash that came before the hub answered waits in memory; the disk holds none that the hub did not first
-/// say may go.
+/// **The app's side of the error reports** (`ErrorReportsSending`, in FleetCore, holds every rule and its tests): at
+/// each tick of the store's loop it gives the store's facts and the calls to the hub and to our own site. The crashes go
+/// only while the owner's switch is on, at that moment, and the Mac's day once a day (W17). It works under the hood,
+/// with nothing on a page.
 @MainActor final class ErrorReportsSender {
     static let shared = ErrorReportsSender()
-    /// The crashes of this run that wait for the hub's answer: in memory only.
-    private var fresh: [ErrorReport.Crash] = []
-    /// What the file holds, read at the first tick of this start.
-    private var onDisk: [ErrorReport.Crash]?
-    /// The file was tried at this start: what failed waits for the next start.
-    private var diskTried = false
-    private var working = false
-    /// Each time the switch was found off: an attempt on its way then keeps nothing.
-    private var offs = 0
-    /// No attempt before this moment, after a hub that did not answer the switch's read.
-    private var notBefore: Date?
-    /// The last time the switch was read for a kept file alone (nothing else waiting).
-    private var lastLook: Date?
-    private let file = ErrorReport.keptFile
+    private let sending = ErrorReportsSending(file: ErrorReport.keptFile, version: ErrorReport.version(of: AppVersion.running),
+                                              system: ErrorReport.runningSystem, remember: { CrashSubscriber.remember() })
 
-    func take(_ crashes: [ErrorReport.Crash]) { fresh = ErrorReport.merged(fresh + crashes) }
+    func take(_ crashes: [ErrorReport.Crash]) { sending.take(crashes) }
 
-    /// The switch is off: nothing waits, and the file is gone.
-    func off() {
-        offs += 1
-        fresh = []
-        onDisk = []
-        ErrorReport.forget(file)
-    }
+    /// The switch is off (`ErrorReportsSending.off`).
+    func off() { sending.off() }
 
     func tick(store: FleetStore) {
-        if onDisk == nil {
-            onDisk = ErrorReport.kept(file)
-            if onDisk?.isEmpty == true { ErrorReport.forget(file) }   // a file that holds no crash is no file
-        }
-        let disk = diskTried ? [] : onDisk ?? []
-        // A file kept after a failed send: the switch is read again each minute, so that a switch-off deletes it.
-        let look = diskTried && fresh.isEmpty && onDisk?.isEmpty == false && lastLook.map { Date().timeIntervalSince($0) >= 60 } ?? true
-        guard !working, !(fresh.isEmpty && disk.isEmpty && !look), notBefore.map({ Date() >= $0 }) ?? true,
-              store.isFresh, let database = store.state?.db else { return }
-        let offered = store.state?.ui_features?.contains(ErrorReportsState.feature) == true
-        let batch = fresh, hub = store.hub
-        if disk.isEmpty && batch.isEmpty { lastLook = Date() }
-        fresh = []
-        working = true
-        Task {
-            await attempt(batch, disk: disk, hub: hub, database: database, offered: offered)
-            working = false
-        }
-    }
-
-    private func attempt(_ batch: [ErrorReport.Crash], disk: [ErrorReport.Crash], hub: URL, database: String,
-                         offered: Bool) async {
-        let offsAtStart = offs
-        guard offered else { return off() }         // a hub with no switch: it is off
-        let on: Bool
-        do { on = try await HubClient().errorReports(hub: hub, database: database).send } catch {
-            // The switch did not answer: they wait in memory, and the next try is a minute away.
-            fresh = ErrorReport.merged(batch + fresh)
-            notBefore = Date().addingTimeInterval(60)
-            return
-        }
-        guard offs == offsAtStart else { return }
-        guard on else { return off() }
-        CrashSubscriber.remember()
-        if batch.isEmpty && disk.isEmpty { return }   // only a look at the switch: the file was tried at this start
-        let releases = try? await HubClient().releases(hub: hub, database: database)
-        var failure: Error? = ErrorReportError.unready
-        if let releases, let report = ErrorReport(fleet: releases.entitlement.fleet,
-                                                   version: ErrorReport.version(of: AppVersion.running),
-                                                   system: ErrorReport.runningSystem, crashes: disk + batch) {
-            do {
-                try await ErrorReportClient().send(report, channel: releases.channel)
-                failure = nil
-            } catch { failure = error }
-        }
-        guard offs == offsAtStart else { return }   // the switch went off while it was sent
-        diskTried = true
-        // A 200 takes out what went; 429, 5xx or no answer keep them for the next start; any other answer drops them.
-        onDisk = ErrorReport.settle(batch, carriedKept: !disk.isEmpty, after: failure, in: file)
+        let hub = store.hub
+        let database = store.isFresh ? store.state?.db : nil
+        let tick = ErrorReportsSending.Tick(
+            hub: hub.absoluteString, database: database,
+            offered: store.state?.ui_features?.contains(ErrorReportsState.feature) == true,
+            answered: store.lastSuccess, reach: ReachFacts.readKind(store.lastReadError))
+        let calls = ErrorReportsSending.Calls(
+            readSwitch: { try await HubClient().errorReports(hub: hub, database: database ?? "").send },
+            readReleases: { try? await HubClient().releases(hub: hub, database: database ?? "") },
+            storeReleases: { [weak store] in
+                guard let store, let database else { return nil }
+                return store.reading("releases") ?? store.keptReleases.reading(of: database)
+            },
+            sources: { [weak store] in
+                ErrorReportsSending.Sources(update: store?.updates.facts ?? AppUpdateFacts(), running: AppVersion.running,
+                                            stops: InstallStop.of(InstallRecords.shared.all()))
+            },
+            send: { try await ErrorReportClient().send($0, channel: $1) })
+        sending.tick(tick, calls: calls)
     }
 }

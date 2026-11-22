@@ -809,6 +809,9 @@ public enum StartAgain {
         }
         MadeServers.forget(hub: hub, in: defaults)
         InstallEnds.forget(hub: hub, in: defaults)
+        // The switch's last answer of error reports and the hub's last answer: no day goes for the fleet that the Mac
+        // left (W17).
+        ErrorReportsDay.forget(in: defaults)
 
         let bar = "\(address)|", space = "\(address) "
         for key in ["unplacedAgents", "addingAgents"] {

@@ -321,9 +321,12 @@ public struct AppUpdateReading: Equatable, Sendable {
     /// The channel did not answer, or answered with a server error (as while our site deploys), so this read knows
     /// nothing new: the last state known stands.
     public let unreachable: Bool
+    /// **The `URLError` code of a read that got no answer** (status 0), for the day's error report, which names the
+    /// network's cause by its fixed word (`AppHealth.update`, W17); nil for every other read and every other error.
+    public let urlError: Int?
 
     public init(status: Int, says: String, manifest: AppManifest? = nil, offered: Bool = false,
-                refused: Bool = false, current: Bool = false, unreachable: Bool = false) {
+                refused: Bool = false, current: Bool = false, unreachable: Bool = false, urlError: Int? = nil) {
         self.status = status
         self.says = says
         self.manifest = manifest
@@ -331,6 +334,7 @@ public struct AppUpdateReading: Equatable, Sendable {
         self.refused = refused
         self.current = current
         self.unreachable = unreachable
+        self.urlError = urlError
     }
 }
 
@@ -383,7 +387,7 @@ public struct AppUpdateChannel: Sendable {
         do { answer = try await fetch(address, headers) } catch {
             // The page's button is Check for updates (24 October 2026); it was a refresh mark, which is what
             // this line used to point at.
-            return AppUpdateReading(status: 0, says: String(l10n: "Founderizer could not reach our channel. Nothing changed on this Mac, and it asks again by itself."), unreachable: true)
+            return AppUpdateReading(status: 0, says: String(l10n: "Founderizer could not reach our channel. Nothing changed on this Mac, and it asks again by itself."), unreachable: true, urlError: (error as? URLError)?.code.rawValue)
         }
         guard answer.status == 200 else { return refusal(answer.status) }
         let manifest: AppManifest

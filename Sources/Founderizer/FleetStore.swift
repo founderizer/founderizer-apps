@@ -2280,8 +2280,9 @@ final class FleetStore {
             let next = try HubClient.address(addressText)
             guard !sending else { return }
             if next != hub { childThreadRequest = nil; cancelEdit(); endProviderSetups(); state = nil; chatTimeline = ChatTimeline(); lastSuccess = nil; answeredUptime = nil; lastAnswer = nil; lastReceipt = nil; stopWatching(); stateToken = nil; forgetOlder() }
-            // Another hub is not the fleet that this start of the app opened on (`welcomeCovers`).
-            if next != hub { welcomePassed = true }
+            // Another hub is not the fleet that this start of the app opened on (`welcomeCovers`), and its error
+            // reports go on no answer of the hub before it (W17).
+            if next != hub { welcomePassed = true; ErrorReportsDay.forget() }
             hub = next
             // A connect is the owner's own ask (the first run's own search never asks for a hub that "Start again"
             // left): that hub is passed over no more.

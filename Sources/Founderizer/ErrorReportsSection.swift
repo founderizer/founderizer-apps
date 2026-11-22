@@ -58,7 +58,12 @@ final class ErrorReportsModel {
             keep(ErrorReportsState(send: receipt.send ?? on, db: database), store: store)
             await read(store: store)
         } catch let HubError.refusal(refused) { error = refused.words }
-        catch { self.error = String(l10n: "The hub has not answered. Try again.") }
+        catch {
+            self.error = String(l10n: "The hub has not answered. Try again.")
+            // A press "off" that got no answer: the hub may have taken it, so no day of error reports goes on an older
+            // "on" while the hub does not answer (W17, `ErrorReportsDay.pressKeepsOff`).
+            if ErrorReportsDay.pressKeepsOff(on, after: error) { ErrorReportsSender.shared.off() }
+        }
     }
 
     /// A reading of the switch. **Off is also the end of what this Mac kept for the next start** (`ErrorReportsSender`).
