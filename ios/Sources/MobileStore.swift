@@ -230,6 +230,9 @@ final class MobileStore {
     /// **This phone has no hub yet** (the owner's yes of 11 November 2026 to its picture): no address was ever set, and
     /// the sample is not open. It reads nothing and says nothing about a hub, and Chats says how to add one.
     var hasNoHub: Bool { !sample && hub == Self.noHub }
+    /// **This phone is in no fleet**: it has no hub, or only the sample open, which a phone with no hub opens and which
+    /// saves no address (`connect` saves the first one).
+    private var inNoFleet: Bool { hasNoHub || (sample && Self.savedHub() == Self.noHub) }
     /// The built-in address, which names no hub (`HubClient.defaultAddress`).
     private static let noHub = try! MobileClient.address(defaultAddress)
     /// The client label of every write of this installation, as the plan asks (MOBILE-APP.md 6.3).
@@ -553,6 +556,13 @@ final class MobileStore {
     ///
     /// A phone that holds a key keeps its hub: a link to another hub would take the phone there and its key with it.
     /// That link opens Add this phone with its code and the reason, as a refusal of the hub does.
+    ///
+    /// **A phone in no fleet has no hub to keep** (F7, piece A1): a key that it holds is one that an earlier install
+    /// left, because iOS keeps a keychain item when the app is deleted and the hub's address goes with the app. That
+    /// key goes, with its signing key, as Forget the key takes them (`forgetKey`), and the phone joins as a new phone.
+    /// After a reinstall every link was "another hub", and the phone could join no fleet at all. A key with no hub
+    /// reaches nothing, so nothing is lost, and the old key never reaches the link's hub: it is gone before anything
+    /// goes there, and the enrolment carries no key.
     func openLink(_ url: URL) async {
         guard let query = Self.enrollItems(url) else { return }
         let code = query.first { $0.name == "code" }?.value ?? ""
@@ -562,10 +572,19 @@ final class MobileStore {
         defer { joining = false }
         if let text = query.first(where: { $0.name == "hub" })?.value, let address = try? MobileClient.address(text),
            address != hub {
-            guard !deviceKey.has else {
-                showEnrollment(code, problem: String(l10n: "This code is for another hub. Forget this phone's key in Settings first."),
-                               otherHub: true)
-                return
+            if deviceKey.has {
+                guard inNoFleet else {
+                    showEnrollment(code, problem: String(l10n: "This code is for another hub. Forget this phone's key in Settings first."),
+                                   otherHub: true)
+                    return
+                }
+                // The key stays when the keychain refuses to let it go: the phone then follows no link, and the
+                // field says why, as Forget the key in Settings does.
+                if let failed = forgetKey() {
+                    enrollDetail = failed.detail
+                    showEnrollment(code, problem: failed.words, otherHub: true)
+                    return
+                }
             }
             addressText = text
             await connect()
@@ -837,6 +856,8 @@ final class MobileStore {
         guard !keyIsHeldBack else { refreshing = false; clock = Date(); return }
         let requested = hub
         defer { refreshing = false; clock = Date() }
+        readsBegun += 1
+        let run = readsBegun
         // Each request of this read has its hold (`holding`); the slowest one sets the next read's.
         slowestRequest = .zero
         do {
@@ -868,6 +889,7 @@ final class MobileStore {
             try await holding(requested) { try await confirmPending(hub: requested, database: database) }
             await readEnded(hub: requested, database: database)
             lastRead = Date()
+            decideTaken(before: run)
             // The read answered: the reading is current again, and the next read's hold follows this one's time.
             lastRequestTook = slowestRequest
             if readHeld { readHeld = false }
@@ -924,6 +946,24 @@ final class MobileStore {
         // message under a card that closed.
         let open = Set(answer.snapshot.needs.map(\.id))
         if clarifyDrafts.keys.contains(where: { !open.contains($0) }) { clarifyDrafts = clarifyDrafts.filter { open.contains($0.key) } }
+        // **A request of another hub or generation leaves at the first read of this one** (F10, A2): it can never go
+        // (it goes only to its own, `canRetry`), Settings offered no control for it, and every later write of the
+        // phone waited behind it, also after a start of the app. Its words go back to no field: an agent of that name
+        // on another hub is another agent. Not in the sample fleet, whose reading is no hub's.
+        // (An Outbox that cannot clear it keeps it, as before, and the next read tries again.)
+        if !sample, let other = pending, !sending, other.hub != hub || other.database != answer.snapshot.db,
+           (try? outbox.clear(matching: other.requestID)) != nil {
+            pending = nil
+            sendError = nil
+        }
+        // A refused answer, or a refused message under a card, whose item is no longer open leaves: no card shows its
+        // line and its Discard any more (F10, A1). **Also in the read that the refused send makes as it ends**, while
+        // `sending` still holds: no other send carries a request then. Later reads of an unchanged fleet answer 304
+        // and come not here, so the request stood in Settings as "Refused" until the next write.
+        if let refused = pending, refused.refusal != nil, let item = refused.needID ?? refused.talkNeed,
+           refused.hub == hub, refused.database == answer.snapshot.db, !open.contains(item) {
+            clear(refused: refused)
+        }
         // The receipt's talk of a card goes once the reading has as many lines, or the card is no longer open: an item
         // that another took the place of keeps no talk, which went to the new one (review B of 20 November 2026).
         if !talkTaken.isEmpty {
@@ -1121,11 +1161,15 @@ final class MobileStore {
 
     /// A send whose answer never arrived may still have reached the hub. The hub's own event is the proof, so the
     /// phone looks for the request's number in that chat before it does anything else (RULES.md 9). An answer to a
-    /// Needs-you item is confirmed by its own receipt or by Retry, which replays the same number.
+    /// Needs-you item is confirmed by its own receipt or by Retry, which replays the same number, **or by a read that no
+    /// longer lists its item as open** (`confirmAnswer`).
     private func confirmPending(hub requested: URL, database: String) async throws {
         // (his message under a card is no message of a chat: its own receipt or Try again confirms it)
         guard let request = pending, request.refusal == nil, request.hub == requested,
-              request.database == database, request.needID == nil, request.command == nil, !sending else { return }
+              request.database == database, request.command == nil, !sending else { return }
+        if let needID = request.needID {
+            return await confirmAnswer(request, to: needID, hub: requested, database: database)
+        }
         let agent = request.recipient ?? "manager"
         let page = try await client.chat(at: requested, key: key, database: database, agent: agent, since: nil)
         let found = Self.held(request, in: page.items)
@@ -1137,8 +1181,42 @@ final class MobileStore {
         }
     }
 
+    /// **An answer that waits unsent, whose item the reading no longer lists as open** (the owner, 22 November 2026:
+    /// "cards on the phone are left with Sending... and never complete"): the hub took it and its receipt was lost, or
+    /// another hand answered the item (the Mac, the owner tools, a notification's button, the manager), or the item
+    /// went. The newest page of the chat of the agent that raised it tells which: the request's own number there is the
+    /// hub's write of this answer, and it ends as its receipt would have ended it (`finish`); else the request leaves,
+    /// and nothing of it goes. The phone confirmed only a chat message so, and every later write waited behind such an
+    /// answer until his Try again, which met the hub's "already answered" and then waited for a Discard. An item that
+    /// is still open keeps its "Not sent" with Try again. An answer of his older than the chat's page or than the
+    /// reading's 50 answered items leaves as one that another hand gave: the hub has the item answered all the same.
+    /// A chat that does not read leaves the request for the next read, and the read itself counts as one that worked.
+    private func confirmAnswer(_ request: PendingRequest, to needID: Int, hub requested: URL, database: String) async {
+        guard let reading = snapshot, reading.db == database, !reading.needs.contains(where: { $0.id == needID })
+        else { return }
+        var found = false
+        if let answered = reading.answered_needs?.first(where: { $0.id == needID }) {
+            guard let page = try? await client.chat(at: requested, key: key, database: database, agent: answered.by,
+                                                    since: nil) else { return }
+            found = Self.held(request, in: page.items).held
+        }
+        guard requested == hub, pending?.requestID == request.requestID, !sending else { return }
+        if found {
+            do { try finish(request) }
+            catch {
+                storageError = String(l10n: "Cannot clear the confirmed request. Sending is blocked.")
+                storageErrorDetail = error.localizedDescription
+            }
+        } else if (try? outbox.clear(matching: request.requestID)) != nil {
+            // (an Outbox that cannot clear it keeps it, as before, and the next read tries again)
+            pending = nil
+            sendError = nil
+        }
+    }
+
     /// Everything that belonged to one hub generation goes: its pages, its cursors and its tag. The waiting request
-    /// stays, because it names its own hub and generation and Settings says so.
+    /// stays, because it names its own hub and generation and Settings says so, until the first read of the new one
+    /// (`readSnapshot`).
     private func forgetGeneration(keepSnapshot: Bool = false) {
         clarifyDrafts = [:]         // the words about a key request belong to the request of that generation
         talkTaken = [:]             // and the talk under a card, which a new generation numbers anew
@@ -1159,6 +1237,7 @@ final class MobileStore {
         deliveredAnswers = []
         writtenAnswers = []
         answersTaken = [:]
+        takenAtRead = [:]
         picturesReading?.cancel()
         picturesReading = nil
         picturesWaiting = []
@@ -1705,7 +1784,7 @@ final class MobileStore {
            pending.hub == hub, pending.database == snapshot?.db {
             return await retry()
         }
-        guard canWrite, let snapshot, features.contains(Self.taskControls) else { return }
+        guard canWrite, let snapshot, features.contains(Self.taskControls), clearRefused() else { return }
         pauseRefusals[task] = nil
         let request = PendingRequest(hub: hub, database: snapshot.db, client: installation,
                                      command: .control(task: task, action: .pause), text: "")
@@ -1851,13 +1930,19 @@ final class MobileStore {
     /// A write with no key is refused for good (`device_key_required`), and the phone then asks to be enrolled again:
     /// a press that waited went so at its next look after the move to the back locked the key, or at the return before
     /// Face ID ended (the review of 21 November 2026). It waits for the key now.
-    var canWrite: Bool { answersWrites && !sending && pending == nil && storageError == nil && !keyIsHeldBack }
+    /// **A request that the hub refused for good holds no write** (the owner, 22 November 2026: "cards on the phone are
+    /// left with Sending... and never complete"): it leaves the Outbox when the next write is saved (`clearRefused`), as
+    /// the Mac's save never waits behind a request in its request line. Every later answer of the phone waited behind
+    /// it, its card said "Sending…" with no end, and only a Discard in Settings moved it.
+    var canWrite: Bool {
+        answersWrites && !sending && (pending == nil || pending?.refusal != nil) && storageError == nil && !keyIsHeldBack
+    }
 
     /// This item's own request, of this hub and generation, waits in the Outbox and no send carries it: an error
-    /// stopped its send, the hub refused it, or the app started with it. Its item says "Not sent", and only his Try
-    /// again, or his Discard of a refused one, moves it.
+    /// stopped its send, or the app started with it. Its item says "Not sent", and only his Try again moves it. **Not a
+    /// refused one**: it holds nothing (`canWrite`), and a new press on its item is a new answer, which takes its place.
     func waitsUnsent(for need: Int) -> Bool {
-        guard let pending, !sending else { return false }
+        guard let pending, pending.refusal == nil, !sending else { return false }
         // his message under the card is its own request too (Needs clarification): a press behind it waited with no
         // end, and the card said "Sending…" in place of its "Not sent"
         return (pending.needID == need || pending.talkNeed == need) && pending.hub == hub
@@ -1990,7 +2075,8 @@ final class MobileStore {
         let text = words.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canWrite, let snapshot, answersTaken[needID] == nil,
               let need = snapshot.needs.first(where: { $0.id == needID }), need.clarifies(features: Array(features)),
-              !text.isEmpty, !KeyInText.contains(text), NeedSecret.length(text) <= NeedTalk.most else { return }
+              !text.isEmpty, !KeyInText.contains(text), NeedSecret.length(text) <= NeedTalk.most, clearRefused()
+        else { return }
         let request = PendingRequest(hub: hub, database: snapshot.db, client: installation,
                                      command: .needTalk(need: needID), text: text)
         // (of the talk that the card shows: a reading behind the last receipt has fewer of them; review A, round 3)
@@ -2293,9 +2379,11 @@ final class MobileStore {
         return false
     }
 
-    /// One answer to one open item of Needs you. It goes to the agent that raised the item.
+    /// One answer to one open item of Needs you. It goes to the agent that raised the item. **Words that look like a
+    /// key never go** (`KeyInText`), as his message under a card does not: the answer's box holds them back first.
     func send(needID: Int) async {
-        guard let need = snapshot?.needs.first(where: { $0.id == needID }) else { return }
+        guard let need = snapshot?.needs.first(where: { $0.id == needID }), !KeyInText.contains(answerDraft(for: needID))
+        else { return }
         await write(answerDraft(for: needID), needID: needID, recipient: need.by,
                     files: readyFiles(for: Self.stageKey(need: needID)))
     }
@@ -2329,6 +2417,9 @@ final class MobileStore {
         let files: [StagedFile]
     }
     @ObservationIgnored private var pressWaits: [Int: Task<Void, Never>] = [:]
+    /// The field's words before the agent's words of a press that waits for the hub (`HeldAnswer.draft`), which its
+    /// Undo gives back.
+    @ObservationIgnored private var waitingDrafts: [Int: String] = [:]
 
     /// **A press on one of an item's options is never refused for a moment**, and its rows are never drawn grey (fix
     /// round 2, item 51): it goes at once when the hub can take a write; otherwise it waits — for this launch's first
@@ -2339,7 +2430,8 @@ final class MobileStore {
     /// or when that request's send stops. The item says "Not sent" with Try again, and only that moves its request: the
     /// press waited behind it with no end, and the item said "Sending…" in place of that line (two reviews of 20
     /// November 2026). A press on any other item waits as before, also behind a request that waits unsent: it goes
-    /// when he sends that one again, or when a read finds that the hub has it.
+    /// when he sends that one again, or when a read finds that the hub has it. **A refused request holds no press**
+    /// (`canWrite`): the press goes, and that request leaves the Outbox first.
     func press(needID: Int, choice: Int) {
         press(needID: needID, .option(choice))
     }
@@ -2392,6 +2484,7 @@ final class MobileStore {
     /// the turn that its wait ends, before the next one looks.
     private func wait(needID: Int, _ press: WaitingPress) {
         waitingPresses[needID] = press
+        waitingDrafts[needID] = nil
         guard pressWaits[needID] == nil else { return }
         let hub = hub, database = snapshot?.db
         pressWaits[needID] = Task { [weak self] in
@@ -2403,6 +2496,7 @@ final class MobileStore {
                 else { break }
                 if store.canWrite {
                     store.waitingPresses[needID] = nil
+                    store.waitingDrafts[needID] = nil
                     store.pressWaits[needID] = nil
                     await store.send(needID: needID, press)
                     return
@@ -2410,6 +2504,7 @@ final class MobileStore {
                 try? await Task.sleep(for: .milliseconds(250))
             }
             self?.waitingPresses[needID] = nil
+            self?.waitingDrafts[needID] = nil
             self?.pressWaits[needID] = nil
         }
     }
@@ -2472,12 +2567,14 @@ final class MobileStore {
     }
 
     /// **Send under his words waits 5 seconds, with Undo**: his words and his files stay in the field, and go then as
-    /// his Send sent them (`send(needID:)`), unless he changed them.
+    /// his Send sent them (`send(needID:)`), unless he changed them. **Words that look like a key are no answer**
+    /// (`KeyInText`): no wait starts and nothing is saved, decided here, at his press, as the answer's box decides.
     func holdSend(needID: Int) {
         let composer = Self.stageKey(need: needID)
         let words = answerDraft(for: needID), files = readyFiles(for: composer)
         let trimmed = words.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !filesAreWaiting(for: composer), trimmed.count <= Self.textLimit, !trimmed.isEmpty || !files.isEmpty
+        guard !filesAreWaiting(for: composer), trimmed.count <= Self.textLimit, !trimmed.isEmpty || !files.isEmpty,
+              !KeyInText.contains(trimmed)
         else { return }
         hold(needID, .words(words, files: files))
     }
@@ -2511,9 +2608,16 @@ final class MobileStore {
 
     /// **Undo**: the answer goes nowhere, and the card opens as it was: the field's words that the agent's words took
     /// the place of, and the options that he had ticked (`restoredTicks`). His own words and his files stayed in the
-    /// field. After the end of the wait it does nothing: the answer went.
+    /// field. **While nothing left the phone**: during its wait with Undo, and while it waits for the hub or for this
+    /// phone's key after that (`waitingPresses`), whose wait ends at its next look. Once its request is saved it does
+    /// nothing: the answer went.
     func undo(needID: Int) {
-        guard let held = heldAnswer(to: needID) else { return }
+        guard let held = heldAnswer(to: needID) else {
+            guard let press = waitingPresses.removeValue(forKey: needID) else { return }
+            if let draft = waitingDrafts.removeValue(forKey: needID) { setAnswerDraft(draft, for: needID) }
+            if case .ticked(let indexes) = press { ticksBack[needID] = indexes }
+            return
+        }
         holdWaits.removeValue(forKey: needID)?.cancel()
         heldAnswers[needID] = nil
         if let draft = held.draft { setAnswerDraft(draft, for: needID) }
@@ -2535,6 +2639,8 @@ final class MobileStore {
         guard let held = heldAnswers.removeValue(forKey: needID), current(held, needID) != nil,
               stillMeant(held.press, for: needID), !waitsUnsent(for: needID) else { return }
         wait(needID: needID, held.press)
+        // the field's words of before, which Undo gives back while the press waits
+        if waitingPresses[needID] == held.press, let draft = held.draft { waitingDrafts[needID] = draft }
     }
 
     /// Every answer that waits goes now: when the app leaves the front, and before it can end there.
@@ -2565,7 +2671,9 @@ final class MobileStore {
             guard need.choices.indices.contains(choice) else { return nil }
             return save(need.choices[choice], needID: needID, recipient: need.by, choice: choice,
                         approval: DeviceSigningKey().approval(for: need, choice: choice))
-        case .words:
+        case .words(let words, _):
+            // (words that look like a key never go: the press of them was no answer, `holdSend`)
+            guard !KeyInText.contains(words) else { return nil }
             return save(answerDraft(for: needID), needID: needID, recipient: need.by,
                         files: readyFiles(for: Self.stageKey(need: needID)))
         case .ticked(let choices):
@@ -2641,12 +2749,13 @@ final class MobileStore {
         // A message carries text, or files, or both. Without a file it must carry text, as the hub asks.
         guard !text.isEmpty || !files.isEmpty, text.count <= Self.textLimit else { return nil }
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return nil }
+        guard clearRefused() else { return nil }
         let request = PendingRequest(hub: hub, database: snapshot.db, client: installation, needID: needID,
                                      choice: choice, choices: choices,
                                      recipient: needID == nil && supportsDirectChat ? recipient : nil,
                                      replacesRequestID: replaces, attachments: files, approval: approval,
                                      clarifies: clarifies, text: text)
-        if let needID { answersTaken[needID] = nil }
+        if let needID { answersTaken[needID] = nil; takenAtRead[needID] = nil }
         do {
             try outbox.save(request)
             pending = request
@@ -2674,15 +2783,30 @@ final class MobileStore {
     /// that may have arrived is dropped.
     func discardRefused() {
         guard !sending, let pending, pending.refusal != nil else { return }
+        clear(refused: pending)
+    }
+
+    /// The steps of a Discard: the refused request leaves the Outbox, and a message's words go back to their field.
+    private func clear(refused request: PendingRequest) {
         do {
-            try outbox.clear(matching: pending.requestID)
-            self.pending = nil
+            try outbox.clear(matching: request.requestID)
+            pending = nil
             sendError = nil
-            giveBack(pending)
+            giveBack(request)
         } catch {
             storageError = String(l10n: "Cannot clear the refused request. Sending is blocked.")
             storageErrorDetail = error.localizedDescription
         }
+    }
+
+    /// **A refused request leaves before the next write is saved** (`canWrite`): by the steps of his Discard, so a
+    /// message's words go back to its field when the field holds none. Each door that saves a request asks it first
+    /// (`save`, `pause(task:)`, `talk(needID:words:)`), because the Outbox keeps one request and refuses a second while
+    /// one is in its file. False when the Outbox could not clear it: then nothing is saved, and the line says why.
+    private func clearRefused() -> Bool {
+        guard let pending, pending.refusal != nil else { return true }
+        discardRefused()
+        return self.pending == nil
     }
 
     /// A message that never went gives its words back to the field they came from, unless the owner has written
@@ -2773,14 +2897,29 @@ final class MobileStore {
                 sendError = String(l10n: "Your hub did not confirm it. Sending it again does not send it twice.")
             }
         }
+        // (the read after a receipt decides whether the item folds: `decideTaken`)
         await refresh()
-        // The read after the receipt still lists the item as open: it does not fold, and its answer is not on its way.
-        if let needID = request.needID, answersTaken[needID] != nil, openNeeds.contains(where: { $0.id == needID }) {
-            answersTaken[needID] = nil
-        }
         // the read after a Pause's receipt has its hold, or the next one has
         if case .control(let task, _)? = request.command { pausesTaken.remove(task) }
     }
+
+    /// **The answer that the hub took stays taken until a read that began after its receipt worked** (the owner, 22
+    /// November 2026: "cards on the phone are left with Sending... and never complete"): that read decides, and a read
+    /// that failed, or that did not run (the app is not in front, this phone's key is not in hand), leaves it to the
+    /// next one. Its item is no longer open: it folds away as answered. It is still open: it does not fold, and its
+    /// answer is not on its way. The read that the send makes after its receipt decided alone, also when it failed or
+    /// did not run, so the card that he answered stood open again with no sign, and a second press met the hub's
+    /// "already answered".
+    private func decideTaken(before run: Int) {
+        for (need, at) in takenAtRead where at < run {
+            takenAtRead[need] = nil
+            if openNeeds.contains(where: { $0.id == need }) { answersTaken[need] = nil }
+        }
+    }
+    /// The reads that began, and for each answer that the hub took the count at its receipt, until a read that began
+    /// after it worked (`decideTaken`).
+    @ObservationIgnored private var readsBegun = 0
+    @ObservationIgnored private var takenAtRead: [Int: Int] = [:]
 
     /// The hub confirmed this request: it leaves the Outbox, and its draft or its correction ends. `editedInPlace`: the
     /// hub changed that message itself and wrote no message of its own (review A2), so its words change where it
@@ -2826,6 +2965,7 @@ final class MobileStore {
             }
             clearStaged(Self.stageKey(need: needID), sent: request.attachments)
             answersTaken[needID] = TakenAnswer(request: request, files: sentFiles)
+            takenAtRead[needID] = readsBegun
             // **What he wrote to a request is his message in the chat of the agent that asked** (`deliveredAnswers`):
             // its bubble stands from the send until that chat's read brings the message itself, as a message's does.
             // An option that he pressed is no message: its card shows it.

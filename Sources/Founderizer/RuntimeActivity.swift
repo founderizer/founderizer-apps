@@ -553,6 +553,10 @@ struct TaskSteering: View {
     /// He chose "Keep it" or "Paste it anyway" for the key in these words: no second question while it is in them.
     @State private var keyAllowed = false
     private var allowed: Bool { Self.shows(task, in: store.state) }
+    /// The agent that gave the task, which gets a copy of each guidance; nil for one that is no agent of the fleet.
+    private var copyReader: String? {
+        task.requester != task.owner && store.state?.agents.contains { $0.name == task.requester } == true ? task.requester : nil
+    }
     /// The box shows: the task is in a working state and no hold of the owner's holds it.
     static func shows(_ task: FleetTask, in state: HubState?) -> Bool {
         ["submitted", "working", "input-required", "auth-required"].contains(task.state) &&
@@ -586,7 +590,8 @@ struct TaskSteering: View {
                 }
             }
             if let held = store.heldKey, held.composer == key {
-                KeyHoldBanner(hold: held.hold, agent: task.owner) { saveHeldKey(held, words: words) } goOn: {
+                // the agent that gave the task gets a copy of each guidance (the hub's steer), so the question names it
+                KeyHoldBanner(hold: held.hold, agent: task.owner, copyTo: copyReader) { saveHeldKey(held, words: words) } goOn: {
                     keepHeldKey(held, words: words)
                 }
             }

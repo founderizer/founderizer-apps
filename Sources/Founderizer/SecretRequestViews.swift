@@ -106,6 +106,9 @@ struct KeyHoldBanner: View {
     let hold: KeyHold
     /// The agent whose chat this is, which gets the secret's name after the save.
     let agent: String
+    /// A second agent that gets a copy of the words: the agent that gave a task gets a copy of each guidance of it
+    /// (the owner, 22 November 2026, "Name both" to the words of a guidance's question). Nil: only `agent` gets them.
+    var copyTo: String? = nil
     /// **A narrow place** (a request card in its own window, `NeedWindows`): the two buttons stand on a line of their
     /// own under the words, at the right. On one line there, the buttons took the width and the words stood as a column
     /// of one or two letters to a line (a guest's check, 21 November 2026). A chat and a chat's card keep one line.
@@ -142,8 +145,14 @@ struct KeyHoldBanner: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(hold == .paste ? "That looks like a key, so it was not pasted." : "This message holds what looks like a key.")
                 .font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
-            Text("In a message, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
-                .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
+            Group {
+                if let copyTo, copyTo != agent {
+                    Text("In a guidance, \(agent.agentLabel) and \(copyTo.agentLabel) and their transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
+                } else {
+                    Text("In a message, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
+                }
+            }
+            .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
         }
     }
 

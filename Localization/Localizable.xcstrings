@@ -10510,6 +10510,16 @@
         }
       }
     },
+    "In a guidance, %@ and %@ and their transcripts would have it. Saved as a secret, it goes straight into the vault, and %@ gets only its name." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En unas indicaciones, %1$@ y %2$@ y sus transcripciones lo tendrían. Guardado como secreto, va directo a la bóveda y %3$@ solo recibe su nombre."
+          }
+        }
+      }
+    },
     "In a message, %@ and its transcripts would have it. Saved as a secret, it goes straight into the vault, and %@ gets only its name." : {
       "localizations" : {
         "es" : {

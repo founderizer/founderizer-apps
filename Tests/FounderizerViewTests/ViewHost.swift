@@ -16,7 +16,8 @@ import Vision
 /// - Each test has one window (`window`), and closes it at its end (`close`): borderless, clear (alpha 0) and far off
 ///   every screen, with the identifier of the app's main window, as the code that looks for the main window finds it.
 ///   It is the key window by its own word, so the app is never activated. Events go to it through `NSApp.sendEvent`,
-///   which runs the app's own key monitors, never through the window server.
+///   which runs the app's own key monitors, never through the window server. A key that no view takes plays no alert
+///   sound, and a test can read it (`LostKeys`, in place before the first window).
 /// - A test's body runs from the main run loop itself (`onMainLoop`), as AppKit runs the app's events, and gives back
 ///   what it saw; the test checks it after. `Screen` says whether the owner's screen stayed his. **Every test of the
 ///   target makes its windows and sends its events inside such a body**, one body at a time: a test that does it on
@@ -38,6 +39,7 @@ import Vision
         madeFolder = defaults.folder.path
         atexit { if let folder = madeFolder { try? FileManager.default.removeItem(atPath: folder) } }
         _ = NSApplication.shared
+        LostKeys.install()              // before the first window: a key that goes nowhere plays no sound
         NSApp.setActivationPolicy(.prohibited)
         // the queue of the app's events runs, so that a key that a view posts again comes back through it
         NSApp.finishLaunching()
@@ -82,13 +84,19 @@ import Vision
             .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])
             .frame(width: size.width, height: size.height))
         host.sizingOptions = []
+        return window(showing: host, size: size)
+    }
+
+    /// The same window, for any view, laid out.
+    static func window(showing view: NSView, size: NSSize) -> NSWindow {
+        _ = ready
         let window = KeyWindow(contentRect: NSRect(origin: NSPoint(x: -40000, y: -40000), size: size),
                                styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.alphaValue = 0
         window.identifier = NSUserInterfaceItemIdentifier(SetupChannel.fleetWindow)
-        window.contentView = host
-        host.frame = NSRect(origin: .zero, size: size)
+        window.contentView = view
+        view.frame = NSRect(origin: .zero, size: size)
         window.orderFront(nil)
         window.makeKey()
         turn(0.2)                       // its first draw; a test then waits for what it reads (`middle`)

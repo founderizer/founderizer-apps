@@ -22,12 +22,14 @@ struct GuidanceKeyHoldTests {
         let now = Date().timeIntervalSince1970
         let task: [String: Any] = [
             "id": 41, "title": "Move the CI of repo one", "details": "", "done_when": "Checked", "needs": "none",
-            "goal": "", "owner": "manager", "requester": "owner", "state": "working", "created": now - 900,
+            "goal": "", "owner": "studio", "requester": "lead", "state": "working", "created": now - 900,
             "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0, "started": now - 890,
             "last_activity": now - 60]
         let state: [String: Any] = [
             "schema_version": 1, "db": "view-test-\(UUID().uuidString)", "time": Int(now),
-            "agents": [["name": "manager", "role": "manager", "runtime": "claude", "can": [], "placed": true]],
+            "agents": [["name": "manager", "role": "manager", "runtime": "claude", "can": [], "placed": true],
+                       ["name": "lead", "role": "lead", "runtime": "claude", "can": [], "placed": true],
+                       ["name": "studio", "role": "worker", "runtime": "claude", "can": [], "placed": true]],
             "tasks": [task], "holds": [], "outcomes": [], "notes": [], "needs": [], "permissions": [], "messages": [],
             "reports": [], "ui_features": ["task_steering", SecretEntryView.feature, "secret_grants"]]
         return try JSONSerialization.data(withJSONObject: state)
@@ -82,7 +84,7 @@ struct GuidanceKeyHoldTests {
 
     struct Seen: Sendable {
         var boxShown = false, askedOnWords = false, bannerShown = false, endedWithoutKey = false
-        var heldOnSend = false, sent = true
+        var heldOnSend = false, sent = true, namesBoth = false
     }
 
     @Test func aKeyInATasksGuidanceWaitsForHisChoice() async throws {
@@ -106,6 +108,11 @@ struct GuidanceKeyHoldTests {
             store.guidanceDrafts[box] = "Use this key: " + Self.keyText
             seen.askedOnWords = ViewHost.turn(10) { store.heldKey == mine }
             seen.bannerShown = ViewHost.turn(10) { Self.element("key-hold", in: window) != nil }
+            // the agent that gave the task gets a copy of each guidance, so the question names it too (the owner's
+            // "Name both" of 22 November 2026): "In a guidance, Studio and Lead and their transcripts would have it."
+            if let card = window.childWindows?.first(where: \.isVisible) {
+                seen.namesBoth = (try? ViewHost.middle(of: "Studio and Lead and their transcripts", in: card, seconds: 10)) != nil
+            }
             // words with no key end it
             store.guidanceDrafts[box] = "Use the test account."
             seen.endedWithoutKey = ViewHost.turn(10) { store.heldKey == nil }
@@ -124,6 +131,7 @@ struct GuidanceKeyHoldTests {
         #expect(seen.boxShown, "the working task's card shows its guidance box")
         #expect(seen.askedOnWords, "words with a key get the box's question")
         #expect(seen.bannerShown, "the question shows over the box")
+        #expect(seen.namesBoth, "and it names the task's agent and the agent that gets the guidance's copy")
         #expect(seen.endedWithoutKey, "words with no key end the question")
         #expect(seen.heldOnSend, "Send holds a key also when the box asked nothing")
         #expect(!seen.sent, "and no guidance with the key reached the hub")

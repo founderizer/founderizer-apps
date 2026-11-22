@@ -168,7 +168,12 @@ struct SampleFleetTests {
     /// **The Mac's code link joins with no line about the phone's key** (`MobileStore.openLink`). A recording on an
     /// iPhone 18 Pro (11 November 2026) showed "The hub wants this phone's key and the phone sent none" over Chats for
     /// the quarter second of the enrolment: the phone read the hub with no key before it had one.
-    @MainActor @Test("the Mac's code link joins a phone with no hub, and no line about its key shows at any moment",
+    ///
+    /// **A phone with no hub joins also when it holds a key that an earlier install left** (F7, piece A1): iOS keeps a
+    /// keychain item when the app is deleted, and after a reinstall each link said "This code is for another hub", so
+    /// the phone could join no fleet. The old key goes before the join and never reaches the hub: the enrolment carries
+    /// no key, and the read after it carries the new one.
+    @MainActor @Test("the Mac's code link joins a phone with no hub, also one with a key of an earlier install, and no line about its key shows at any moment",
                      .timeLimit(.minutes(1)))
     func linkJoins() async throws {
         try await Self.withoutHub {
@@ -176,27 +181,65 @@ struct SampleFleetTests {
                 let hub = LinkHub()
                 defer { hub.stop() }
                 let address = try await hub.start()
-                // A key of the check's own: the key of an enrolled phone is never touched.
+                // A key of the check's own: the key of an enrolled phone is never touched. It holds the key that an
+                // earlier install left.
                 let holder = DeviceKey(account: "device-key-link-check")
                 try holder.remove()
                 defer { try? holder.remove() }
+                try holder.save("a-key-that-an-earlier-install-left")
                 let store = MobileStore(deviceKey: holder)
-                #expect(store.hasNoHub && store.keyState == .none)
+                #expect(store.hasNoHub && store.keyState == .locked)
                 store.chatRoute = [.settings, .enroll]
                 let link = try #require(URL(string: "fleet://enroll?hub=\(address)&code=ABCD-2345"))
                 let join = Task { await store.openLink(link) }
                 // The enrolment is on its way, and the hub holds its answer: the phone is at the hub and says nothing
-                // about its key.
-                for await request in hub.requests where request == "POST /ui/owner/enroll" { break }
+                // about its key. A phone that did not follow the link has its code for Add this phone, and sent nothing.
+                try await Self.until { hub.log.contains { $0.hasPrefix("POST /ui/owner/enroll") } || store.linkedCode != nil }
+                #expect(store.linkedCode == nil, "the phone did not follow the link: \(store.linkedCode?.problem ?? "")")
                 #expect(store.hub.absoluteString == address + "/" && !store.hasNoHub)
                 #expect(store.unavailableWords == nil && store.authProblem == nil && store.readError == nil)
                 hub.answerEnrolment()
                 await join.value
-                // No read went before the key, so the hub had no read to refuse.
+                // No read went before the key, so the hub had no read to refuse; the enrolment carried no key, and the
+                // read after it the new one.
                 #expect(hub.log == ["POST /ui/owner/enroll", "GET /ui/mobile with the key"])
                 #expect(store.keyState == .ready && store.lastRead != nil && store.snapshot?.db == "gen-link")
+                #expect(try holder.pressKey() == LinkHub.key)
                 #expect(store.unavailableWords == nil && store.authProblem == nil && store.readError == nil)
                 #expect(store.tab == .chats && store.chatRoute.isEmpty)
+            }
+        }
+    }
+
+    /// **A phone with a hub keeps it, and its key, when a link names another hub** (`MobileStore.openLink`): a phone
+    /// that dropped its key for every link would leave its fleet for any picture, and its key would go with it. Nothing
+    /// goes to either hub, and Add this phone shows the link's code with the reason.
+    @MainActor @Test("a link to another hub moves no phone that has a hub and a key, and sends nothing",
+                     .timeLimit(.minutes(1)))
+    func aLinkToAnotherHubMovesNoPhone() async throws {
+        try await Self.withoutHub {
+            try await Self.keepingReadings {
+                let own = LinkHub(), other = LinkHub()
+                defer { own.stop(); other.stop() }
+                let ownAddress = try await own.start(), otherAddress = try await other.start()
+                // Both answer an enrolment at once, so a phone that went to one would not wait for the check.
+                own.answerEnrolment()
+                other.answerEnrolment()
+                let holder = DeviceKey(account: "device-key-link-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                try holder.save("the-key-of-this-phones-own-hub")
+                UserDefaults.standard.set(ownAddress, forKey: "hubAddress")
+                let store = MobileStore(deviceKey: holder)
+                #expect(store.hub.absoluteString == ownAddress + "/" && store.keyState == .locked)
+                await store.openLink(try #require(URL(string: "fleet://enroll?hub=\(otherAddress)&code=ABCD-2345")))
+                #expect(other.log.isEmpty && own.log.isEmpty)
+                #expect(store.hub.absoluteString == ownAddress + "/" && store.keyState == .locked)
+                #expect(try holder.pressKey() == "the-key-of-this-phones-own-hub")
+                let linked = try #require(store.takeLinkedCode())
+                #expect(linked.code == "ABCD-2345" && linked.otherHub)
+                #expect(linked.problem == "This code is for another hub. Forget this phone's key in Settings first.")
+                #expect(store.tab == .chats && store.chatRoute == [.settings, .enroll])
             }
         }
     }
@@ -364,7 +407,8 @@ private class LoopbackHub: @unchecked Sendable {
 
 /// **A hub for the Mac's code link** (`MobileStore.openLink`): it refuses a read with no key in the hub's words for an
 /// owner device, gives a key for the code, and answers a read that carries that key. It holds its answer to the
-/// enrolment until the check has looked at the phone, and it keeps every request, in order.
+/// enrolment until the check has looked at the phone, and it keeps every request, in order, with the key that it
+/// carried: its own, another one or none.
 private final class LinkHub: LoopbackHub, @unchecked Sendable {
     static let key = "a-key-that-the-check-hub-gave"
     /// The enrolment's connection and its answer, until the check lets the answer go.
@@ -396,13 +440,14 @@ private final class LinkHub: LoopbackHub, @unchecked Sendable {
         let route = "\(request.method) \(request.path)"
         switch route {
         case "GET /ui/mobile":
-            let keyed = request.headers["authorization"] == "Bearer \(Self.key)"
-            note(route + (keyed ? " with the key" : " with no key"))
+            let bearer = request.headers["authorization"], keyed = bearer == "Bearer \(Self.key)"
+            note(route + (keyed ? " with the key" : bearer == nil ? " with no key" : " with another key"))
             send(keyed ? Self.reply(200, Self.fleet)
                        : Self.reply(403, #"{"error": "device key required", "auth": "device_key_required"}"#),
                  on: connection)
         case "POST /ui/owner/enroll":
-            note(route)
+            // An enrolment carries no key: one that came with it would be a key of another hub.
+            note(route + (request.headers["authorization"] == nil ? "" : " with a key"))
             let reply = Self.reply(200, #"{"device": "phone-check", "label": "iPhone", "key": "\#(Self.key)"}"#)
             let now = lock.withLock { () -> Bool in
                 if letGo { return true }
@@ -508,37 +553,47 @@ private final class TalkHub: LoopbackHub, @unchecked Sendable {
 }
 
 extension SampleFleetTests {
-    /// **A press on the words that an item's agent recommends waits as a press on an option waits** (owner feature
-    /// `need_recommended`; two reviews of 20 November 2026): behind the item's own answer that waits unsent it is
-    /// dropped, so his Discard of that answer sends nothing in its place. The press waited in a task of its own, and
-    /// the agent's words went by themselves after the Discard.
-    @MainActor @Test("a press on the agent's words is dropped behind the item's own refused answer, and Discard sends nothing")
-    func aPressOnTheAgentsWordsIsDroppedBehindARefusedAnswer() async throws {
+    /// **A refused answer holds no other answer** (the owner, 22 November 2026: "cards on the phone are left with
+    /// Sending... and never complete"; `MobileStore.canWrite`, `clearRefused`), in the sample fleet, which refuses each
+    /// write: his words on card 1 are refused, and a press on card 2 then goes to the hub at once, is refused too, and
+    /// takes the place of card 1's request in the Outbox; a new press on card 1 is a new answer, which goes the same
+    /// way. Nothing waits behind a refusal. The bug that this stops: a press on any other card waited behind the
+    /// refused request with no end, its card said "Sending…", and only a Discard in Settings moved it, on every build
+    /// and in the sample in two presses. The bug of before, a press that waited and went by itself after his Discard,
+    /// cannot come back: no press waits behind a refusal.
+    @MainActor @Test("a refused answer holds no other answer, and leaves the Outbox at the next write",
+                     .timeLimit(.minutes(1)))
+    func aRefusedAnswerHoldsNoOtherAnswer() async throws {
         try await Self.withoutHub {
             let store = MobileStore()
             try #require(store.pending == nil, "the simulator holds a request of its own")
             store.startSample()
             defer { store.leaveSample() }
             await store.refresh()
-            try #require(store.canWrite && store.openNeeds.contains(where: { $0.id == 1 }))
+            try #require(store.canWrite && Set(store.openNeeds.map(\.id)).isSuperset(of: [1, 2]))
+            let outbox = Outbox(file: Self.support.appendingPathComponent("pending.json"))
 
+            // his words on card 1 stand in its field at once, as if he had typed them, and the sample refuses them
             let words = "Offer a 20% voucher"
             store.press(needID: 1, words: words)
-            // the words stand in the field at once, as if he had typed them, and the sample refuses them
             #expect(store.answerDraft(for: 1) == words)
-            for _ in 0..<60 where store.pending?.refusal == nil { try await Task.sleep(for: .milliseconds(50)) }
-            try #require(store.pending?.refusal != nil && store.waitsUnsent(for: 1))
+            try await Self.until { store.pending?.refusal != nil && !store.sending }
+            let first = try #require(store.pending)
+            try #require(first.needID == 1 && first.refusal != nil)
 
-            // a second press while that answer waits unsent does not wait behind it, and it leaves his field as it
-            // is: only Try again moves that answer
-            store.setAnswerDraft("Ask the customer first", for: 1)
+            // a press on card 2 goes at once, and the sample refuses it too: card 1's request left the Outbox first
+            store.press(needID: 2, choice: 0)
+            try await Self.until { store.pending?.needID == 2 && store.pending?.refusal != nil && !store.sending }
+            #expect(store.waitingPresses.isEmpty, "a press waits behind a refused answer")
+            #expect(store.pending?.needID == 2 && store.pending?.refusal != nil)
+            #expect(try outbox.load()?.needID == 2, "the Outbox does not hold card 2's request alone")
+
+            // a new press on card 1 is a new answer, with a number of its own
             store.press(needID: 1, words: words)
-            #expect(store.waitingPresses[1] == nil)
-            #expect(store.answerDraft(for: 1) == "Ask the customer first")
-            store.discardRefused()
-            #expect(store.pending == nil)
-            try await Task.sleep(for: .milliseconds(800))
-            #expect(store.pending == nil, "a press that waited went after the Discard")
+            try await Self.until { store.pending?.needID == 1 && store.pending?.refusal != nil && !store.sending }
+            #expect(store.waitingPresses.isEmpty)
+            #expect(store.pending?.needID == 1 && store.pending?.requestID != first.requestID)
+            #expect(try outbox.load()?.requestID == store.pending?.requestID)
         }
     }
 }
@@ -1001,6 +1056,12 @@ private final class PictureHub: LoopbackHub, @unchecked Sendable {
         return found
     }
 
+    /// The words of every element under the window that has some, as VoiceOver reads them.
+    var labels: [String] { elements.compactMap { $0.accessibilityLabel }.filter { !$0.isEmpty } }
+
+    /// Where the part with this identifier stands, as VoiceOver finds it.
+    func frame(of id: String) -> CGRect? { parts[id]?.accessibilityFrame }
+
     /// Presses the part with this identifier, as VoiceOver does: true when it took the press.
     func press(_ id: String) -> Bool { parts[id]?.accessibilityActivate() == true }
 
@@ -1161,10 +1222,11 @@ extension SampleFleetTests {
             try await Task.sleep(for: .milliseconds(400))
             try #require(store.waitingPresses[9] == .ticked([0, 2]), "the Send did not wait behind the other answer")
 
-            // while it waits: the card stands folded with his two options, and no tick or Send is there to press
+            // while it waits: the card stands folded with his two options, and no tick or Send is there to press; Undo
+            // stays, because nothing of it left the phone (F10, A5)
             let parts = Set(window.parts.keys)
             #expect(!parts.contains { $0.hasPrefix("need-tick-9-") } && !parts.contains("need-send-ticked-9"))
-            #expect(!parts.contains("need-undo-9"), "the Send that waits for the hub still offered Undo")
+            #expect(parts.contains("need-undo-9"), "the Send that waits behind another answer has no Undo")
 
             // the other answer's receipt: the Send goes, with the indexes of the ticked options
             hub.release()
@@ -1202,8 +1264,11 @@ extension SampleFleetTests {
     /// `CardValueWords`; the owner's "Yes, as drawn" of 21 November 2026 to a chip with a copy icon on each value). The
     /// action is the chip's own copy, as VoiceOver gives it. The bugs that this stops: a chip in the script that the
     /// phone signs, which shows its words as the agent's values; a chip on his own words; a chip in every message of a
-    /// chat; and a copy with a character added or cut.
-    @MainActor @Test("a card's values copy exactly, and the door's script, his answer and a chat have no copy",
+    /// chat; and a copy with a character added or cut. **A key card says the Mac once**: its line with the key, and
+    /// not the hub's own sentence in its `todo` under "What it wants", which the Mac's card leaves out too (the owner,
+    /// 20 November 2026: "I need more brevity and clarity"). The bug that this stops: a kind of request whose `todo` is
+    /// a sentence of the hub's, which the card says a second time.
+    @MainActor @Test("a card's values copy exactly, only the agent's words have one, and a key card says the Mac once",
                      .timeLimit(.minutes(1)))
     func aCardsValuesCopyExactly() async throws {
         try await Self.withoutHub {
@@ -1243,6 +1308,24 @@ extension SampleFleetTests {
                     == [["Copy the-shop"]])
             #expect(try await copies(ReplyText(text: "Run `fleet doctor` first.")).isEmpty)
 
+            // a key request, whose todo is the hub's own sentence about the Mac's form (SECRET_TODO in hub.py)
+            let key = try need([
+                "id": 10, "by": "manager", "kind": "secret", "raised": 23,
+                "title": "Enter the API key SHOP_MAIL_KEY for mail.example.com",
+                "why": "The shop's mail key ends today, and the agent sends no mail without it.",
+                "todo": "Open this request in Founderizer on your Mac and type it into its secure form: it goes "
+                    + "straight into the vault, and no agent sees it. Never type the key or the password in a message.",
+            ])
+            let keyCard = CardWindow(NeedCard(store: store, need: key, header: true))
+            try await Task.sleep(for: .milliseconds(300))
+            let keyParts = Set(keyCard.parts.keys), keyWords = keyCard.labels
+            keyCard.close()
+            #expect(keyParts.contains("secret-need-10"), "the key card has no line with the key")
+            try #require(keyWords.contains { $0.contains("the agent sends no mail without it") },
+                         "the check read none of the card's words")
+            #expect(!keyWords.contains { $0.contains("Open this request in Founderizer") },
+                    "the key card says the hub's sentence under its own line about the Mac")
+
             // the two values of What it wants, in their order; the first's copy puts its characters, and only them, on
             // the system's pasteboard
             let window = CardWindow(NeedCard(store: store, need: words, header: true))
@@ -1259,6 +1342,66 @@ extension SampleFleetTests {
             #expect(UIPasteboard.general.string == "ABCD-1234-EFGH")
         }
     }
+
+    /// **A wrapped answer keeps its room over and under its words, and the rows of one card are equal** (the owner, 22
+    /// November 2026: "text wrapping of the options does not look good"; `NeedOptions.option`): labels of 20, 60 and
+    /// 110 characters draw rows of one, two and three lines, each 20 points or more higher than its words, and the row
+    /// of the answer that the agent recommends is as high as the same words in a plain row. The bugs that this stops: a
+    /// wrapped label that fills its row to the edges, as every row but the recommended one had it, and a row whose room
+    /// goes with the next change of the badge.
+    @MainActor @Test("a wrapped option keeps its room, and a recommended row is as high as a plain one",
+                     .timeLimit(.minutes(1)))
+    func aWrappedOptionKeepsItsRoom() async throws {
+        try await Self.withoutHub {
+            let store = MobileStore()
+            try #require(store.pending == nil, "the simulator holds a request of its own")
+            // the sample's hub names the answer that an agent recommends (owner feature need_recommended)
+            store.startSample()
+            defer { store.leaveSample() }
+            await store.refresh()
+            try #require(store.features.contains(NeedRecommended.feature))
+            let labels = ["Refund all of it now", "Offer a voucher of 20% for the next order, and keep this one",
+                          "Say no politely, and tell the customer that the window for a refund was 30 days, as the "
+                            + "shop says in its terms"]
+            try #require(labels.map(\.count) == [20, 60, 110])
+            func need(recommended: String?) throws -> OwnerNeed {
+                var fields: [String: Any] = ["id": 31, "by": "manager", "title": "Refund an order from 45 days ago?",
+                                             "raised": 20, "todo": "", "options": labels,
+                                             "why": "A customer asks for a refund 15 days after the 30-day window."]
+                if let recommended { fields["recommended"] = recommended }
+                return try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: fields))
+            }
+            /// The height of the words alone, in the width that the row gives them: its own less 14 points at each side.
+            func words(_ label: String, in row: CGRect) -> CGFloat {
+                UIHostingController(rootView: Text(verbatim: label).font(.body))
+                    .sizeThatFits(in: CGSize(width: row.width - 28, height: .greatestFiniteMagnitude)).height
+            }
+
+            // the card with no recommended answer, then with the agent's badge on the 20 characters, and on the 60
+            var heights: [[CGFloat]] = []
+            for recommended in [nil, labels[0], labels[1]] {
+                let window = CardWindow(NeedCard(store: store, need: try need(recommended: recommended), header: true))
+                defer { window.close() }
+                try await Task.sleep(for: .milliseconds(300))
+                let rows = try labels.indices.map { try #require(window.frame(of: "need-option-31-\($0)")) }
+                let line = words("A", in: rows[0])
+                #expect(labels.indices.map { Int((words(labels[$0], in: rows[$0]) / line).rounded()) } == [1, 2, 3],
+                        "the labels do not take one, two and three lines")
+                for (label, row) in zip(labels, rows) {
+                    #expect(row.height >= 44, "\(label.count) characters: a row of \(row.height) points")
+                    #expect(row.height - words(label, in: row) >= 20,
+                            "\(label.count) characters: \(row.height - words(label, in: row)) points of room in the row")
+                }
+                heights.append(rows.map(\.height))
+            }
+            // A row with the badge stands under the room for the badge's upper half, which VoiceOver's frame of the
+            // row takes in: the one-line row of 44 points with the badge, less the same row without it. The two-line
+            // row with the badge, less that room, is as high as the same words without it.
+            let room = heights[1][0] - heights[0][0]
+            #expect(abs(heights[2][1] - room - heights[0][1]) < 0.5,
+                    "with the badge: \(heights[2][1] - room) points; the same words with none: \(heights[0][1])")
+        }
+    }
 }
 
 extension SampleFleetTests {
@@ -1266,8 +1409,13 @@ extension SampleFleetTests {
     /// November 2026; `MobileStore.hold`): the card stands folded with his answer and Undo, nothing reaches the Outbox or
     /// the hub for the 5 seconds, then the answer goes as a press went before, once, and Undo after it does nothing. The
     /// bugs that this stops: an answer that goes before he could take it back, one that never goes, and an Undo after
-    /// the send that takes back an answer that went.
-    @MainActor @Test("a press waits 5 seconds with Undo on its folded card, then goes once", .timeLimit(.minutes(1)))
+    /// the send that takes back an answer that went. **A press that waits for the hub after its 5 seconds keeps Undo
+    /// and has no check** (the owner, 22 November 2026: "cards on the phone are left with Sending... and never
+    /// complete"; `NeedCard.going`), and its Undo opens the card, and nothing of it reaches the hub. The bug that this
+    /// stops: behind another answer on its way the folded card showed the check and no Undo, so it read "done" while
+    /// nothing was saved or sent, and he could not take it back.
+    @MainActor @Test("a press waits 5 seconds with Undo on its folded card, goes once, and keeps Undo while it waits",
+                     .timeLimit(.minutes(1)))
     func aPressWaitsFiveSecondsThenGoesOnce() async throws {
         try await Self.withPictureHub { store, hub in
             let need = try #require(store.openNeeds.first { $0.id == 8 })
@@ -1293,6 +1441,29 @@ extension SampleFleetTests {
             store.undo(needID: 8)
             try await Task.sleep(for: .milliseconds(600))
             #expect(hub.answers.count == 1)
+
+            // behind another card's answer whose receipt the hub holds, his press on card 8 (open again: the hub's
+            // reading still lists it) waits for the hub after its wait with Undo: its folded line keeps Undo and has
+            // no check, and Undo opens the card, and nothing of it goes
+            try #require(window.parts.keys.contains("need-option-8-2"), "card 8 did not open again")
+            store.answerWait = .milliseconds(100)
+            hub.holdsAnswers = true
+            store.press(needID: 7, choice: 0)
+            try await Self.until { hub.answers.count == 2 && store.sending }
+            #expect(window.press("need-option-8-2"))
+            try await Self.until { store.waitingPresses[8] != nil }
+            try await Task.sleep(for: .milliseconds(300))
+            let waiting = try #require(NeedCard.going(need, store: store, given: store.givenAnswer(to: 8)))
+            #expect(waiting.waits && !waiting.checks, "a press that waits for the hub shows the check")
+            #expect(window.parts.keys.contains("need-undo-8"), "a press that waits for the hub has no Undo")
+            #expect(window.press("need-undo-8"))
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(store.waitingPresses[8] == nil && window.parts.keys.contains("need-option-8-2"),
+                    "Undo did not open the card")
+            hub.release()
+            try await Self.until { store.pending == nil && !store.sending }
+            try await Task.sleep(for: .milliseconds(600))
+            #expect(hub.answers.map(\.path) == ["/ui/needs/8", "/ui/needs/7"], "the press that he took back went")
         }
     }
 
@@ -1857,6 +2028,383 @@ extension SampleFleetTests {
             await staging.value
             #expect(hub.uploads == [true], "the file did not go up with the key")
             #expect(store.readyFiles(for: composer) == [61] && store.authProblem == nil)
+        }
+    }
+}
+
+/// **A hub of two open requests with options, 7 and 8, both the manager's** (the answers of a phone that stayed at
+/// "Sending…": the owner, 22 November 2026): it takes an answer with the hub's receipt, cuts the connection before it
+/// takes it, as a hub that went away, or takes it and then cuts the connection, as an answer whose receipt was lost on
+/// its way back. A repeat of a request that it took gets that request's first result, as the hub's own record answers
+/// it. An item whose answer it took is answered in its read, and the answer is a message with the request's number in
+/// the manager's chat, as the hub writes it; an item that another hand answered (`answerElsewhere`) has that hand's
+/// message there. Or it refuses the answer for good. It takes his message under a card and a task's Pause with their
+/// receipts, as commands. `database` names its generation, and it fails the next `failsReads` reads of the fleet with
+/// 502, as a proxy whose hub went away: a cut connection would not do, because the system sends a read again by itself
+/// when its connection closes before any answer, and that second read worked. It keeps the route of each answer that
+/// came, a cut or refused one too, and the item of each answer that it took, in order, and the route of each command.
+private final class AnswerHub: LoopbackHub, @unchecked Sendable {
+    enum Mode { case takes, cutsBefore, cutsAfter, refuses }
+    private var answering = Mode.takes
+    private var generation = "gen-answers-1"
+    private var routes: [String] = []
+    private var took: [(item: Int, request: String)] = []
+    private var elsewhere: [Int] = []
+    private var readsToFail = 0
+    private var commandRoutes: [String] = []
+
+    init() { super.init(label: "founderizer.check.answer-hub") }
+
+    var mode: Mode {
+        get { lock.withLock { answering } }
+        set { lock.withLock { answering = newValue } }
+    }
+    var database: String {
+        get { lock.withLock { generation } }
+        set { lock.withLock { generation = newValue } }
+    }
+    var failsReads: Int {
+        get { lock.withLock { readsToFail } }
+        set { lock.withLock { readsToFail = newValue } }
+    }
+    /// The route of each answer that came, a cut one too, in order.
+    var tries: [String] { lock.withLock { routes } }
+    /// The item of each answer that it took, in order.
+    var taken: [Int] { lock.withLock { took.map(\.item) } }
+    /// The route of each message under a card and each Pause that it took, in order.
+    var commands: [String] { lock.withLock { commandRoutes } }
+    /// Another hand answers the item: the Mac, the owner tools, the manager.
+    func answerElsewhere(_ item: Int) { lock.withLock { elsewhere.append(item) } }
+
+    override func answer(_ request: Request, on connection: NWConnection) {
+        let route = "\(request.method) \(request.path)"
+        note(route)
+        switch route {
+        case "GET /ui/mobile":
+            let fails = lock.withLock { () -> Bool in
+                defer { readsToFail = max(0, readsToFail - 1) }
+                return readsToFail > 0
+            }
+            if fails { return send(Self.reply(502, #"{"error": "bad gateway"}"#), on: connection) }
+            send(Self.reply(200, fleet()), on: connection)
+        case "GET /ui/mobile/chat/manager":
+            send(Self.reply(200, chat()), on: connection)
+        case "POST /ui/needs/7/talk", "POST /ui/needs/8/talk", "POST /ui/tasks/41/control":
+            let fields = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            lock.withLock { commandRoutes.append(request.path) }
+            var receipt: [String: Any] = ["ok": true, "request_id": fields["request_id"] as? String ?? "",
+                                          "client": request.headers["x-fleet-client"] ?? "", "replayed": false]
+            if request.path.hasSuffix("/talk") {
+                receipt["need"] = Int(request.path.split(separator: "/")[2]) ?? 0
+                receipt["talk"] = [["who": "owner", "text": fields["text"] as? String ?? "", "ts": 1_800_000_060]]
+            } else {
+                receipt["changed"] = true
+                receipt["hold"] = ["id": 91, "task": 41, "kind": "pause", "state": "requested", "attempt": 1]
+            }
+            send(Self.reply(200, Self.json(receipt)), on: connection)
+        case "POST /ui/needs/7", "POST /ui/needs/8":
+            let fields = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            let item = Int(request.path.dropFirst("/ui/needs/".count)) ?? 0
+            let id = fields["request_id"] as? String ?? ""
+            let (takes, known) = lock.withLock { () -> (Bool, Bool) in
+                routes.append(request.path)
+                let known = took.contains { $0.request == id }
+                if !known && (answering == .takes || answering == .cutsAfter) { took.append((item, id)) }
+                return (known || answering == .takes, known)
+            }
+            if !known && mode == .refuses {
+                return send(Self.reply(409, #"{"error": "this request takes no answer now"}"#), on: connection)
+            }
+            guard takes else { return connection.cancel() }
+            let receipt: [String: Any] = ["ok": true, "request_id": id, "event_id": 100 + item, "replayed": known,
+                                          "client": request.headers["x-fleet-client"] ?? "", "created": 1_800_000_100]
+            send(Self.reply(200, Self.json(receipt)), on: connection)
+        default:
+            send(Self.reply(404, #"{"error": "not found"}"#), on: connection)
+        }
+    }
+
+    static func json(_ value: Any) -> String {
+        (try? JSONSerialization.data(withJSONObject: value)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    }
+
+    /// The manager's chat: the message of each answer, by its request's number, oldest first.
+    private func chat() -> String {
+        let (database, answers) = lock.withLock {
+            (generation, took.map { ($0.item, $0.request) } + elsewhere.map { ($0, UUID().uuidString.lowercased()) })
+        }
+        let items: [[String: Any]] = answers.enumerated().map { index, answer in
+            ["kind": "message", "ts": 1_800_000_100 + index, "id": answer.1, "text": "Answered", "attachments": [],
+             "client": "founderizer-swift/0.1", "answer_to": answer.0]
+        }
+        return Self.json(["db": database, "agent": "manager", "items": items, "cursor": 1_800_000_200] as [String: Any])
+    }
+
+    /// The hub's compact read: the requests open in it, and answered the ones whose answer it took or another hand
+    /// gave.
+    private func fleet() -> String {
+        let (database, answered) = lock.withLock { (generation, Set(took.map(\.item) + elsewhere)) }
+        func card(_ id: Int) -> [String: Any] {
+            let options = id == 7 ? ["Refund it", "Offer a 20% voucher", "Say no, politely"]
+                : ["Send it on Monday", "Show me the email first"]
+            return ["id": id, "by": "manager", "raised": 1_799_999_000 + id, "todo": "", "options": options,
+                    "title": id == 7 ? "Refund an order from 45 days ago?" : "Send the spring sale email on Monday?",
+                    "why": id == 7 ? "A customer asks for a refund 15 days after the 30-day window."
+                        : "The email is written and the list is ready.",
+                    "answer": answered.contains(id) ? options[0] : NSNull(), "clarify": true,
+                    "answered": answered.contains(id) ? 1_800_000_100 : NSNull()]
+        }
+        return Self.json([
+            "schema_version": 1, "db": database, "time": 1_800_000_000,
+            "ui_features": ["mobile", "need_options", "need_clarify", "task_controls"], "agents": [],
+            "needs": [7, 8].filter { !answered.contains($0) }.map(card),
+            "answered_needs": [7, 8].filter(answered.contains).map(card),
+            "tasks": [], "recent": [], "holds": [], "outcomes": [],
+        ] as [String: Any])
+    }
+}
+
+extension SampleFleetTests {
+    /// Runs `body` with a store that read the answer hub, and leaves nothing of it: no key, no reading, no request.
+    @MainActor private static func withAnswerHub(_ body: (MobileStore, AnswerHub) async throws -> Void) async throws {
+        try await withoutHub {
+            try await keepingReadings {
+                let hub = AnswerHub()
+                defer { hub.stop() }
+                let address = try await hub.start()
+                // A key of the check's own, which holds none: the reads go with no key, and an enrolled phone's key is
+                // never touched.
+                let holder = DeviceKey(account: "device-key-answer-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                let store = MobileStore(deviceKey: holder)
+                try #require(store.pending == nil, "the simulator holds a request of its own")
+                // whatever this check leaves in the Outbox goes with it
+                defer {
+                    if let left = store.pending {
+                        try? Outbox(file: support.appendingPathComponent("pending.json")).clear(matching: left.requestID)
+                    }
+                }
+                store.addressText = address
+                await store.connect()
+                try #require(store.canWrite && store.openNeeds.map(\.id).sorted() == [7, 8])
+                var failure: Error?
+                do { try await body(store, hub) } catch { failure = error }
+                // a press that still waits goes to this hub, or drops, before the check cleans up
+                for _ in 0..<60 where !store.waitingPresses.isEmpty || store.sending {
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                if let failure { throw failure }
+            }
+        }
+    }
+
+    /// **A request of another generation leaves at the first read of the new one** (the owner, 22 November 2026:
+    /// "cards on the phone are left with Sending... and never complete"; `MobileStore.readSnapshot`): an answer whose
+    /// send the hub cut waits unsent in the Outbox; the hub's next read has a new generation; that read takes the
+    /// request off the phone, nothing of it goes, and a press then goes. The bug that this stops: the request of the
+    /// gone generation stayed for ever, also after a start of the app; it can never go (it goes only to its own),
+    /// Settings offered no control for it, and every later answer of the phone waited behind it under "Sending…".
+    @MainActor @Test("a request of another generation leaves at the first read of the new one, and a press goes",
+                     .timeLimit(.minutes(1)))
+    func aRequestOfAnotherGenerationLeaves() async throws {
+        try await Self.withAnswerHub { store, hub in
+            hub.mode = .cutsBefore
+            store.press(needID: 7, choice: 0)
+            try await Self.until { hub.tries.count == 1 && !store.sending }
+            let cut = try #require(store.pending, "the cut answer is not in the Outbox")
+            try #require(cut.needID == 7 && cut.refusal == nil && !store.canWrite)
+
+            // the hub's new generation: its first read takes the request off the phone
+            hub.mode = .takes
+            hub.database = "gen-answers-2"
+            await store.refresh()
+            try #require(store.snapshot?.db == "gen-answers-2" && store.readError == nil)
+            #expect(store.pending == nil, "the request of the old generation stays")
+            #expect(try Outbox(file: Self.support.appendingPathComponent("pending.json")).load() == nil)
+
+            // and a press goes
+            store.press(needID: 8, choice: 1)
+            try await Self.until { !hub.taken.isEmpty && store.pending == nil && !store.sending }
+            #expect(hub.taken == [8] && hub.tries == ["/ui/needs/7", "/ui/needs/8"])
+        }
+    }
+
+    /// **A read finds an answer whose receipt was lost, and clears one that another hand overtook** (the owner, 22
+    /// November 2026: "cards on the phone are left with Sending... and never complete"; `MobileStore.confirmAnswer`):
+    /// the hub takes card 7's answer and cuts the connection; the next read no longer lists 7 as open and has the
+    /// request's number in the manager's chat, so the request ends as its receipt would have ended it, sent once. The
+    /// hub cuts card 8's answer before it takes it, and another hand answers card 8: the next read clears the request,
+    /// and nothing of it goes again. The bugs that this stops: an answer whose receipt was lost, or one that the Mac or a
+    /// notification overtook, stayed in the Outbox, and every later answer waited behind it under "Sending…".
+    @MainActor @Test("a read finds an answer whose receipt was lost, and clears one that another hand overtook",
+                     .timeLimit(.minutes(1)))
+    func aReadFindsAnAnswerWhoseReceiptWasLost() async throws {
+        try await Self.withAnswerHub { store, hub in
+            hub.mode = .cutsAfter
+            store.press(needID: 7, choice: 1)
+            // (the read at the end of the send comes while it still holds `sending`: the next read is the one)
+            try await Self.until { !hub.tries.isEmpty && !store.sending }
+            try #require(store.pending?.needID == 7 && store.pending?.refusal == nil, "the cut answer is not kept")
+            await store.refresh()
+            #expect(store.pending == nil, "the answer whose receipt was lost stays in the Outbox")
+            #expect(hub.tries == ["/ui/needs/7"] && hub.taken == [7])
+            #expect(!store.openNeeds.contains { $0.id == 7 })
+
+            hub.mode = .cutsBefore
+            store.press(needID: 8, choice: 0)
+            try await Self.until { hub.tries.count == 2 && !store.sending }
+            try #require(store.pending?.needID == 8 && store.pending?.refusal == nil, "the cut answer is not kept")
+            hub.answerElsewhere(8)
+            hub.mode = .takes
+            await store.refresh()
+            #expect(store.pending == nil, "the answer that another hand overtook stays in the Outbox")
+            #expect(hub.tries == ["/ui/needs/7", "/ui/needs/8"] && hub.taken == [7])
+        }
+    }
+
+    /// **The answer that the hub took stays taken until a read that worked** (the owner, 22 November 2026: "cards on
+    /// the phone are left with Sending... and never complete"; `MobileStore.decideTaken`): the hub gives the receipt of
+    /// card 7's answer and fails the read after it; the card keeps his answer meanwhile, and the next read that works,
+    /// which has 7 answered, folds it away. The bug that this stops: the failed read decided, the card stood open again
+    /// with no sign, and a second press met the hub's "already answered".
+    @MainActor @Test("the answer that the hub took stays taken until a read that worked", .timeLimit(.minutes(1)))
+    func aTakenAnswerStaysUntilAReadThatWorked() async throws {
+        try await Self.withAnswerHub { store, hub in
+            hub.failsReads = 1
+            store.press(needID: 7, choice: 2)
+            try await Self.until { hub.taken == [7] && store.pending == nil && !store.sending }
+            try #require(hub.taken == [7] && store.readError != nil, "the read after the receipt did not fail")
+            #expect(store.givenAnswer(to: 7) == .option(2), "the card stands open again after a read that failed")
+
+            await store.refresh()
+            #expect(store.readError == nil && !store.openNeeds.contains { $0.id == 7 })
+            #expect(hub.tries == ["/ui/needs/7"])
+        }
+    }
+
+    /// **A press that waits behind an answer that did not go says so, with Try again** (the owner, 22 November 2026:
+    /// "cards on the phone are left with Sending... and never complete"; `NeedFooter.stoppedAhead`): the hub cuts card
+    /// 7's answer and still lists 7 as open; a press on card 8 waits behind it, and the line under card 8 says "Not
+    /// sent" with Try again, not "Sending…"; Try again sends card 7's request, and card 8's answer goes after it, each
+    /// once. The bug that this stops: card 8 said "Sending…" with no end, no reason and nothing to press, while the
+    /// request that held it waited for a Try again that only card 7 or Settings offered.
+    @MainActor @Test("a press behind an answer that did not go says Not sent with Try again, and goes after it",
+                     .timeLimit(.minutes(1)))
+    func aPressBehindAStoppedAnswerSaysSo() async throws {
+        try await Self.withAnswerHub { store, hub in
+            store.answerWait = .milliseconds(100)
+            hub.mode = .cutsBefore
+            store.press(needID: 7, choice: 0)
+            try await Self.until { hub.tries.count == 1 && !store.sending }
+            try #require(store.pending?.needID == 7 && store.pending?.refusal == nil && store.canRetry)
+
+            hub.mode = .takes
+            let need = try #require(store.openNeeds.first { $0.id == 8 })
+            let window = CardWindow(NeedCard(store: store, need: need, header: true))
+            defer { window.close() }
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(window.press("need-option-8-1"))
+            try await Self.until { store.waitingPresses[8] != nil }
+            // past the second after which "Sending…" comes under a card
+            try await Task.sleep(for: .milliseconds(1_300))
+            let words = window.labels
+            #expect(words.contains { $0.contains("Not sent") } && words.contains { $0.contains("Try again") },
+                    "the card of a press that waits behind an answer that did not go does not say so")
+            #expect(!words.contains { $0.contains("Sending") }, "the card says Sending… while nothing goes")
+            #expect(window.parts.keys.contains("waiting-answer"))
+
+            await store.retry()
+            try await Self.until { hub.taken.count == 2 && store.pending == nil && !store.sending }
+            #expect(hub.taken == [7, 8] && hub.tries == ["/ui/needs/7", "/ui/needs/7", "/ui/needs/8"])
+        }
+    }
+
+    /// **A refused answer of a card that another hand answered leaves at the read that its send makes** (the owner,
+    /// 22 November 2026: "cards on the phone are left with Sending... and never complete"; `MobileStore.readSnapshot`):
+    /// the Mac answers card 7, the hub refuses the phone's answer to it, and the read at the end of that send no longer
+    /// lists 7 as open, so the request leaves, and no "Refused" stays. The bug that this stops: that read came while
+    /// the send still held `sending`, which a Discard waits for, and the later reads of an unchanged fleet answer 304,
+    /// so the request stood in Settings as "Refused", with reads every 10 seconds, until the next write.
+    @MainActor @Test("a refused answer of a card that another hand answered leaves at the read of its send",
+                     .timeLimit(.minutes(1)))
+    func aRefusedAnswerOfAClosedCardLeaves() async throws {
+        try await Self.withAnswerHub { store, hub in
+            hub.answerElsewhere(7)
+            hub.mode = .refuses
+            store.press(needID: 7, choice: 0)
+            try await Self.until { hub.tries.count == 1 && !store.sending }
+            try #require(hub.tries == ["/ui/needs/7"] && !store.openNeeds.contains { $0.id == 7 })
+            #expect(store.pending == nil, "the refused answer of a card that closed stays")
+            #expect(try Outbox(file: Self.support.appendingPathComponent("pending.json")).load() == nil)
+        }
+    }
+
+    /// **A Pause and a message under a card go after a refused answer** (the owner, 22 November 2026: "cards on the
+    /// phone are left with Sending... and never complete"; the doors `MobileStore.pause(task:)` and
+    /// `talk(needID:words:)`): the hub refuses card 8's answer, and card 8 stays open; a task's Pause then goes, and so
+    /// does his message under card 7 after a second refusal; each refused request left the Outbox first. The bugs that
+    /// this stops: a door that saves a request while a refused one is in the Outbox, which refuses a second request, so
+    /// the phone says that sending is blocked and nothing goes; and a door that waits behind the refusal.
+    @MainActor @Test("a Pause and a message under a card go after a refused answer", .timeLimit(.minutes(1)))
+    func aPauseAndAMessageGoAfterARefusedAnswer() async throws {
+        try await Self.withAnswerHub { store, hub in
+            hub.mode = .refuses
+            store.press(needID: 8, choice: 1)
+            try await Self.until { hub.tries.count == 1 && !store.sending }
+            try #require(store.pending?.needID == 8 && store.pending?.refusal != nil)
+            try #require(store.openNeeds.contains { $0.id == 8 })
+
+            await store.pause(task: 41)
+            #expect(hub.commands == ["/ui/tasks/41/control"], "the Pause did not go after the refused answer")
+            #expect(store.pending == nil && store.storageError == nil)
+
+            store.press(needID: 8, choice: 0)
+            try await Self.until { hub.tries.count == 2 && !store.sending }
+            try #require(store.pending?.needID == 8 && store.pending?.refusal != nil)
+            await store.talk(needID: 7, words: "Is it the same customer as last month?")
+            #expect(hub.commands == ["/ui/tasks/41/control", "/ui/needs/7/talk"],
+                    "the message under the card did not go after the refused answer")
+            #expect(store.pending == nil && store.storageError == nil)
+        }
+    }
+
+    /// **Words that look like a key are no answer** (`NeedAnswerBox`, `MobileStore.holdSend`; as his message under a
+    /// card, `NeedClarify`): Send on an answer that holds a made-up key shows the line over the field, "That looks like
+    /// a key. Never send a key in a message.", starts no wait with Undo, and the hub gets no request, also from the
+    /// store's own Send; the words stay in the field. A plain answer then goes. The bug that this stops: the answer's
+    /// box sent such words with no look, into the agent's conversation, where nothing masks a key before it is read.
+    @MainActor @Test("an answer that looks like a key is held back with its line, and a plain answer goes",
+                     .timeLimit(.minutes(1)))
+    func anAnswerThatLooksLikeAKeyIsHeldBack() async throws {
+        try await Self.withAnswerHub { store, hub in
+            store.answerWait = .milliseconds(100)
+            defer { store.setAnswerDraft("", for: 7) }
+            let need = try #require(store.openNeeds.first { $0.id == 7 })
+            let window = CardWindow(NeedCard(store: store, need: need, header: true))
+            defer { window.close() }
+            // a made-up key, from two parts, so no file holds a key's whole shape
+            let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+            store.setAnswerDraft(key, for: 7)
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(window.press("send-answer-7"))
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(window.parts.keys.contains("answer-key-7"), "no line says that the words look like a key")
+            #expect(store.heldAnswer(to: 7) == nil && store.waitingPresses.isEmpty && store.pending == nil)
+            #expect(store.answerDraft(for: 7) == key)
+            // the store's own Send refuses them too
+            store.holdSend(needID: 7)
+            await store.send(needID: 7)
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(store.heldAnswer(to: 7) == nil && store.pending == nil && hub.tries.isEmpty)
+
+            // a plain answer: the line goes, and the answer goes after its wait
+            store.setAnswerDraft("Refund it, but only this once", for: 7)
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(!window.parts.keys.contains("answer-key-7"))
+            #expect(window.press("send-answer-7"))
+            try await Self.until { hub.taken == [7] && store.pending == nil && !store.sending }
+            #expect(hub.tries == ["/ui/needs/7"])
         }
     }
 }

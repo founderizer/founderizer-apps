@@ -385,6 +385,10 @@ struct NeedCard: View {
     struct Going: Equatable {
         let answer: MobileStore.GivenAnswer
         let waits: Bool
+        /// The check that draws itself stands on the line: an option or ticked options whose request the hub has, or
+        /// which is on its way (his picture of 11 November 2026), never words that he wrote (14 November 2026), and
+        /// never an answer that has not left the phone.
+        var checks: Bool { !waits && answer.words == nil }
     }
 
     /// **His answer folds the open card, from his press until the hub's reading folds it as an answered card** (his "Yes,
@@ -392,11 +396,18 @@ struct NeedCard: View {
     /// that the card shows its mark as now"; the Mac's `NeedRequestCard.onItsWay`): while it waits with Undo, while it
     /// waits for the hub and this phone's key, and on its way. An answer that did not go opens the card again, with its
     /// line under it ("Not sent", Try again). The key card keeps its own form.
-    private var goingNow: Going? {
+    private var goingNow: Going? { Self.going(need, store: store, given: answerGiven) }
+
+    /// **Undo stays while nothing left the phone, and the check comes only with the hub's request** (the owner, 22
+    /// November 2026: "cards on the phone are left with Sending... and never complete"): an answer that waits with Undo,
+    /// and a press that waits for the hub or for this phone's key after that, keep Undo and have no check; an answer
+    /// whose request is on its way or that the hub took has its check. A press that waited showed the check and no
+    /// Undo, so the card read "done" while nothing was saved or sent, and he could not take it back.
+    static func going(_ need: OwnerNeed, store: MobileStore, given: MobileStore.GivenAnswer?) -> Going? {
         guard need.isOpen, !need.asksForSecret else { return nil }
         if let held = store.heldAnswer(to: need.id) { return Going(answer: held.shown, waits: true) }
-        let shown = answerGiven ?? store.waitingPresses[need.id].map(MobileStore.GivenAnswer.init)
-        return shown.map { Going(answer: $0, waits: false) }
+        if let given { return Going(answer: given, waits: false) }
+        return store.waitingPresses[need.id].map { Going(answer: MobileStore.GivenAnswer($0), waits: true) }
     }
 
     /// **The card takes his message under it** (Needs clarification, owner feature `need_clarify`): on a hub that names
@@ -456,11 +467,12 @@ struct NeedCard: View {
 
     /// **His answer on the open card that it folds** (`goingNow`): while it waits, his answer with Undo at the end of its
     /// line, and no check, no words beside Undo and no count (his "Yes, 5 seconds": "the answer line "Tide" with "Undo"
-    /// at its end, and no check mark"); after it, an option that he pressed with its check, which draws itself, and his
-    /// words with none (the owner, 14 November 2026), until the hub's reading draws what came of it.
+    /// at its end, and no check mark"), also while it waits for the hub; after it, an option that he pressed with its
+    /// check, which draws itself, and his words with none (the owner, 14 November 2026), until the hub's reading draws
+    /// what came of it.
     private func goingLine(_ line: Going) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if !line.waits, line.answer.words == nil {
+            if line.checks {
                 DrawnMark(symbol: "checkmark").font(.caption.weight(.semibold))
             }
             Text(verbatim: Self.words(of: line.answer, in: need)).lineLimit(1)
@@ -958,9 +970,9 @@ private struct NeedHead: View {
 }
 
 /// **The answers the agent offered, as rows to press** (the owner's yes of 28 October 2026 to D-7): each one the whole
-/// width of the item and 44 points high, in the quiet grey of what is his to press, and a press sends that answer, as
-/// the ping's button for it does. The item asked him to press buttons it did not draw ("Press one, or write another
-/// time."), so that line of the agent's goes where its options stand.
+/// width of the item and at least 44 points high, in the quiet grey of what is his to press, and a press sends that
+/// answer, as the ping's button for it does. The item asked him to press buttons it did not draw ("Press one, or write
+/// another time."), so that line of the agent's goes where its options stand.
 ///
 /// **They are never drawn grey** (fix round 2, item 51): a press while the hub cannot take it waits and goes when it
 /// can, and the item says "Sending…" under it (`MobileStore.press`). They went grey at 1.71:1 whenever the hub was slow
@@ -978,8 +990,11 @@ struct NeedOptions: View {
     static let dimmed = 0.38
 
     /// The agent's "What it wants" stands only for an item without options: with them, what it wants are the rows.
+    /// **Never on a request for a key or a login**: its `todo` is the hub's own sentence about the Mac's secure form,
+    /// which the card's line with the key says already, and the Mac's card leaves it out too (the owner, 20 November
+    /// 2026: "I need more brevity and clarity"). The phone's key card said where the key is typed twice.
     static func asksInWords(_ need: OwnerNeed) -> Bool {
-        need.choices.isEmpty && !need.todo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !need.asksForSecret && need.choices.isEmpty && !need.todo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// **The words that the agent recommends on an item with no options** (owner feature `need_recommended`, API 1.269):
@@ -992,8 +1007,12 @@ struct NeedOptions: View {
         return words
     }
 
-    /// Over and under the words of the recommended row: a first line that wraps stands under the badge, and one line
-    /// keeps the row's 44 points. It grows with the badge, which stops growing at the largest ordinary text size.
+    /// **Over and under the words of every row** (the owner, 22 November 2026: "text wrapping of the options does not
+    /// look good"): a label that wraps keeps this room over and under it, as the Mac's row and the words under a
+    /// picture keep theirs, so one line is 44 points, two about 66 and three about 88, and a recommended row is as high
+    /// as a plain row with words of the same length. A first line that wraps stands under the badge. Only the
+    /// recommended row had it, and a wrapped label filled its row to the edges. It grows with the badge, which stops
+    /// growing at the largest ordinary text size.
     @ScaledMetric(relativeTo: .caption) private var clearScaled: CGFloat = 11
     private var clear: CGFloat { min(clearScaled, RecommendedBadge.clearMost) }
 
@@ -1032,7 +1051,7 @@ struct NeedOptions: View {
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
-                .padding(.vertical, marks ? clear : 0)
+                .padding(.vertical, clear)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.horizontal, 14)
                 .background(Brand.bubble, in: shape)
@@ -1421,6 +1440,11 @@ struct NeedAnswerBox: View {
     @FocusState private var focused: Bool
     /// One line of the field, so "+" and Send stand on its centre at every text size.
     @ScaledMetric(relativeTo: .body) private var line: CGFloat = 22
+    /// **Send found words that look like a key** (`KeyInText`), as the field of Needs clarification finds them: the
+    /// line over the field says so, nothing is held or saved, and the words stay, until they hold no key. An answer in
+    /// words goes into the agent's conversation, where nothing masks a key before it is read; the answer's box sent
+    /// them with no look.
+    @State private var looksLikeKey = false
 
     private static let capsule = RoundedRectangle(cornerRadius: 25, style: .continuous)
 
@@ -1430,8 +1454,10 @@ struct NeedAnswerBox: View {
         // wrote nothing in the field, so its field stays as it is.
         let taken = store.answersTaken[need.id]
         let typed = taken.flatMap { $0.request.choice == nil && $0.request.choices == nil ? $0.request.text : nil }
-        let text = Binding(get: { sent ?? typed ?? store.answerDraft(for: need.id) },
-                           set: { store.setAnswerDraft($0, for: need.id) })
+        let text = Binding(get: { sent ?? typed ?? store.answerDraft(for: need.id) }, set: { words in
+            if looksLikeKey, !KeyInText.contains(words) { looksLikeKey = false }
+            store.setAnswerDraft(words, for: need.id)
+        })
         let trimmed = text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let composer = MobileStore.stageKey(need: need.id)
         let files = store.readyFiles(for: composer)
@@ -1440,6 +1466,11 @@ struct NeedAnswerBox: View {
             && (!trimmed.isEmpty || !files.isEmpty)
         VStack(alignment: .leading, spacing: 8) {
             AttachmentStrip(store: store, composer: composer)
+            // Over the field: under it, the keyboard stands on the line, as over the field of Needs clarification.
+            if looksLikeKey, KeyInText.contains(trimmed) {
+                ComposerNote(words: String(l10n: "That looks like a key. Never send a key in a message."), isWarning: true)
+                    .accessibilityIdentifier("answer-key-\(need.id)")
+            }
             HStack(alignment: .bottom, spacing: 0) {
                 // As in a chat: the round buttons stop growing at the largest ordinary text size.
                 if store.supportsAttachments {
@@ -1460,6 +1491,8 @@ struct NeedAnswerBox: View {
                 // The keyboard goes with the answer, before the item folds (item 95): it does not carry the page.
                 // his words wait 5 seconds with Undo, then go (`MobileStore.holdSend`)
                 SendButton(enabled: canSend, label: String(l10n: "Send answer"), side: 36) {
+                    // Words that look like a key stay here, with the line that says why, and nothing is held.
+                    if KeyInText.contains(trimmed) { looksLikeKey = true; return }
                     focused = false
                     store.holdSend(needID: need.id)
                 }
@@ -1831,6 +1864,13 @@ struct NeedFooter: View {
         } else if store.heldAnswer(to: need.id) != nil {
             // his answer waits with Undo: nothing goes, and nothing waits for it
             EmptyView()
+        } else if let stopped = stoppedAhead {
+            // **His press waits behind a request that did not go, and says so** (the owner, 22 November 2026: "cards
+            // on the phone are left with Sending... and never complete"): another card's answer, a chat message, a
+            // message under a card or a Pause, which waits in the Outbox with no refusal and no send. Its Try again
+            // sends that request with its own number, and this press goes by itself once it has its answer. While the
+            // hub does not answer, or this phone's key is not in hand, the line over the page is the one sign.
+            stoppedLine(stopped)
         } else if taken || sends {
             // **This answer on its way is one line, from the press to the fold** (polish pass: the receipt's jump): a
             // press that waits for the hub (item 51), the send, and the answer that the hub took until its item folds.
@@ -1858,6 +1898,14 @@ struct NeedFooter: View {
         }
     }
 
+    /// The request that this item's press waits behind, when it did not go: another one of this hub and generation in
+    /// the Outbox, with no refusal and no send, which Try again can send now (`canRetry`).
+    private var stoppedAhead: PendingRequest? {
+        guard store.waitingPresses[need.id] != nil, store.canRetry, let pending = store.pending,
+              pending.needID != need.id, !store.talks(pending, under: need.id) else { return nil }
+        return pending
+    }
+
     /// This item's own answer goes now: a press that waits for the hub, or a send that waits for its receipt; or his
     /// message under the card, on its way.
     private var sends: Bool {
@@ -1866,8 +1914,8 @@ struct NeedFooter: View {
         return pending.refusal == nil && store.sending
     }
 
-    /// This answer did not go: one line and the one action that fits. It stays until the hub confirms the answer or the
-    /// owner discards a refused one.
+    /// This answer did not go, or the one that it waits behind: one line and the one action that fits. It stays until
+    /// the hub confirms the answer or the owner discards a refused one.
     private func stoppedLine(_ request: PendingRequest) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             if let refusal = request.notSentLine {
