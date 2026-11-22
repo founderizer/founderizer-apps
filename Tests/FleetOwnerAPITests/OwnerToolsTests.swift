@@ -14,7 +14,9 @@ struct OwnerTableTests {
         #expect(kinds[.swift] == 13)
         #expect(kinds[.later] == nil)
         #expect(Set(table.tools.filter { $0.kind == .swift }.map(\.name)) == OwnerTools.written)
-        #expect(kinds[.absent] == 7)           // the six of the app's own pages, and connect_google (owner API 1.178)
+        // the six of the app's own pages, connect_google (owner API 1.178), and the three tools of a server at a
+        // cloud until piece B2 of design 9 writes them in Swift
+        #expect(kinds[.absent] == 10)
         #expect(table.tools.filter(\.kind.built).count == 57)
         #expect(table.version.count == 64)
         let check = try #require(table.tool("check_machine"))

@@ -505,12 +505,18 @@ private struct SentMessageView: View {
             if message.replaces_request_id != nil {
                 Text("Correction").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             }
+            // **The badge of the task or the job that it is about stands over his words** (`AboutBadgeView`), and over
+            // the files of a message of files alone.
+            let about = message.about?.place != nil
             // A message may carry files and no words: then the files are the message, and no empty bubble shows.
             // **The footer stands beside the bubble, on its last line** (T-20), and takes no height: under the
             // bubble it kept 26 points under every message he sent, so a reply stood 57 points from his question
             // and 29 from his next one. A message of files alone has no bubble, and keeps it under its files.
             if !message.text.isEmpty {
-                OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer), names: names)
+                OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer), names: names,
+                            over: about ? AnyView(AboutBadgeView(store: store, message: message)) : nil)
+            } else if about {
+                AboutBadgeView(store: store, message: message, alone: true)
             }
             if let files = message.attachments, !files.isEmpty {
                 // 12 points under his bubble (the stack's spacing is 6), as under a reply

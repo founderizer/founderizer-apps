@@ -94,7 +94,13 @@ public struct JobLevel: Sendable {
     public let lines: [WorkItem.Line]
     /// The ids of all its tasks, also of one that somebody canceled, which `lines` leaves out: his feedback on the job
     /// names one of them, and stays on the card when that task is canceled later (`HubState.messages(aboutJob:)`).
+    /// **Never a task that only opened a case of it**, which `lines` lists: a session that opened several cases is the
+    /// work of none of them (the hub names none of them in its `duty_case`), so his feedback names no such task
+    /// (`HubState.feedback(onJob:)`), and his message about it stands on none of their cards.
     public let taskIDs: Set<Int>
+    /// The tasks of it that later work took over (`Job.replaced`, by the board's rules over its tasks): a result of one
+    /// that did not succeed is no news, and its row's mark is muted, as on the board (`FleetTask.tint(in:replaced:)`).
+    public let replaced: Set<Int>
     /// The tasks of it that are not over, for the status row of one that goes on; empty once it ended.
     public let open: [FleetTask]
     /// How it ended (`WorkItem.result`), or nil while it goes on.
@@ -162,8 +168,15 @@ extension HubState {
                 guard let item = workItem(key) else { return nil }
                 let open = item.isOver ? [] : item.tasks.filter { !$0.isTerminal }
                 let waits = ownerWaits(of: open).sorted { $0.key < $1.key }.map(\.value)
+                // the sessions that opened a case of it, which its page lists (`workItem`), and which are not its own
+                var openers: Set<Int> = []
+                if case .dutyCase(let id) = item.id {
+                    openers = Set((responsibilities?.cases[id] ?? []).compactMap(\.opened_in)).subtracting(item.tasks.map(\.id))
+                }
+                let replaced = JobStanding(item.tasks, columns: taskColumns, waits: ownerWaits(of: item.tasks)).replaced
                 return JobLevel(title: item.title, agent: agent, request: request(of: waits),
-                                lines: item.lines, taskIDs: Set((item.tasks + item.shown).map(\.id)), open: open, result: item.result, recorded: item.recorded,
+                                lines: item.lines, taskIDs: Set((item.tasks + item.shown).map(\.id)).subtracting(openers),
+                                replaced: replaced, open: open, result: item.result, recorded: item.recorded,
                                 endedAt: item.endedAt)
             }
         }
@@ -173,15 +186,17 @@ extension HubState {
     }
 
     /// A card of the board as the same facts: its own tasks with none that somebody canceled, as its card lists them,
-    /// each subtask under the task that gave it, and how it ended by the rules of a thing of the work.
-    private func jobLevel(_ job: Job) -> JobLevel {
+    /// each subtask under the task that gave it, and how it ended by the rules of a thing of the work. The badge of his
+    /// message about a job reads it too (`badge(about:jobs:)`).
+    func jobLevel(_ job: Job) -> JobLevel {
         let shown = job.lines
         let head: CaseHead? = if case .dutyCase(let id) = job.key { responsibilities?.byID[id] } else { nil }
         let key: WorkItem.Key = if case .dutyCase(let id) = job.key { .dutyCase(id) } else { .task(job.firstTask) }
         let item = WorkItem(id: key, title: job.title, tasks: job.tasks.sorted { $0.id < $1.id }, shown: shown,
                             dutyCase: head, endedAt: job.open.isEmpty && !job.tasks.isEmpty ? job.endedAt : nil)
         return JobLevel(title: job.title, agent: job.agent, request: request(of: job.wait.map { [$0] } ?? []),
-                        lines: item.lines, taskIDs: Set((item.tasks + item.shown).map(\.id)), open: job.open, result: item.result, recorded: item.recorded,
+                        lines: item.lines, taskIDs: Set((item.tasks + item.shown).map(\.id)), replaced: job.replaced,
+                        open: job.open, result: item.result, recorded: item.recorded,
                         endedAt: item.endedAt)
     }
 

@@ -124,8 +124,8 @@ struct ChatAskHead: View {
     }
 }
 
-/// `opensTask` for a row that may have no task to open.
-private struct OpensItsTask: ViewModifier {
+/// `opensTask` for a row that may have no task to open (also the badge of a message about a job, `AboutBadgeView`).
+struct OpensItsTask: ViewModifier {
     let store: FleetStore
     let task: Int?
 

@@ -78,34 +78,15 @@ struct JobDetail: View {
     /// **How it ended, and when**, or where it stands while it goes on: its mark, its words, and under them what its
     /// agent recorded; the day and time at the right. While it goes on, the task that says where it stands speaks for
     /// it, in the mark and the words of its own row under it: one that waits for him, else one in work now, else the
-    /// open one that moved last.
+    /// open one that moved last (`JobLevel.standing`, which the badge of his message about the job shows too).
     private var statusRow: some View {
-        let open = level.open
-        let waits = state.ownerWaits(of: open)
-        let lead = open.first { waits[$0.id] != nil } ?? open.first { $0.mark(in: state).inWork }
-            ?? open.max { ($0.activityTime, $0.id) < ($1.activityTime, $1.id) }
-        let wait = lead.flatMap { waits[$0.id] }
-        let mark = lead?.mark(in: state)
-        let words: String = if let result = level.result { result.words }
-            else if case .request? = wait { String(l10n: "Waits for you") }
-            else if let wait { wait.words }
-            else { mark?.words ?? String(l10n: "Waiting") }
-        let detail = level.recorded ?? (mark?.inWork == true ? lead?.doing : nil)
+        let standing = level.standing(in: state)
+        let lead = standing.lead
+        let detail = level.recorded ?? (lead?.mark(in: state).inWork == true ? lead?.doing : nil)
         return HStack(alignment: .top, spacing: 0) {
-            RowMark {
-                if let end = level.result?.end {
-                    Self.endMark(end)
-                } else if wait != nil {
-                    Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange)
-                } else if let lead, let mark {
-                    if mark.inWork && store.isFresh { WorkMark(size: Self.mark, moves: store.marksMove) }
-                    else { Image(systemName: mark.symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(lead.tint(in: state).color) }
-                } else {
-                    Image(systemName: "circle.dotted").font(IconMetrics.symbol(Self.mark)).foregroundStyle(FleetStyle.muted)
-                }
-            }.accessibilityHidden(true)
+            RowMark { StandingMarkView(mark: standing.mark, size: Self.mark, store: store) }.accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text(words).font(FormMetrics.title).foregroundStyle(level.result?.end == .failed ? EndedRow.failedWords : FleetStyle.text)
+                Text(standing.words).font(FormMetrics.title).foregroundStyle(level.result?.end == .failed ? EndedRow.failedWords : FleetStyle.text)
                 if let detail, !detail.isEmpty {
                     Text(detail).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -124,7 +105,8 @@ struct JobDetail: View {
 
     /// One task of it: its mark, its title on one line, and under it its agent and its end, or its state while it is
     /// open (what it waits for from him, as his panel says it, when it waits for him); a subtask one step further in
-    /// than the task that gave it. It opens the task level over this job, also by an assistive app's press (VoiceOver's
+    /// than the task that gave it; a failure that later work of the job took over has a muted mark, as on the board
+    /// (`JobLevel.replaced`). It opens the task level over this job, also by an assistive app's press (VoiceOver's
     /// VO-Space, `AXPress`): the row's one element of its words is no button's own, so it takes the row's action as its
     /// default action, as a card of the board does.
     private func taskRow(_ line: WorkItem.Line, wait: OwnerWait?) -> some View {
@@ -139,7 +121,9 @@ struct JobDetail: View {
                 RowMark {
                     if wait != nil { Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(Self.mark)).foregroundStyle(.orange) }
                     else if mark.inWork && store.isFresh { WorkMark(size: Self.mark, moves: store.marksMove) }
-                    else { Image(systemName: mark.symbol).font(IconMetrics.symbol(Self.mark)).foregroundStyle(task.tint(in: state).color) }
+                    // a failure that later work of the job took over is muted, as on the board: it is no news
+                    else { Image(systemName: mark.symbol).font(IconMetrics.symbol(Self.mark))
+                        .foregroundStyle(task.tint(in: state, replaced: level.replaced.contains(task.id)).color) }
                 }.accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title).font(FormMetrics.text).foregroundStyle(FleetStyle.text).lineLimit(1)
@@ -162,17 +146,32 @@ struct JobDetail: View {
         .accessibilityIdentifier("work-task-\(task.id)")
     }
 
-    /// The mark of a thing that ended: the board's green check of a result that succeeded, its red of one that did not.
-    @ViewBuilder static func endMark(_ end: WorkItem.End) -> some View {
-        switch end {
-        case .done: Image(systemName: "checkmark.circle.fill").font(IconMetrics.symbol(mark)).foregroundStyle(FleetTask.MarkTint.checked.color)
-        case .failed: Image(systemName: "exclamationmark.circle.fill").font(IconMetrics.symbol(mark)).foregroundStyle(FleetTask.MarkTint.failed.color)
-        case .quiet: Image(systemName: "circle").font(IconMetrics.symbol(mark)).foregroundStyle(FleetStyle.muted)
-        }
-    }
-
     /// The size of every mark of the card, a form row's (`FormRow`).
     private static let mark: CGFloat = 15
     /// How far a subtask stands in under the task that gave it: one mark's column and its gap.
     private static let step = FormMetrics.markColumn + FormMetrics.markGap
+}
+
+/// **The mark of where a task or a job stands** (`StandingMark`), as the board draws it: a task's symbol in its colour,
+/// which turns in the green of work while it is work now and the reading is current (`marksMove`); the orange hand of
+/// what waits for him; how a job ended, the board's green check of a result that succeeded and its red of one that did
+/// not; and the muted dotted circle of a job that goes on with no task that says where. The job level's state row and
+/// the badge of his message about a task or a job (`AboutBadgeView`) draw it.
+struct StandingMarkView: View {
+    let mark: StandingMark
+    let size: CGFloat
+    let store: FleetStore
+
+    var body: some View {
+        switch mark {
+        case .task(let symbol, let tint, let inWork):
+            if inWork && store.isFresh { WorkMark(size: size, moves: store.marksMove) }
+            else { Image(systemName: symbol).font(IconMetrics.symbol(size)).foregroundStyle(tint.color) }
+        case .waits: Image(systemName: "hand.raised.fill").font(IconMetrics.symbol(size)).foregroundStyle(.orange)
+        case .ended(.done): Image(systemName: "checkmark.circle.fill").font(IconMetrics.symbol(size)).foregroundStyle(FleetTask.MarkTint.checked.color)
+        case .ended(.failed): Image(systemName: "exclamationmark.circle.fill").font(IconMetrics.symbol(size)).foregroundStyle(FleetTask.MarkTint.failed.color)
+        case .ended(.quiet): Image(systemName: "circle").font(IconMetrics.symbol(size)).foregroundStyle(FleetStyle.muted)
+        case .open: Image(systemName: "circle.dotted").font(IconMetrics.symbol(size)).foregroundStyle(FleetStyle.muted)
+        }
+    }
 }

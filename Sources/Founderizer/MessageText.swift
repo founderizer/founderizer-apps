@@ -447,6 +447,9 @@ struct OwnerBubble: View {
     var theirs = false
     /// The names that his words draw as badges, in an agent's chat (`MessageText.chatNames`).
     var names: ChatNames? = nil
+    /// What stands over his words, 6 points over them, inside the bubble and above its fold: the badge of the task or
+    /// the job that the message is about (`SentMessageView`, `AboutBadgeView`).
+    var over: AnyView? = nil
     @State private var expanded = false
     private var canCollapse: Bool { text.count > 420 || text.filter { $0 == "\n" }.count > 5 }
     /// A long message at rest: the height of its first six lines, the last of them fading into the bubble.
@@ -456,6 +459,8 @@ struct OwnerBubble: View {
         let folded = canCollapse && !expanded
         BubbleLayout(trailing: !theirs) {
         VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: 6) {
+            if let over { over }
             // **His words are drawn from their Markdown, as an agent's are** (3 November 2026: "chat messages dont
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
             // under them reads, where the literal text ran them all together.
@@ -474,6 +479,7 @@ struct OwnerBubble: View {
                                                                        bottom: folded ? 0 : -CardBadge.bleed,
                                                                        trailing: -CardBadge.bleed))
                 }
+            }
             if canCollapse {
                 // The click reaches over and under the words (`IconMetrics.reach`); the bubble keeps its size.
                 Button { expanded.toggle() } label: {

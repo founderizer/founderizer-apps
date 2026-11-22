@@ -143,11 +143,18 @@ struct FeedbackRows: View {
     var body: some View {
         let going = going
         let drawn = messages + [going].compactMap { $0 }.map { OwnerMessage(onItsWay: $0) }
+        // **The names in his words are badges, as in his chat** (`MessageText.chatNames`): the chat's one book, read
+        // once for the rows. No badge of the task or the job over his words: the card is that task or that job.
+        let book = store.chatNames
         ForEach(drawn) { message in
             VStack(alignment: .leading, spacing: ChatStyle.blockSpacing) {
-                // As the chat's row of his message (`SentMessageView`): no empty bubble over files alone.
+                // As the chat's row of his message (`SentMessageView`): no empty bubble over files alone, and a
+                // correction, which is about what its message is about (`FleetStore.sendEdit`), says so over it.
                 VStack(alignment: .trailing, spacing: 6) {
-                    if !message.text.isEmpty { OwnerBubble(text: message.text, origin: message.origin) }
+                    if message.replaces_request_id != nil {
+                        Text("Correction").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
+                    }
+                    if !message.text.isEmpty { OwnerBubble(text: message.text, origin: message.origin, names: book) }
                     if let files = message.attachments, !files.isEmpty {
                         MessageFilesView(store: store, files: files).padding(.top, message.text.isEmpty ? 0 : 6)
                     }
@@ -160,6 +167,10 @@ struct FeedbackRows: View {
                     ChatAskLine(store: store, row: ChatAskRow(ask, agent: message.chatRecipient, state: state))
                 }
             }
+            // A name's badge in his words opens what it names in this window, as in his chat (`openCardLink`): the
+            // card's window has no such action of its own, and the Mac's would look for an app of the badge's link.
+            .environment(\.openURL, OpenURLAction { store.openCardLink($0) })
+            .environment(\.cardServerSymbols, store.chatServerSymbols)
             // No group of its own and no identifier on the stack: a group with no label is one more level for
             // VoiceOver, and an identifier on a stack stands on each element in it. His words, his files and the
             // answer stand in the thread's order, as the chat's rows do.
@@ -203,3 +214,77 @@ private extension View {
         if let selection { wordsSelectable(in: selection, row: row) } else { self }
     }
 }
+
+/// **The badge of the task or the job that his message is about, over his words in the agent's chat** (design "Task
+/// details as a card over the page", part 2; the owner, 21 November 2026, "Yes, build it" to its drawing): the mark of
+/// where it stands, as the board draws it (`StandingMarkView`), and its title on one line, cut at its end, in the look
+/// of a name's badge in the chat: the card's fill, edge and corner (`CardBadge.draw`), violet because a press opens it,
+/// and a little more of both under the pointer. **It is a plain button** with the hand of a link, as "Show more" of the
+/// bubble is: no field of selectable words lies over it, and it takes Tab and Space with Full Keyboard Access, as every
+/// other press of a chat's row; an AppKit press view (`BadgePress`) stands only over a text's words, in the row under
+/// the pointer, because one in every such message would cost each frame of a scroll. A press opens the card over the
+/// chat at the task, or at the whole job (`HubState.badge(about:jobs:)`), and the pointer on a task's badge reads that
+/// task's thread first, as every opener of a task does (`opensTask`). For a task or a job that the reading has no more: the
+/// hub's title alone, with no mark and no press, and the same fill and edge with no colour, because violet is what he
+/// can press. It is never wider than a bubble can be, and a short message's bubble grows to hold it. **VoiceOver reads
+/// it as one button**, its title and where it stands, and its own action opens the card: an element of
+/// `.accessibilityElement(children: .ignore)` with no action of its own does not answer VoiceOver's press (the fault of
+/// a job's task rows, 21 November 2026). `alone`: the badge of a message of files alone, which stands over them at the
+/// column's trailing side, as a bubble does (`BubbleLayout`).
+struct AboutBadgeView: View {
+    let store: FleetStore
+    let message: OwnerMessage
+    var alone = false
+    /// The pointer is on it: its fill and its edge are a little stronger.
+    @State private var hovered = false
+
+    var body: some View {
+        if let about = message.about, let badge = store.aboutBadge(about) {
+            if alone { BubbleLayout(trailing: true) { drawn(badge) } } else { drawn(badge) }
+        }
+    }
+
+    @ViewBuilder private func drawn(_ badge: AboutBadge) -> some View {
+        if let standing = badge.standing {
+            let open = { store.show(standing.opens) }
+            Button(action: open) { pill(badge.title, mark: standing.mark) }
+                .buttonStyle(.plain)
+                .pointerStyle(.link)
+                .onHover { hovered = $0 }
+                .modifier(OpensItsTask(store: store, task: standing.opens.task))
+                // a badge that goes takes its hover with it: the pointer may have left it
+                .onDisappear { hovered = false }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel([badge.title, standing.words].joined(separator: ", "))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction(.default, open)
+                .accessibilityIdentifier("message-about-\(message.id)")
+        } else {
+            // its words are static text: it opens nothing
+            pill(badge.title, mark: nil)
+        }
+    }
+
+    /// The pill: the mark where it has one, then the title, on the badge's fill and edge, in grey where it does not
+    /// press.
+    private func pill(_ title: String, mark: StandingMark?) -> some View {
+        let presses = mark != nil, over = hovered
+        return HStack(spacing: 5) {
+            if let mark { StandingMarkView(mark: mark, size: Self.mark, store: store).accessibilityHidden(true) }
+            Text(title).font(ChatStyle.font).foregroundStyle(presses ? FleetStyle.link : FleetStyle.text).lineLimit(1)
+        }
+        .padding(.leading, 5).padding(.trailing, 7).padding(.vertical, 2)
+        .background {
+            Canvas { context, size in
+                if !presses { context.addFilter(.grayscale(1)) }
+                CardBadge.draw(CGRect(origin: .zero, size: size), over: over, room: nil, at: nil, in: &context) { _, _ in }
+            }
+        }
+        // the press and the hover reach the whole pill, its edge too
+        .contentShape(Rectangle())
+    }
+
+    /// The size of its mark, under the chat's words of 14 points, as a name's badge has its icon.
+    private static let mark: CGFloat = 12
+}
+

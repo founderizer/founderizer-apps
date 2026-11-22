@@ -892,6 +892,21 @@ final class FleetStore {
     /// message is about, so the draft of a task's or a job's card stays through a change of the card's level and a
     /// close of the card, as a guidance's draft stays with its task, and the hub's receipt empties it (`finish`).
     var feedbackDrafts: [String: String] = [:]
+    /// **The badge of what his message is about, in the agent's chat** (`HubState.badge(about:jobs:)`, `AboutBadgeView`).
+    /// A badge reads the jobs of the board of every agent (a job's name and mark, and whether later work took a task
+    /// over), which are worked out once for each reading, and only when a message names a task or a job that the reading
+    /// has: each draw of a message would work out the whole board again.
+    func aboutBadge(_ about: MessageAbout) -> AboutBadge? {
+        guard let state else { return nil }
+        return state.badge(about: about, jobs: jobsByTask(of: state))
+    }
+    private func jobsByTask(of state: HubState) -> [Int: Job] {
+        if let kept = jobsKept, kept.reading == readingCount { return kept.jobs }
+        let jobs = state.jobsByTask
+        jobsKept = (readingCount, jobs)
+        return jobs
+    }
+    @ObservationIgnored private var jobsKept: (reading: Int, jobs: [Int: Job])?
     var supportsDirectChat: Bool { state?.ui_features?.contains("direct_chat") == true }
     func canChat(with agent: String) -> Bool { state?.supportsChat(with: agent) == true }
     var supportsCorrections: Bool { state?.ui_features?.contains("corrections") == true }
@@ -943,7 +958,10 @@ final class FleetStore {
     /// The composer whose files a request carries: a guidance's, a request's answer's, a card's feedback's or a chat's.
     static func stageKey(of request: PendingRequest) -> String {
         if case .steer(let task, _) = request.command { return stageKey(task: task, database: request.database) }
-        if let about = request.about, request.needID == nil { return stageKey(about: about, database: request.database) }
+        // a correction of a feedback message is the chat's: it takes no file and no draft of the card's box
+        if let about = request.about, request.needID == nil, request.replacesRequestID == nil {
+            return stageKey(about: about, database: request.database)
+        }
         return request.needID.map { stageKey(need: $0) } ?? stageKey(agent: request.recipient ?? "manager")
     }
 
@@ -1300,7 +1318,9 @@ final class FleetStore {
     func cancelEdit() { editingMessage = nil; editText = "" }
     func sendEdit() async {
         guard let message = editingMessage, canEdit(message) else { return }
-        await sendText(editText, recipient: message.chatRecipient, replaces: message.id)
+        // a correction is about what its message is about (`HubState.correctionAbout`), and goes also where it is not
+        await sendText(editText, recipient: message.chatRecipient, replaces: message.id,
+                       about: state?.correctionAbout(of: message))
         if pending == nil { cancelEdit() }
     }
     var chatAgent: String {
