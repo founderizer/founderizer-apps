@@ -52,8 +52,8 @@ Primary: Productivity. Secondary: Business.
 
 ## Addresses
 
-- Support: https://founderizer.com/support
-- Privacy policy: https://founderizer.com/privacy
+- Support: https://platform.founderizer.com/support
+- Privacy policy: https://platform.founderizer.com/privacy
 - Marketing: https://founderizer.com
 
 ## Copyright
@@ -93,7 +93,7 @@ see.
 with the founder's own AI accounts. The agents do the founder's tasks: code, support mail, operations. The iPhone app
 is the founder's remote for that team: the chat with each agent, the decisions that wait for the founder (Needs you)
 and the tasks in progress. It is for founders and owners of small companies who run Founderizer on a Mac. Anyone can
-download Founderizer free at founderizer.com/download; it is not made for one company (3.2).
+download Founderizer free at platform.founderizer.com/download; it is not made for one company (3.2).
 
 3. Setup and access: no login is needed for review. On the first screen, tap See a sample fleet: every page works with
 made-up data, inside the app, and every write answers "Not sent: This is a sample." Tap Leave on the Sample fleet line

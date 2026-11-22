@@ -257,7 +257,7 @@ enum SampleFleetData {
    "tasks_open": 3
   },
   "db": "sample",
-  "ended_mark": "17ccf5cc38ed61ae",
+  "ended_mark": "82dc2db910034ac0",
   "holds": [],
   "manager_flag": null,
   "manager_warning": null,
@@ -292,6 +292,7 @@ enum SampleFleetData {
      "Offer a 20% voucher",
      "Say no, politely"
     ],
+    "pictures": null,
     "question": null,
     "raised": "@-2400",
     "recommended": null,
@@ -340,6 +341,7 @@ enum SampleFleetData {
      "Send it on Monday",
      "Show me the email first"
     ],
+    "pictures": null,
     "question": null,
     "raised": "@-1500",
     "recommended": null,
@@ -663,7 +665,9 @@ enum SampleFleetData {
    "need_recommended",
    "need_clarify",
    "message_about",
-   "chat_waits_answers"
+   "chat_waits_answers",
+   "need_pictures",
+   "agent_tags"
   ]
  },
  "tasks": {
@@ -1214,7 +1218,7 @@ enum SampleFleetData {
     "chat_undelivered": false,
     "direct_chat": true,
     "last": {
-     "preview": "Sí. Marketing tiene el correo listo, y Desarrollador publica el banner de las rebajas el domingo por la noche. El correo",
+     "preview": "Sí. Marketing tiene el correo listo, y Desarrollador publica el banner de las rebajas el domingo por la noche. Puedes ap",
      "side": "agent",
      "ts": "@-480"
     },
@@ -1351,7 +1355,7 @@ enum SampleFleetData {
    "tasks_open": 3
   },
   "db": "sample",
-  "ended_mark": "310a18d01c390a8f",
+  "ended_mark": "3f7ae631fb46cb45",
   "holds": [],
   "manager_flag": null,
   "manager_warning": null,
@@ -1386,6 +1390,7 @@ enum SampleFleetData {
      "Ofrecer un vale del 20 %",
      "Decir que no, con amabilidad"
     ],
+    "pictures": null,
     "question": null,
     "raised": "@-2400",
     "recommended": null,
@@ -1434,6 +1439,7 @@ enum SampleFleetData {
      "Enviarlo el lunes",
      "Ver antes el correo"
     ],
+    "pictures": null,
     "question": null,
     "raised": "@-1500",
     "recommended": null,
@@ -1757,7 +1763,9 @@ enum SampleFleetData {
    "need_recommended",
    "need_clarify",
    "message_about",
-   "chat_waits_answers"
+   "chat_waits_answers",
+   "need_pictures",
+   "agent_tags"
   ]
  },
  "tasks": {

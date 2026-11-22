@@ -5309,7 +5309,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "People: The people who may write to an agent from Discord or WhatsApp: add one, change one, or remove one with delete true and its id. role is one of the roles that fleet_read(page=\"people\") lists; agents are the agents they may reach; daily is their own message limit, or null for the role's own; a field left out stays as it is. scopes, for a person who is there already, maps an agent of their list to null (All: whatever that agent holds) or to a list {\"repo:<owner/name>\": \"read\" or \"write\", \"secret:bws://<uuid>\": \"use\" or \"read\"} of what that agent holds: their conversation with it then runs locked, and the hub makes each repository call for it. role_access true (Founderizer for Teams) gives a person who is there their role's set again, whole; a new person whose role has a set needs no agents; a change of role writes the new role's set first, so scopes in that write name only an agent of that set or of agents, else the hub refuses the whole write. This tool and save_role are the only writers of the people tables, so nothing a person says can widen their own access.",
+   "description": "People: The people who may write to an agent from Discord or WhatsApp: add one, change one, or remove one with delete true and its id. role is one of the roles that fleet_read(page=\"people\") lists; agents are the agents they may reach; daily is their own message limit, or null for the role's own; a field left out stays as it is. scopes, for a person who is there already, maps an agent of their list to null (All: whatever that agent holds) or to a list {\"repo:<owner/name>\": \"read\" or \"write\", \"secret:bws://<uuid>\": \"use\" or \"read\"} of what that agent holds: their conversation with it then runs locked, and the hub makes each repository call for it. role_access true (Founderizer for Teams) gives a person who is there their role's set again, whole; a new person whose role has a set needs no agents; a change of role writes the new role's set first, so scopes in that write name only an agent that the person has after the set and the agents of that write are written, else the hub refuses the whole write. This tool and save_role are the only writers of the people tables, so nothing a person says can widen their own access.",
    "feature": "people",
    "fields": [
     "id",
@@ -6154,5 +6154,5 @@
    "whole": []
   }
  ],
- "version": "91b51b329d5f16f7b47112a97a78bf3159e390af7386810ae416f45cb1ac6cdc"
+ "version": "979b0ec90316117ba93d9577410e76e30e575d6af5444e7a71a89dee8b8e1d22"
 }

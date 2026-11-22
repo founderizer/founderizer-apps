@@ -534,7 +534,10 @@ private struct PlanSteps: View {
 /// rest that grows upward, `ComposerCapsule`), up to five lines. **Its plus sends files with the guidance** (owner API
 /// 1.223; the owner's "Yes, build it" of 19 November 2026 to the pictures): the chat's plus, its chips over the line,
 /// and a file dropped on the task's thread or a picture pasted with Cmd+V, all where its composer takes files
-/// (`FleetStore.guidanceComposer`). Send needs words too: the hub keeps a guidance's words as its record.
+/// (`FleetStore.guidanceComposer`). Send needs words too: the hub keeps a guidance's words as its record. **A key in it
+/// waits for his choice, as in the chat's composer** (`KeyHoldBanner`): one that he pastes is not pasted, and one that he
+/// types holds Send, until he saves it as a secret or keeps it. Until 22 November 2026 it sent such words to the agent
+/// with no question (a reader of the Windows app's key hold found it).
 struct TaskSteering: View {
     @Bindable var store: FleetStore
     let task: FleetTask
@@ -547,6 +550,8 @@ struct TaskSteering: View {
     }
     /// The box's whole capsule gives its field the cursor (`ComposerCapsule`).
     @FocusState private var focused: Bool
+    /// He chose "Keep it" or "Paste it anyway" for the key in these words: no second question while it is in them.
+    @State private var keyAllowed = false
     private var allowed: Bool { Self.shows(task, in: store.state) }
     /// The box shows: the task is in a working state and no hold of the owner's holds it.
     static func shows(_ task: FleetTask, in state: HubState?) -> Bool {
@@ -578,6 +583,11 @@ struct TaskSteering: View {
                     Text(line).font(ChatStyle.detail).foregroundStyle(.orange).help(store.fileCause(for: composer) ?? "")
                 }
             }
+            if let held = store.heldKey, held.composer == key {
+                KeyHoldBanner(hold: held.hold, agent: task.owner) { saveHeldKey(held, words: words) } goOn: {
+                    keepHeldKey(held, words: words)
+                }
+            }
         } line: {
             if let composer { AttachFilesButton(store: store, composer: composer) }
             TextField("Guide this task…", text: words, axis: .vertical)
@@ -591,22 +601,32 @@ struct TaskSteering: View {
                     return .handled
                 }
                 .composerField(alone: composer == nil, lines: 1...5)
+                .onChange(of: text) { _, now in heldKeyCheck(now) }
             SendSlot(shows: canSend) {
                 Button { send() } label: { SendMark() }
                     .buttonStyle(FleetIconButtonStyle(filled: true)).help("Send this guidance to the task")
                     .accessibilityLabel("Send task guidance").keyboardShortcut(.return, modifiers: .command)
+                    .accessibilityIdentifier("task-guidance-send")
                     .disabled(!canSend)
             }
         }
         .pasteAttachments(store: store, composer: focused ? composer : nil)
+        .keyPasteGuard(store: store, composer: focused && SecretEntryView.isOffered(by: store) ? key : nil)
         .stageDroppedFiles(store: store, composer: composer)
         .chatColumn().padding(.top, 10).padding(.bottom, FleetSpace.under)
         .onChange(of: store.secretRefusals) { _, _ in text = "" }
+        .onChange(of: key) { _, _ in keyAllowed = false }
+        // The question of a key goes with the box, so no other box waits behind it.
+        .onDisappear { if store.heldKey?.composer == key { store.heldKey = nil } }
     }
 
     /// The hub's confirmation empties the box (`finish`); a file that went up an hour ago goes up again first, because
     /// the hub may have let it go and given its number to another file (`freshFiles`).
     private func send() {
+        if SecretEntryView.isOffered(by: store) && !keyAllowed && KeyInText.contains(text) {
+            store.heldKey = HeldKey(composer: key, hold: .text)
+            return
+        }
         let sent = text, composer = store.guidanceComposer(for: task)
         Task {
             var files: [Int] = []
@@ -616,6 +636,36 @@ struct TaskSteering: View {
             }
             await store.command(.steer(task: task.id, attempt: task.attempt), note: sent, attachments: files)
         }
+    }
+
+    /// Words that hold a key, however they came in, get the question once; words without one end it.
+    private func heldKeyCheck(_ now: String) {
+        guard SecretEntryView.isOffered(by: store) else { return }
+        if !KeyInText.contains(now) {
+            keyAllowed = false
+            if store.heldKey == HeldKey(composer: key, hold: .text) { store.heldKey = nil }
+        } else if !keyAllowed && store.heldKey == nil {
+            store.heldKey = HeldKey(composer: key, hold: .text)
+        }
+    }
+
+    /// "Save it as a secret": the key goes into the secure form over the page and out of his words, and the task's agent
+    /// gets the secret's name in its chat where he has one. A paste reads the clipboard again now.
+    private func saveHeldKey(_ held: HeldKey, words: Binding<String>) {
+        store.heldKey = nil
+        var cut: String?
+        if held.hold == .paste { cut = KeyCut.onClipboard() }
+        else if let split = KeyCut.split(words.wrappedValue) { words.wrappedValue = split.rest; cut = split.key }
+        // told only where he has a chat with the agent, as a request's card does: a tell that cannot go held the form open
+        store.secretForm = SecretPreset(tell: store.canChat(with: task.owner) ? task.owner : nil, key: cut,
+                                        kept: SecretValueKept())
+    }
+
+    /// "Paste it anyway" or "Keep it": his choice, and no second question while the key is in his words.
+    private func keepHeldKey(_ held: HeldKey, words: Binding<String>) {
+        store.heldKey = nil
+        keyAllowed = true
+        if held.hold == .paste, let pasted = NSPasteboard.general.string(forType: .string) { words.wrappedValue += pasted }
     }
 }
 

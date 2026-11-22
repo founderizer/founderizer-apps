@@ -852,7 +852,10 @@ process at a time.
   were removed is checked as a whole one: Windows' own RSA refuses the short form (measured in the build VM, .NET
   SDK 10.0.404; macOS's takes it), so 2026.0.0 on a PC failed about 1 in 256 key exchanges with a server that sends
   that form (OpenSSH sends the whole form). Its two security fixes are in `SftpClient` and `ScpClient`, which the app
-  does not use. No test covers the two changes: OpenSSH, which the tests run, shows neither fault.
+  does not use. No test covers the two changes: OpenSSH, which the tests run, shows neither fault. Four more of its
+  changes are on the app's path: the socket's buffer sizes (SSH.NET's pull request 1821), the socket's waits (1850),
+  the read of a program's output (1849) and the read of a field's bytes in each message (1848); the tests of
+  `Founderizer.Remote`, the 30-minute run included, pass with them.
 - The tests take MSTest 4.5.1 and Microsoft.NET.Test.Sdk 18.11.0, with their own lock file.
 - `nuget.config` names nuget.org alone, so no source of a machine's own setup is asked.
 - The self-check has no lock file of its own: its one package is the library's, and a lock file there would change
