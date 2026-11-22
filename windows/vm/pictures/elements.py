@@ -1,12 +1,21 @@
 """Checks one page of the Windows app, element by element, against a picture set's list (set8-elements.json): each word
-of the picture's table is an element's name (or in one, for a line with a link), and each control that the list
+of the picture's table is the whole name of a text, a button, a link or a field, and each control that the list
 measures has its place and its size. The page is a dump of elements.ps1, in the screen's own pixels.
 
-    python3 -I elements.py set8-elements.json 02-help-improve page.tsv [--scale 2]
+    python3 -I elements.py set8-elements.json 02-help-improve page.tsv [--scale 2] [host=10.0.2.2 ...]
+
+A word is found only as the whole name of such an element: a line with a link is listed whole, and its link as an
+element of its own ({"name": "Privacy", "type": "Hyperlink"}); a word that is a part of a longer name, or a page's own
+automation name, is not found. Words of the picture's example data that a proof's stand-in gives otherwise (a server's
+address, its system) are written {name} in the list, with the picture's own value in its "data"; name=value on the
+command line gives the proof's.
 
 Prints one line for each check and exits 1 when one fails."""
 import json
 import sys
+
+# The kinds of element whose whole name is a word of the page (not a group's, a pane's or the window's name).
+WORDED = {"Text", "Button", "Hyperlink", "Edit"}
 
 
 def read(path, scale):
@@ -26,12 +35,18 @@ def matches(row, want):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    scale = float(sys.argv[sys.argv.index("--scale") + 1]) if "--scale" in sys.argv else 2.0
-    spec_path, picture, dump = args[0], args[1], args[2]
+    argv = sys.argv[1:]
+    scale = 2.0
+    if "--scale" in argv:
+        at = argv.index("--scale")
+        scale = float(argv[at + 1])
+        del argv[at:at + 2]
+    given = dict(a.split("=", 1) for a in argv if "=" in a)
+    spec_path, picture, dump = [a for a in argv if "=" not in a][:3]
     spec = json.load(open(spec_path, encoding="utf-8"))
     page = spec["pictures"][picture]
     common = spec["common"]
+    data = {**spec.get("data", {}), **given}
     rows = read(dump, scale)
     failed = 0
 
@@ -40,14 +55,27 @@ def main():
         failed += 0 if ok else 1
         print(("pass  " if ok else "FAIL  ") + what)
 
-    names = [r["name"] for r in rows if r["name"]]
-    for words in page.get("words", []):
-        say(words in names or any(words in n for n in names), f'the words "{words}"')
+    def fill(value):
+        if not isinstance(value, str):
+            return value
+        for name, words in data.items():
+            value = value.replace("{" + name + "}", words)
+        return value
+
+    def filled(want):
+        return {key: fill(value) for key, value in want.items()}
+
+    for entry in page.get("words", []):
+        want = filled({"name": entry} if isinstance(entry, str) else entry)
+        kinds = {want["type"]} if "type" in want else WORDED
+        found = any(r["name"] == want["name"] and r["type"] in kinds for r in rows)
+        say(found, f'the words "{want["name"]}"' + (f' ({want["type"]})' if "type" in want else ""))
 
     for box in page.get("boxes", []):
-        found = [r for r in rows if matches(r, box["match"])]
+        match = filled(box["match"])
+        found = [r for r in rows if matches(r, match)]
         if len(found) != 1:
-            say(False, f'{box["match"]}: {len(found)} elements')
+            say(False, f'{match}: {len(found)} elements')
             continue
         r = found[0]
         tol = box.get("tol", 1.5)
@@ -58,11 +86,23 @@ def main():
         if "cx" in box:
             checks.append(("cx", r["x"] + r["w"] / 2, box["cx"]))
         for key, got, want in checks:
-            say(abs(got - want) <= tol, f'{box["match"]} {key} {got:.1f}, set 8 {want} (±{tol})')
+            say(abs(got - want) <= tol, f'{match} {key} {got:.1f}, set 8 {want} (±{tol})')
+
+    # The room between two elements, one over the other: from the lower edge of the first to the upper edge of the second.
+    for gap in page.get("gaps", []):
+        above = [r for r in rows if matches(r, filled(gap["above"]))]
+        below = [r for r in rows if matches(r, filled(gap["below"]))]
+        if len(above) != 1 or len(below) != 1:
+            say(False, f'the gap {filled(gap["above"])} to {filled(gap["below"])}: {len(above)} and {len(below)} elements')
+            continue
+        got = below[0]["y"] - (above[0]["y"] + above[0]["h"])
+        tol = gap.get("tol", 1.5)
+        say(abs(got - gap["gap"]) <= tol,
+            f'the gap {filled(gap["above"])} to {filled(gap["below"])} {got:.1f}, set 8 {gap["gap"]} (±{tol})')
 
     for gone in page.get("absent", []):
-        found = [r for r in rows if matches(r, gone)]
-        say(not found, f"no element {gone}")
+        found = [r for r in rows if matches(r, filled(gone))]
+        say(not found, f"no element {filled(gone)}")
 
     if page.get("back", True):
         back = common["back"]

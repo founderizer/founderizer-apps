@@ -104,7 +104,7 @@ struct FeedbackBox: View {
         var cut: String?
         if held.hold == .paste { cut = KeyCut.onClipboard() }
         else if let split = KeyCut.split(words.wrappedValue) { words.wrappedValue = split.rest; cut = split.key }
-        store.secretForm = SecretPreset(tell: feedback.recipient, key: cut)
+        store.secretForm = SecretPreset(tell: feedback.recipient, key: cut, kept: SecretValueKept())
     }
 
     /// "Paste it anyway" or "Keep it": his choice, and no second question while the key is in his words.

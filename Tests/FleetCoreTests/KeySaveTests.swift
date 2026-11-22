@@ -59,6 +59,47 @@ struct KeySaveTests {
         #expect(gone.look == nil && !gone.holds && !gone.collapsed(expanded: false))
     }
 
+    /// The bug that this catches: the part goes to rest in the same moment that his Replace ends, and its check never
+    /// draws; a failed step draws a check beside the rows that say it failed; or the end of the save's last read of the
+    /// hub, more than about 2 seconds after the check, draws the check a second time.
+    @Test("The part Value's mark: the ring while Replace runs, the check once after the part went to rest, no mark for a failed step")
+    func thePartValuesMark() {
+        var mark = KeyValueMark()
+        #expect(mark.look == nil)
+        let none = mark.take(nil)
+        #expect(!none)
+        mark.take(KeySaveLook.of(done: nil, busy: true, saving: true))
+        #expect(mark.look == .goes)
+        mark.take(KeySaveLook.of(done: true, busy: true, saving: true))
+        #expect(mark.look == .saved)
+        // the part is at rest at once, with its field empty: the check stays until it has drawn itself
+        let rested = mark.take(KeySaveLook.of(done: nil, busy: false, saving: false))
+        #expect(!rested && mark.look == .saved)
+        mark.rest()
+        #expect(mark.look == nil)
+        // the same Replace says "saved" again after a slow read of the hub: no second check
+        let again = mark.take(.saved)
+        #expect(!again && mark.look == nil)
+        // the next Replace has its own ring and its own check
+        mark.take(.goes)
+        mark.take(.saved)
+        #expect(mark.look == .saved)
+
+        // a step failed after the value went in: the rows say it, with no mark; Try again turns the ring again
+        var failed = KeyValueMark()
+        failed.take(.goes)
+        failed.take(KeySaveLook.of(done: false, busy: false, saving: false))
+        #expect(failed.look == nil)
+        failed.take(KeySaveLook.of(done: false, busy: true, saving: false))
+        #expect(failed.look == .goes)
+        // a ring that turns stays when he types meanwhile: its save still runs
+        failed.rest()
+        #expect(failed.look == .goes)
+        // a save that ended with a line of its own before anything was sent (nil) leaves no ring
+        failed.take(nil)
+        #expect(failed.look == nil)
+    }
+
     @Test("Only a saved key folds to its title and a check: a decline and his words keep their words")
     func onlyASavedKeyFoldsToTheCheck() throws {
         func key(_ secret: [String: Any], answered: Bool = true) throws -> OwnerNeed {

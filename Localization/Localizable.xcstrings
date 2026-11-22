@@ -1525,16 +1525,6 @@
         }
       }
     },
-    "%@ proposes this. %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ propone esto. %@"
-          }
-        }
-      }
-    },
     "%@ reached its usage limit" : {
       "localizations" : {
         "es" : {
@@ -11490,16 +11480,6 @@
         }
       }
     },
-    "Its vault signs in with it. No agent sees the password." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Su bóveda inicia sesión con él. Ningún agente ve la contraseña."
-          }
-        }
-      }
-    },
     "Join line" : {
       "localizations" : {
         "es" : {
@@ -12370,6 +12350,16 @@
         }
       }
     },
+    "Manage" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gestionar"
+          }
+        }
+      }
+    },
     "Manager" : {
       "localizations" : {
         "es" : {
@@ -12856,6 +12846,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Las sesiones nuevas usan esto. Una tarea de escritorio usa el modelo de escritorio."
+          }
+        }
+      }
+    },
+    "New value" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valor nuevo"
           }
         }
       }
@@ -19090,6 +19090,16 @@
         }
       }
     },
+    "Show each agent with its access" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar cada agente con su acceso"
+          }
+        }
+      }
+    },
     "Show less" : {
       "localizations" : {
         "es" : {
@@ -23350,6 +23360,16 @@
         }
       }
     },
+    "The same agents keep it. Nobody sees the old or the new value." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los mismos agentes siguen teniendo acceso. Nadie ve el valor anterior ni el nuevo."
+          }
+        }
+      }
+    },
     "The same handle is in the list two times." : {
       "localizations" : {
         "es" : {
@@ -26560,16 +26580,6 @@
         }
       }
     },
-    "Uses it: its vault sends the key for it, and it never sees it. Reads it: the key is in its sessions as $%@." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lo usa: su bóveda envía la clave por él, y nunca la ve. Lo lee: la clave está en sus sesiones como $%@."
-          }
-        }
-      }
-    },
     "Uses the mouse and keyboard of %@. It can do all that a person at that Mac can do." : {
       "localizations" : {
         "es" : {
@@ -26606,6 +26616,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Válido hasta %@."
+          }
+        }
+      }
+    },
+    "Value" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valor"
           }
         }
       }

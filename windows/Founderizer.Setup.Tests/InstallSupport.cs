@@ -17,8 +17,17 @@ internal sealed class StandInRemote(Func<RemoteCall, byte[]?, RemoteResult> answ
     public List<RemoteCall> Calls { get; } = [];
     public List<byte[]?> Inputs { get; } = [];
 
+    /// <summary>Whether the app's own key is in the box: a call with it while it is not throws, as SshRemote's does.
+    /// Null: the stand-in asks no box.</summary>
+    public Func<bool>? HoldsAppKey { get; set; }
+
+    /// <summary>The real client's two refusals come first (RemoteRules.Check, and the app's key that is not there), so a
+    /// model that makes such a call fails here as it fails on a PC.</summary>
     public Task<RemoteResult> RunAsync(RemoteCall call, Action<string>? line, CancellationToken cancel)
     {
+        RemoteRules.Check(call);
+        if (call.Login is RemoteLogin.AppKey && HoldsAppKey?.Invoke() == false)
+            throw new InvalidOperationException("The app has no SSH key yet: make it with AppSshKey.Make and keep it in the secret box first.");
         var input = call.Input?.ToArray();
         Calls.Add(call);
         Inputs.Add(input);

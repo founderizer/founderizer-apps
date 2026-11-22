@@ -242,6 +242,12 @@ public sealed class FirstRunTests
             TailscaleSetup.CannotDownload("%@"), TailscaleSetup.NoInstaller, TailscaleSetup.NotTailscales, TailscaleSetup.CannotOpen("%@"),
             SetupViewWords.Back, SetupViewWords.Server, SetupViewWords.Hub, SetupViewWords.Agent, SetupViewWords.AServer, SetupViewWords.Slider,
             SetupViewWords.Progress(0, 6, "%@").Replace("1 of 6", "%lld of %lld"), SetupViewWords.Progress(6, 6, "").Replace("6", "%lld"),
+            // Piece U2: the build page, the lists under a server, the policy's lines, the key's picker, a stopped install.
+            SetupViewWords.Minutes(7).Replace("7", "%lld"), SetupViewWords.AnotherProvider, SetupViewWords.AsksForToken,
+            SetupViewWords.NewServer, SetupViewWords.Copy, SetupViewWords.Copied, SetupViewWords.ChooseKeyTitle,
+            SetupViewWords.Done, SetupViewWords.Failed, SetupViewWords.Waiting, SetupViewWords.InstallStopped,
+            SetupViewWords.Checks, SetupViewWords.Ready, SetupViewWords.NotReady, SetupViewWords.NotChecked, SetupViewWords.Warning,
+            SetupViewWords.ChecksFooter,
         })
             Assert.IsTrue(keys.Contains(Mac(words)), words);
     }

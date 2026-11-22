@@ -32,6 +32,8 @@
     <Compile Include="../Founderizer.Windows/Fleet/OwnerKeyLine.cs" Link="Linked/OwnerKeyLine.cs" />
     <Compile Include="../Founderizer.Windows/Pages/FirstRun/WelcomePlan.cs" Link="Linked/WelcomePlan.cs" />
     <Compile Include="../Founderizer.Windows/Pages/FirstRun/SetupViewWords.cs" Link="Linked/SetupViewWords.cs" />
+    <Compile Include="../Founderizer.Windows/Pages/FirstRun/BuildRows.cs" Link="Linked/BuildRows.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/KeyFile.cs" Link="Linked/KeyFile.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/History.cs" Link="Linked/History.cs" />
     <Compile Include="../Founderizer.Windows/Navigation/PaneMarks.cs" Link="Linked/PaneMarks.cs" />
     <Compile Include="../Founderizer.Windows/Pages/EndedRows.cs" Link="Linked/EndedRows.cs" />

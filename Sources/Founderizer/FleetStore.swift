@@ -608,6 +608,7 @@ final class FleetStore {
             guard detail != oldValue else { return }
             childThreadRequest = nil
             detailHoldsEscape = false
+            detailKeyForms = [:]
             // The task level is the place that he left, and opens at the next start (`keptName`).
             let kept = Self.keptName(destination, detail: detail)
             if keptPages[hub.absoluteString] != kept { keptPages[hub.absoluteString] = kept }
@@ -615,6 +616,9 @@ final class FleetStore {
             if detail == nil { markRepliesSeen() }
         }
     }
+    /// **The forms of key requests in the job level of the card**, outside its two builds (`keptKeyForm`): memory only,
+    /// and they go with the card and with each change of its level.
+    @ObservationIgnored var detailKeyForms: [Int: SecretValueKept] = [:]
     /// A page that takes another name while the card shows: it keeps the card (`destination`).
     @ObservationIgnored private var keepsDetail = false
 

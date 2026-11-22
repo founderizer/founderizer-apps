@@ -96,6 +96,71 @@ public sealed class SetupKeyTests
         }
     }
 
+    /// <summary>**Other VPS on a PC that has made no server yet: the check has the app's own key** (found by piece U2 in
+    /// the build VM). The app's SSH key is made at its first use; the provider's build makes it, and Other VPS checks with
+    /// it before any build. The rig's remote refuses a call with the app's key while the box holds none, as SshRemote
+    /// does. The bug: a PC whose first run goes to Other VPS checks with no key in its box, and the title stands at
+    /// "Checking" for ever, or stops with the words of a server not reached.</summary>
+    [TestMethod]
+    public async Task Other_VPS_on_a_PC_with_no_server_yet_checks_with_the_apps_own_key()
+    {
+        await using var rig = new SetupRig(call => new KeyServer().Answer(call, call.Input));
+        Assert.IsNull(rig.Box.Read(AppSshKey.BoxName), "a PC that has made no server holds no key yet");
+        rig.ThroughTheFirstPages(ServersStep.One);
+        rig.Store.ChooseOtherVps();
+        await rig.Store.CheckVpsAsync(Server);
+        var s = rig.Store.State;
+        Assert.AreEqual((VpsPhase.Stopped, true), (s.Vps.Phase, s.Vps.KeysOnly), s.Vps.Why);
+        Assert.AreEqual(ServerCheck.KeysOnly(Server), s.Vps.Why);
+        Assert.IsTrue(rig.Remote.Calls.Any(c => c.Login is RemoteLogin.AppKey), "the check called the server with the app's key");
+    }
+
+    /// <summary>**Try again of an address that is not one says its sentence again, and calls nothing** (Check 1 of U2).
+    /// The address's own sentence shows at once; its stop's one press is Try again, and Enter presses it too. The bug: Try
+    /// again sent the call that no server may get, the SSH client refused it with an exception, and the title stood at
+    /// "Checking &lt;address&gt;" for ever. The rig's remote refuses such a call as RemoteRules.Check does.</summary>
+    [TestMethod]
+    public async Task Try_again_of_an_address_that_is_not_one_says_its_sentence_again()
+    {
+        foreach (var typed in new[] { "my server", "https://203.0.113.10", "203.0.113.10:70000" })
+        {
+            await using var rig = new SetupRig(call => new KeyServer().Answer(call, call.Input));
+            rig.ThroughTheFirstPages(ServersStep.One);
+            rig.Store.ChooseOtherVps();
+            var says = SetupStore.Target(typed).Problem;
+            Assert.IsNotNull(says, typed);
+            await rig.Store.CheckVpsAsync(typed);
+            Assert.AreEqual((VpsPhase.Stopped, says), (rig.Store.State.Vps.Phase, rig.Store.State.Vps.Why), typed);
+            await rig.Store.VpsAgainAsync();
+            Assert.AreEqual((VpsPhase.Stopped, says), (rig.Store.State.Vps.Phase, rig.Store.State.Vps.Why), typed + ", Try again");
+            Assert.AreEqual(0, rig.Remote.Calls.Count, typed + ": no call");
+        }
+    }
+
+    /// <summary>**A call of Other VPS that throws ends in a stop, and the owner's key goes** (Check 1 of U2; the Mac's
+    /// <c>ServerCheck.run</c> turns each error into the stop of a server not reached). The bug: an exception that is not
+    /// a cancel (a box that does not open, a call that the SSH client refuses) leaves the title at "Checking" with no
+    /// end, and the owner's key and its passphrase in memory until Back.</summary>
+    [TestMethod]
+    public async Task A_call_that_throws_ends_in_a_stop_and_the_owners_key_goes()
+    {
+        var (file, _) = Key();
+        var server = new KeyServer(keyCall: (_, _) => throw new IOException("the network went away in the middle"));
+        await using var rig = await AtTheKeysOnlyStop(server);
+        await rig.Store.ChooseKey(file, "id_ed25519");
+        var s = rig.Store.State;
+        Assert.AreEqual((VpsPhase.Stopped, ServerCheck.Unreached(Server)), (s.Vps.Phase, s.Vps.Why));
+        Assert.IsFalse(rig.Store.HoldsOwnerKey, "no byte of the owner's key and no passphrase stays");
+        Assert.IsNull(s.Vps.KeyName);
+
+        // The check itself: a remote that throws at the check is a stop in the same words, not a title with no end.
+        await using var other = new SetupRig(call => call.Program == "/bin/sh -s" ? throw new IOException("no answer") : (RemoteResult?)null);
+        other.ThroughTheFirstPages(ServersStep.One);
+        other.Store.ChooseOtherVps();
+        await other.Store.CheckVpsAsync(Server);
+        Assert.AreEqual((VpsPhase.Stopped, ServerCheck.Unreached(Server)), (other.Store.State.Vps.Phase, other.Store.State.Vps.Why));
+    }
+
     /// <summary>**A server that names a password way, or names none, shows the password and the key on one page, and a key
     /// chosen there puts this PC's key on the server with no password call** (picture 14b, W15): the password's field and
     /// its line, then the key's row with Choose key and "Your key never leaves this PC". Keyboard-interactive is a

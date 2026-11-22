@@ -1,8 +1,21 @@
 {
-  "about": "Picture set 8 (the first run, pictures 1 to 7) as elements: each picture's words of the table in ~/dev/founderizer-plans/windows-app-pictures-8/windows-app-pictures-8.md, and each control's measures in effective pixels of the 1440 by 900 window, from that table and the set's source (make.py: .back, .prog, .st, .cho, .pc, .fld, .pri, .sld). x and cx are the left edge and the middle; tol is how far a measure may be from it. elements.py checks a dump of elements.ps1 against one picture.",
+  "about": "Picture set 8 (the first run, pictures 1 to 17 with 13d and 14b) as elements: each picture's words of the table in ~/dev/founderizer-plans/windows-app-pictures-8/windows-app-pictures-8.md, and each control's measures in effective pixels of the 1440 by 900 window, from that table and the set's source (make.py: .back, .prog, .st, .cho, .pc, .fld, .pri, .sld, .ssteps, .grid3, .boxes, .combo, .form, .row, .btn, .bl). x and cx are the left edge and the middle; tol is how far a measure may be from it. A word is the whole name of a text, a button, a link or a field; a line with a link is listed whole, and its link as an element of its own. The steps on Back's line stand 92 to 96 apart: 96 is set 8's number, and 92 the Mac's rule (a step as wide as its longest name and 16, at least 92) with Windows' font (plan v2, 9.1). Words in braces are the picture's example data (data, below), which a proof's stand-in gives otherwise: elements.py takes the proof's as name=value. elements.py checks a dump of elements.ps1 against one picture. gaps: the room from the lower edge of one element to the upper edge of the next, in their UI Automation rectangles: set 8's 24 from a title to the first control and 18 between two controls (.st .cn), less 2.5 under a title (Look.TitleNudge: WinUI sets a title's line 2.5 higher than the pictures), and with the inset of an element in its control: a field's text box stands 7 within its frame of 34, a row's title 12 within a row of 44 and 7 within a row of 56 (two lines of 20 and 2), under the card's edge of 1.",
   "common": {
     "steps": {"names": ["Manager", "AI provider", "Servers", "Network", "VPS", "Build"], "top": 99, "step": [92, 96], "tol": 3},
     "back": {"match": {"id": "setup-back"}, "text": {"name": "Back", "x": 47, "y": 72, "h": 20, "tol": 3}}
+  },
+  "data": {
+    "pick": "Hetzner · CX23 · €5.99 a month",
+    "host": "203.0.113.10",
+    "user": "root",
+    "summary": "Ubuntu 24.04 · 4 GB · x86_64",
+    "changes": "SSH moves to Tailscale. Port 443 stays open.",
+    "keyfile": "id_ed25519",
+    "hubline": "Installing security updates · 9 min",
+    "why": "Hetzner has no server free now.",
+    "nextpick": "Hetzner · CPX22 · €7.99 a month",
+    "failedstep": "Finish the install",
+    "stop": "Finish the install took too long. The server is still working, or it cannot be reached."
   },
   "pictures": {
     "01-welcome": {
@@ -16,11 +29,13 @@
     "02-help-improve": {
       "steps": false,
       "words": ["Help improve Founderizer", "Sends error codes, versions and counts to Founderizer. Never your work, names or keys.",
-                "Send anonymous usage data", "Don't send", "You can change this later in Settings › Help.", "Privacy"],
+                "Send anonymous usage data", "Don't send", "You can change this later in Settings › Help. Privacy\u00a0↗",
+                {"name": "Privacy", "type": "Hyperlink"}],
       "boxes": [
         {"match": {"id": "first-run-reports-send", "type": "Button"}, "x": 370, "w": 343, "h": 58, "tol": 1.5},
         {"match": {"id": "first-run-reports-none", "type": "Button"}, "x": 727, "w": 343, "h": 58, "tol": 1.5}
-      ]
+      ],
+      "absent": [{"name": "Now"}]
     },
     "03-name-your-manager": {
       "at": 0,
@@ -29,7 +44,7 @@
         {"match": {"id": "first-run-name", "type": "Edit"}, "x": 541, "w": 358, "tol": 2},
         {"match": {"id": "first-run-name-continue", "type": "Button"}, "h": 32, "cx": 720, "tol": 1.5}
       ],
-      "absent": [{"type": "Button", "name": "Clear"}, {"id": "DeleteButton"}]
+      "absent": [{"type": "Button", "name": "Delete"}, {"id": "DeleteButton"}, {"id": "GlyphElement"}]
     },
     "04-ai-provider": {
       "at": 1,
@@ -37,7 +52,8 @@
       "boxes": [
         {"match": {"id": "first-run-ai-codex", "type": "Button"}, "x": 490, "w": 223, "h": 66, "tol": 1.5},
         {"match": {"id": "first-run-ai-claude", "type": "Button"}, "x": 727, "w": 223, "h": 66, "tol": 1.5}
-      ]
+      ],
+      "absent": [{"name": "Now"}]
     },
     "05-servers": {
       "at": 2,
@@ -59,6 +75,161 @@
       "words": ["Waiting for Tailscale", "Open Tailscale again"],
       "boxes": [{"match": {"id": "first-run-network-again", "type": "Button"}, "cx": 720, "tol": 2}],
       "absent": [{"id": "first-run-network-connect"}]
+    },
+    "08-tailscale-key": {
+      "at": 3,
+      "words": ["Your Tailscale key", "Open Keys\u00a0↗ in Tailscale", {"name": "Keys", "type": "Hyperlink"}, "Generate access token, then copy it",
+                {"name": "Paste it here", "type": "Edit"}],
+      "boxes": [
+        {"match": {"type": "Text", "name": "Generate access token, then copy it"}, "x": 550, "w": 360, "tol": 1.5},
+        {"match": {"id": "first-run-tailscale-key", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}
+      ],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Your Tailscale key"}, "below": {"type": "Text", "name": "Open Keys\u00a0↗ in Tailscale"}, "gap": 21.5},
+        {"above": {"type": "Text", "name": "Generate access token, then copy it"}, "below": {"id": "first-run-tailscale-key", "type": "Edit"}, "gap": 25}
+      ]
+    },
+    "09-vps": {
+      "at": 4,
+      "words": ["A VPS for your fleet", "Hetzner", "Best price", "DigitalOcean", "Simple to use", "Vultr", "Many regions", "Akamai",
+                "Formerly Linode", "Other VPS", "Any server by SSH"],
+      "boxes": [
+        {"match": {"id": "first-run-cloud-hetzner", "type": "Button"}, "x": 450, "y": 428.4, "w": 170.7, "h": 126, "tol": 2},
+        {"match": {"id": "first-run-cloud-digitalocean", "type": "Button"}, "x": 634.7, "y": 428.4, "w": 170.7, "h": 126, "tol": 2},
+        {"match": {"id": "first-run-cloud-vultr", "type": "Button"}, "x": 819.3, "y": 428.4, "w": 170.7, "h": 126, "tol": 2},
+        {"match": {"id": "first-run-cloud-akamai", "type": "Button"}, "x": 450, "y": 568.4, "w": 170.7, "h": 126, "tol": 2},
+        {"match": {"id": "first-run-cloud-other", "type": "Button"}, "x": 634.7, "y": 568.4, "w": 170.7, "h": 126, "tol": 2}
+      ],
+      "gaps": [
+        {"above": {"type": "Text", "name": "A VPS for your fleet"}, "below": {"id": "first-run-cloud-hetzner", "type": "Button"}, "gap": 21.5}
+      ]
+    },
+    "10-provider-token": {
+      "at": 4,
+      "words": ["Your Hetzner token", "Open your project in Hetzner Console\u00a0↗", {"name": "Hetzner Console", "type": "Hyperlink"},
+                "Security › API tokens › Generate API token", "Choose Read & Write, then copy the token", {"name": "Paste it here", "type": "Edit"}],
+      "boxes": [{"match": {"id": "first-run-cloud-token", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Your Hetzner token"}, "below": {"type": "Text", "name": "Open your project in Hetzner Console\u00a0↗"}, "gap": 21.5},
+        {"above": {"type": "Text", "name": "Choose Read & Write, then copy the token"}, "below": {"id": "first-run-cloud-token", "type": "Edit"}, "gap": 25}
+      ]
+    },
+    "11-your-fleet": {
+      "at": 4,
+      "words": ["Your fleet", "Server", "Hub", "Juno", "Agent", {"name": "{pick}", "type": "Button"}, {"name": "Make 2 servers", "type": "Button"}],
+      "boxes": [
+        {"match": {"id": "first-run-fleet-hub", "type": "Button"}, "cx": 597.3, "h": 32, "tol": 3},
+        {"match": {"id": "first-run-fleet-manager", "type": "Button"}, "cx": 842.7, "h": 32, "tol": 3},
+        {"match": {"id": "cloud-choice-press", "type": "Button"}, "cx": 720, "h": 32, "tol": 1.5}
+      ],
+      "absent": [{"name": "Servers in another project?"}]
+    },
+    "12-other-vps-address": {
+      "at": 4,
+      "words": ["Your VPS", {"name": "Address", "type": "Edit"}],
+      "boxes": [{"match": {"id": "first-run-vps-address", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Your VPS"}, "below": {"id": "first-run-vps-address", "type": "Edit"}, "gap": 28.5}
+      ]
+    },
+    "13-other-vps-check": {
+      "at": 4,
+      "words": ["{host}", "{summary}", {"name": "Install", "type": "Button"}, "{changes}"],
+      "boxes": [{"match": {"id": "first-run-vps-install", "type": "Button"}, "cx": 720, "h": 32, "tol": 1.5}],
+      "absent": [{"id": "first-run-vps-key"}, {"id": "first-run-vps-password"}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "{host}"}, "below": {"id": "first-run-vps-summary"}, "gap": 21.5},
+        {"above": {"id": "first-run-vps-summary"}, "below": {"id": "first-run-vps-install", "type": "Button"}, "gap": 18},
+        {"above": {"id": "first-run-vps-install", "type": "Button"}, "below": {"id": "first-run-vps-changes"}, "gap": 18}
+      ]
+    },
+    "14-other-vps-password": {
+      "at": 4,
+      "words": ["Password for {user}@{host}", {"name": "Password", "type": "Edit"}, "Used once, to add this PC's key. Never kept."],
+      "boxes": [{"match": {"id": "first-run-vps-password", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}],
+      "absent": [{"id": "first-run-vps-key"}, {"id": "first-run-vps-key-choose"}, {"id": "first-run-vps-passphrase"}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Password for {user}@{host}"}, "below": {"id": "first-run-vps-password", "type": "Edit"}, "gap": 28.5},
+        {"above": {"id": "first-run-vps-password", "type": "Edit"}, "below": {"id": "first-run-vps-used-once"}, "gap": 25}
+      ]
+    },
+    "14b-password-or-key": {
+      "at": 4,
+      "words": ["Password for {user}@{host}", {"name": "Password", "type": "Edit"}, "Used once, to add this PC's key. Never kept.", "SSH key",
+                {"name": "Choose key", "type": "Button"}, "Your key never leaves this PC"],
+      "boxes": [
+        {"match": {"id": "first-run-vps-password", "type": "Edit"}, "x": 541, "w": 358, "tol": 2},
+        {"match": {"id": "first-run-vps-key"}, "x": 535, "h": 20, "tol": 1.5},
+        {"match": {"id": "first-run-vps-key-stays"}, "x": 535, "h": 20, "tol": 1.5},
+        {"match": {"id": "first-run-vps-key-choose", "type": "Button"}, "x": 835.9, "w": 97.2, "h": 32, "tol": 2}
+      ],
+      "absent": [{"id": "first-run-vps-passphrase"}, {"name": "Change"}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "Password for {user}@{host}"}, "below": {"id": "first-run-vps-password", "type": "Edit"}, "gap": 28.5},
+        {"above": {"id": "first-run-vps-password", "type": "Edit"}, "below": {"id": "first-run-vps-used-once"}, "gap": 25},
+        {"above": {"id": "first-run-vps-used-once"}, "below": {"id": "first-run-vps-key"}, "gap": 31}
+      ]
+    },
+    "13d-key-with-passphrase": {
+      "at": 4,
+      "words": ["{host}", "{host} takes SSH keys only, so a password cannot open it. Choose its key.", "SSH key", "{keyfile}",
+                {"name": "Change", "type": "Button"}, "Your key never leaves this PC", {"name": "Passphrase", "type": "Edit"},
+                "Used once, to add this PC's key. Never kept."],
+      "boxes": [
+        {"match": {"id": "first-run-vps-key"}, "x": 535, "h": 20, "tol": 1.5},
+        {"match": {"id": "first-run-vps-key-choose", "type": "Button"}, "x": 859.7, "w": 73.4, "h": 32, "tol": 2},
+        {"match": {"id": "first-run-vps-passphrase", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}
+      ],
+      "absent": [{"id": "first-run-vps-password"}, {"name": "Choose key"}, {"name": "That passphrase does not open this key."}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "{host}"}, "below": {"type": "Text", "name": "{host} takes SSH keys only, so a password cannot open it. Choose its key."}, "gap": 21.5},
+        {"above": {"type": "Text", "name": "{host} takes SSH keys only, so a password cannot open it. Choose its key."}, "below": {"id": "first-run-vps-key"}, "gap": 26},
+        {"above": {"id": "first-run-vps-key-stays"}, "below": {"id": "first-run-vps-passphrase", "type": "Edit"}, "gap": 38},
+        {"above": {"id": "first-run-vps-passphrase", "type": "Edit"}, "below": {"id": "first-run-vps-passphrase-used-once"}, "gap": 25}
+      ]
+    },
+    "13d-wrong-passphrase": {
+      "at": 4,
+      "words": ["{host}", "{host} takes SSH keys only, so a password cannot open it. Choose its key.", "SSH key", "{keyfile}",
+                {"name": "Change", "type": "Button"}, "Your key never leaves this PC", {"name": "Passphrase", "type": "Edit"},
+                "Used once, to add this PC's key. Never kept.", "That passphrase does not open this key."],
+      "boxes": [
+        {"match": {"id": "first-run-vps-key-choose", "type": "Button"}, "x": 859.7, "w": 73.4, "h": 32, "tol": 2},
+        {"match": {"id": "first-run-vps-passphrase", "type": "Edit"}, "x": 541, "w": 358, "tol": 2}
+      ],
+      "absent": [{"id": "first-run-vps-password"}],
+      "gaps": [
+        {"above": {"type": "Text", "name": "{host}"}, "below": {"type": "Text", "name": "{host} takes SSH keys only, so a password cannot open it. Choose its key."}, "gap": 21.5},
+        {"above": {"type": "Text", "name": "{host} takes SSH keys only, so a password cannot open it. Choose its key."}, "below": {"id": "first-run-vps-key"}, "gap": 26},
+        {"above": {"id": "first-run-vps-key-stays"}, "below": {"id": "first-run-vps-passphrase", "type": "Edit"}, "gap": 38},
+        {"above": {"id": "first-run-vps-passphrase", "type": "Edit"}, "below": {"id": "first-run-vps-passphrase-used-once"}, "gap": 25},
+        {"above": {"id": "first-run-vps-passphrase-used-once"}, "below": {"type": "Text", "name": "That passphrase does not open this key."}, "gap": 18}
+      ]
+    },
+    "15-build-at-work": {
+      "back": false, "steps": false,
+      "words": ["Building your fleet", "Server", "Hub", "Juno", "Agent", "{hubline}"],
+      "boxes": [{"match": {"type": "Text", "name": "{hubline}"}, "cx": 595.1, "tol": 3}]
+    },
+    "16-build-owners-turn": {
+      "back": false, "steps": false,
+      "words": ["Building your fleet", "Server", "Hub", "Juno", "Agent", "{why}", {"name": "{nextpick}", "type": "Button"},
+                {"name": "Make Juno's server", "type": "Button"}],
+      "boxes": [{"match": {"id": "first-run-build-manager-press", "type": "Button"}, "cx": 844.9, "h": 32, "tol": 3}]
+    },
+    "17-build-stop": {
+      "steps": false,
+      "words": ["Your hub did not install", "Your hub", "{failedstep}", "Failed", "The install stopped", "{stop}",
+                {"name": "Try again", "type": "Button"}],
+      "boxes": [
+        {"match": {"type": "Text", "name": "Your hub did not install"}, "y": 220.5, "tol": 3},
+        {"match": {"id": "install-again", "type": "Button"}, "x": 843.1, "w": 90, "h": 32, "tol": 2}
+      ],
+      "absent": [{"name": "Report a problem"}, {"id": "install-report"}],
+      "until": "Report a problem stands beside Try again from piece U11 (the report form) on; until then the stop has Try again alone, as the Mac's row where it has no report form.",
+      "gaps": [
+        {"above": {"type": "Text", "name": "Your hub did not install"}, "below": {"type": "Text", "name": "Your hub"}, "gap": 21.5}
+      ]
     }
   }
 }

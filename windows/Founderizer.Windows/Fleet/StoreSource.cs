@@ -63,7 +63,8 @@ public sealed class StoreSource : IFleetSource
         if (firstRun is not null || box is not { } secrets || tailscale is not { } pc) return firstRun;
         var hostKeys = new HostKeys(AppFolders.Setup);
         // One exchange for every provider: the provider's own client never disposes it (ProviderHttp).
-        var providers = ProviderHandler.Create();
+        var providers = Providers();
+        clouds = provider => CloudServers.For(provider, providers, secrets);
         firstRun = new SetupStore(new SetupSettings
         {
             Owner = store,
@@ -71,12 +72,28 @@ public sealed class StoreSource : IFleetSource
             Remote = new SshRemote(hostKeys, () => secrets.Read(AppSshKey.BoxName)),
             HostKeys = hostKeys,
             Records = new SetupRecords(AppFolders.Setup),
-            Tailscale = new FleetNet(new TailscaleApi(ProviderHandler.Create(), secrets)),
-            Cloud = provider => CloudServers.For(provider, providers, secrets),
+            Tailscale = new FleetNet(new TailscaleApi(Providers(), secrets)),
+            Cloud = clouds,
             Status = cancel => pc.ReadAsync(cancel),
             Choices = new FileChoices(System.IO.Path.Combine(AppFolders.Setup, "choices.json")),
         });
         return firstRun;
+    }
+
+    private Func<CloudProvider, ICloud>? clouds;
+
+    /// <summary>Whether this PC holds a token of the provider, as the first run's list under a server reads it.</summary>
+    internal bool HoldsToken(CloudProvider provider) => clouds?.Invoke(provider).IsHeld == true;
+
+    /// <summary>The way out to the providers' own APIs: Windows' exchange with no redirect (<see cref="ProviderHandler"/>).
+    /// A build with the proofs' switch takes the stand-in of FOUNDERIZER_PROVIDERS in its place
+    /// (<see cref="ProviderStandIn"/>); any other build has no such way.</summary>
+    private static System.Net.Http.HttpMessageHandler Providers()
+    {
+#if PROOFS
+        if (ProviderStandIn.Create() is { } standIn) return standIn;
+#endif
+        return ProviderHandler.Create();
     }
 
     /// <summary>For the proofs only: the store of FOUNDERIZER_HUB, or null when the build has no switch or the variable

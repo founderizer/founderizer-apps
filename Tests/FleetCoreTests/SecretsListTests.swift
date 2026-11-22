@@ -134,6 +134,30 @@ struct SecretsListTests {
         #expect(SecretsList.agentsWords(0) == "All agents" && SecretsList.agentsWords(1) == "1 agent" && SecretsList.agentsWords(3) == "3 agents")
     }
 
+    /// **"Who can use it", closed, is a line for each level that has agents, Uses it first, and no line for no access.**
+    /// The bugs: an agent stands in two lines, a read key shows as used, a level with nobody draws an empty line, the
+    /// door's grant shows as an agent, a name that the list of agents has two times stops the app, or "+N" names nobody
+    /// under the pointer.
+    @Test func whoCanUseItClosedIsOneLineForEachLevelThatHasAgents() {
+        let access: [String: SecretGrant] = ["writer": .read, "support": .use, "builder": .read, "door": .use]
+        let lines = SecretsList.accessLines(access, holders: agents, login: false)
+        #expect(lines == [SecretsList.AccessLine(level: .use, agents: ["support"]),
+                          SecretsList.AccessLine(level: .read, agents: ["writer", "builder"])])
+        // a login is never read: each of its grants is Uses it
+        #expect(SecretsList.accessLines(access, holders: agents, login: true)
+                == [SecretsList.AccessLine(level: .use, agents: ["support", "writer", "builder"])])
+        // nobody has it yet (a new key): no line at all, only Manage
+        #expect(SecretsList.accessLines([:], holders: agents, login: false).isEmpty)
+        #expect(SecretsList.accessLines(["door": .use], holders: agents, login: false).isEmpty)
+        // a name two times in the list of agents: one face, and no stop
+        #expect(SecretsList.accessLines(access, holders: ["writer", "support", "writer"], login: false)
+                == [SecretsList.AccessLine(level: .use, agents: ["support"]), SecretsList.AccessLine(level: .read, agents: ["writer"])])
+        // a long line ends in "+N", which stands for the agents after the eighth
+        let many = (1...11).map { "agent-\($0)" }
+        #expect(SecretsList.lineFaces(many).shown == Array(many.prefix(8)) && SecretsList.lineFaces(many).rest == Array(many.suffix(3)))
+        #expect(SecretsList.lineFaces(["support"]).shown == ["support"] && SecretsList.lineFaces(["support"]).rest.isEmpty)
+    }
+
     /// **A card's badge opens the one secret of its name, and a name of two secrets is no badge.** The bug: the badge of
     /// a name that two keys from before have opens one of them, and his new value goes into the key that the request did
     /// not mean.

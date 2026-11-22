@@ -46,7 +46,9 @@ struct JobDetail: View {
                     .accessibilityIdentifier("detail-done")
             }
             if let need {
+                // a key request's form is the card's, outside its two builds (`keptKeyForm`, `fleetModal`)
                 NeedRequestCard(store: store, need: need)
+                    .environment(\.keptKeyForm, need.asksForSecret ? store.keptKeyForm(for: need.id) : nil)
             } else {
                 FormSection { statusRow }
             }

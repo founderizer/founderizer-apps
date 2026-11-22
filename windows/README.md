@@ -709,6 +709,26 @@ How the window draws the library's first run, for the window pieces after it (U2
   `https://login.tailscale.com/…`. `tailscale.exe` runs only after the same publisher check (`WindowsTailscale`).
 - **On the owner's computer**: Settings shows no Forget the key, and the line over a page says one sentence of the PC
   for each refusal of the owner's key (`Fleet/OwnerKeyLine.cs`), until piece L6 repairs them by itself.
+- **The key, the VPS and the build pages (piece U2, `Navigation/Routes.Fleet.cs`)**: `KeyPage` (Your Tailscale key,
+  with the Mac's `PolicyLines` for a policy file that the PC may not write), `CloudPage` (A VPS for your fleet),
+  `TokenPage` (a provider's token, "Your fleet" with a combo box under each server, the account's list, the token of
+  the manager's own provider, and the build while the hub's server is made), `VpsPage` (Other VPS: the address, the
+  check, the password once, the key's card "SSH key · Choose key" where `VpsView.TakesKey` says, and the passphrase's
+  field only for a key with a passphrase), and `InstallPage` (the build page, the stop with each step and Try again, a
+  stop for the network's key, checks that did not pass; Report a problem comes with its form, piece U11). The parts are in `SetupParts.cs`
+  (`PasteField`, `SecretField`, `FleetSelect`, `ServerBoxes`, `BuildLine`); the build page's lines and the motion of its
+  title are `BuildRows`, the Mac's view logic, which `Founderizer.Windows.Tests` reads.
+- **The owner's key once (`Fleet/KeyFile.cs`)**: Windows' own picker (`IFileOpenDialog`, on a thread of its own, with
+  hidden files shown and no entry in Windows' recent files) opens in `%USERPROFILE%\.ssh` when that folder is there; the
+  window reads the one file once, at most 64 KiB, and gives its bytes and its name to `SetupStore.ChooseKey`. It keeps no
+  path and no copy. Windows keeps one trace of a pick: the picker's list of last folders (`ComDlg32\LastVisitedPidlMRU`)
+  has the app's name with the folder of the last pick, not the file. A typed password or passphrase goes to the model as
+  characters, and its field is empty again, also when the page shows a state without the field (WinUI keeps the typed
+  words as a string, which .NET cannot clear, until the garbage collector takes it). The step fields have Windows' spell
+  check and text prediction off: with them on, Windows changed a word typed into the address field.
+- **A proofs' build** (`-p:FounderizerProofs=true`) with `FOUNDERIZER_PROVIDERS=http://10.0.2.2:<port>` sends every
+  request to a provider's own API to `vm/provider_standin.py` on the Mac (`Fleet/ProviderStandIn.cs`); a build without
+  the switch has no such class.
 
 ## Build and test
 

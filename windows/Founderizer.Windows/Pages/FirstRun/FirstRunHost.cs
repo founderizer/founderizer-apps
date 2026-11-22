@@ -39,6 +39,7 @@ internal sealed class FirstRunHost : Grid
     private readonly UISettings settings = new();
     private IStepView? view;
     private SetupPage? shown;
+    private string? namedAs;
     private DispatcherQueueTimer? poll;
     private int reading;
     private bool open;
@@ -47,7 +48,8 @@ internal sealed class FirstRunHost : Grid
 
     /// <summary><paramref name="named"/> gets the title of each page that opens: the window's name of its page, for
     /// assistive apps.</summary>
-    public FirstRunHost(SetupStore store, PcTailscale pc, TailscaleSetup tailscale, Action addThisPc, DispatcherQueue queue, Action<string> named)
+    public FirstRunHost(SetupStore store, PcTailscale pc, TailscaleSetup tailscale, Action addThisPc, DispatcherQueue queue, Action<string> named,
+                        IntPtr window = default, Func<Founderizer.Setup.Cloud.CloudProvider, bool>? holds = null)
     {
         this.store = store;
         this.named = named;
@@ -59,6 +61,8 @@ internal sealed class FirstRunHost : Grid
             AddThisPc = addThisPc,
             ReduceMotion = () => !settings.AnimationsEnabled,
             Queue = queue,
+            Window = window,
+            Holds = holds ?? (_ => false),
         };
         Background = Look.CanvasBrush;
 
@@ -125,6 +129,7 @@ internal sealed class FirstRunHost : Grid
         view?.Left();
         view = null;
         shown = null;
+        namedAs = null;
         host.Tailscale.Stop();
     }
 
@@ -154,6 +159,12 @@ internal sealed class FirstRunHost : Grid
             }
             shown = state.Page;
             scroll.ChangeView(null, 0, null, disableAnimation: true);
+        }
+        // The window's name of its page follows the page's title at each change ("Waiting for Tailscale" after Connect,
+        // "Checking 203.0.113.10" while a check runs), not only when the page changes.
+        if (screen.Title != namedAs)
+        {
+            namedAs = screen.Title;
             named(screen.Title);
         }
         back.Visibility = screen.Back && !store.Runs ? Visibility.Visible : Visibility.Collapsed;

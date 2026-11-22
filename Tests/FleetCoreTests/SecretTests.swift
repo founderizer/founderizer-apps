@@ -178,6 +178,72 @@ struct SecretTests {
         #expect(SecretNameHeld.of("other.example.test · owner", kind: .login, in: one) == SecretNameHeld.none)
     }
 
+    /// **A new value of a key in one press** (the part "Value" of a key's card, and a request for a new value): under
+    /// the key's own reference, with no access step, and nothing for a key that left the list. The bugs that this
+    /// catches: the value goes under a dead reference and makes a new entry, the press changes who holds the key, or the
+    /// request for the new value stays open on Needs you after he replaced it from the key's card.
+    @Test func oneReplaceGoesUnderTheKeysOwnReferenceAndAGoneKeySendsNothing() throws {
+        let reference = "bws://11111111-2222-4333-8444-555555555551", other = "bws://11111111-2222-4333-8444-555555555552"
+        let key = TeamLogin(title: "Example, the old one", protected: true, kind: "api_key", env: "EXAMPLE_API_KEY", grants: ["dev-lead": "read"])
+        let catalog = [reference: key, other: TeamLogin(title: "OTHER_API_KEY", protected: true, kind: "api_key", env: "OTHER_API_KEY")]
+        // the entry as it is: its own title and variable name, and its grants untouched (the case has no grant at all)
+        #expect(SecretValueReplace.plan(reference, variable: "EXAMPLE_API_KEY", in: catalog, canReplace: true) == .replace(key))
+        // a key that left the list, a reference that is another key now, or a login: nothing is sent, also when the vault
+        // could not replace
+        #expect(SecretValueReplace.plan("bws://11111111-2222-4333-8444-555555555559", variable: "EXAMPLE_API_KEY", in: catalog,
+                                        canReplace: true) == .gone)
+        #expect(SecretValueReplace.plan(other, variable: "EXAMPLE_API_KEY", in: catalog, canReplace: true) == .gone)
+        #expect(SecretValueReplace.plan(reference, variable: "EXAMPLE_API_KEY", in: [reference: TeamLogin(title: "EXAMPLE_API_KEY", protected: true)],
+                                        canReplace: true) == .gone)
+        #expect(SecretValueReplace.plan(reference, variable: "EXAMPLE_API_KEY", in: [:], canReplace: false) == .gone)
+        #expect(SecretValueReplace.plan(reference, variable: "EXAMPLE_API_KEY", in: catalog, canReplace: false) == .notYet)
+
+        // the part stands for a key that he types: never a GitHub App's key, nor an app's setting of the door, nor a login
+        #expect(SecretValueReplace.offered(key))
+        #expect(SecretValueReplace.offered(TeamLogin(title: "DOOR_BACKBLAZE_ACME_KEY", protected: true, kind: "api_key", env: "DOOR_BACKBLAZE_ACME_KEY")))
+        #expect(!SecretValueReplace.offered(TeamLogin(title: "GITHUB_APP_ACME_KEY", protected: true, kind: "api_key", env: "GITHUB_APP_ACME_KEY")))
+        #expect(!SecretValueReplace.offered(TeamLogin(title: "DOOR_APP_SHOP_API_KEY", protected: true, kind: "api_key", env: "DOOR_APP_SHOP_API_KEY")))
+        #expect(!SecretValueReplace.offered(TeamLogin(title: "shop.example.test · owner", protected: true, kind: "login")))
+
+        // the requests that the new value answers: its own first, then each other open one that asks a new value of it
+        func need(_ id: Int, _ secret: [String: Any], open: Bool = true) throws -> OwnerNeed {
+            try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: [
+                "id": id, "by": "manager", "title": "Synthetic", "why": "", "todo": "", "raised": 1, "kind": "secret", "secret": secret,
+                "answer": open ? NSNull() : "Synthetic", "answered": open ? NSNull() : 2,
+            ]))
+        }
+        let needs = [try need(3, ["kind": "api_key", "env": "EXAMPLE_API_KEY", "replaces": reference]),
+                     try need(4, ["kind": "api_key", "env": "OTHER_API_KEY", "replaces": other]),
+                     try need(5, ["kind": "api_key", "env": "EXAMPLE_API_KEY", "replaces": reference], open: false),
+                     try need(6, ["kind": "api_key", "env": "EXAMPLE_API_KEY"]),
+                     try need(7, ["kind": "api_key", "env": "EXAMPLE_API_KEY", "replaces": reference])]
+        #expect(SecretValueReplace.answers(own: nil, replacing: reference, in: needs) == [3, 7])
+        #expect(SecretValueReplace.answers(own: 7, replacing: reference, in: needs) == [7, 3])
+        #expect(SecretValueReplace.answers(own: 6, replacing: nil, in: needs) == [6])
+        #expect(SecretValueReplace.answers(own: nil, replacing: nil, in: needs).isEmpty)
+    }
+
+    /// **A request for a new value sends no address.** The bug that this catches: the request's `site`, an agent's
+    /// word, goes into the new value, and the central vault puts it in the place of the key's stored address
+    /// (`kept_address`), so the key is sent to another service from then on (call_api included).
+    @Test func aRequestForANewValueSendsNoAddress() throws {
+        func asked(_ secret: [String: Any]) throws -> NeedSecret {
+            try JSONDecoder().decode(NeedSecret.self, from: JSONSerialization.data(withJSONObject: secret))
+        }
+        let site = "https://api.example.test"
+        let replace = try asked(["kind": "api_key", "env": "EXAMPLE_API_KEY", "site": site,
+                                 "replaces": "bws://11111111-2222-4333-8444-555555555551"])
+        #expect(replace.replaces != nil && replace.site == site)
+        #expect(SecretValueReplace.formAddress(replace) == "")
+        // a request for a new key keeps its site, as before
+        #expect(SecretValueReplace.formAddress(try asked(["kind": "api_key", "env": "EXAMPLE_API_KEY", "site": site])) == site)
+        // what one press seals names no address, whatever the form holds
+        var key = LoginSecret()
+        key.kind = .apiKey; key.env = "EXAMPLE_API_KEY"; key.password = "synthetic-CANARY-9d2f"; key.url = "https://other.example.test"
+        let item = try #require(try JSONSerialization.jsonObject(with: SecretValueReplace.value(key)) as? [String: String])
+        #expect(Set(item.keys) == ["username", "password"])
+    }
+
     @Test func aLoginBecomesTheItemValueThatTheVaultsRead() throws {
         let line = try login { $0.totp = " JBSW Y3DP EHPK 3PXP " }.value()
         let item = try #require(try JSONSerialization.jsonObject(with: line) as? [String: String])
@@ -520,6 +586,15 @@ struct SecretTests {
         #expect(try asked(["kind": "login", "note": long, "account": "two\nlines"]) == NeedSecret(kind: .login))
         #expect(try asked(["kind": "login", "clarified": 12.5]).clarified)
         #expect(try !asked(["kind": "login", "clarified": NSNull()]).clarified)
+        // A request for a new value of a key that the fleet holds names it only by a reference, and only for an API
+        // key: a made-up word, or a login's, would make the card's Replace write under it.
+        let held = "bws://11111111-2222-4333-8444-555555555555"
+        #expect(try asked(["kind": "api_key", "env": "EXAMPLE_API_KEY", "replaces": held]).replaces == held)
+        #expect(try asked(["kind": "api_key", "replaces": "bws://not-a-reference"]).replaces == nil)
+        #expect(try asked(["kind": "api_key", "replaces": held.uppercased()]).replaces == nil)
+        #expect(try asked(["kind": "api_key", "replaces": 7]).replaces == nil)
+        #expect(try asked(["kind": "login", "site": "https://shop.example.test/login", "replaces": held]).replaces == nil)
+        #expect(try asked(["replaces": held]).replaces == held)       // the hub's own default kind: an API key
 
         // The lengths are counted in code points, as the hub counts: a family emoji is one character and seven code
         // points, so 29 of them are 203 where Swift counts 29. A note is counted after the fold that the hub makes

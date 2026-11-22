@@ -42,8 +42,16 @@ struct LoginReading: Sendable {
 private enum SecretChoice: Hashable { case use, read, none }
 
 /// **The secret whose detail shows over the page, by its reference**: a row's of this page, and over any page the card
-/// that a request's badge opens (`FleetStore.secretCard`, `showSecret(named:)`).
-struct SecretCard: Identifiable, Equatable { let id: String }
+/// that a request's badge opens (`FleetStore.secretCard`, `showSecret(named:)`). Each showing has its own part "Value",
+/// whose typed value and save stand here, outside the card's two builds (`SecretValueKept`), and go with the card.
+struct SecretCard: Identifiable, Equatable {
+    let id: String
+    let kept: SecretValueKept
+
+    @MainActor init(id: String) { self.id = id; kept = SecretValueKept() }
+
+    static func == (one: SecretCard, other: SecretCard) -> Bool { one.id == other.id && one.kept === other.kept }
+}
 
 /// **A change of several secrets that works now** (the bar of the fleet's Secrets page): what it does, how many calls
 /// it makes and how many are done, and the secrets that it still changes, whose rows show a spinner at their end.
@@ -169,7 +177,7 @@ struct SecretsPage: View {
 
     var body: some View {
         Group {
-            if let card { detail(card.id) }
+            if let card { detail(card) }
             else if importing && offered { importPage } else if adding && offered { addPage } else { list }
         }
             .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(offered)") { await poll() }
@@ -189,7 +197,7 @@ struct SecretsPage: View {
     @ViewBuilder private var list: some View {
         if grouped {
             VStack(alignment: .leading, spacing: FleetSpace.block) { listContent }
-                .fleetModal(item: $shown) { detail($0.id) }
+                .fleetModal(item: $shown) { detail($0) }
         } else {
             // Every control of the page waits while a change of several secrets works; the page still scrolls.
             FleetPage("Secrets") { listContent.disabled(bulk != nil) } actions: {
@@ -224,7 +232,7 @@ struct SecretsPage: View {
                 // Also while its line says what came of a change whose secrets the filter shows no more.
                 if let reading, !ticked.isEmpty || bulk != nil || bulkLine != nil { barView(reading) }
             }
-            .fleetModal(item: $shown) { detail($0.id) }
+            .fleetModal(item: $shown) { detail($0) }
         }
     }
 
@@ -604,8 +612,8 @@ struct SecretsPage: View {
 
     /// The detail of one secret: its name and kind, each agent with its access and its control, and
     /// it, and Remove for a secret that nobody has. Done, Esc or a click outside closes it.
-    private func detail(_ reference: String) -> some View {
-        let entry = reading?.catalog[reference]
+    private func detail(_ card: SecretCard) -> some View {
+        let reference = card.id, entry = reading?.catalog[reference]
         return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
                 IconTile(symbol: entry?.isAPIKey == true ? "key.horizontal" : "person.badge.key")
@@ -641,6 +649,21 @@ struct SecretsPage: View {
                         .help(entry.note_by == "owner" ? String(l10n: "Your note") : String(l10n: "An agent wrote this note"))
                         .accessibilityIdentifier("secret-note-words")
                 }
+            }
+            // **Its part "Value"** (the owner, 21 November 2026, "Yes, both" to its drawing): a new value of the key, in
+            // one press of Replace, under its own reference, and the same agents keep it (`SecretEntryView`'s mode
+            // `valuePart`). For an API key that he types, on a hub that takes a secret from this Mac; its controls wait
+            // while the hub does not answer and while a change of the page works.
+            if let entry, offered, SecretValueReplace.offered(entry) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Value").font(FormMetrics.heading).foregroundStyle(FleetStyle.text).accessibilityAddTraits(.isHeader)
+                        .frame(minHeight: FormMetrics.headingRow).padding(.leading, 2)
+                    SecretEntryView(store: store, preset: .value(of: reference, entry: entry), compact: true, kept: card.kept) { _ in
+                        Task { await read() }
+                    }
+                    .disabled(!store.writesNow || bulk != nil || working != nil)
+                }
+                .id(reference)
             }
             if let entry, let reading {
                 let holders = reading.holders(reference, entry, agents: agents)
@@ -1045,9 +1068,12 @@ extension FleetStore {
 
 /// **The faces of the agents that hold a secret**, as a group shows its members: each agent's glyph at the size beside
 /// a name, on a ring of the card's colour, each one over the next and 6 points over it, with no status dot (the
-/// owner's "yes as drawn" of 20 November 2026). Their names stand after them, in words that VoiceOver reads.
-private struct HolderFaces: View {
+/// owner's "yes as drawn" of 20 November 2026). Their names stand after them, in words that VoiceOver reads. In the
+/// lines of Who can use it (`SecretEntryView`), which name nobody after the faces, each face has its agent's name under
+/// the pointer (`named`).
+struct HolderFaces: View {
     let names: [String]
+    var named = false
     @Environment(\.cardFill) private var cardFill
     /// The ring of the card's colour around each glyph, which parts it from the one under it.
     private static let ring: CGFloat = 1.5
@@ -1055,9 +1081,11 @@ private struct HolderFaces: View {
     var body: some View {
         HStack(spacing: -(6 + 2 * Self.ring)) {
             ForEach(Array(names.enumerated()), id: \.element) { index, name in
-                AgentGlyph(name: name, size: GlyphSize.inline, dot: false)
+                let face = AgentGlyph(name: name, size: GlyphSize.inline, dot: false)
                     .padding(Self.ring)
                     .background(cardFill, in: Circle())
+                // a name under the pointer only where it is asked for: an empty one hid the row's own words there
+                Group { if named { face.help(name.agentLabel) } else { face } }
                     .zIndex(Double(names.count - index))
             }
         }

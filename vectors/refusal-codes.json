@@ -83,7 +83,9 @@
     "takeover_screen_failed": "{agent}'s server could not share its screen: press Take over again",
     "about_unreadable": "{agent} cannot read this work in its chat, so it cannot get a message about it",
     "teams_off": "This needs Founderizer for Teams, which this fleet does not have.",
-    "teams_part_missing": "This fleet has Founderizer for Teams, but its hub has not loaded this part of it."
+    "teams_part_missing": "This fleet has Founderizer for Teams, but its hub has not loaded this part of it.",
+    "secret_value_asked": "This request asks for a new value of {name}: type it in the request's form.",
+    "secret_app_setting": "{name} is a setting of an app on a host: its new value changes on that host, not here."
   },
   "holes": {
     "profile_unread": [
@@ -205,6 +207,12 @@
     ],
     "about_unreadable": [
       "agent"
+    ],
+    "secret_value_asked": [
+      "name"
+    ],
+    "secret_app_setting": [
+      "name"
     ]
   }
 }

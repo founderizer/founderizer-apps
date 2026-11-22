@@ -162,6 +162,12 @@ Mac, and a device route is all that the PC reaches.
   too"): waits. A Windows card owes all three. The iPhone's card has them (`MobileStore.hold`, `pausable` and
   `taskOpened` in `ios/Sources/MobileStore.swift`), its Pause through `POST /ui/tasks/<id>/control`, which a device
   may use.
+- **Two presses of the first run's provider pages** (the Mac's `CloudChoice` and `FirstFleetChoice`; found by piece U2
+  of step 2, 22 November 2026): gaps of the PC's model, not drawn until it has them. "Servers in another project?"
+  under a Hetzner list (the Mac's `askAnotherProject`: the next token takes the place of the one this computer holds)
+  has no press in `SetupStore`, and set 8 draws none. "Use this server" for a server of the account's list (the Mac's
+  `useExisting`: the hub's install on a server that the account holds) has no press either: the window draws the
+  account's servers grey, with the new server chosen and "Make the server". Each waits for a library piece of its own.
 - **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
   Mac's alone, an AppKit panel over every app, also over a full-screen one.
 - **An answer waits 5 seconds with Undo, Pause stands on its card while its task works, and the mark opens the task**

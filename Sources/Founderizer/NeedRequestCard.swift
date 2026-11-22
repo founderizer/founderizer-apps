@@ -778,7 +778,7 @@ extension NeedAnswerBox {
         var key: String?
         if held.hold == .paste { key = KeyCut.onClipboard() }
         else if let cut = KeyCut.split(words.wrappedValue) { words.wrappedValue = cut.rest; key = cut.key }
-        store.secretForm = SecretPreset(tell: store.canChat(with: need.by) ? need.by : nil, key: key)
+        store.secretForm = SecretPreset(tell: store.canChat(with: need.by) ? need.by : nil, key: key, kept: SecretValueKept())
         cardWindow?.showMainWindow()
     }
 
@@ -1428,6 +1428,8 @@ struct NeedRequestCard: View {
                                 withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySave.end() }
                             }
                         }
+                        // the request's note shows only with Details open (`requestNoteShows`)
+                        .environment(\.requestNoteShows, expanded)
                     } else {
                         NeedAnswerBox(store: store, need: need)
                     }

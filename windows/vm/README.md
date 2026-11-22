@@ -110,7 +110,8 @@ app/windows/vm/vm.sh run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:
 app/windows/vm/vm.sh desktop 'Start-Process C:\fz\out\arm64\Founderizer.App.exe'
 app/windows/vm/vm.sh picture /tmp/window.png    # a picture of the desktop, taken in the VM
 FZ_VM_USER=<session> app/windows/vm/vm.sh hold  # before a proof run: the VM is this session's, no update restarts it
-app/windows/vm/vm.sh release                   # after the run: Windows' updates as before, and the VM free again
+FZ_VM_USER=<session> app/windows/vm/vm.sh release  # after the run: Windows' updates as before, and the VM free again
+                                                # (only the session that holds it; no name, no hold and no release)
 app/windows/vm/vm.sh stop                      # the power button through the monitor; waits until QEMU ends
 ```
 
@@ -253,6 +254,33 @@ app/windows/vm/vm.sh desktop '& C:\fz\setup\elements.ps1 -Out C:\fz\page.tsv'
 app/windows/vm/vm.sh copy vm:C:/fz/page.tsv page.tsv
 python3 -I app/windows/vm/pictures/elements.py app/windows/vm/pictures/set8-elements.json 02-help-improve page.tsv
 ```
+
+### The first run's servers against stand-ins (step 2, piece U2)
+
+Never the owner's network: take the VM's Tailscale down first (`tailscale down`), and up again after with the settings
+of "The owner's private network". With Tailscale down, the rule `fz-tailscale-range-only-through-tailscale` stops each
+call to an address of 100.64.0.0/10, so a server that "joins" in a status file stops at its first SSH call. **Do not add
+an address to the VM's card** (`New-NetIPAddress` on `Ethernet` turned its DHCP off, and SSH from the Mac stopped until
+a PowerShell on the VM's own screen took it back).
+
+- **The providers**: `python3 -I app/windows/vm/provider_standin.py > standin.out &` answers Tailscale's and Hetzner's
+  APIs from the library's own vector files, on the first free port from 58459 down (the VM reaches the Mac on 58440 to
+  58459 only). A proofs' build with `FOUNDERIZER_PROVIDERS=http://10.0.2.2:<port>` sends each provider's request there.
+  Words in the file `commands` of its folder: `hold` and `go` (the hub's server waits at "Making your server"),
+  `refuse` and `take` (servers of agents are refused with "Hetzner has no server free now."), `quit`. It logs each
+  request (method, host, path; no header, no body) to `requests.log`, and writes the public line of the app's key that
+  Hetzner was given to `app-key.pub`.
+- **This PC's Tailscale**: `FOUNDERIZER_TAILSCALE_STATUS` (above) with `BackendState` `Running` and a private address of
+  `Self`; a server joins when its name (`worker-1`) is a peer that is `Online` in that file.
+- **A server for Other VPS**: a container of the Remote tests' image with root by key, systemd's mark and a stand-in of
+  `tailscale` that waits 90 seconds and fails (nothing is downloaded), published on 127.0.0.1:58451 (keys only) and
+  58452 (keys, password and keyboard-interactive); the address on the page is `10.0.2.2:58451`.
+- **The owner's keys**: made for the proof (by this Mac's `ssh-keygen` with its passphrase on a helper's input, or by
+  Windows' own `ssh-keygen` in the VM), in `%USERPROFILE%\.ssh` of the VM while the proof runs. A passphrase is typed
+  into a page with `vm.sh type` (letters, digits and "-", from standard input), or, with a letter outside ASCII, through
+  a named pipe of the desktop session that types Windows' Unicode keys: the words come on SSH's standard input, never in
+  a command line, a file, a log or a picture. Windows' picker takes the file's name as keys of the VM's keyboard
+  (QEMU's `send-key`, as `vm.sh type` sends them).
 
 ### The store against a scratch hub
 

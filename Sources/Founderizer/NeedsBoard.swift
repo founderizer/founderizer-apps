@@ -828,6 +828,8 @@ private struct NeedStep: View {
                                 KeySaveMark(saved: keySave.look == .saved, draws: true, point: KeySaveMark.step, weight: .light)
                             }
                             SecretRequestForm(store: store, need: need, onLook: keyLook) { keyDone() }
+                                // the request's note shows only with Details open (`requestNoteShows`)
+                                .environment(\.requestNoteShows, expanded)
                                 .modifier(KeptAway(away: keyCollapsed))
                         }
                     } else {

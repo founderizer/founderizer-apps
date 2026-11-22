@@ -236,6 +236,7 @@ internal sealed class SetupRig : IAsyncDisposable
     {
         foreach (var provider in CloudProviders.All) Clouds[provider] = new StandInCloud(provider, Status) { IsHeld = provider == CloudProvider.Hetzner };
         Remote = Answering(first);
+        Remote.HoldsAppKey = () => Box.Read(AppSshKey.BoxName) is not null;
         HostKeys = new HostKeys(Folder);
         Records = new SetupRecords(Folder, "launch-1");
         Owner = new OwnerStore(new StoreSettings { Folder = Path.Combine(Folder, "store"), Keys = new MemoryKeyStore(), Box = Box, ClientLabel = "Founderizer for Windows (test)" });

@@ -1083,7 +1083,7 @@ struct FleetView: View {
         var key: String?
         if held.hold == .paste { key = KeyCut.onClipboard() }
         else if let cut = KeyCut.split(text.wrappedValue) { text.wrappedValue = cut.rest; key = cut.key }
-        store.secretForm = SecretPreset(tell: store.chatAgent, key: key)
+        store.secretForm = SecretPreset(tell: store.chatAgent, key: key, kept: SecretValueKept())
     }
 
     /// "Paste it anyway" or "Keep it": the owner's choice, and no second question while the key is in the message.

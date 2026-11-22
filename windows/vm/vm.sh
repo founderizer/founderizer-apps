@@ -19,7 +19,8 @@
 #   vm.sh hold                before a proof run: take the VM for FZ_VM_USER (refused while another user has it), pause
 #                             Windows' updates for a day and make the next 18 hours its active hours, so that Windows
 #                             restarts in none of them; refuse while a restart waits
-#   vm.sh release             after the run: Windows' updates and active hours as they were, and the VM free again
+#   vm.sh release             after the run: Windows' updates and active hours as they were, and the VM free again; only
+#                             for the FZ_VM_USER that holds it (hold and release refuse with no FZ_VM_USER)
 #
 # Settings, each with a default:
 #   FZ_VM_DIR       the VM's folder, outside any repository ($HOME/VMs/founderizer-windows)
@@ -402,10 +403,26 @@ create_vm() {
 # uses Windows' own pause of updates (what Settings > Windows Update > Pause writes) and its active hours, in which
 # Windows restarts for no update. It never restarts Windows itself: a restart also ends a Tailscale sign-in that waits.
 # Who uses the VM, since when: one line in the VM's folder on the Mac, which hold writes and release removes. A second
-# user's hold reads it and refuses, so that two sessions do not run builds or pictures in the VM at once.
+# user's hold reads it and refuses, so that two sessions do not run builds or pictures in the VM at once. Both take
+# FZ_VM_USER and refuse with none, and a release frees only the hold of its own user: a release under another name took
+# Windows' update pause off under that session's run (U2, 22 November 2026).
 in_use="$dir/in-use"
+vm_user() {
+    [ -n "${FZ_VM_USER:-}" ] || die "say who holds the VM: FZ_VM_USER=<your session's name> vm.sh $1"
+    printf '%s' "$FZ_VM_USER"
+}
+give_vm() {
+    local who
+    who="$(vm_user release)" || exit 1
+    [ -f "$in_use" ] || die "no session holds the VM; nothing is released"
+    if [ "$(cut -f1 "$in_use")" != "$who" ]; then
+        die "the VM is held by $(cut -f1 "$in_use") since $(cut -f2 "$in_use"), not by $who; only that session releases it"
+    fi
+    rm -f "$in_use"
+}
 take_vm() {
-    local who="${FZ_VM_USER:-unknown}"
+    local who
+    who="$(vm_user hold)" || exit 1
     if [ -f "$in_use" ] && [ "$(cut -f1 "$in_use")" != "$who" ]; then
         die "the VM is in use by $(cut -f1 "$in_use") since $(cut -f2 "$in_use"); release it there first (vm.sh release)"
     fi
@@ -439,7 +456,7 @@ PS
 )"
 }
 release_updates() {
-    rm -f "$in_use"
+    give_vm
     vm_ps "$(cat <<'PS'
 $ux = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
 $mark = 'HKLM:\SOFTWARE\Founderizer\UpdateHold'

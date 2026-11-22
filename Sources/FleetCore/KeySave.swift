@@ -80,6 +80,43 @@ public struct KeySaveCard: Equatable, Sendable {
     public func showsForm(open: Bool) -> Bool { open || holds }
 }
 
+/// **The mark of the part "Value" of a key's card** (the owner, 21 November 2026, word for word: "Yes, ring and check"):
+/// at the start of the row of Cancel and Replace, the ring while his Replace runs, then the check that draws itself,
+/// with no words, as on a key card (`KeySaveMark`); then the part is at rest again, with its empty field and no mark. A
+/// step that failed has no mark: the form's rows say it, with Try again.
+public struct KeyValueMark: Equatable, Sendable {
+    /// The ring (`goes`) or the check (`saved`), or nil at rest.
+    public private(set) var look: KeySaveLook?
+    /// **The check of this Replace came already** (Fable's review of 22 November 2026): a later word of the same
+    /// Replace draws no second check. The end of the save's last read of the hub can come after the check went to
+    /// rest, about 2 seconds after it drew itself, and it said "saved" again. Only the ring of the next Replace starts
+    /// a new one.
+    private var checked = false
+
+    public init() {}
+
+    /// The form's look (`KeySaveLook.of`). **A form that went back to rest after its save (nil) leaves the check where it
+    /// stands**: the part empties its field and is at rest at once, and the check draws itself there. A failed step
+    /// (`failed`) is no mark, and the check comes once for each Replace (`checked`). False: nothing changed.
+    @discardableResult
+    public mutating func take(_ new: KeySaveLook?) -> Bool {
+        let next = new == .failed ? nil : new
+        if next == nil && look == .saved { return false }
+        if next == .saved && checked { return false }
+        guard next != look else { return false }
+        look = next
+        if next == .goes { checked = false }
+        if next == .saved { checked = true }
+        return true
+    }
+
+    /// The check has drawn itself and stood for a moment, or he types a new value: the part is at rest, with no mark. A
+    /// ring that turns stays: its save still runs.
+    public mutating func rest() {
+        if look == .saved { look = nil }
+    }
+}
+
 extension OwnerNeed {
     /// **A saved key answered this request**: its folded card is its title and a check, with no words. The hub's words
     /// of the answer stay in the whole card, a click away. A key request that he declined, or answered with his own

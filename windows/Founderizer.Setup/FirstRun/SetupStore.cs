@@ -553,6 +553,7 @@ public sealed class SetupStore
             if (check is OwnerKeyCheck.Usable) await AddWithKeyAsync(target, null, cancel).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { ClearKey(); }
+        catch (Exception) { System.Security.Cryptography.CryptographicOperations.ZeroMemory(file); Failed(target); }
         finally { EndVps(cancel); }
     }
 
@@ -584,6 +585,7 @@ public sealed class SetupStore
             await AddWithKeyAsync(target, null, cancel).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { ClearKey(); }
+        catch (Exception) { Array.Clear(passphrase); Failed(target); }
         finally { EndVps(cancel); }
     }
 
@@ -688,6 +690,7 @@ public sealed class SetupStore
             await ReadVpsAsync(target, cancel).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
+        catch (Exception) { Failed(State.Vps.Target); }
         finally { EndVps(cancel); }
     }
 
@@ -710,6 +713,10 @@ public sealed class SetupStore
     /// <summary>One check, and a busy server read again every fifteen seconds until it says something else.</summary>
     private async Task ReadVpsAsync(InstallTarget target, CancellationToken cancel)
     {
+        // Each check logs in with the app's own key: a PC that has made no server at a provider has none yet, and
+        // SshRemote takes no call with a key that is not there (the title stood at "Checking" for ever). Every way to a
+        // check passes here: the address, Try again, the password once and the owner's key.
+        AppPublicLine();
         while (!cancel.IsCancellationRequested)
         {
             var result = await ServerCheck.RunAsync(settings.Remote, target, InstallJob.Hub, new RemoteLogin.AppKey(), HoldsSudo(),
@@ -775,6 +782,7 @@ public sealed class SetupStore
             await ReadVpsAsync(target, cancel).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
+        catch (Exception) { Failed(target); }
         finally
         {
             if (password.Length > 0 && !ReferenceEquals(password, sudoPassword)) Array.Clear(password);
@@ -793,7 +801,18 @@ public sealed class SetupStore
             await ReadVpsAsync(target, cancel).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
+        catch (Exception) { Failed(target); }
         finally { EndVps(cancel); }
+    }
+
+    /// <summary>**A way of Other VPS that threw** (a box that does not open, a call that the remote refuses): the stop of
+    /// a server not reached, in the Mac's words (its <c>ServerCheck.run</c> turns each error into that stop), and the
+    /// owner's key and its passphrase go. The title never stands at "Checking" with no end.</summary>
+    private void Failed(InstallTarget? target)
+    {
+        ClearKey();
+        var host = target?.Host ?? State.Vps.Host;
+        Set(s => s with { Vps = s.Vps with { Phase = VpsPhase.Stopped, Why = ServerCheck.Unreached(host), KeysOnly = false, KeyWarning = null } });
     }
 
     /// <summary>Install of Other VPS, after a check that passed.</summary>

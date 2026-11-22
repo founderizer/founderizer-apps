@@ -420,10 +420,19 @@ public static class ServerCheck
                                               bool holdsSudoPassword = false, string? tailnet = null, bool firstRun = true,
                                               PolicyPlace? policy = null, CancellationToken cancel = default)
     {
+        // An address, a user or a port that no SSH call may take says its own sentence and calls nothing: the remote
+        // throws for such a call (RemoteRules.Check), and a Try again of such a stop stood at "Checking" for ever.
+        if (target.Problem is { } problem) return new Result(new Verdict.Stop(problem), null);
         var input = Encoding.UTF8.GetBytes(Script);
         var call = new RemoteCall(target.Remote, InstallPlan.Command("/bin/sh -s", target, Runs.Login), input, login,
                                   HostKeyRule.TakeNew, RemoteCall.ConnectTimeout) { Limit = Limit };
-        var answer = await remote.RunAsync(call, null, cancel);
+        RemoteResult answer;
+        try { answer = await remote.RunAsync(call, null, cancel); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // The Mac's ServerCheck.run: a call that throws is a stop, in the words of a server not reached.
+            return new Result(new Verdict.Stop(Unreached(target.Host)), null);
+        }
         if (answer.Failure == RemoteFailure.Canceled) throw new OperationCanceledException(cancel);
         if (answer.Failure == RemoteFailure.LoginRefused && login is RemoteLogin.AppKey)
             return new Result(TakesPassword(answer.LoginWays) ? new Verdict.NeedsPassword(PasswordNeed.Ssh)

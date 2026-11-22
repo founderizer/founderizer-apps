@@ -30,6 +30,11 @@ internal sealed class StepHost
     public required Action AddThisPc { get; init; }
     public required Func<bool> ReduceMotion { get; init; }
     public required DispatcherQueue Queue { get; init; }
+    /// <summary>The window, which Windows' own picker of the owner's key stands over (piece U2).</summary>
+    public IntPtr Window { get; init; }
+    /// <summary>Whether this PC holds a token of a provider (the list under a server says "asks for its token" for each
+    /// other; piece U2).</summary>
+    public Func<Founderizer.Setup.Cloud.CloudProvider, bool> Holds { get; init; } = _ => false;
 }
 
 /// <summary>One page of the first run as the window draws it: its view, and its model at each change of the first run.
@@ -355,6 +360,11 @@ internal sealed class StepField : Grid
             AcceptsReturn = false,
             TextWrapping = TextWrapping.NoWrap,
             PlaceholderText = placeholder,
+            // A step's field takes a name, an address or a token, which Windows' spell check and text prediction must not
+            // touch: with them on, a word that Windows does not know is marked, and a word that it knows better is changed
+            // as it is typed (in the build VM, "adress" became "address"); text prediction offers words and learns them.
+            IsSpellCheckEnabled = false,
+            IsTextPredictionEnabled = false,
         };
         foreach (var state in new[] { "", "PointerOver", "Focused", "Disabled" })
         {

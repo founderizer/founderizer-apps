@@ -15,14 +15,38 @@ struct SecretRequestForm: View {
     /// The form's end: Done after a step that failed or left words for him, a decline, his words.
     var onDone: () -> Void = {}
 
+    /// **A key request in a job's card keeps its form here** (`FleetStore.keptKeyForm`): `fleetModal` builds that card
+    /// two times. Nil everywhere else.
+    @Environment(\.keptKeyForm) private var kept
+
     var body: some View {
         if SecretEntryView.isOffered(by: store) {
-            SecretEntryView(store: store, preset: SecretPreset(need: need), compact: true, onLook: onLook) { _ in onDone() }
+            SecretEntryView(store: store, preset: SecretPreset(need: need), compact: true, onLook: onLook, kept: kept) { _ in onDone() }
                 .id("\(store.hub)/\(store.state?.db ?? "")/secret-\(need.id)")
         } else {
             Text("Update the hub to answer this request here. It takes no answer in words.")
                 .font(FormMetrics.detail).foregroundStyle(.orange)
         }
+    }
+}
+
+extension EnvironmentValues {
+    /// **The form of a key request in a job's card** (`JobDetail`, `FleetStore.keptKeyForm`), which both of the card's
+    /// builds draw from (`SecretValueKept`); nil everywhere else.
+    @Entry var keptKeyForm: SecretValueKept? = nil
+}
+
+extension FleetStore {
+    /// **The form of a key request in the job level of the detail card**, by the request (`SecretValueKept`): `fleetModal`
+    /// builds that card two times, as it is and in a scroll, and both builds draw from this one. It goes when the card
+    /// closes or shows another level (`detail`), and when the request is open no more.
+    func keptKeyForm(for need: Int) -> SecretValueKept {
+        let open = Set(openNeeds.map(\.id))
+        if detailKeyForms.keys.contains(where: { !open.contains($0) }) { detailKeyForms = detailKeyForms.filter { open.contains($0.key) } }
+        if let kept = detailKeyForms[need] { return kept }
+        let kept = SecretValueKept()
+        detailKeyForms[need] = kept
+        return kept
     }
 }
 
@@ -41,7 +65,8 @@ struct SecretFormCard: View {
                     .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
             }
             if SecretEntryView.isOffered(by: store) {
-                SecretEntryView(store: store, preset: preset) { _ in store.secretForm = nil }
+                // its form in the card's item: `fleetModal` builds this card two times (`SecretPreset.kept`)
+                SecretEntryView(store: store, preset: preset, kept: preset.kept) { _ in store.secretForm = nil }
             } else {
                 Text("Update the hub to save secrets from here.").font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
                 HStack {

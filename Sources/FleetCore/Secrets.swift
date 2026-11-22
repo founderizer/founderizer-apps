@@ -301,6 +301,69 @@ public enum SecretReplaceAccess {
     }
 }
 
+/// **A new value of a key that the list has, in one press** (the owner's "Yes, both" of 21 November 2026 to the part
+/// "Value" of a key's card, and to the key card of a request for a new value of a key that the fleet holds): Replace
+/// puts the new value under the key's own reference, with the key's own title and variable name, and gives and takes
+/// no access, so the same agents keep it. There is no orange line first, as Add secret has for a name that the list has
+/// (`SecretNameHeld`): the card names the key already.
+public enum SecretValueReplace: Equatable, Sendable {
+    /// The new value goes under the reference, with this entry's title and variable name, and no grant changes.
+    case replace(TeamLogin)
+    /// The list has no API key of that reference and variable name any more: nothing is sent, and the form says "This
+    /// secret is no longer in the list."
+    case gone
+    /// The central vault does not replace a value yet, or this Mac cannot sign the replace: nothing is sent
+    /// (`SameName.notYet`).
+    case notYet
+
+    /// What one press of Replace does for the key of `reference`, which the card shows as `variable`, against the
+    /// catalog that the press read. `canReplace`: the hub has `secret_replace`, and this Mac signs (`GrantSigning`).
+    public static func plan(_ reference: String, variable: String, in catalog: [String: TeamLogin], canReplace: Bool) -> Self {
+        guard let entry = catalog[reference], entry.isAPIKey, entry.env == variable else { return .gone }
+        return canReplace ? .replace(entry) : .notYet
+    }
+
+    /// **The part "Value" stands for this secret**: an API key that he types. Never a GitHub App's key, which the app
+    /// makes with GitHub and nobody types, and never an app's setting that the door keeps (`app:<app>:<NAME>`), whose
+    /// app keeps the old value in its env file until a later step writes over it. **The `DOOR_APP_` start is not the
+    /// whole rule**: it is the hub's own name for such a key (`door_env`), but a request may name the key otherwise, and
+    /// the catalog's entry (`GET /ui/team`) says nothing of the door. The hub refuses a new value for any key that an
+    /// app of the door holds, so a part that stands for one by another name ends in the hub's refusal, which the form
+    /// shows in its own rows. A login's part (User name and Password) waits for the vault to keep its address and seed
+    /// in a replace.
+    public static func offered(_ entry: TeamLogin) -> Bool {
+        guard entry.isAPIKey, let env = entry.env else { return false }
+        return env.range(of: "^GITHUB_APP_[A-Z0-9_]{1,45}_KEY$", options: .regularExpression) == nil && !env.hasPrefix("DOOR_APP_")
+    }
+
+    /// **A request for a new value sends no address** (Fable's review of 22 November 2026, a security fault): the
+    /// central vault puts the address of a new value in the place of the key's stored one, and keeps the stored one
+    /// when the new value names none (`vault.py` `kept_address`). So the request's `site`, an agent's word, would
+    /// change where the key goes (call_api included). The form of a request for a new value takes no address from the
+    /// request (`formAddress`), and what one press of Replace seals names none (`value`); the hub refuses a `site`
+    /// with `failed` too. Every other request keeps its site.
+    public static func formAddress(_ asked: NeedSecret) -> String { asked.replaces == nil ? asked.site ?? "" : "" }
+
+    /// The item value of a new value in one press: the key, with no address, whatever the form holds.
+    public static func value(_ login: LoginSecret) throws -> Data {
+        var bare = login
+        bare.url = ""
+        return try bare.value()
+    }
+
+    /// **The requests that a new value of a key answers**: the form's own request first, then each other open request
+    /// of an API key whose `replaces` names this key, in the hub's order. A request for a new value that he gave from
+    /// the key's own card, or from Add secret, would stay open on Needs you for a value that the vault has already.
+    /// `reference` nil: a save that replaces no key, which answers its own request alone.
+    public static func answers(own: Int?, replacing reference: String?, in needs: [OwnerNeed]) -> [Int] {
+        let others = reference.map { key in
+            needs.filter { $0.isOpen && $0.asksForSecret && $0.id != own && $0.secret?.kind == .apiKey && $0.secret?.replaces == key }
+                .map(\.id)
+        } ?? []
+        return (own.map { [$0] } ?? []) + others
+    }
+}
+
 extension LoginSecret {
     /// The most titles that the hub's catalog holds.
     public static let maxCatalog = 256
@@ -818,6 +881,10 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
     /// **The owner answered with words about the request** (Needs clarification, owner feature `secret_clarify`):
     /// the item's answer is his own words, which have no check (`OwnerNeed.answeredInWords`).
     public let clarified: Bool
+    /// **The key of the fleet whose value no longer works** (the hub's `secret.replaces`, for a request with `failed`):
+    /// its reference, and the request asks for a new value of that key. Kept only as a reference, and only for an API
+    /// key: a made-up word never makes the card's Replace write under it.
+    public let replaces: String?
 
     /// The hub's most for a note and for an account, which bound what the card takes from a request.
     public static let noteMost = 200
@@ -826,12 +893,12 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
     public static let clarifyMost = 2000
 
     public init(kind: LoginSecret.Kind, env: String? = nil, site: String? = nil, give: [String: SecretGrant] = [:], saved: String? = nil,
-                note: String? = nil, account: String? = nil, clarified: Bool = false) {
+                note: String? = nil, account: String? = nil, clarified: Bool = false, replaces: String? = nil) {
         self.kind = kind; self.env = env; self.site = site; self.give = give; self.saved = saved
-        self.note = note; self.account = account; self.clarified = clarified
+        self.note = note; self.account = account; self.clarified = clarified; self.replaces = replaces
     }
 
-    private enum Keys: String, CodingKey { case kind, env, site, give, saved, note, account, clarified }
+    private enum Keys: String, CodingKey { case kind, env, site, give, saved, note, account, clarified, replaces }
 
     public init(from decoder: Decoder) throws {
         let data = try decoder.container(keyedBy: Keys.self)
@@ -847,6 +914,8 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
         account = (try? data.decodeIfPresent(String.self, forKey: .account)).flatMap { Self.line($0, most: Self.accountMost) }
         // The hub writes the time of his words there: any value says that words answered the request.
         clarified = data.contains(.clarified) && (try? data.decodeNil(forKey: .clarified)) != true
+        replaces = kind == .apiKey
+            ? (try? data.decodeIfPresent(String.self, forKey: .replaces)).flatMap { LoginSecret.isReference($0) ? $0 : nil } : nil
     }
 
     /// One line of text of at most `most` characters, or nil.

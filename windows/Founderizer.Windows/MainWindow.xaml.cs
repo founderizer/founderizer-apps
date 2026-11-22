@@ -426,7 +426,8 @@ public sealed partial class MainWindow : Window
         if (source is not StoreSource store || store.FirstRun() is not { } setup || store.Tailscale is not { } pc) return null;
         tailscaleSetup ??= new TailscaleSetup(pc);
         return firstRun ??= new FirstRunHost(setup, pc, tailscaleSetup, () => Go(Page.AddThisPc), DispatcherQueue,
-                                             title => AutomationProperties.SetName(PageHost, title));
+                                             title => AutomationProperties.SetName(PageHost, title),
+                                             WinRT.Interop.WindowNative.GetWindowHandle(this), store.HoldsToken);
     }
 
     /// <summary>**The first run fills the window** (set 8; the Mac's <c>fillsWindow</c>): no pane, no Back, Forward or

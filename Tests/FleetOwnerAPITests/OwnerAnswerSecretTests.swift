@@ -420,7 +420,9 @@ struct OwnerAnswerSecretFieldTests {
         let source = try String(contentsOf: OwnerGrantSecretFieldTests.hub, encoding: .utf8)
         #expect(source.contains("\nSECRET_GIVE_MAX = \(AnswerSecret.giveMost)\n"))
         #expect(source.contains(#"raise Refusal(409, code="request_answered")"#))
-        #expect(source.contains(#"give = {"door": "use"} if door else"#))
+        // The door's own proposal (a door key's request gives the door "use"); since owner API 1.295 a request for a
+        // new value of a key that the fleet holds comes first in the same line and proposes nothing.
+        #expect(source.contains(#"{"door": "use"} if door else"#))
     }
 }
 
