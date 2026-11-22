@@ -567,6 +567,8 @@ struct TaskSteering: View {
 
     private var box: some View {
         let composer = store.guidanceComposer(for: task)
+        // the box's key, taken now: a hub that changes under it must not change the key that its close clears
+        let key = self.key
         // A file that its rule takes no more (the agent's Shell box went off after he picked it) holds Send, with the
         // rule's words, until he takes it out with its x.
         let refusal = composer.flatMap(store.refusedFileWords)
@@ -731,7 +733,13 @@ struct TaskOutcomeCheck: View {
     @State private var resolving: TaskOutcome?
     @State private var finding: OutcomeFinding?
     @State private var note = ""
+    /// He chose "Keep it" or "Paste it anyway" for the key in the note: no second question while it is in it.
+    @State private var keyAllowed = false
+    @FocusState private var noteFocused: Bool
     private var unknown: [TaskOutcome] { store.state?.outcomes?.filter { $0.task == task.id && $0.state == "unknown" } ?? [] }
+    /// The note's key for the guard of a key: the task's agent reads the note when the task runs again (the hub's
+    /// outcome lines), so a key in it waits for his choice, as in the chat's composer (`KeyHoldBanner`).
+    private func noteKey(_ outcome: TaskOutcome) -> String { "outcome:\(store.state?.db ?? ""):\(outcome.id)" }
 
     var body: some View {
         if let outcome = resolving, unknown.contains(where: { $0.id == outcome.id }) {
@@ -744,7 +752,10 @@ struct TaskOutcomeCheck: View {
     /// The check of one result, in place of the list; no sheet. Its Cancel takes Esc, and the card around it gives
     /// Esc to it alone while it is open (`OutcomeFormOpen`).
     private func form(_ outcome: TaskOutcome) -> some View {
-        Group {
+        // one key for the form, taken now: a hub that changes under it (its database gone) must not change the key
+        // that its close clears
+        let heldID = noteKey(outcome)
+        return Group {
             FormSection("Check the result", detail: String(l10n: "Confirm what happened before the task repeats an action.")) {
                 FormRow(outcome.title) {
                     FleetSelect("Result", selection: $finding, options: [
@@ -753,22 +764,65 @@ struct TaskOutcomeCheck: View {
                     ], placeholder: String(l10n: "Choose a result")).accessibilityIdentifier("outcome-result")
                 }
                 FormBlock("How you checked", detail: String(l10n: "Optional.")) {
+                    if let held = store.heldKey, held.composer == heldID {
+                        KeyHoldBanner(hold: held.hold, agent: task.owner) { saveHeldKey(held) } goOn: { keepHeldKey(held) }
+                    }
                     // The one field look (`.fleetField`, T-30), where the stock bezel stood; its placeholder the muted
                     // words, with or without the cursor (`fieldPlaceholder`; fix round 3, item 55).
                     TextField(text: $note, prompt: Text(verbatim: "")) { Text("How you checked") }
-                        .fieldPlaceholder(String(l10n: "How you checked"), shows: note.isEmpty).fleetField()
+                        .fieldPlaceholder(String(l10n: "How you checked"), shows: note.isEmpty).fleetField(focus: $noteFocused)
+                        .accessibilityIdentifier("outcome-note")
+                        .onChange(of: note) { _, now in heldKeyCheck(now, outcome) }
                 }
                 FormRow("", warning: store.pending != nil ? String(l10n: "A saved request waits. Check it below.") : nil) {
                     HStack(spacing: 8) {
                         Button("Cancel") { resolving = nil }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
                         Button("Save finding") {
                             guard let finding else { return }
+                            if SecretEntryView.isOffered(by: store) && !keyAllowed && KeyInText.contains(note) {
+                                store.heldKey = HeldKey(composer: heldID, hold: .text)
+                                return
+                            }
                             Task { await store.command(.outcome(id: outcome.id, finding: finding), note: note); if store.pending == nil { resolving = nil } }
                         }.buttonStyle(FleetPrimaryButtonStyle()).disabled(finding == nil || !store.canWrite || note.count > 2000)
+                            .accessibilityIdentifier("outcome-save")
                     }
                 }
             }
         }
+        .keyPasteGuard(store: store, composer: noteFocused && SecretEntryView.isOffered(by: store) ? heldID : nil)
+        // The question of a key goes with the form, so no other box waits behind it.
+        .onDisappear { if store.heldKey?.composer == heldID { store.heldKey = nil } }
+    }
+
+    /// A note that holds a key, however it came in, gets the question once; one without a key ends it.
+    private func heldKeyCheck(_ now: String, _ outcome: TaskOutcome) {
+        guard SecretEntryView.isOffered(by: store) else { return }
+        let mine = HeldKey(composer: noteKey(outcome), hold: .text)
+        if !KeyInText.contains(now) {
+            keyAllowed = false
+            if store.heldKey == mine { store.heldKey = nil }
+        } else if !keyAllowed && store.heldKey == nil {
+            store.heldKey = mine
+        }
+    }
+
+    /// "Save it as a secret": the key goes into the secure form over the page and out of the note, and the task's agent
+    /// gets the secret's name in its chat where he has one. A paste reads the clipboard again now.
+    private func saveHeldKey(_ held: HeldKey) {
+        store.heldKey = nil
+        var cut: String?
+        if held.hold == .paste { cut = KeyCut.onClipboard() }
+        else if let split = KeyCut.split(note) { note = split.rest; cut = split.key }
+        store.secretForm = SecretPreset(tell: store.canChat(with: task.owner) ? task.owner : nil, key: cut,
+                                        kept: SecretValueKept())
+    }
+
+    /// "Paste it anyway" or "Keep it": his choice, and no second question while the key is in the note.
+    private func keepHeldKey(_ held: HeldKey) {
+        store.heldKey = nil
+        keyAllowed = true
+        if held.hold == .paste, let pasted = NSPasteboard.general.string(forType: .string) { note += pasted }
     }
 
     /// The actions whose outcome is not known, each a row that opens its check.
@@ -778,10 +832,11 @@ struct TaskOutcomeCheck: View {
             ForEach(unknown) { outcome in
                 // The row clicks in 26 points and more, over and under its words (`IconMetrics.reach`, T-21):
                 // its line of 14 points was all that took the click. The card keeps its rhythm.
-                Button { finding = nil; note = ""; resolving = outcome } label: {
+                Button { finding = nil; note = ""; keyAllowed = false; resolving = outcome } label: {
                     HStack { Text(outcome.title).lineLimit(2); Spacer(); Image(systemName: "chevron.right").font(IconMetrics.symbol(9)) }
                         .padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
                 }.buttonStyle(.plain).padding(.vertical, -IconMetrics.reach).disabled(!store.canWrite)
+                    .accessibilityIdentifier("outcome-\(outcome.id)")
             }
         }.font(FormMetrics.detail).padding(12).background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
     }

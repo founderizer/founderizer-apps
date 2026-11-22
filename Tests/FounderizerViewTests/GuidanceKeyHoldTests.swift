@@ -33,6 +33,26 @@ struct GuidanceKeyHoldTests {
         return try JSONSerialization.data(withJSONObject: state)
     }
 
+    /// A reading with one stopped task of the manager whose send is not known, of a hub with task controls and secrets
+    /// and no guidance, so that the card shows only the check of the result.
+    private static func outcomeReading() throws -> Data {
+        let now = Date().timeIntervalSince1970
+        let task: [String: Any] = [
+            "id": 41, "title": "Send the weekly note", "details": "", "done_when": "Checked", "needs": "none",
+            "goal": "", "owner": "manager", "requester": "owner", "state": "working", "created": now - 900,
+            "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0, "started": now - 890,
+            "last_activity": now - 60]
+        let state: [String: Any] = [
+            "schema_version": 1, "db": "view-test-\(UUID().uuidString)", "time": Int(now),
+            "agents": [["name": "manager", "role": "manager", "runtime": "claude", "can": [], "placed": true]],
+            // stopped, as a task whose send nobody knows is: the owner checks it (`TaskOutcome.waitsOnOwner`)
+            "tasks": [task], "holds": [["id": 1, "task": 41, "kind": "stop", "state": "stopped", "attempt": 1]],
+            "notes": [], "needs": [], "permissions": [], "messages": [], "reports": [],
+            "outcomes": [["id": 1, "task": 41, "attempt": 1, "title": "Send the note", "kind": "send", "state": "unknown"]],
+            "ui_features": ["task_controls", SecretEntryView.feature, "secret_grants"]]
+        return try JSONSerialization.data(withJSONObject: state)
+    }
+
     /// A store of the app that reads `hub`, after the hub's first answer: it can write, so Send shows and would send.
     @MainActor private static func store(on hub: LoopbackHub, _ state: Data) throws -> FleetStore {
         _ = ViewHost.store(try HubState.decode(state))         // the test's own defaults and folder
@@ -107,6 +127,43 @@ struct GuidanceKeyHoldTests {
         #expect(seen.endedWithoutKey, "words with no key end the question")
         #expect(seen.heldOnSend, "Send holds a key also when the box asked nothing")
         #expect(!seen.sent, "and no guidance with the key reached the hub")
+        #expect(screen.stayedHis)
+    }
+
+    /// The note of a result's check ("How you checked") reaches the task's agent when the task runs again (the hub's
+    /// outcome lines), so a key in it waits for his choice too.
+    @Test func aKeyInTheNoteOfAResultsCheckWaitsForHisChoice() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop { () -> (opened: Bool, focused: Bool, asked: Bool, banner: Bool) in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let state = try Self.outcomeReading()
+            let hub = try LoopbackHub(state: state)
+            defer { hub.stop() }
+            let store = try Self.store(on: hub, state)
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            store.show(.task(41))
+            ViewHost.turn(20) { Self.element("outcome-1", in: window) != nil }
+            if let row = Self.element("outcome-1", in: window) {
+                _ = row.perform(NSSelectorFromString("accessibilityPerformPress"))
+            }
+            let opened = ViewHost.turn(10) { Self.element("outcome-note", in: window) != nil }
+            // his typing: the field takes the keyboard, and its editor takes the words, as the system gives it typed text
+            let card = window.childWindows?.first(where: \.isVisible)
+            // (by key-value coding, which hands the setter its BOOL; a selector's perform would hand it an object)
+            Self.element("outcome-note", in: window)?.setValue(true, forKey: "accessibilityFocused")
+            let focused = ViewHost.turn(5) { card?.firstResponder is NSTextView }
+            (card?.firstResponder as? NSTextView)?.insertText("I read it with " + Self.keyText,
+                                                              replacementRange: NSRange(location: NSNotFound, length: 0))
+            let asked = ViewHost.turn(10) { store.heldKey?.hold == .text && store.heldKey?.composer.hasPrefix("outcome:") == true }
+            let banner = ViewHost.turn(10) { Self.element("key-hold", in: window) != nil }
+            return (opened, focused, asked, banner)
+        }
+        #expect(seen.opened, "the check of the result opens")
+        #expect(seen.focused, "its note takes the keyboard")
+        #expect(seen.asked, "a key in its note gets the question")
+        #expect(seen.banner, "the question shows over the note")
         #expect(screen.stayedHis)
     }
 }
