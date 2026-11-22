@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import FleetCore
 
-/// The Updates screen (PRODUCT.md 4.3), and what stays of the old subscription until our open channel answers every
-/// fleet (4.2 and 4.5): a record that no screen shows, and the key of the website's link. `Fixtures/releases.json` is
+/// The Updates screen (PRODUCT.md 4.3), the record of the entitlement (4.2) that no screen shows, and the key of the
+/// platform's link, which the fleet's hub takes (teams-design-1-shop-and-licence.md 3.11). `Fixtures/releases.json` is
 /// the answer of the hub's own `GET /ui/releases`, taken from `ui_fixture.py`, so this reads the shape the hub really
 /// serves and not one this app guessed.
 struct ReleaseTests {
@@ -505,7 +505,7 @@ struct ReleaseTests {
         #expect(elsewhere.notesLink(channel: "https://platform.founderizer.com") == nil)
     }
 
-    // ---- the key of the website's link, which is traded with nothing on the screen (`ClaimFromLink`)
+    // ---- the key of the platform's link, which the fleet's hub takes with nothing on the screen (`ClaimGiving`)
 
     @Test func aKeyIsSentAsItCame() {
         #expect(ClaimKey.toSend("  FZ-7KMQ-2PRJ-4TVW  ") == "FZ-7KMQ-2PRJ-4TVW")
@@ -535,32 +535,129 @@ struct ReleaseTests {
         _ = try HubClient.address(HubClient.defaultAddress)
     }
 
-    @Test func aFleetIdIsSixteenHexCharactersAndSaysNothingAboutItsOwner() {
-        let made = FleetID.make()
-        #expect(FleetID.isValid(made))
-        #expect(made.count == 16)
-        #expect(FleetID.make() != made)
+    @Test func aFleetIdIsSixteenLowercaseHexCharacters() {
+        #expect(FleetID.isValid("0123456789abcdef"))
         #expect(FleetID.isValid("0123456789ABCDEF") == false)
         #expect(FleetID.isValid("0123456789abcde") == false)
     }
 
-    @Test func anAnswerForAnotherFleetIsNotTakenAsOurOwn() throws {
-        let answer = try JSONDecoder().decode(ClaimedEntitlement.self, from: Data("""
-        {"token": "eyJmbGVldCI6ICIwMTIzNDU2Nzg5YWJjZGVmIn0.c2lnbmF0dXJl", "fleet": "0123456789abcdef",
-         "plan": "monthly", "until": 2000000000, "machines": 5, "agents": 10}
-        """.utf8))
-        #expect(answer.isFor(fleet: "0123456789abcdef"))
-        #expect(answer.isFor(fleet: "fedcba9876543210") == false)
+    /// A reading of a hub with these features and, when given, this field `teams`. Synthetic data only.
+    private static func reading(features: [String], teams: [String: Any]? = nil) throws -> HubState {
+        var body: [String: Any] = ["schema_version": 1, "db": "claim-db", "time": 1_797_000_000, "agents": [Any](),
+                                   "tasks": [Any](), "notes": [Any](), "needs": [Any](), "permissions": [Any](),
+                                   "messages": [Any](), "reports": [Any](), "ui_features": features]
+        if let teams { body["teams"] = teams }
+        return try HubState.decode(JSONSerialization.data(withJSONObject: body))
     }
 
-    @Test func theClaimGoesOnlyToAnHTTPSChannel() async throws {
-        await #expect(throws: ClaimError.notOurSite) {
-            try await ClaimCall().claim(key: "FZ-7KMQ-2PRJ-4TVW", fleet: "0123456789abcdef",
-                                        channel: "http://platform.founderizer.com")
+    /// Where a test's key waits: a place of its own, never this Mac's keychain.
+    private final class KeyPlace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var key: String?
+        init(_ key: String) { self.key = key }
+        var held: String? { lock.withLock { key } }
+        /// A link of the platform brought this key.
+        func put(_ new: String) { lock.withLock { key = new } }
+        var place: ClaimGiving.Place {
+            ClaimGiving.Place(isHeld: { self.held != nil }, read: { self.held },
+                              remove: { self.lock.withLock { self.key = nil } })
         }
-        await #expect(throws: ClaimError.notAKey) {
-            try await ClaimCall().claim(key: "no", fleet: "0123456789abcdef",
-                                        channel: "https://platform.founderizer.com")
+    }
+
+    /// No hub listens here: a give that goes here all the same fails, and counts as a try.
+    private static let nowhere = URL(string: "http://127.0.0.1:1")!
+
+    /// A hub that takes the key of one give, as the hub's claim route answers, after `meanwhile` ran.
+    private static func takingHub(meanwhile: @escaping @Sendable () -> Void = {}) throws -> OneAnswer {
+        try OneAnswer(status: "200 OK") { request in
+            meanwhile()
+            let sent = (try? JSONSerialization.jsonObject(with: OneAnswer.body(of: request))) as? [String: Any]
+            return #"{"ok":true,"request_id":"\#(sent?["request_id"] as? String ?? "")","client":"test","#
+                + #""replayed":false,"teams":{"on":true,"until":1797811200,"renews":true,"ended":null}}"#
         }
+    }
+
+    /// **A key goes to a hub that lists `teams_claim`, and waits on a hub of an older release** (teams design 1, A1).
+    /// Bug: the key is lost on a hub of an older release: that hub has no claim route, each give fails there and
+    /// counts, and after six the key goes before the hub's update could take it.
+    @MainActor @Test func aKeyGoesToAHubThatTakesItAndWaitsOnAnOlderOne() async throws {
+        let key = "FZ-7KMQ-2PRJ-4TVW", place = KeyPlace(key)
+        let giving = ClaimGiving(place: place.place)
+        let older = try Self.reading(features: ["entitlement", "direct_chat"])
+        for _ in 0...ClaimGiving.tries {
+            #expect(giving.look(state: older, hub: Self.nowhere, client: "test", canWrite: true) == nil)
+        }
+        #expect(giving.tried == 0 && place.held == key, "the key waits, and no try is counted")
+
+        let hub = try Self.takingHub()
+        let task = try #require(giving.look(state: try Self.reading(features: [ClaimKey.feature]),
+                                            hub: URL(string: "http://127.0.0.1:\(hub.port)")!, client: "test",
+                                            canWrite: true))
+        await task.value
+        #expect(hub.received.starts(with: Data("POST /ui/teams/claim HTTP/1.1\r\n".utf8)))
+        let body = try #require(try JSONSerialization.jsonObject(with: OneAnswer.body(of: hub.received)) as? [String: String])
+        #expect(body["claim_key"] == key && body["db"] == "claim-db" && body.count == 3)
+        #expect(UUID(uuidString: body["request_id"] ?? "") != nil)
+        #expect(place.held == nil && giving.tried == 0, "the hub took the key, so the key goes from this Mac")
+    }
+
+    /// **Only a refusal of the key counts a failed give** (the coordinator's D65): a 503 and a 502 of the hub, a
+    /// refusal of the hub's own (a 409 with no `claim_error`) and `too_many` leave the key waiting with no try counted,
+    /// and a code after which the key is never taken counts one (`unknown_key`, the closed shop's `gone`, the 400
+    /// codes). Bug: an outage uses up the six tries and the key that the owner paid for goes unused; or a closed shop
+    /// gets the key each ten minutes for ever.
+    @MainActor @Test func onlyARefusalOfTheKeyCountsAFailedGive() async throws {
+        let answers: [(status: String, body: String, counted: Int)] = [
+            ("503 Service Unavailable", #"{"error":"The shop is busy.","claim_error":"unavailable"}"#, 0),
+            ("502 Bad Gateway", #"{"error":"the claim got no answer from the release channel: timed out"}"#, 0),
+            ("409 Conflict", #"{"error":"hub generation changed; refresh state"}"#, 0),
+            ("429 Too Many Requests", #"{"error":"Too many claims.","claim_error":"too_many"}"#, 0),
+            ("404 Not Found", #"{"error":"That is not a key of ours.","claim_error":"unknown_key"}"#, 1),
+            ("410 Gone", #"{"error":"The shop is closed.","claim_error":"gone"}"#, 1),
+            ("400 Bad Request", #"{"error":"The claim lacks a field.","claim_error":"incomplete"}"#, 1),
+            ("400 Bad Request", #"{"error":"The claim could not be read.","claim_error":"unreadable"}"#, 1),
+        ]
+        for answer in answers {
+            let place = KeyPlace("FZ-7KMQ-2PRJ-4TVW")
+            let giving = ClaimGiving(place: place.place)
+            let hub = try OneAnswer(status: answer.status) { _ in answer.body }
+            let task = try #require(giving.look(state: try Self.reading(features: [ClaimKey.feature]),
+                                                hub: URL(string: "http://127.0.0.1:\(hub.port)")!, client: "test",
+                                                canWrite: true))
+            await task.value
+            #expect(giving.tried == answer.counted && place.held == "FZ-7KMQ-2PRJ-4TVW", "\(answer.status)")
+        }
+    }
+
+    /// **A fleet whose Teams is on gets no second key** (teams design 1, A1), and a fleet whose licence ended takes one.
+    /// Bug: a key that the owner opened for the next fleet is spent on this one, which holds its licence already.
+    @MainActor @Test func aFleetWhoseTeamsIsOnGetsNoSecondKey() throws {
+        let key = "FZ-7KMQ-2PRJ-4TVW", place = KeyPlace(key)
+        let giving = ClaimGiving(place: place.place)
+        let on = try Self.reading(features: [ClaimKey.feature],
+                                  teams: ["on": true, "until": 1_797_811_200, "renews": true, "ended": NSNull()])
+        #expect(on.teams == TeamsLicence(on: true, until: 1_797_811_200, renews: true, ended: nil))
+        #expect(giving.look(state: on, hub: Self.nowhere, client: "test", canWrite: true) == nil)
+        #expect(giving.tried == 0 && place.held == key, "the key waits for the next fleet")
+
+        let ended = try Self.reading(features: [ClaimKey.feature],
+                                     teams: ["on": false, "until": 1_797_811_200, "renews": false, "ended": 1_797_000_000])
+        #expect(ended.teams?.ended == 1_797_000_000)
+        #expect(ClaimKey.goesTo(ended), "a fleet whose licence ended takes a new key")
+        #expect(ClaimKey.goesTo(try Self.reading(features: [ClaimKey.feature])), "and so does a fleet with no licence")
+    }
+
+    /// **The key of a link that comes while the last key is on its way to the hub waits** (teams design 1, A1). Bug:
+    /// when the hub takes the last key, its give takes the new key away from this Mac, and the key for the next fleet
+    /// is lost.
+    @MainActor @Test func aKeyThatComesWhileTheLastIsOnItsWayWaits() async throws {
+        let place = KeyPlace("FZ-7KMQ-2PRJ-4TVW")
+        let giving = ClaimGiving(place: place.place)
+        let hub = try Self.takingHub { place.put("FZ-3NWX-8HDL-6CQB") }
+        let task = try #require(giving.look(state: try Self.reading(features: [ClaimKey.feature]),
+                                            hub: URL(string: "http://127.0.0.1:\(hub.port)")!, client: "test",
+                                            canWrite: true))
+        await task.value
+        #expect(place.held == "FZ-3NWX-8HDL-6CQB" && giving.tried == 0)
     }
 }

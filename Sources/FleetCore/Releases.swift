@@ -62,10 +62,10 @@ public struct ReleaseRow: Codable, Equatable, Identifiable, Sendable {
 
 /// What the hub carries of the old subscription (PRODUCT.md 4.2): a record of `GET /ui/releases`.
 ///
-/// **Founderizer has no subscription and no account, and no screen shows this record.** A hub of today still sends
-/// it, and two things still read it until our open channel is the only one: the Mac's own update read names its fleet
-/// by `fleet` (`AppUpdate.fleetHeader`), and a key that came with the website's link is traded only while the hub
-/// holds no token (`ClaimFromLink`). A hub that sends less of it, or none of it, reads as a fleet with no token.
+/// **No screen shows this record.** A hub of today still sends it, and the Mac's own reads of our side name its fleet
+/// by `fleet` (`AppUpdate.fleetHeader`, the error and problem reports). The key of the platform's link reads nothing
+/// here: it goes by the hub's field `teams` (`ClaimKey.goesTo`). A hub that sends less of this record, or none of it,
+/// reads as a fleet with no token.
 public struct Entitlement: Codable, Equatable, Sendable {
     public static let feature = "entitlement"
     /// The sixteen hex characters that identify this fleet to our channel, and nothing about its owner. nil until the
@@ -343,8 +343,7 @@ public struct ReleaseState: Codable, Equatable, Sendable {
     }
 }
 
-/// The answer of the presses of the Updates screen (`POST /ui/releases/check | update | auto`), and of the token
-/// that a key of the website's link is traded for (`entitlement`, `ClaimFromLink`).
+/// The answer of the presses of the Updates screen (`POST /ui/releases/check | update | auto`).
 public struct ReleaseReceipt: Decodable, Sendable {
     public let ok: Bool
     public let request_id: String
@@ -354,8 +353,4 @@ public struct ReleaseReceipt: Decodable, Sendable {
     public let applying: Bool?
     /// `auto`: whether automatic updates are on now.
     public let automatic: Bool?
-    /// `entitlement`: the record as the hub now holds it.
-    public let fleet: String?
-    public let plan: String?
-    public let until: Double?
 }

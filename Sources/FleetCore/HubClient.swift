@@ -843,19 +843,46 @@ public final class HubClient: Sendable {
         return receipt
     }
 
-    /// `POST /ui/releases/entitlement`: the token the website issued for this fleet (PRODUCT.md 4.2). Only
-    /// `ClaimFromLink` calls it, and it goes with it when our open channel answers every fleet.
+    /// `POST /ui/teams/claim` (feature `teams_claim`, teams-design-1-shop-and-licence.md 3.11): the key of the
+    /// platform's link, which the hub trades at the platform with its own fleet id. The hub keeps the licence and
+    /// answers with the field `teams` as it holds it then. Only `ClaimGiving` calls it.
     ///
-    /// The token is a bearer credential. It is in this one request body and in nothing else the app keeps: no
-    /// command label, no note, no record, and the hub keeps only its SHA-256 in the owner's own command record.
-    public func storeEntitlement(token: String, hub: URL, database: String, client: String,
-                                 requestID: UUID = UUID()) async throws -> ReleaseReceipt {
-        guard (16...4000).contains(token.utf8.count), !token.contains(where: \.isWhitespace) else {
+    /// The key is in this one request body and in nothing else that the app sends: the hub's record of the command
+    /// keeps its SHA-256.
+    ///
+    /// The request has its own limit of 45 seconds (`claimSession`), above the hub's 30 for the platform: with the 15 of
+    /// the other requests, a slow platform made the hub keep the licence while this Mac counted a failed give, and the
+    /// used key went on to the next hub of the Mac (the coordinator's D65). A refusal is `TeamsClaimRefused`.
+    public func claimTeams(key: String, hub: URL, database: String, client: String,
+                           requestID: UUID = UUID()) async throws -> TeamsClaimReceipt {
+        guard let key = ClaimKey.toSend(key) else { throw HubError.invalidResponse }
+        let request = try ownerRequest("ui/teams/claim", hub: hub, database: database, client: client,
+                                       requestID: requestID, fields: ["claim_key": key])
+        let (data, response) = try await Self.claimSession.hubData(for: request)
+        HubWrites.note(request)
+        guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
+        guard response.statusCode == 200 else {
+            throw TeamsClaimRefused(refusal: .read(status: response.statusCode, body: data),
+                                    keyCode: TeamsClaimRefused.keyCode(status: response.statusCode, body: data))
+        }
+        let receipt = try JSONDecoder().decode(TeamsClaimReceipt.self, from: data)
+        guard receipt.ok, receipt.request_id.lowercased() == requestID.uuidString.lowercased() else {
             throw HubError.invalidResponse
         }
-        return try await releaseCommand("entitlement", hub: hub, database: database, client: client,
-                                        requestID: requestID, fields: ["token": token])
+        return receipt
     }
+
+    /// The session of `claimTeams` alone: 45 seconds for its one request, with no redirect, as the shared one.
+    private static let claimSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = 45
+        configuration.timeoutIntervalForResource = 45
+        return URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+    }()
 
     private func releaseCommand(_ press: String, hub: URL, database: String, client: String, requestID: UUID,
                                 fields: [String: Any]) async throws -> ReleaseReceipt {
@@ -869,13 +896,20 @@ public final class HubClient: Sendable {
 
     func ownerCommand(_ route: String, hub: URL, database: String, client: String, requestID: UUID,
                       fields: [String: Any]) async throws -> Data {
+        try await perform(ownerRequest(route, hub: hub, database: database, client: client, requestID: requestID,
+                                       fields: fields))
+    }
+
+    /// The POST of one owner command, with its `request_id` and `db`.
+    func ownerRequest(_ route: String, hub: URL, database: String, client: String, requestID: UUID,
+                      fields: [String: Any]) throws -> URLRequest {
         var request = URLRequest(url: hub.appendingPathComponent(route))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.httpBody = try JSONSerialization.data(withJSONObject: fields.merging(
             ["request_id": requestID.uuidString.lowercased(), "db": database]) { _, new in new }, options: [.sortedKeys])
-        return try await perform(request)
+        return request
     }
 
     /// `GET /ui/history?mode=messages` (owner feature `history_messages`): the records that hold every typed word, the

@@ -1318,7 +1318,7 @@ struct OwnerMacKeyTests {
             "ErrorReports.swift": "our own site, for error reports (its hub calls are in HubClient.swift)",
             "TailscaleFleetKey.swift": "Tailscale's API", "AppUpdateInstall.swift": "the release channel",
             "MachineInstaller.swift": "the claim's listener, with the key's SHA-256", "AppUpdate.swift": "the release channel",
-            "EntitlementClaim.swift": "our own site", "PrivateNetwork.swift": "Tailscale's API",
+            "PrivateNetwork.swift": "Tailscale's API",
             "MacInstallerLink.swift": "a Mac's installer on the local network", "GitHubAppKey.swift": "GitHub's API",
             "GitHubManifest.swift": "GitHub's API", "MacNetwork.swift": "Tailscale's download", "CloudServers.swift": "a cloud's API",
             "OwnerMacKey.swift": "the key itself: hubData and the registration",

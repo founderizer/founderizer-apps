@@ -59,6 +59,11 @@ public struct HubState: Decodable, Sendable {
     /// last 72 hours, by which the card Work names an agent's work (`WorkItem`). nil on a hub that sends no duties; a
     /// var, so the phone's reading (`init(phoneTime:)`) has none by itself.
     public private(set) var responsibilities: DutyCaseLists?
+    /// **This fleet's licence of Founderizer for Teams** (teams-design-1-shop-and-licence.md, 3.12): there only while
+    /// the hub holds a token that our key signed with plan `teams`, so nil on a fleet with no licence and from a hub
+    /// before it. A var, so the phone's reading (`init(phoneTime:)`) has none by itself. The key of the platform's link
+    /// reads `on` (`ClaimKey.goesTo`).
+    public private(set) var teams: TeamsLicence?
 
     /// The token as one the watcher can wait from, or nil.
     public var liveToken: LiveToken? { LiveToken(token) }

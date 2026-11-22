@@ -176,6 +176,14 @@ public enum TransportFailure: Error, Sendable {
 public struct Transfer: Sendable, Equatable {
     public let limit: Int
     public let file: Bool
+    /// The seconds of a request that is no file when they are not the transport's own (a table tool's `wait`), or nil.
+    public var wait: TimeInterval?
+
+    public init(limit: Int, file: Bool, wait: TimeInterval? = nil) {
+        self.limit = limit
+        self.file = file
+        self.wait = wait
+    }
 
     public static let call = Transfer(limit: 8 * 1024 * 1024, file: false)
     /// The whole snapshot (`/ui/state`), `owner_mcp.py` STATE_MAX: an answer that holds a fleet's whole history,
@@ -223,29 +231,58 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
     private let session: URLSession
     /// The session of the file tools: the same rules, with the times of a file (`Transfer`).
     private let fileSession: URLSession
+    /// A copy of the configuration, for the session of a request with a wait of its own (`Transfer.wait`), which is made
+    /// at its first request and kept: the same rules, with that wait and twice it in all.
+    private let template: URLSessionConfiguration
+    private let waitedLock = NSLock()
+    private var waited: [TimeInterval: URLSession] = [:]
+
+    private static func made(_ configuration: URLSessionConfiguration, wait: TimeInterval,
+                             total: TimeInterval) -> URLSession {
+        configuration.connectionProxyDictionary = ["HTTPEnable": false, "HTTPSEnable": false]
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.timeoutIntervalForRequest = wait
+        configuration.timeoutIntervalForResource = total
+        return URLSession(configuration: configuration, delegate: Loader(), delegateQueue: nil)
+    }
 
     /// `configuration`: a test gives one whose `protocolClasses` hold its stand-in hub, so that no port is opened.
     public init(configuration: URLSessionConfiguration = .ephemeral, timeout: TimeInterval = 30) {
-        func made(_ configuration: URLSessionConfiguration, wait: TimeInterval, total: TimeInterval) -> URLSession {
-            configuration.connectionProxyDictionary = ["HTTPEnable": false, "HTTPSEnable": false]
-            configuration.httpCookieStorage = nil
-            configuration.urlCredentialStorage = nil
-            configuration.httpShouldSetCookies = false
-            configuration.urlCache = nil
-            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-            configuration.timeoutIntervalForRequest = wait
-            configuration.timeoutIntervalForResource = total
-            return URLSession(configuration: configuration, delegate: Loader(), delegateQueue: nil)
-        }
         let files = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
-        session = made(configuration, wait: timeout, total: timeout * 2)
-        fileSession = made(files, wait: Transfer.fileWait, total: Transfer.fileTotal)
+        template = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
+        session = Self.made(configuration, wait: timeout, total: timeout * 2)
+        fileSession = Self.made(files, wait: Transfer.fileWait, total: Transfer.fileTotal)
         super.init()
     }
 
     deinit {
         session.finishTasksAndInvalidate()
         fileSession.finishTasksAndInvalidate()
+        for one in waited.values { one.finishTasksAndInvalidate() }
+    }
+
+    /// The session of one request: the file tools', one with the request's own wait, or the transport's own.
+    private func chosenSession(_ transfer: Transfer) -> URLSession {
+        transfer.file ? fileSession : transfer.wait.map { session(waiting: $0) } ?? session
+    }
+
+    /// The limit of the session that a request of `transfer` takes, without data (a test reads it).
+    func requestWait(_ transfer: Transfer) -> TimeInterval {
+        chosenSession(transfer).configuration.timeoutIntervalForRequest
+    }
+
+    /// The session of a request with the wait `seconds`.
+    private func session(waiting seconds: TimeInterval) -> URLSession {
+        waitedLock.lock(); defer { waitedLock.unlock() }
+        if let made = waited[seconds] { return made }
+        let made = Self.made((template.copy() as? URLSessionConfiguration) ?? .ephemeral, wait: seconds,
+                             total: seconds * 2)
+        waited[seconds] = made
+        return made
     }
 
     /// One request's answer while it arrives.
@@ -334,7 +371,7 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
 
     public func send(_ request: URLRequest, transfer: Transfer) throws(TransportFailure)
         -> (status: Int, headers: [String: String], body: Data) {
-        let chosen = transfer.file ? fileSession : session
+        let chosen = chosenSession(transfer)
         let state = Arriving(limit: transfer.limit)
         let task = chosen.dataTask(with: request)
         (chosen.delegate as? Loader)?.add(task, state)
@@ -619,14 +656,17 @@ public final class OwnerHub: @unchecked Sendable {
     /// gave it. `requestID`: the agent's own, when it sends the same command again after a lost answer; else this
     /// makes one. The lock is held for the one request, never for the read of the generation.
     public func command(_ route: String, _ body: [String: JSONValue], _ what: String,
-                        requestID: JSONValue? = nil) throws -> JSONValue? {
+                        requestID: JSONValue? = nil, wait: TimeInterval? = nil) throws -> JSONValue? {
         let rid = try Self.requestID(requestID) ?? UUID().uuidString.lowercased()
         func once() throws -> HubAnswer {
             let db = try generation()
             var envelope = body
             envelope["request_id"] = .string(rid.lowercased())
             envelope["db"] = .string(db)
-            return try CommandLock.holding(lockFile) { try call("POST", route, body: .object(envelope)) }
+            let transfer = wait.map { Transfer(limit: Transfer.call.limit, file: false, wait: $0) } ?? .call
+            return try CommandLock.holding(lockFile) {
+                try call("POST", route, body: .object(envelope), transfer: transfer)
+            }
         }
         var answer = try once()
         if stale(answer) {

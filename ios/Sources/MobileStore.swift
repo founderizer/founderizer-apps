@@ -2280,8 +2280,17 @@ final class MobileStore {
     // MARK: The writes
 
     /// A message to one agent. The manager's chat is where the owner writes a goal, as on the Mac.
-    func send(to name: String) async {
-        await write(draft(for: name), recipient: name, files: readyFiles(for: Self.stageKey(agent: name)))
+    ///
+    /// **Words that look like a key do not go** (`KeyInText`), as on Needs you: a key typed or pasted into the chat
+    /// would go out as words, into the agent's conversation and the hub's records. The send reads the composer's words
+    /// once, decides on them before anything is saved, and sends those same words or none: no later read of the
+    /// composer, which a send empties and he can change while another write is on its way, decides it again. It gives
+    /// true when it held them back for that: nothing is saved, they stay in the composer, and its line says why.
+    @discardableResult func send(to name: String) async -> Bool {
+        let words = draft(for: name)
+        if KeyInText.contains(words) { return true }
+        await write(words, recipient: name, files: readyFiles(for: Self.stageKey(agent: name)))
+        return false
     }
 
     /// One answer to one open item of Needs you. It goes to the agent that raised the item.
@@ -2598,10 +2607,14 @@ final class MobileStore {
     }
 
     /// Sends the correction of the message that the owner opened. The original message and the work that followed it
-    /// stay in the history: the hub keeps both events.
-    func sendCorrection(in name: String) async {
-        guard let item = correcting, canCorrect(item, in: name) else { return }
-        await write(correctionText, recipient: name, replaces: item.key)
+    /// stay in the history: the hub keeps both events. Words that look like a key do not go, as from the chat's
+    /// composer (`send(to:)`): decided once, on the words that it would send, and true when it held them back.
+    @discardableResult func sendCorrection(in name: String) async -> Bool {
+        let words = correctionText
+        guard let item = correcting, canCorrect(item, in: name) else { return false }
+        if KeyInText.contains(words) { return true }
+        await write(words, recipient: name, replaces: item.key)
+        return false
     }
 
     /// Saves the request, then sends it. The order is the rule: the Outbox holds the number and the text before the

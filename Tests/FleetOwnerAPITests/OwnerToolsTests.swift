@@ -15,7 +15,7 @@ struct OwnerTableTests {
         #expect(kinds[.later] == nil)
         #expect(Set(table.tools.filter { $0.kind == .swift }.map(\.name)) == OwnerTools.written)
         #expect(kinds[.absent] == 7)           // the six of the app's own pages, and connect_google (owner API 1.178)
-        #expect(table.tools.filter(\.kind.built).count == 57)
+        #expect(table.tools.filter(\.kind.built).count == 58)
         #expect(table.version.count == 64)
         let check = try #require(table.tool("check_machine"))
         #expect(check.kind == .plain && check.route == "/ui/machines/{agent}/check" && check.what == "the machine check")
@@ -359,7 +359,7 @@ final class OwnerRefusalTests {
         #expect(!tools.listed.contains { $0.name == "which_hub" })
         // And the three setup tools and the link's six write tools (save_bot_token, prepare_problem_report,
         // save_secret, grant_secret, share_secret, answer_secret_request).
-        #expect(tools.listed.count == 73 + 3 + 6 && tools.listed.contains { $0.name == "save_profile" })
+        #expect(tools.listed.count == 74 + 3 + 6 && tools.listed.contains { $0.name == "save_profile" })
     }
 
     /// A table of a newer `owner_mcp.py` can name a `swift` tool that this program's code does not have: that tool is
@@ -395,9 +395,57 @@ final class OwnerRefusalTests {
         let writes = tools.listed.filter { OwnerTools.verb(of: $0) == .write }
         // And the link's six: save_bot_token, prepare_problem_report, save_secret, grant_secret, share_secret,
         // answer_secret_request.
-        #expect(writes.count == 69 + 6)
+        #expect(writes.count == 70 + 6)
         #expect(writes.allSatisfy { $0.annotations["readOnlyHint"] == .bool(false) })
         #expect(OwnerTools.verb(of: Fixture.table.tool("install_hub")!) == nil)
     }
 
+}
+
+/// **claim_teams waits longer than its hub waits for the platform** (the coordinator's D65): the table gives it a `wait`
+/// of 45 seconds (`owner_mcp.py`'s CLAIM_TIMEOUT), its request reaches the transport with that wait, and the transport
+/// sends it on a session with that limit, while every other request keeps the transport's own. Bug: the program gives
+/// up after 30 seconds, in the same second that the hub answers after its own 30 for the platform, so the agent hears
+/// of a failure while the hub kept the licence.
+struct OwnerWaitTests {
+    /// A transport that records the `Transfer` of each request, and answers the state's head and the claim.
+    final class Recording: HubTransport, @unchecked Sendable {
+        let lock = NSLock()
+        var sent: [(path: String, transfer: Transfer)] = []
+
+        func send(_ request: URLRequest, transfer: Transfer) throws(TransportFailure)
+            -> (status: Int, headers: [String: String], body: Data) {
+            let path = request.url?.path ?? ""
+            lock.withLock { sent.append((path, transfer)) }
+            let body: String
+            if path == "/ui/state" {
+                body = #"{"db": "g1", "time": 1763078400, "ui_features": ["teams_claim"], "head": true}"#
+            } else {
+                let sentBody = (request.httpBody.flatMap { JSONValue.parse(String(decoding: $0, as: UTF8.self)) })
+                let id = sentBody?["request_id"]?.string ?? ""
+                body = #"{"ok": true, "request_id": "\#(id)", "replayed": false, "#
+                    + #""teams": {"on": true, "until": 1797811200, "renews": true, "ended": null}}"#
+            }
+            return (200, ["content-type": "application/json"], Data(body.utf8))   // as the transport gives them
+        }
+    }
+
+    @Test func claimTeamsWaitsLongerThanTheHubWaitsForThePlatform() throws {
+        #expect(Fixture.table.tool("claim_teams")?.wait == 45)
+        #expect(Fixture.table.tool("pause_chat_apps")?.wait == nil)
+        let recording = Recording()
+        let home = Fixture.home()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let context = OwnerContext(hubSetting: { "http://hub.example.invalid:8765" }, transport: recording, home: home,
+                                   userAgent: "founderizer-cli/test", ownBuild: nil, startedBuild: { nil },
+                                   clientLabel: { "founderizer-cli/1/test" }, programs: Fixture.noPrograms)
+        let answer = try OwnerTools(table: Fixture.table, context: context)
+            .json("claim_teams", ["claim_key": .string("FZ-7QK2-M9XP-4RTB")])
+        #expect(answer["teams"]?["on"] == .bool(true))
+        let claim = try #require(recording.sent.first { $0.path == "/ui/teams/claim" })
+        #expect(claim.transfer.wait == 45 && !claim.transfer.file)
+        #expect(recording.sent.filter { $0.path != "/ui/teams/claim" }.allSatisfy { $0.transfer.wait == nil })
+        let transport = SessionTransport(timeout: 30)
+        #expect(transport.requestWait(claim.transfer) == 45 && transport.requestWait(.call) == 30)
+    }
 }

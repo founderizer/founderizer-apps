@@ -44,6 +44,9 @@ struct ChatPage: View {
     /// The run that took the line's place and the line it took, so that its cross-fade keeps the line's words to its
     /// end: the line has gone from the frame after it came.
     @State private var taken: (run: String, line: ChatWaiting)?
+    /// His Send held back words that look like a key (`MobileStore.send(to:)`, `sendCorrection(in:)`): the composer's
+    /// line says so, in the words of Needs you's field, until his words hold none.
+    @State private var looksLikeKey = false
 
     private var items: [MobileChatItem] { store.items(for: agent) }
     /// The open requests this agent raised, the oldest first, as the conversation reads.
@@ -1010,7 +1013,10 @@ struct ChatPage: View {
                 let look = MarkTeam.look(of: agent, in: team)
                 SendButton(enabled: canSend, label: isCorrecting ? String(l10n: "Send correction") : String(l10n: "Send message"), side: 36,
                            fill: look.mid, arrow: Self.arrow(on: look.mid)) {
-                    if isCorrecting { await store.sendCorrection(in: agent) } else { await store.send(to: agent) }
+                    // Words that look like a key stay here, with the line that says why: the send decides it once,
+                    // on the words that it would send, and nothing reads them again after it.
+                    let held = isCorrecting ? await store.sendCorrection(in: agent) : await store.send(to: agent)
+                    if held { looksLikeKey = true }
                 }
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .frame(height: line + 28)
@@ -1035,6 +1041,10 @@ struct ChatPage: View {
         }
         .composerGlass()
         .padding(.horizontal, 16).padding(.bottom, 6)
+        // The line about a key goes once his words hold none (also the draft that Cancel of a correction shows).
+        .onChange(of: text.wrappedValue) { _, words in
+            if looksLikeKey, !KeyInText.contains(words) { looksLikeKey = false }
+        }
     }
 
     /// "+" stands at the start of the field's line, before the words.
@@ -1060,17 +1070,22 @@ struct ChatPage: View {
     }
 
     /// At most one line under the composer, and only when it says something that the screen does not: why this chat
-    /// takes no message, that the Outbox is blocked, or how near the hub's limit the text is.
+    /// takes no message, that the Outbox is blocked, that his words look like a key and did not go, or how near the
+    /// hub's limit the text is.
     /// The system's own words behind the note, when it is a failure that gave some.
     private var noteDetail: String? {
         if store.chatUnavailableWords(agent) != nil { return nil }
         if store.storageError != nil { return store.storageErrorDetail }
+        if looksLikeKey { return nil }
         return store.fileError != nil ? store.fileErrorDetail : nil
     }
 
     private var note: (words: String, isWarning: Bool)? {
         if let words = store.chatUnavailableWords(agent) { return (words, true) }
         if let words = store.storageError { return (words, true) }
+        // His Send held back words that look like a key: Needs you's own line, over a file's failure, which his
+        // press did not answer.
+        if looksLikeKey { return (String(l10n: "That looks like a key. Never send a key in a message."), true) }
         if let words = store.fileError { return (words, true) }
         if store.filesAreWaiting(for: composerKey) {
             return (store.uploading.isEmpty ? String(l10n: "A file did not go up. Send it again, or take it out.") : String(l10n: "Sending a file…"),

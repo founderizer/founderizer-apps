@@ -491,7 +491,8 @@ public final class OwnerTools: @unchecked Sendable {
         case .plain:
             let body = Self.body(tool, args)
             let path = try Self.route(tool.route, args)
-            return try hub.command(path, body, tool.what, requestID: tool.requestIDFromArguments ? args["request_id"] : nil)
+            return try hub.command(path, body, tool.what, requestID: tool.requestIDFromArguments ? args["request_id"] : nil,
+                                   wait: tool.wait)
         case .withBase:
             // A field of `whole` replaces a whole value that the client made from its own read of the team, so it
             // goes only with that read's base: a base read here would hold a change made after that read

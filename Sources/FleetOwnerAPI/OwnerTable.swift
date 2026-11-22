@@ -50,6 +50,9 @@ public struct OwnerTable: Sendable {
         /// agent's model that follows the default again, a chat app account removed. Every other null is left out.
         /// A table from before them has none.
         public var nulls: [String] = []
+        /// The seconds of its request when they are not the 30 of a call (`owner_mcp.py`'s `wait`: claim_teams, whose
+        /// hub waits up to 30 seconds for the platform itself), or nil.
+        public var wait: TimeInterval?
 
         /// The first sentence of its words, for one line of `founderizer-cli tools`.
         public var firstSentence: String {
@@ -147,7 +150,7 @@ public struct OwnerTable: Sendable {
             // version: refused at the call, and the rest of the table still works.
             let kind = Kind(rawValue: said) ?? .later
             var route = "", fields: [String] = [], what = "", page: String?, fromArguments = true, feature: String?
-            var whole: [String] = [], nulls: [String] = []
+            var whole: [String] = [], nulls: [String] = [], wait: TimeInterval?
             if kind.built {
                 guard let found = item["route"]?.string, let names = item["fields"]?.array,
                       let said = item["what"]?.string else { throw broken }
@@ -164,10 +167,16 @@ public struct OwnerTable: Sendable {
                 if let names = item["nulls"]?.array {
                     nulls = try names.map { guard let text = $0.string else { throw broken }; return text }
                 }
+                if let given = item["wait"] {
+                    guard case .int(let seconds) = given, seconds > 0 else { throw broken }
+                    wait = TimeInterval(seconds)
+                }
             }
-            tools.append(Tool(name: name, description: description, inputSchema: schema, annotations: annotations,
-                              kind: kind, route: route, fields: fields, what: what, revisionPage: page,
-                              requestIDFromArguments: fromArguments, feature: feature, whole: whole, nulls: nulls))
+            var tool = Tool(name: name, description: description, inputSchema: schema, annotations: annotations,
+                            kind: kind, route: route, fields: fields, what: what, revisionPage: page,
+                            requestIDFromArguments: fromArguments, feature: feature, whole: whole, nulls: nulls)
+            tool.wait = wait
+            tools.append(tool)
         }
         guard let pageMap = root["PAGES"]?.object, let instructions = root["instructions"]?.string,
               let version = root["version"]?.string, let protocolVersion = root["protocol"]?.string else { throw broken }

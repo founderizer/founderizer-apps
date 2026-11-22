@@ -651,6 +651,176 @@ extension SampleFleetTests {
     }
 }
 
+/// **A hub with the manager's chat** (owner feature `corrections`): it takes a message and a correction with the hub's
+/// receipt, and its chat's read has each message that it took, with the client that sent it. While `holdsReceipts` is
+/// set it holds each receipt until `letGo`. It keeps the words of each message and correction that came, in order.
+private final class ChatHub: LoopbackHub, @unchecked Sendable {
+    private var taken: [(id: String, text: String, client: String, replaces: String?)] = []
+    private var holding = false
+    private var held: [(connection: NWConnection, reply: Data)] = []
+
+    init() { super.init(label: "founderizer.check.chat-hub") }
+
+    /// The words of each message and correction that came, in order.
+    var messages: [String] { lock.withLock { taken.map(\.text) } }
+    var holdsReceipts: Bool {
+        get { lock.withLock { holding } }
+        set { lock.withLock { holding = newValue } }
+    }
+
+    /// The receipts that it holds go.
+    func letGo() {
+        let going = lock.withLock { () -> [(connection: NWConnection, reply: Data)] in
+            defer { held = [] }
+            return held
+        }
+        for (connection, reply) in going { send(reply, on: connection) }
+    }
+
+    override func stop() {
+        let left = lock.withLock { () -> [NWConnection] in
+            defer { held = [] }
+            return held.map(\.connection)
+        }
+        for connection in left { connection.cancel() }
+        super.stop()
+    }
+
+    override func answer(_ request: Request, on connection: NWConnection) {
+        note("\(request.method) \(request.path)")
+        switch (request.method, request.path) {
+        case ("GET", "/ui/mobile"):
+            send(Self.reply(200, Self.fleet), on: connection)
+        case ("GET", "/ui/mobile/chat/manager"):
+            let items = lock.withLock { taken }.enumerated().map { index, message -> [String: Any] in
+                var item: [String: Any] = ["kind": "message", "ts": 1_800_000_100 + index, "id": message.id,
+                                           "text": message.text, "client": message.client]
+                if let replaces = message.replaces { item["replaces"] = replaces }
+                return item
+            }
+            let page: [String: Any] = ["db": "gen-chat", "agent": "manager", "items": items,
+                                       "cursor": 1_800_000_100 + max(items.count - 1, 0)]
+            send(Self.reply(200, Self.text(page)), on: connection)
+        case ("POST", "/ui/messages"):
+            let fields = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            let id = fields["request_id"] as? String ?? "", replaces = fields["replaces_request_id"] as? String
+            let client = request.headers["x-fleet-client"] ?? ""
+            var receipt: [String: Any] = ["ok": true, "request_id": id, "client": client, "event_id": 201,
+                                          "created": 1_800_000_100, "replayed": false]
+            if let replaces { receipt["replaces_request_id"] = replaces }
+            let reply = Self.reply(200, Self.text(receipt))
+            let now = lock.withLock { () -> Bool in
+                taken.append((id, fields["text"] as? String ?? "", client, replaces))
+                guard holding else { return true }
+                held.append((connection, reply))
+                return false
+            }
+            if now { send(reply, on: connection) }
+        default:
+            send(Self.reply(404, #"{"error": "not found"}"#), on: connection)
+        }
+    }
+
+    /// The hub's compact read: the manager alone, on a hub that takes corrections.
+    private static let fleet: String = ChatHub.text([
+        "schema_version": 1, "db": "gen-chat", "time": 1_800_000_000, "ui_features": ["mobile", "corrections"],
+        "agents": [["name": "manager", "role": "manager", "runtime": "claude", "open_tasks": 0, "usage": []]],
+        "needs": [], "tasks": [], "recent": [], "holds": [], "outcomes": [],
+    ])
+
+    private static func text(_ value: Any) -> String {
+        (try? JSONSerialization.data(withJSONObject: value)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    }
+}
+
+extension SampleFleetTests {
+    /// **Words that look like a key do not go from the chat's composer** (`KeyInText`; `MobileStore.send(to:)` and
+    /// `sendCorrection(in:)`), as on Needs you: a message and a correction that hold one save nothing and send nothing,
+    /// their words stay in the composer, and the send gives the hold that the composer's line shows. The send decides
+    /// it once, on the words that it would send: also while another write is on its way, and a good message after a
+    /// held key goes. The bugs that this stops: a key typed or pasted into the chat goes to the agent in clear text; a
+    /// hold that a later read of the composer decides lets a key go after a write, or drops a good message.
+    @MainActor @Test("a chat message and a correction that look like a key send nothing, and a good message goes",
+                     .timeLimit(.minutes(1)))
+    func aKeyInTheChatSendsNothing() async throws {
+        try await Self.withoutHub {
+            try await Self.keepingReadings {
+                let drafts = UserDefaults.standard.object(forKey: "agentDrafts")
+                defer {
+                    if let drafts { UserDefaults.standard.set(drafts, forKey: "agentDrafts") }
+                    else { UserDefaults.standard.removeObject(forKey: "agentDrafts") }
+                }
+                let hub = ChatHub()
+                defer { hub.stop() }
+                let address = try await hub.start()
+                // A key of the check's own, which holds none: an enrolled phone's key is never touched.
+                let holder = DeviceKey(account: "device-key-chat-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                let store = MobileStore(deviceKey: holder)
+                try #require(store.pending == nil, "the simulator holds a request of its own")
+                defer {
+                    if let left = store.pending {
+                        try? Outbox(file: Self.support.appendingPathComponent("pending.json")).clear(matching: left.requestID)
+                    }
+                }
+                store.addressText = address
+                await store.connect()
+                // the chat is open, so each read reads it (a new hub closed every page)
+                store.chatRoute = [.chat("manager")]
+                try #require(store.canWrite && store.canChat(with: "manager"))
+                let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+
+                // a key in a message: nothing is saved or sent, and the words stay in the composer with its line
+                store.setDraft(key, for: "manager")
+                #expect(await store.send(to: "manager"), "the composer shows no line about the key")
+                #expect(store.pending == nil && hub.messages.isEmpty && store.draft(for: "manager") == key)
+
+                // a good message goes
+                let first = "Ship the newsletter on Monday."
+                store.setDraft(first, for: "manager")
+                #expect(await store.send(to: "manager") == false)
+                #expect(hub.messages == [first] && store.pending == nil && store.draft(for: "manager").isEmpty)
+
+                // a key in its correction: nothing goes, and the correction stays open with its words; good words go
+                await store.refresh()
+                let sent = try #require(store.correctable(in: "manager"))
+                store.beginCorrection(sent, in: "manager")
+                store.correctionText = key
+                #expect(await store.sendCorrection(in: "manager"), "the composer shows no line about the key")
+                #expect(store.pending == nil && hub.messages == [first])
+                #expect(store.correcting != nil && store.correctionText == key)
+                let corrected = "Ship the newsletter on Tuesday."
+                store.correctionText = corrected
+                #expect(await store.sendCorrection(in: "manager") == false)
+                #expect(hub.messages == [first, corrected] && store.correcting == nil)
+
+                // a key while another write is on its way: held at the press, and nothing of it goes after that write
+                hub.holdsReceipts = true
+                let second = "Then tell the customer."
+                store.setDraft(second, for: "manager")
+                let going = Task { await store.send(to: "manager") }
+                try await Self.until { hub.messages.count == 3 }
+                try #require(store.sending && store.draft(for: "manager").isEmpty)
+                store.setDraft(key, for: "manager")
+                #expect(await store.send(to: "manager"), "the composer shows no line about the key")
+                hub.holdsReceipts = false
+                hub.letGo()
+                #expect(await going.value == false)
+                try await Self.until { store.pending == nil && !store.sending }
+                try await Task.sleep(for: .milliseconds(500))
+                #expect(hub.messages == [first, corrected, second] && store.draft(for: "manager") == key)
+                // his good words after the held key go, with no hold of before
+                let third = "And send me the list."
+                store.setDraft(third, for: "manager")
+                #expect(await store.send(to: "manager") == false)
+                #expect(hub.messages == [first, corrected, second, third] && store.pending == nil)
+                #expect(!hub.messages.contains { $0.contains("EXAMPLE") }, "a key went to the hub")
+            }
+        }
+    }
+}
+
 /// **A hub with three requests of pictures** (owner feature `need_pictures`, owner API 1.285): request 7 has three options
 /// and a picture for each, request 8 three options and two pictures, request 9 three options that combine (`multi`) and
 /// a picture for each. It gives each picture's bytes and takes an answer to each request with the hub's receipt, and it
