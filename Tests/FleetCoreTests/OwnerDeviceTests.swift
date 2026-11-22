@@ -1,3 +1,5 @@
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import Foundation
 import Testing
 @testable import FleetCore
@@ -304,6 +306,44 @@ struct OwnerDeviceTests {
         #expect(parts?.queryItems?.first { $0.name == "hub" }?.value == hub.absoluteString)
         #expect(OwnerDevices.isCode("ABCD-2345") && !OwnerDevices.isCode("ABCD-23456"))
         #expect(parts?.queryItems?.contains { $0.name == "bind" } == false)
+    }
+
+    /// F7 A6 of the owner's feedback of 22 November 2026: the picture of a code in Your devices keeps each module of
+    /// its QR at 3 points or more, for the link of a hub at a Tailscale address of the most characters, drawn as
+    /// `QRCodeView` draws it: it stretches CoreImage's whole image, the border of one module at each side too. That
+    /// link (126 characters) is 45 modules and the border, 47 in all, so a module is 168 / 47 = 3.6 points. At the 104
+    /// points of before it was 2.2 points, about 0.4 mm on a MacBook screen.
+    @Test func thePictureOfACodeHasModulesThatAPhoneCanRead() throws {
+        let longest = URL(string: "http://100.127.255.255:8765")!
+        let filter = CIFilter.qrCodeGenerator()
+        let link = OwnerDevices.enrollPayload(hub: longest, code: "ABCD-2345", bind: DeviceBinding.newBind())
+        filter.message = Data(link.utf8)
+        filter.correctionLevel = "M"
+        let side = try #require(filter.outputImage).extent.width           // the modules and the border, in modules
+        #expect(side >= 47)
+        #expect(OwnerDevices.pictureSize / side >= 3)
+    }
+
+    /// F7 A2 of the owner's feedback of 22 November 2026: the hub gives the code of Add device also to a phone whose
+    /// address is a device already, which then has a new key and no new row. So Add device's block goes when a device
+    /// that the list did not hold appears, as before, and also when a device that it held has a key newer than the
+    /// code. A key from before the code keeps the block, and so does a device with no key.
+    @Test func addDevicesBlockGoesWhenAPhoneTookItsCode() throws {
+        func devices(_ rows: [[String: Any]]) throws -> [OwnerDevice] {
+            try decode(OwnerDeviceList.self, list(rows)).devices
+        }
+        let expires = 10_600.0                                      // made at 10 000 on the hub's clock
+        let linkedBefore = try devices([row(since: 9_000.0)])
+        #expect(!OwnerDevices.codeTaken(by: linkedBefore, known: ["iphone"], expires: expires))
+        #expect(OwnerDevices.codeTaken(by: try devices([row(since: 10_200.0)]), known: ["iphone"], expires: expires))
+        let second = try devices([row(since: 9_000.0),
+                                  row(device: "iphone-2", label: "iPhone 2", address: "100.84.1.21")])
+        #expect(OwnerDevices.codeTaken(by: second, known: ["iphone"], expires: expires))
+        let noKey = try devices([row(key: false, since: NSNull(), lastSeen: NSNull(), contact: NSNull())])
+        #expect(!OwnerDevices.codeTaken(by: noKey, known: ["iphone"], expires: expires))
+        // A code whose time Founderizer did not get: only a new device counts.
+        #expect(!OwnerDevices.codeTaken(by: try devices([row(since: 10_200.0)]), known: ["iphone"], expires: 0))
+        #expect(OwnerDevices.codeTaken(by: second, known: ["iphone"], expires: 0))
     }
 
     /// Owner feature `door_calls` (API 1.81): the picture also carries a one-time value, the phone binds its own key to

@@ -55,6 +55,7 @@
 		AC00000000000000000071 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000070 /* ShareViewController.swift */; };
 		AC00000000000000000072 /* ShareModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000071 /* ShareModel.swift */; };
 		AC00000000000000000073 /* SharePages.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000072 /* SharePages.swift */; };
+		AC000000000000000000D0 /* ShareModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000071 /* ShareModel.swift */; };
 		AC00000000000000000074 /* SharedPlace.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000060 /* SharedPlace.swift */; };
 		AC00000000000000000075 /* MobileStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000003 /* MobileStyle.swift */; };
 		AC00000000000000000076 /* AgentMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000010 /* AgentMark.swift */; };
@@ -568,6 +569,7 @@
 				AC000000000000000000A0 /* SampleFleet.swift in Sources */,
 				AC000000000000000000A1 /* SampleFleetData.swift in Sources */,
 				AC000000000000000000C0 /* CardValueChips.swift in Sources */,
+				AC000000000000000000D0 /* ShareModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

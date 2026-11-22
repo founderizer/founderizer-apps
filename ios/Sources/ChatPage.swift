@@ -44,9 +44,11 @@ struct ChatPage: View {
     /// The run that took the line's place and the line it took, so that its cross-fade keeps the line's words to its
     /// end: the line has gone from the frame after it came.
     @State private var taken: (run: String, line: ChatWaiting)?
-    /// His Send held back words that look like a key (`MobileStore.send(to:)`, `sendCorrection(in:)`): the composer's
-    /// line says so, in the words of Needs you's field, until his words hold none.
-    @State private var looksLikeKey = false
+    /// **His Send held back words that look like a key** (`MobileStore.ChatKeyHold`; the owner, 22 November 2026: "Keep
+    /// it, as on the Mac"): the composer's line says so, in the words of Needs you's field, with Keep it, which sends
+    /// those exact words. It belongs to these words of this send, in this mode: an edit of the box, or a correction
+    /// that opens or ends, ends it, and the next Send asks again.
+    @State private var keyHold: MobileStore.ChatKeyHold?
 
     private var items: [MobileChatItem] { store.items(for: agent) }
     /// The open requests this agent raised, the oldest first, as the conversation reads.
@@ -1013,10 +1015,7 @@ struct ChatPage: View {
                 let look = MarkTeam.look(of: agent, in: team)
                 SendButton(enabled: canSend, label: isCorrecting ? String(l10n: "Send correction") : String(l10n: "Send message"), side: 36,
                            fill: look.mid, arrow: Self.arrow(on: look.mid)) {
-                    // Words that look like a key stay here, with the line that says why: the send decides it once,
-                    // on the words that it would send, and nothing reads them again after it.
-                    let held = isCorrecting ? await store.sendCorrection(in: agent) : await store.send(to: agent)
-                    if held { looksLikeKey = true }
+                    await send(keeping: nil)
                 }
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .frame(height: line + 28)
@@ -1028,9 +1027,19 @@ struct ChatPage: View {
             if let note {
                 // **On the left edge of the words that it counts** (margins pass, fault 5): it started 33.6 points to
                 // their left, under "+".
-                ComposerNote(words: note.words, isWarning: note.isWarning, detail: noteDetail)
-                    .padding(.leading, showsPlus ? Self.rowStart + 44 : Self.wordsWithoutPlus)
-                    .padding(.trailing, 18).padding(.bottom, 12)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    ComposerNote(words: note.words, isWarning: note.isWarning, detail: noteDetail)
+                    // **Keep it** on the line about a key, at its end, as "Try again" on the line of a send: it sends
+                    // the words that the line is about, and only while Send could send.
+                    if let hold = keyLine {
+                        TextAction(title: String(l10n: "Keep it"), enabled: canSend, font: .caption) {
+                            Task { await send(keeping: hold) }
+                        }
+                        .accessibilityIdentifier("keep-key")
+                    }
+                }
+                .padding(.leading, showsPlus ? Self.rowStart + 44 : Self.wordsWithoutPlus)
+                .padding(.trailing, 18).padding(.bottom, 12)
             }
         }
         // **The whole capsule takes the tap** (fix round 2, item 53): only the field's 22-point line of words did.
@@ -1041,10 +1050,26 @@ struct ChatPage: View {
         }
         .composerGlass()
         .padding(.horizontal, 16).padding(.bottom, 6)
-        // The line about a key goes once his words hold none (also the draft that Cancel of a correction shows).
+        // The line about a key and its Keep it go with any edit of those words, and with a correction that opens or
+        // ends: the next Send asks again.
         .onChange(of: text.wrappedValue) { _, words in
-            if looksLikeKey, !KeyInText.contains(words) { looksLikeKey = false }
+            if let keyHold, keyHold.words != words { self.keyHold = nil }
         }
+        .onChange(of: store.correcting?.key) { _, _ in keyHold = nil }
+    }
+
+    /// His Send, or his Keep it of the words that a Send held back: the store decides once, on the box's words, and
+    /// gives back the hold that the composer shows, or nil.
+    private func send(keeping hold: MobileStore.ChatKeyHold?) async {
+        keyHold = await isCorrecting ? store.sendCorrection(in: agent, keeping: hold) : store.send(to: agent, keeping: hold)
+    }
+
+    /// The hold that the line about a key stands for: of this chat, of the box's mode and of its words now.
+    private var keyLine: MobileStore.ChatKeyHold? {
+        guard let keyHold, keyHold.agent == agent, keyHold.replaces == (isCorrecting ? store.correcting?.key : nil),
+              keyHold.words == text.wrappedValue, store.chatUnavailableWords(agent) == nil, store.storageError == nil
+        else { return nil }
+        return keyHold
     }
 
     /// "+" stands at the start of the field's line, before the words.
@@ -1076,7 +1101,7 @@ struct ChatPage: View {
     private var noteDetail: String? {
         if store.chatUnavailableWords(agent) != nil { return nil }
         if store.storageError != nil { return store.storageErrorDetail }
-        if looksLikeKey { return nil }
+        if keyLine != nil { return nil }
         return store.fileError != nil ? store.fileErrorDetail : nil
     }
 
@@ -1085,7 +1110,7 @@ struct ChatPage: View {
         if let words = store.storageError { return (words, true) }
         // His Send held back words that look like a key: Needs you's own line, over a file's failure, which his
         // press did not answer.
-        if looksLikeKey { return (String(l10n: "That looks like a key. Never send a key in a message."), true) }
+        if keyLine != nil { return (String(l10n: "That looks like a key. Never send a key in a message."), true) }
         if let words = store.fileError { return (words, true) }
         if store.filesAreWaiting(for: composerKey) {
             return (store.uploading.isEmpty ? String(l10n: "A file did not go up. Send it again, or take it out.") : String(l10n: "Sending a file…"),

@@ -368,12 +368,7 @@ internal sealed class MessageFooter : StackPanel
         HorizontalAlignment = right ? HorizontalAlignment.Right : HorizontalAlignment.Left;
         var words = Look.Words("", 12, 16, Look.Link, wrap: false);
         copy = new Button { Style = (Style)Application.Current.Resources["QuietButtonStyle"], Content = words };
-        copy.Click += (_, _) =>
-        {
-            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
-            package.SetText(text);
-            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-        };
+        copy.Click += (_, _) => ClipboardText.Copy(text);
         Children.Add(time);
         Children.Add(copy);
         Visibility = Visibility.Collapsed;

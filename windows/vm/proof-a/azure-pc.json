@@ -1,0 +1,317 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "0.0.0.1",
+  "metadata": {
+    "about": "The x64 clean PC of proof A's run 2 (azure-pc-make.sh): one resource group with one x64 Windows Server 2025 Datacenter VM (Desktop Experience, licence included, Gen2, Trusted launch with Secure Boot and a vTPM), its Standard SSD, NIC, static public IPv4, network and network security group. The only inbound rule is SSH from one address (this Mac's public address). No RDP rule. No boot diagnostics (Azure's pictures of the screen). Every resource has the tags temporary=true and proof=a."
+  },
+  "parameters": {
+    "group": {
+      "type": "string",
+      "defaultValue": "proof-a-pc-rg"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "northeurope"
+    },
+    "name": {
+      "type": "string",
+      "defaultValue": "proof-a-pc"
+    },
+    "size": {
+      "type": "string",
+      "defaultValue": "Standard_D2s_v6"
+    },
+    "from": {
+      "type": "string",
+      "metadata": {
+        "description": "The one public IPv4 address that may reach SSH."
+      }
+    },
+    "adminUser": {
+      "type": "string",
+      "defaultValue": "builder"
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Random, made by the script and given on standard input; the VM's setup replaces it with a password made in the VM."
+      }
+    },
+    "diskController": {
+      "type": "string",
+      "defaultValue": "NVMe",
+      "allowedValues": [
+        "NVMe",
+        "SCSI"
+      ],
+      "metadata": {
+        "description": "NVMe for the v6 sizes (Dsv6, Dasv6), which have no SCSI."
+      }
+    }
+  },
+  "variables": {
+    "tags": {
+      "temporary": "true",
+      "proof": "a"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('group')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "proof-a-pc",
+      "resourceGroup": "[parameters('group')]",
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('group'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "name": {
+            "value": "[parameters('name')]"
+          },
+          "size": {
+            "value": "[parameters('size')]"
+          },
+          "from": {
+            "value": "[parameters('from')]"
+          },
+          "adminUser": {
+            "value": "[parameters('adminUser')]"
+          },
+          "adminPassword": {
+            "value": "[parameters('adminPassword')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "diskController": {
+            "value": "[parameters('diskController')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "0.0.0.1",
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string"
+            },
+            "adminUser": {
+              "type": "string"
+            },
+            "adminPassword": {
+              "type": "securestring"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "diskController": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-nsg')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "ssh-from-one-address",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "[concat(parameters('from'), '/32')]",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "22"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-vnet')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('name'), '-nsg'))]"
+              ],
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "10.70.0.0/24"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "pc",
+                    "properties": {
+                      "addressPrefix": "10.70.0.0/26",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('name'), '-nsg'))]"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-ip')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static",
+                "publicIPAddressVersion": "IPv4"
+              }
+            },
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-nic')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', concat(parameters('name'), '-vnet'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('name'), '-ip'))]"
+              ],
+              "properties": {
+                "networkSecurityGroup": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('name'), '-nsg'))]"
+                },
+                "ipConfigurations": [
+                  {
+                    "name": "ipv4",
+                    "properties": {
+                      "privateIPAllocationMethod": "Dynamic",
+                      "subnet": {
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(parameters('name'), '-vnet'), 'pc')]"
+                      },
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('name'), '-ip'))]",
+                        "properties": {
+                          "deleteOption": "Delete"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('name'), '-nic'))]"
+              ],
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "[parameters('size')]"
+                },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "MicrosoftWindowsServer",
+                    "offer": "WindowsServer",
+                    "sku": "2025-datacenter-g2",
+                    "version": "latest"
+                  },
+                  "osDisk": {
+                    "name": "[concat(parameters('name'), '-disk')]",
+                    "createOption": "FromImage",
+                    "deleteOption": "Delete",
+                    "managedDisk": {
+                      "storageAccountType": "StandardSSD_LRS"
+                    }
+                  },
+                  "diskControllerType": "[parameters('diskController')]"
+                },
+                "osProfile": {
+                  "computerName": "[parameters('name')]",
+                  "adminUsername": "[parameters('adminUser')]",
+                  "adminPassword": "[parameters('adminPassword')]",
+                  "windowsConfiguration": {
+                    "provisionVMAgent": true,
+                    "enableAutomaticUpdates": false,
+                    "patchSettings": {
+                      "patchMode": "Manual"
+                    }
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('name'), '-nic'))]",
+                      "properties": {
+                        "deleteOption": "Delete"
+                      }
+                    }
+                  ]
+                },
+                "securityProfile": {
+                  "securityType": "TrustedLaunch",
+                  "uefiSettings": {
+                    "secureBootEnabled": true,
+                    "vTpmEnabled": true
+                  }
+                },
+                "diagnosticsProfile": {
+                  "bootDiagnostics": {
+                    "enabled": false
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "address": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('name'), '-ip'))).ipAddress]"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "address": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('group')), 'Microsoft.Resources/deployments', 'proof-a-pc')).outputs.address.value]"
+    }
+  }
+}

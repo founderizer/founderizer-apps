@@ -187,9 +187,7 @@ internal sealed class ValueChips : Grid
         /// <summary>Copies the value's exact characters to the system's clipboard; the icon is a check for 1.5 s.</summary>
         private void Copy()
         {
-            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
-            package.SetText(value.Value.Text);
-            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            if (!ClipboardText.Copy(value.Value.Text)) return;
             copied = true;
             timer ??= MakeTimer();
             timer?.Stop();

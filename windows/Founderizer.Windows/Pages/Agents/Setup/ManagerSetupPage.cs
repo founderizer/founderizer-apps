@@ -15,7 +15,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 
@@ -284,7 +283,7 @@ internal sealed class ManagerSetupPage : Grid
 
     private static void OpenSignIn(Uri link, string? code)
     {
-        if (code is not null) CodeBox.CopyText(code);
+        if (code is not null) ClipboardText.Copy(code, once: true);
         _ = global::Windows.System.Launcher.LaunchUriAsync(link);
     }
 }
@@ -415,7 +414,7 @@ internal sealed class CodeBox : Grid
         // A second press says Copied again for its own two seconds.
         copy.Click += (_, _) =>
         {
-            CopyText(code);
+            if (!ClipboardText.Copy(code, once: true)) return;
             Say(SetupViewWords.Copied);
             back.Stop();
             back.Start();
@@ -429,15 +428,5 @@ internal sealed class CodeBox : Grid
     {
         if (copy.Content is Border { Child: TextBlock label }) label.Text = words;
         AutomationProperties.SetName(copy, words);
-    }
-
-    /// <summary>Puts a code on Windows' clipboard, and not in its history or its sync to the owner's other devices: a
-    /// sign-in code is the owner's, for one sign-in. Where Windows does not take it so, it is not copied at all; the page
-    /// still shows it.</summary>
-    public static void CopyText(string text)
-    {
-        var package = new DataPackage();
-        package.SetText(text);
-        Clipboard.SetContentWithOptions(package, new ClipboardContentOptions { IsAllowedInHistory = false, IsRoamable = false });
     }
 }

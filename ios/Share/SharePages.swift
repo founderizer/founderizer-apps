@@ -163,8 +163,18 @@ struct ShareComposePage: View {
             }
             .padding(.leading, 3).padding(.trailing, 7)
             if let note {
-                ComposerNote(words: note.words, isWarning: note.isWarning)
-                    .padding(.leading, 18).padding(.trailing, 18).padding(.bottom, 12)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    ComposerNote(words: note.words, isWarning: note.isWarning)
+                    // **Keep it** on the line about a key, at its end, as in the app's chat: it sends the words that
+                    // the line is about, and only while Send could send.
+                    if let hold = keyLine {
+                        TextAction(title: String(l10n: "Keep it"), enabled: model.canSend, font: .caption) {
+                            Task { await model.send(to: agent, keeping: hold) }
+                        }
+                        .accessibilityIdentifier("share-keep-key")
+                    }
+                }
+                .padding(.leading, 18).padding(.trailing, 18).padding(.bottom, 12)
             }
         }
         // The whole capsule takes the tap, as the chat's does.
@@ -175,11 +185,21 @@ struct ShareComposePage: View {
         }
         .composerGlass()
         .padding(.horizontal, 16).padding(.bottom, 6)
+        // The line about a key and its Keep it go with any edit of those words: the next Send asks again.
+        .onChange(of: model.text) { _, words in model.edited(words) }
     }
 
-    /// The one line under the field: "Sending…" while the message goes, then what went wrong, in the app's words.
+    /// The hold that the line about a key stands for: of this agent and of the field's words now.
+    private var keyLine: ShareModel.KeyHold? {
+        guard let hold = model.keyHold, hold.agent == agent, hold.words == model.text, !model.sending else { return nil }
+        return hold
+    }
+
+    /// The one line under the field: "Sending…" while the message goes, then that the words look like a key (the app's
+    /// own line, with Keep it), then what went wrong, in the app's words.
     private var note: (words: String, isWarning: Bool)? {
         if model.sending { return (String(l10n: "Sending…"), false) }
+        if keyLine != nil { return (String(l10n: "That looks like a key. Never send a key in a message."), true) }
         if let note = model.note { return note }
         let count = model.trimmed.count
         if count > ShareModel.textLimit {

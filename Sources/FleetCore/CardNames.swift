@@ -19,7 +19,7 @@ import Foundation
 /// - a knowledge file of the owner's: its path, word for word ("knowledge/owner/brand.md"), also as the whole of an
 ///   inline code, which is how agents write a path;
 /// - a secret of the fleet's (an API key or a login): its name, word for word, when it has a character that is no
-///   letter and no space ("DOOR_BACKBLAZE_AMURA_KEY", "acme-login"), also as the whole of an inline code; a name of
+///   letter and no space ("DOOR_BACKBLAZE_ACME_KEY", "acme-login"), also as the whole of an inline code; a name of
 ///   words of letters only ("Stripe", "Google Drive") only as the whole of an inline code, because it is a product's
 ///   words too (the owner, 21 November 2026:
 ///   "task cards in both agents chat and needs you sohuld also have a badge for specific Credentials", and "Yes, both");

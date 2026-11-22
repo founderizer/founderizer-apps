@@ -496,6 +496,42 @@ struct ClarifyDraftTests {
     }
 }
 
+/// **A chat's draft keeps no words that look like a key on the phone's disk** (`MobileStore.setDraft`,
+/// `keepChatDrafts`): they stay in memory only, as the words of Needs clarification do. The bug that this holds: a key
+/// pasted into the chat's box stayed in the app's settings file while it waited there, and a draft with a key that an
+/// earlier build kept stayed after every later start. A plain draft is still kept across a start. Synchronous on the
+/// main actor, so no other check's store writes the drafts between its steps.
+@Suite("A chat's draft", .serialized)
+struct ChatDraftTests {
+    @MainActor @Test("keeps no key-like words on the disk, also from an earlier build, and a plain draft survives a start")
+    func drafts() {
+        func onDisk() -> [String: String] {
+            UserDefaults.standard.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:]
+        }
+        let saved = UserDefaults.standard.object(forKey: "agentDrafts")
+        defer {
+            if let saved { UserDefaults.standard.set(saved, forKey: "agentDrafts") }
+            else { UserDefaults.standard.removeObject(forKey: "agentDrafts") }
+        }
+        let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+        // drafts as an earlier build kept them, a key-like one among them: the start takes it off the disk, and this
+        // launch still has it in memory
+        UserDefaults.standard.set(["manager": key, "wren": "Ship it on Monday."], forKey: "agentDrafts")
+        let store = MobileStore()
+        #expect(onDisk()["manager"] == nil, "the key-like words of an earlier build stay on the phone's disk")
+        #expect(store.draft(for: "manager") == key && onDisk()["wren"] == "Ship it on Monday.")
+        // a key typed into a box now stays in memory only, also when another draft is written after it
+        store.setDraft(key + " now", for: "theo")
+        store.setDraft("Send me the list.", for: "nova")
+        #expect(store.draft(for: "theo") == key + " now")
+        #expect(!onDisk().values.contains { KeyInText.contains($0) }, "a key-like draft is on the phone's disk")
+        // a start of the app: the plain drafts are there, the key-like ones are not
+        let next = MobileStore()
+        #expect(next.draft(for: "wren") == "Ship it on Monday." && next.draft(for: "nova") == "Send me the list.")
+        #expect(next.draft(for: "manager").isEmpty && next.draft(for: "theo").isEmpty)
+    }
+}
+
 /// What depends on it: the item of a request on Needs you takes no touch while his answer to it is on its way, and
 /// the agent's chat shows that answer as his message. A request that waits with no send must be neither: its line
 /// says "Not sent" with Try again, which he must be able to press. The bug that this holds: after a start of the app

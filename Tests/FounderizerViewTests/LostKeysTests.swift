@@ -19,6 +19,30 @@ import Testing
         override func insertText(_ insertString: Any) { took.append("insertText: \(insertString)") }
     }
 
+    /// A local key monitor of the test: it takes a key down of its window, as FleetView's monitor takes one of its own
+    /// window, and says what it took.
+    @MainActor private final class Watcher {
+        var window: NSWindow?
+        var saw: [String] = []
+
+        func takes(_ event: NSEvent) -> Bool {
+            guard let window, event.window === window else { return false }
+            saw.append(event.characters ?? "")
+            return true
+        }
+    }
+
+    /// A plain window that stands (ordered in) and is never key (a borderless window cannot become key), clear and far
+    /// off every screen, as ViewHost's.
+    @MainActor private static func standingWindow() -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: -40000, y: -40000, width: 120, height: 60),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.orderFront(nil)
+        return window
+    }
+
     /// ViewBridge, which TextInputUI loads after a field took text: with it, AppKit's own end of a command asks the view
     /// bridge before it plays the sound, and so does the catch. Whether its class method is there.
     @MainActor private static func loadTheViewBridge() -> Bool {
@@ -37,9 +61,12 @@ import Testing
     /// In a window whose one view takes no key, each of the ends: a key down that no responder takes, also one that names
     /// no window (AppKit gives it to the key window), a command of the key bindings that no responder performs (with the
     /// view bridge loaded), typed text that reaches no text view, and, once the window is closed, a key down that names
-    /// no window while the app has no key window.
+    /// no window while the app has no key window. Then, still with no key window, a key down that names a window
+    /// that stands is not kept: it goes on to AppKit's own, whose local monitors see it first, as FleetView's monitor
+    /// takes a key of its own window; a catch that kept it would take that key from the app.
     @Test func aKeyThatNoViewTakesIsKeptAndPlaysNoSound() async throws {
-        let (seen, screen) = try await ViewHost.onMainLoop { () -> (lost: [LostKeys.Key], bridge: Bool) in
+        typealias Seen = (lost: [LostKeys.Key], bridge: Bool, monitored: [String])
+        let (seen, screen) = try await ViewHost.onMainLoop { () -> Seen in
             let bridge = Self.loadTheViewBridge()
             let window = ViewHost.window(showing: NSView(), size: NSSize(width: 200, height: 100))
             let before = LostKeys.seen.count
@@ -49,7 +76,16 @@ import Testing
             window.insertText("k")
             ViewHost.close(window)
             ViewHost.atOnce(Self.downWithNoWindow("o", code: 31))
-            return (Array(LostKeys.seen.dropFirst(before)), bridge)
+            let watcher = Watcher(), standing = Self.standingWindow()
+            watcher.window = standing
+            let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                MainActor.assumeIsolated { watcher.takes(event) } ? nil : event
+            }
+            ViewHost.atOnce(ViewHost.keys("h", in: standing).filter { $0.type == .keyDown })
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            standing.orderOut(nil)
+            standing.close()
+            return (Array(LostKeys.seen.dropFirst(before)), bridge, watcher.saw)
         }
         #expect(seen.bridge, "ViewBridge gives NSResponder its view bridge, so this test covers the catch's question")
         #expect(seen.lost == [LostKeys.Key(selector: "keyDown:", window: "KeyWindow", characters: "k"),
@@ -58,6 +94,8 @@ import Testing
                               LostKeys.Key(selector: "insertText:", window: "KeyWindow", characters: "k"),
                               LostKeys.Key(selector: "sendEvent:", window: "", characters: "o")],
                 "each end kept its key: \(seen.lost)")
+        #expect(seen.monitored == ["h"],
+                "a key that names a window that stands reached the app's monitors: \(seen.monitored)")
         #expect(LostKeys.missing.isEmpty, "each catch found its AppKit method: \(LostKeys.missing)")
         #expect(screen.stayedHis)
     }

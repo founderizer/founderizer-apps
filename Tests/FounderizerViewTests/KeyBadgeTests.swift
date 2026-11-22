@@ -120,7 +120,7 @@ import Testing
     }
 
     /// **The key's name in the title of a request for its new value is its badge** (his "Yes, both" to the drawing
-    /// "New value for DOOR_BACKBLAZE_AMURA_KEY"), and **no other card's title has one** (the area Needs-you and the
+    /// "New value for DOOR_BACKBLAZE_ACME_KEY"), and **no other card's title has one** (the area Needs-you and the
     /// manager). A press on the badge in a Replace card's title opens the key's card, and the title's own press (it
     /// opens the card's long part) does not take it; in another key request's title the name is words, and a press on
     /// the title opens the long part and no key's card.

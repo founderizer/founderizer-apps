@@ -175,10 +175,7 @@ internal static class Blocks
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(copy, "Copy code");
         copy.Click += (_, _) =>
         {
-            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
-            package.SetText(code);
-            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-            copy.Content = Icons.Of(Icons.Check, Look.Muted, 12);
+            if (ClipboardText.Copy(code)) copy.Content = Icons.Of(Icons.Check, Look.Muted, 12);
         };
         var grid = new Grid { Children = { block, copy } };
         grid.PointerEntered += (_, _) => { copy.Opacity = 1; copy.IsHitTestVisible = true; };

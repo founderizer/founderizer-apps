@@ -34,6 +34,13 @@ public sealed class StoreSource : IFleetSource
         this.tailscale = tailscale;
         store.Changed += (_, change) => Changed?.Invoke(this, new FleetChange(change.After, Stopwatch.GetTimestamp()));
         store.Notified += (_, due) => Notified?.Invoke(this, due);
+        // A store that can be the owner's computer keeps the mark of a manager that its hub shows with no server, at each
+        // current reading (the Mac's notePlacing): the window does not wait for the read that it may need.
+        if (box is not null)
+        {
+            var placing = new ManagerPlacing(Founderizer.Owner.Reads.OwnerReads.Of(store), Choices());
+            store.Changed += (_, change) => _ = placing.NoteAsync(change.After, DateTimeOffset.UtcNow);
+        }
     }
 
     /// <summary>The store of a normal start.</summary>
@@ -91,8 +98,9 @@ public sealed class StoreSource : IFleetSource
     private ManagerSetup? managerSetup;
 
     /// <summary>**The setup of the manager of a new fleet** (piece U3), while this PC keeps its mark for the hub that it
-    /// owns now, of this generation, with that manager in its reading: the first run's hand-over writes it, and the
-    /// manager's run takes it away. Null otherwise, and for a store that can be no owner's computer. Made once for a mark,
+    /// owns now, of this generation, with that manager in its reading: the first run writes it from the claim on, a
+    /// current reading of a manager with no server writes it (<see cref="ManagerPlacing"/>), and the manager's run takes
+    /// it away. Null otherwise, and for a store that can be no owner's computer. Made once for a mark,
     /// so that its readings stay while its page comes and goes. A build with the proofs' switch takes the stand-in of
     /// FOUNDERIZER_SETUP_READINGS in its place (<see cref="SetupStandIn"/>).</summary>
     internal ManagerSetup? ManagerSetup()
@@ -103,10 +111,7 @@ public sealed class StoreSource : IFleetSource
             return managerSetup ??= new ManagerSetup(new ManagerSetupSettings { Calls = standIn, Fleet = standIn.Fleet, Choices = Choices() }, standIn.Mark());
         }
 #endif
-        var s = store.State;
-        if (box is null || s.Role != HubRole.Owner || s.Fleet is not { } fleet || ManagerSetupMark.Read(Choices()) is not { } mark ||
-            !mark.IsOf(s.Hub, fleet.Db) || !fleet.Agents.Any(a => a.Name == mark.Agent))
-            return null;
+        if (box is null || ManagerSetupMark.Shown(store.State, Choices()) is not { } mark) return null;
         if (managerSetup is { } kept && kept.Mark.IsOf(mark.Hub, mark.Db) && kept.Mark.Agent == mark.Agent) return kept;
         return managerSetup = new ManagerSetup(new ManagerSetupSettings
         {

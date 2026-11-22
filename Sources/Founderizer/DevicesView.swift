@@ -59,7 +59,8 @@ struct DevicesSection: View {
         let device: String
         let code: String?
         let expires: Double
-        /// The devices when a code for a new phone was made: a device that is not one of them is that phone.
+        /// The devices when a code for a new phone was made: a device that is not one of them is that phone, and so is
+        /// one of them whose key is newer than the code (`OwnerDevices.codeTaken`).
         var known: [String] = []
         /// The QR's one-time value (owner feature `door_calls`), which this Mac keeps to certify the phone's key.
         var bind = DeviceBinding.newBind()
@@ -226,7 +227,8 @@ struct DevicesSection: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                QRCodeView(text: OwnerDevices.enrollPayload(hub: hub, code: value, bind: made.bind), size: 104)
+                QRCodeView(text: OwnerDevices.enrollPayload(hub: hub, code: value, bind: made.bind),
+                           size: OwnerDevices.pictureSize)
                     .accessibilityIdentifier("device-code-qr")
             }
             .padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -242,7 +244,8 @@ struct DevicesSection: View {
 
     /// A code for a phone that `team.json` does not hold yet, in the card where the form was: the code, the words to
     /// scan it, how long it still works and its picture, then Cancel. The phone that brings it is added with its own
-    /// address, and its new row takes the place of this block (`read`).
+    /// address, and its new row takes the place of this block (`read`). A phone that is a device already takes the
+    /// same code for its own row, and the block goes too.
     private func newPhone(_ made: MadeCode) -> some View {
         VStack(alignment: .trailing, spacing: 9) {
             codeBlock(made, words: [String(l10n: "Scan with your phone."), OwnerDevices.left(made.expires, now: now)])
@@ -366,7 +369,9 @@ struct DevicesSection: View {
             if first { await store.settle(since: opened) }
             guard sameHub else { return }
             kept = .current(fresh, at: now)
-            if let newCode, fresh.devices.contains(where: { !newCode.known.contains($0.device) }) { made = nil }
+            if let newCode, OwnerDevices.codeTaken(by: fresh.devices, known: newCode.known, expires: newCode.expires) {
+                made = nil
+            }
             team = snapshot
             await DoorCallSigning.certify(fresh.devices, store: store, hub: hub, database: database)
         } catch {

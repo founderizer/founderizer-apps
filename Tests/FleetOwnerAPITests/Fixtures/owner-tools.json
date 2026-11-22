@@ -5403,7 +5403,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "People: One role of the people who may write to an agent: add one, change one, rename one with rename (its people keep it), or delete one with delete true. A name that is not there yet is a new role, which needs prompt and tools; a change writes only the fields it gives. To copy a role, add a new one with its fields. prompt is what the agent is told about such a person, in the owner's own words: what it does for them, what it shares with whom, whether they may give it instructions or targets, and what they decide. tools true runs their conversations with the agent's own tools; false keeps them closed, for outsiders. daily is the messages a day of a closed role, or null for no limit; a role with tools has none. A role that a person holds cannot be deleted. People hold these roles once the setting contacts.v2 is on. access is the role's set (Founderizer for Teams): it maps each agent that a person of this role may talk to to null (All: whatever that agent holds) or to a list as scopes of save_person. It replaces the whole set. Each person who holds the role takes the change, but for a pair that the owner changed by hand: fleet_read(page=\"roles\") names who differs. {} takes from them what the set gave. null takes the set away and changes nobody.",
+   "description": "People: One role of the people who may write to an agent: add one, change one, rename one with rename (its people keep it), or delete one with delete true. A name that is not there yet is a new role, which needs prompt and tools; a change writes only the fields it gives. To copy a role, add a new one with its fields. prompt is what the agent is told about such a person, in the owner's own words: what it does for them, what it shares with whom, whether they may give it instructions or targets, and what they decide. tools true runs their conversations with the agent's own tools; false keeps them closed, for outsiders. daily is the messages a day of a closed role, or null for no limit; a role with tools has none. A role that a person holds cannot be deleted. People hold these roles once the setting contacts.v2 is on. access is the role's set (Founderizer for Teams): it maps each agent that a person of this role may talk to to null (All: whatever that agent holds) or to a list as scopes of save_person. It replaces the whole set. Each person who holds the role takes the change, but for a pair that the owner changed by hand: fleet_read(page=\"roles\") names who differs. {} takes from them what the set gave. null takes the set away and changes nobody. Leave access out unless you change the set.",
    "feature": null,
    "fields": [
     "name",
@@ -6190,5 +6190,5 @@
    "whole": []
   }
  ],
- "version": "755f25be8820c6b606650547f34d092bb302a8649c51e0fdcf22a8f3c2e5c856"
+ "version": "595e9864d0a96a36c2123a0106b096af8aa7d07c96e2b2e029ec9b0b7f9aa0e4"
 }

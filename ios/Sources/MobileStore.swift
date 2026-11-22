@@ -292,6 +292,14 @@ final class MobileStore {
     /// that composer. They are kept across a force quit, as the drafts are; the bytes of one that is not on the hub
     /// yet wait beside the Outbox, so a crash in the middle loses nothing and sends nothing twice.
     private(set) var staged: [String: [StagedFile]] = [:]
+    /// **The generation that the chats' drafts and the staged files belong to** (`readSnapshot`; the hub's `db`, random for
+    /// each database), kept with them as "composersPlace": a file's number, and an item's, name another one in another
+    /// generation. The hub's address is not part of it: the same generation at another form of the address (a new code
+    /// link, a restore to a new server that keeps the database, the address typed another way) is the same fleet.
+    @ObservationIgnored private var composersPlace: String?
+    /// The chats' drafts that look like a key, which stand in memory only (`keepChatDrafts`), as they were when he
+    /// opened the sample fleet: its end loads the drafts from the disk, and gives these back too.
+    @ObservationIgnored private var keyDraftsBeforeSample: [String: String] = [:]
     /// The uploads that run now, by their own number.
     private(set) var uploading: Set<UUID> = []
     /// The bytes of the files that the pages show, by attachment number, newest last. A page reads them through
@@ -398,6 +406,9 @@ final class MobileStore {
             pending = nil
         }
         keyState = deviceKey.has ? .locked : .none
+        // (chat drafts that an earlier build kept with words that look like a key leave the disk now)
+        if drafts.values.contains(where: { KeyInText.contains($0) }) { Self.writeChatDrafts(drafts) }
+        composersPlace = UserDefaults.standard.string(forKey: "composersPlace")
         shareRoster()
     }
 
@@ -971,6 +982,17 @@ final class MobileStore {
             let still = talkTaken.filter { id, taken in read[id].map { ($0.talk ?? []).count < taken.count } ?? false }
             if still.count != talkTaken.count { talkTaken = still }
         }
+        // **The chats' drafts and the files that he picked belong to their generation** (`composersPlace`): at the first
+        // read of another one they go, from memory and from the disk, or the files of an old item 7 stood in the new
+        // item 7's box and went with a Send, with the attachment numbers of the old generation. Not by
+        // `forgetGeneration`, which also runs when he leaves the sample fleet, whose end gives him back what he had
+        // before; not in the sample, whose reading is no hub's. A first read with no record keeps them.
+        let place = answer.snapshot.db
+        if !sample, composersPlace != place {
+            if composersPlace != nil { forgetComposers() }
+            composersPlace = place
+            UserDefaults.standard.set(place, forKey: "composersPlace")
+        }
         keptDatabase = answer.snapshot.db
         snapshotAt = Date()
         etag = answer.etag
@@ -1301,6 +1323,7 @@ final class MobileStore {
     func startSample() {
         guard !sample else { return }
         SampleHub.begin()
+        keyDraftsBeforeSample = drafts.filter { KeyInText.contains($0.value) }
         sample = true
         use(SampleHub.address)
         tab = .chats
@@ -1317,7 +1340,8 @@ final class MobileStore {
     }
 
     /// Takes the sample off this phone: a write of it that waits or that was refused, and the drafts written in it,
-    /// which were never kept (`setDraft`), so the drafts of before it come back.
+    /// which were never kept (`setDraft`), so the drafts of before it come back, those that look like a key too
+    /// (`keyDraftsBeforeSample`).
     private func endSample() {
         sample = false
         if let left = pending, left.hub == SampleHub.address, (try? outbox.clear(matching: left.requestID)) != nil {
@@ -1325,7 +1349,9 @@ final class MobileStore {
         }
         sendError = nil
         fileFailed(nil)
-        drafts = UserDefaults.standard.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:]
+        drafts = (UserDefaults.standard.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:])
+            .merging(keyDraftsBeforeSample) { _, kept in kept }
+        keyDraftsBeforeSample = [:]
         answers = UserDefaults.standard.dictionary(forKey: "answerDrafts") as? [String: String] ?? [:]
         let seen = UserDefaults.standard.dictionary(forKey: "mobileRepliesSeen")
         seenContext = seen?["context"] as? String ?? ""
@@ -1970,11 +1996,25 @@ final class MobileStore {
     // MARK: The drafts
 
     func draft(for name: String) -> String { drafts[name] ?? "" }
-    /// A draft is kept across a force quit, except one written in the sample fleet, which ends with the sample.
+    /// A draft is kept across a force quit, except one written in the sample fleet, which ends with the sample, and one
+    /// whose words look like a key (`keepChatDrafts`).
     func setDraft(_ text: String, for name: String) {
         guard drafts[name] ?? "" != text else { return }
         if text.isEmpty { drafts[name] = nil } else { drafts[name] = text }
-        if !sample { UserDefaults.standard.set(drafts, forKey: "agentDrafts") }
+        keepChatDrafts()
+    }
+
+    /// **The chats' drafts are kept across a start of the app, but words that look like a key are not** (`KeyInText`):
+    /// they stay in memory only, as the words of Needs clarification do (`clarifyDrafts`), because a key pasted into
+    /// the chat's box must not stay on the phone's disk while it waits there. A force quit loses such a draft, the
+    /// price of no key on the disk. The sample's drafts are never kept.
+    private func keepChatDrafts() {
+        guard !sample else { return }
+        Self.writeChatDrafts(drafts)
+    }
+
+    private static func writeChatDrafts(_ drafts: [String: String]) {
+        UserDefaults.standard.set(drafts.filter { !KeyInText.contains($0.value) }, forKey: "agentDrafts")
     }
 
     /// **The words about a key request that stand in its field, in memory only.** They are the field's own words: the
@@ -2225,6 +2265,20 @@ final class MobileStore {
         keepStaged()
     }
 
+    /// The chats' drafts and every staged file, with its bytes, leave this phone: they were of another generation
+    /// (`readSnapshot`). An upload on its way then finds no file to change.
+    private func forgetComposers() {
+        if !drafts.isEmpty {
+            drafts = [:]
+            keepChatDrafts()
+        }
+        guard !staged.isEmpty else { return }
+        for file in staged.values.joined() { try? FileManager.default.removeItem(at: stagedURL(file)) }
+        staged = [:]
+        stagedThumbs = [:]
+        keepStaged()
+    }
+
     private func keepStaged() {
         guard let data = try? JSONEncoder().encode(staged) else { return }
         UserDefaults.standard.set(data, forKey: "stagedFiles")
@@ -2365,18 +2419,41 @@ final class MobileStore {
 
     // MARK: The writes
 
+    /// **Words of a chat's Send that look like a key, which wait for his choice** (`KeyInText`): the chat, the message
+    /// that a correction replaces (nil for a message), and the words, exactly as the box held them. His Keep it gives
+    /// it back to the send of that chat and that mode, and then those words go.
+    struct ChatKeyHold: Equatable, Sendable {
+        let agent: String
+        let replaces: String?
+        let words: String
+    }
+
     /// A message to one agent. The manager's chat is where the owner writes a goal, as on the Mac.
     ///
-    /// **Words that look like a key do not go** (`KeyInText`), as on Needs you: a key typed or pasted into the chat
-    /// would go out as words, into the agent's conversation and the hub's records. The send reads the composer's words
-    /// once, decides on them before anything is saved, and sends those same words or none: no later read of the
-    /// composer, which a send empties and he can change while another write is on its way, decides it again. It gives
-    /// true when it held them back for that: nothing is saved, they stay in the composer, and its line says why.
-    @discardableResult func send(to name: String) async -> Bool {
-        let words = draft(for: name)
-        if KeyInText.contains(words) { return true }
-        await write(words, recipient: name, files: readyFiles(for: Self.stageKey(agent: name)))
-        return false
+    /// **Words that look like a key wait for his choice** (`KeyInText`), as on the Mac (the owner, 22 November 2026:
+    /// "Keep it, as on the Mac"): a key typed or pasted into the chat would go out as words, into the agent's
+    /// conversation and the hub's records, but a normal link can look like one too. The send reads the box's words
+    /// once and decides on them before anything is saved (`sendChat`), and it gives back the hold that the composer
+    /// shows, or nil. `kept` is his Keep it of a hold: those exact words of this chat go, once.
+    @discardableResult func send(to name: String, keeping kept: ChatKeyHold? = nil) async -> ChatKeyHold? {
+        let hold = ChatKeyHold(agent: name, replaces: nil, words: draft(for: name))
+        return await sendChat(hold, kept: kept) {
+            save(hold.words, recipient: name, files: readyFiles(for: Self.stageKey(agent: name)))
+        }
+    }
+
+    /// **The one decision of a chat's Send** (`send(to:keeping:)`, `sendCorrection(in:keeping:)`), on the words that it
+    /// would send (`hold`): words that look like a key wait, with nothing saved and the words in the box, unless his
+    /// Keep it names this hold. A Keep it of other words (he changed the box since, or it is the other mode's) sends
+    /// nothing, and a key in these words waits again. No later read of the box, which a send empties and he can
+    /// change while another write is on its way, decides it again. Kept words that nothing can save now still wait.
+    private func sendChat(_ hold: ChatKeyHold, kept: ChatKeyHold?, saving: () -> PendingRequest?) async -> ChatKeyHold? {
+        let looksLikeKey = KeyInText.contains(hold.words)
+        if let kept, kept != hold { return looksLikeKey ? hold : nil }
+        if kept == nil, looksLikeKey { return hold }
+        guard let request = saving() else { return kept }
+        await transmit(request)
+        return nil
     }
 
     /// One answer to one open item of Needs you. It goes to the agent that raised the item. **Words that look like a
@@ -2715,14 +2792,13 @@ final class MobileStore {
     }
 
     /// Sends the correction of the message that the owner opened. The original message and the work that followed it
-    /// stay in the history: the hub keeps both events. Words that look like a key do not go, as from the chat's
-    /// composer (`send(to:)`): decided once, on the words that it would send, and true when it held them back.
-    @discardableResult func sendCorrection(in name: String) async -> Bool {
-        let words = correctionText
-        guard let item = correcting, canCorrect(item, in: name) else { return false }
-        if KeyInText.contains(words) { return true }
-        await write(words, recipient: name, replaces: item.key)
-        return false
+    /// stay in the history: the hub keeps both events. Words that look like a key wait for his choice, as in a message
+    /// (`send(to:keeping:)`): decided once, on the words that it would send. A correction has its own hold: the Keep
+    /// it of a message, or of another correction, sends nothing here.
+    @discardableResult func sendCorrection(in name: String, keeping kept: ChatKeyHold? = nil) async -> ChatKeyHold? {
+        guard let item = correcting, canCorrect(item, in: name) else { return nil }
+        let hold = ChatKeyHold(agent: name, replaces: item.key, words: correctionText)
+        return await sendChat(hold, kept: kept) { save(hold.words, recipient: name, replaces: item.key) }
     }
 
     /// Saves the request, then sends it. The order is the rule: the Outbox holds the number and the text before the

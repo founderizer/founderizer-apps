@@ -1,0 +1,15 @@
+{
+  "hub": {"machine": "hub", "port": 8765},
+  "addresses": {"hub": "100.64.0.1", "worker-2": "100.64.0.2", "owner": "100.64.0.9"},
+  "access": {"hub": {"ssh_user": "root", "ssh_port": 22}, "worker-2": {"ssh_user": "root", "ssh_port": 22}},
+  "agents": {
+    "juno": {
+      "role": "manager",
+      "title": "Fleet Manager",
+      "machine": "worker-2",
+      "runtime": "codex",
+      "can": ["shell", "web"],
+      "vault": "none"
+    }
+  }
+}

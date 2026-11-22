@@ -16,7 +16,11 @@ import UniformTypeIdentifiers
 /// It sends as the chat sends: this phone's key from the keychain behind Face ID (only when the owner presses Send),
 /// the hub's generation from `GET /ui/mobile`, each file up with its own number, then the message with its own
 /// number. A send that the hub did not confirm keeps its numbers, so Send again never makes a second message; the sheet
-/// closes when the hub confirms it.
+/// closes when the hub confirms it. **Shared words that look like a key wait for his choice** (`KeyHold`), as in the
+/// app's chat.
+///
+/// The app compiles this file too, only so that the iPhone's tests reach it (`@testable import FleetMobile`); the app
+/// never makes one.
 @MainActor @Observable
 final class ShareModel {
 
@@ -39,6 +43,19 @@ final class ShareModel {
     private(set) var taking = true
 
     private(set) var sending = false
+    /// The hub confirmed the message and the sheet closes: nothing more goes from it.
+    private(set) var finished = false
+
+    /// **Shared words that look like a key, which wait for his choice** (`KeyInText`; the owner, 22 November 2026: "Keep
+    /// it, as on the Mac"), as in the app's chat (`MobileStore.ChatKeyHold`): a key in a shared text would go into the
+    /// agent's conversation and the hub's records, but a normal link can look like one too. The agent and the words,
+    /// exactly as the field held them at his Send.
+    struct KeyHold: Equatable, Sendable {
+        let agent: String
+        let words: String
+    }
+    /// The hold that the composer's line and its Keep it stand for, or nil. Any edit of the field ends it (`edited`).
+    private(set) var keyHold: KeyHold?
     /// What the composer's one line says, or nil: a refusal or a send that the hub did not confirm, else a file that
     /// stayed out of what was shared.
     var note: (words: String, isWarning: Bool)? { sendNote ?? takeNote }
@@ -64,10 +81,14 @@ final class ShareModel {
     @ObservationIgnored private let finish: @MainActor () -> Void
     @ObservationIgnored private let leave: @MainActor () -> Void
 
-    init(finish: @escaping @MainActor () -> Void, cancel: @escaping @MainActor () -> Void) {
+    /// This phone's key, which Face ID opens at his Send (a check gives a key of its own).
+    @ObservationIgnored private let deviceKey: DeviceKey
+
+    init(roster: SharedRoster? = SharedPlace.roster(), deviceKey: DeviceKey = DeviceKey(),
+         finish: @escaping @MainActor () -> Void, cancel: @escaping @MainActor () -> Void) {
         self.finish = finish
         leave = cancel
-        let roster = SharedPlace.roster()
+        self.deviceKey = deviceKey
         hub = roster?.hubURL ?? (try! MobileClient.address(HubClient.defaultAddress))
         installation = roster?.installation ?? "founderizer-ios/1/\(UUID().uuidString.lowercased())"
         if let roster, !roster.team.isEmpty {
@@ -120,6 +141,12 @@ final class ShareModel {
         pending = nil
         pendingAgent = nil
         sendNote = nil
+        keyHold = nil
+    }
+
+    /// The field's words changed: the line about a key and its Keep it go, and the next Send asks again.
+    func edited(_ words: String) {
+        if let keyHold, keyHold.words != words { self.keyHold = nil }
     }
 
     // MARK: What was shared
@@ -175,16 +202,30 @@ final class ShareModel {
 
     /// A message carries words, or files, or both, and at most the hub's limit of words.
     var canSend: Bool {
-        !taking && !sending && (!trimmed.isEmpty || !files.isEmpty) && trimmed.count <= Self.textLimit
+        !taking && !sending && !finished && (!trimmed.isEmpty || !files.isEmpty) && trimmed.count <= Self.textLimit
     }
 
     /// The hub takes 1 to 16,000 characters in a message, as the app's composer counts them.
     static let textLimit = 16_000
 
     /// Sends the message to one agent and closes the sheet when the hub confirms it.
-    func send(to agent: String) async {
+    ///
+    /// **Decided once, at the press, on the words that go** (`KeyHold`): words that look like a key wait, with nothing
+    /// sent, unless `kept`, his Keep it, names these words of this agent; a Keep it of other words (he changed the
+    /// field since) sends nothing, and a key in these words waits again. The words that go are the ones read here: no
+    /// later read of the field decides again. A message that waits for the hub's receipt goes again as it is: its words
+    /// were decided at its first press.
+    func send(to agent: String, keeping kept: KeyHold? = nil) async {
         guard canSend else { return }
         open(agent)
+        let words = text
+        if pending == nil {
+            let hold = KeyHold(agent: agent, words: words)
+            let looksLikeKey = KeyInText.contains(words)
+            if let kept, kept != hold { keyHold = looksLikeKey ? hold : nil; return }
+            if kept == nil, looksLikeKey { keyHold = hold; return }
+        }
+        keyHold = nil
         sending = true
         sendNote = nil
         defer { sending = false }
@@ -220,7 +261,8 @@ final class ShareModel {
                 }
                 pending = PendingRequest(hub: hub, database: snapshot.db, client: installation,
                                          recipient: features.contains("direct_chat") ? agent : nil,
-                                         attachments: files.compactMap(\.attachmentID), text: trimmed)
+                                         attachments: files.compactMap(\.attachmentID),
+                                         text: words.trimmingCharacters(in: .whitespacesAndNewlines))
                 pendingAgent = agent
             }
             guard let request = pending else { return }
@@ -229,6 +271,7 @@ final class ShareModel {
             pending = nil
             pendingAgent = nil
             for file in files { file.forget() }
+            finished = true
             finish()
         } catch {
             if case MobileError.refusal(let refusal, _) = error, refusal.status == 422 {
@@ -252,7 +295,7 @@ final class ShareModel {
     /// address, as the simulator reads it, needs none).
     private func phoneKey() async throws -> String? {
         if keyTaken { return key }
-        let holder = DeviceKey()
+        let holder = deviceKey
         if holder.has { key = try await holder.key(reason: String(l10n: "Founderizer uses this phone's own key to reach the hub.")) }
         keyTaken = true
         return key

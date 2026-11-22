@@ -13,14 +13,20 @@ namespace Founderizer.Setup.Agents;
 
 /// <summary>**What this PC keeps of the manager's first setup** (the Mac's <c>FleetStore</c> marks <c>unplacedAgents</c>,
 /// <c>serversJoinedFor</c> and <c>providersChosenFor</c>, under one key: the hub's address, its generation and the
-/// manager's name): the first run's hand-over writes it, each start of the app reads it, and it goes once the manager runs
-/// or Start again takes the hub away. So an app that starts again during the manager's install or its sign-in opens on
-/// that page, and not on a chat that cannot answer yet. It holds the provider that the owner chose for a manager with no
-/// server, and the server that joined for it; no key, token, code or address of a server.</summary>
+/// manager's name): the first run writes it at each reading of the hub that it claimed and at its hand-over, a current
+/// reading of a manager with no server writes it too (<see cref="ManagerPlacing"/>), each start of the app reads it, and it
+/// goes once the manager runs or Start again takes the hub away. So an app that starts again during the hub's install, the
+/// manager's install or its sign-in opens on that page, and not on a chat that cannot answer yet. It holds the provider
+/// that the owner chose for a manager with no server, and the server that joined for it; no key, token, code or address
+/// of a server.</summary>
 public sealed partial record ManagerSetupMark(Uri Hub, string Db, string Agent, string? Provider = null, string? Joined = null)
 {
     /// <summary>The name of the mark among the first run's kept answers (<see cref="ISetupChoices"/>).</summary>
     public const string ChoiceName = "managerFirstSetup";
+
+    /// <summary>One write of the mark at a time in this app: the first run, the reading's rule and the setup each write it
+    /// from a thread of their own, and a read and the write that follows it must have no other write between them.</summary>
+    private static readonly object Writes = new();
 
     /// <summary>The mark that this PC keeps, or null for none, or for one of no valid shape.</summary>
     public static ManagerSetupMark? Read(ISetupChoices choices)
@@ -42,10 +48,40 @@ public sealed partial record ManagerSetupMark(Uri Hub, string Db, string Agent, 
         if (Hub is not { IsAbsoluteUri: true, Scheme: "http" or "https" }) return;
         string[] parts = [Hub.GetLeftPart(UriPartial.Authority) + "/", Db, Agent, Provider ?? "", Joined ?? ""];
         if (parts.Any(p => p.Contains('|'))) return;
-        choices.Set(ChoiceName, string.Join('|', parts));
+        lock (Writes) choices.Set(ChoiceName, string.Join('|', parts));
     }
 
-    public static void Forget(ISetupChoices choices) => choices.Set(ChoiceName, null);
+    /// <summary>**Keeps this mark when the PC keeps none of this hub and this generation**: a mark that the first run or
+    /// the setup wrote keeps its provider and its joined server. A mark of another hub or generation is replaced.</summary>
+    public void KeepIfNone(ISetupChoices choices)
+    {
+        lock (Writes)
+            if (Read(choices)?.IsOf(Hub, Db) != true) Keep(choices);
+    }
+
+    /// <summary>**Keeps this mark when the kept one says something else**, and writes nothing for a mark that is there.</summary>
+    public void KeepChanged(ISetupChoices choices)
+    {
+        lock (Writes)
+            if (Read(choices) is not { } kept || !kept.IsOf(Hub, Db) || (kept.Agent, kept.Provider, kept.Joined) != (Agent, Provider, Joined))
+                Keep(choices);
+    }
+
+    public static void Forget(ISetupChoices choices)
+    {
+        lock (Writes) choices.Set(ChoiceName, null);
+    }
+
+    /// <summary>**The mark for which the window shows the manager's setup now**: the PC is the owner's computer of the hub
+    /// of the mark, the store holds a reading of that generation, and that reading has the manager. Null otherwise.</summary>
+    public static ManagerSetupMark? Shown(StoreState state, ISetupChoices choices) =>
+        state.Role == HubRole.Owner && state.Fleet is { } fleet && Read(choices) is { } mark && mark.IsOf(state.Hub, fleet.Db) &&
+        fleet.Agents.Any(a => a.Name == mark.Agent)
+            ? mark
+            : null;
+
+    /// <summary>A name that a mark can hold.</summary>
+    public static bool Holds(string agent) => AgentShape().IsMatch(agent);
 
     /// <summary>The mark is of this hub: the same scheme, host and port (a hub's address has no path, and a recorded one
     /// with a path or a query is still that hub). It never throws: Start again asks it in its last step.</summary>
@@ -58,6 +94,52 @@ public sealed partial record ManagerSetupMark(Uri Hub, string Db, string Agent, 
 
     [GeneratedRegex(@"\A[a-z][a-z0-9_-]{0,63}\z", RegexOptions.CultureInvariant)]
     private static partial Regex AgentShape();
+}
+
+/// <summary>**A manager that the hub shows with no server gets its mark on the owner's computer, at a current reading**
+/// (windows-app-plan-v2.md, the read of U3, fault 1; the Mac's <c>FleetStore.notePlacing</c>): so the manager's setup
+/// shows also when no first run of this app wrote the mark, as after an app that ended between the hub's claim and its
+/// first reading. The PC's reading of the hub (<c>/ui/mobile</c>) does not say where an agent runs, so the rule reads the
+/// hub's servers, once for each generation of the hub while this PC keeps no mark of it, and never again in this run of
+/// the app once the manager has its server. A mark that is there keeps its provider and its joined server.</summary>
+public sealed class ManagerPlacing(OwnerReads.ICalls calls, ISetupChoices choices)
+{
+    private readonly object gate = new();
+    private bool reading;
+    /// <summary>The hub and the generation whose manager has its server: nothing more to read for them in this run.</summary>
+    private string? placedOf;
+
+    /// <summary>**One state of the owner's store**: only a current reading of a hub whose owner's computer this PC is, that
+    /// offers the manager's own setup (<see cref="AgentSetupFlow.ServerFeature"/>). One read of the servers at a time; a
+    /// read that does not answer is asked again at a later reading. The window does not wait for it; a test does.</summary>
+    public async Task NoteAsync(StoreState state, DateTimeOffset now, CancellationToken cancel = default)
+    {
+        if (state.Role != HubRole.Owner || state.Hub is not { } hub || state.Fleet is not { } fleet || !state.IsFresh(now)) return;
+        if (!fleet.Offers(AgentSetupFlow.ServerFeature) || !AgentSetupFlow.Features.All(fleet.Offers)) return;
+        if (fleet.Agents.FirstOrDefault(a => a.Role == "manager") is not { } manager || !ManagerSetupMark.Holds(manager.Name)) return;
+        if (ManagerSetupMark.Read(choices)?.IsOf(hub, fleet.Db) == true) return;
+        var key = hub.GetLeftPart(UriPartial.Authority) + "|" + fleet.Db;
+        lock (gate)
+        {
+            if (reading || placedOf == key) return;
+            reading = true;
+        }
+        try
+        {
+            if ((await OwnerReads.ServersAsync(calls, cancel).ConfigureAwait(false)).Value is not { } list || list.Db != fleet.Db) return;
+            if (list.ServerOf(manager.Name) is not null)
+            {
+                lock (gate) placedOf = key;
+                return;
+            }
+            new ManagerSetupMark(hub, fleet.Db, manager.Name).KeepIfNone(choices);
+        }
+        catch (Exception e) when (e is HubException or InvalidOperationException or System.Text.Json.JsonException) { }
+        finally
+        {
+            lock (gate) reading = false;
+        }
+    }
 }
 
 /// <summary>What the manager's first setup needs from the PC (the window gives each; a test gives stand-ins).</summary>
@@ -135,7 +217,7 @@ public sealed record ManagerSetupView
 /// Not here (wave B, piece L4b, and wave C): the server's page of a manager whose server did not join in the first run,
 /// the slider's page and its root step on the hub's own server, the name's page of a hub whose first run did not ask,
 /// the machine check and the activation of an agent that is not the manager of a new fleet, and a change of provider.
-/// Their pages draw their frame alone.</summary>
+/// Their pages draw their frame alone, and do not take the window (<see cref="ManagerSetupScreens.TakesWindow"/>).</summary>
 public sealed class ManagerSetup
 {
     private readonly ManagerSetupSettings settings;
@@ -219,7 +301,9 @@ public sealed class ManagerSetup
     }
 
     /// <summary>**The setup while the window shows it** (the Mac's <c>poll</c>): one read and what follows it by itself,
-    /// then a pause of two seconds while something goes on, else five, until the manager runs or the window leaves.</summary>
+    /// then a pause of two seconds while something goes on, else five, until the manager runs or the window leaves. A read
+    /// or a step that fails is tried again at the next turn, as the Mac's <c>try?</c> does: only the window's leave ends
+    /// the reads (the read of U3: one error ended them for good, and the page stood still).</summary>
     public async Task RunAsync(CancellationToken cancel)
     {
         while (!cancel.IsCancellationRequested && !View.Ended)
@@ -227,7 +311,12 @@ public sealed class ManagerSetup
             try
             {
                 await StepAsync(cancel).ConfigureAwait(false);
-                if (View.Ended) return;
+            }
+            catch (OperationCanceledException) when (cancel.IsCancellationRequested) { return; }
+            catch (Exception e) when (e is not OutOfMemoryException) { }
+            if (View.Ended) return;
+            try
+            {
                 await settings.Pause(TimeSpan.FromSeconds(Quick ? 2 : 5), cancel).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { return; }
@@ -482,7 +571,7 @@ public sealed class ManagerSetup
                 Busy = busy,
                 UnreadReads = unreadReads,
                 ShareStopped = shareStopped,
-                Shows =reading is null || AgentSetupFlow.FillsWindow(reading.Agent, reading.Features, placing: true),
+                Shows = reading is null || AgentSetupFlow.FillsWindow(reading.Agent, reading.Features, placing: true),
                 Ended = ended,
             };
             now = view;
@@ -505,7 +594,7 @@ public sealed class ManagerSetup
 /// <c>AgentSetupWizard</c>): its name, its title (which moves while <c>Waits</c>), its muted line, its controls, its one
 /// orange line, the steps on Back's line, and its mark: the provider's own logo (<c>Logo</c>, a provider's name), else
 /// the manager's mark, at twice a step's size while it waits for the server (<c>Making</c>). <c>Drawn</c> is false for a
-/// page that this build does not draw yet: the frame alone shows.</summary>
+/// page that this build does not draw yet: it does not take the window (<see cref="ManagerSetupScreens.TakesWindow"/>).</summary>
 public sealed record ManagerSetupScreen(string Name, string Title, bool Waits, string? Detail, IReadOnlyList<SetupControl> Controls,
                                         string? Warning, SetupProgress? Progress, string? Logo = null, bool Making = false, bool Drawn = true);
 
@@ -517,6 +606,12 @@ public static class ManagerSetupScreens
     public const string ItsServer = "its server";
     public const string Copy = "Copy", Copied = "Copied";
     public static string SettingUp(string name) => $"Setting up {name}";
+
+    /// <summary>**The setup takes the window now**: it shows (<see cref="ManagerSetupView.Shows"/>), it has not ended, and
+    /// this build draws its page. A page that the build draws as its frame alone (<see cref="ManagerSetupScreen.Drawn"/>
+    /// false: the server's page, the fleet's servers with the root step, the name's page, which piece U3b draws) does not
+    /// take it: the manager's page shows with the pane, so that every other page stays in reach (the read of U3, fault 2).</summary>
+    public static bool TakesWindow(ManagerSetupView v) => v is { Shows: true, Ended: false } && Of(v).Drawn;
 
     public static ManagerSetupScreen Of(ManagerSetupView v)
     {

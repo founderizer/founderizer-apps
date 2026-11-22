@@ -321,6 +321,45 @@ public sealed class SetupStoreTests
         Assert.IsTrue(mark.IsOf(new Uri(rig.Store.State.Install.ClaimedHub!), "db-1"));
     }
 
+    /// <summary>**The manager's first setup is kept from the claim on, so an app that ends before the hand-over opens on it
+    /// at its next start** (the read of U3, fault 1): the hub's install claims the hub minutes before it ends, and checks
+    /// that did not pass hold the hand-over until the owner's press. At the next start no first run runs: the PC owns the
+    /// hub, reads it, and its kept mark gives the setup, which gives the manager the server that joined, with the provider
+    /// that the owner chose. The bug: the mark written only at the hand-over, and a PC that owns a hub with no welcome page,
+    /// whose manager's page is a chat that cannot answer.</summary>
+    [TestMethod]
+    public async Task The_managers_setup_is_kept_from_the_claim_for_an_app_that_ends_before_the_hand_over()
+    {
+        await using var rig = new SetupRig(call => call.Program.Contains("verify --json", StringComparison.Ordinal) ? StandInRemote.Said(FailedChecklist) : null)
+        {
+            Fleet = SetupRig.NewFleet(),
+        };
+        await Built(rig);
+        var s = await rig.Until(x => x.Install.Checklist is not null && x.ManagerInstall.Checklist is not null, "the hub's install and the manager's join");
+        Assert.IsFalse(s.HandedOver, "the app ends here, before the hand-over");
+        var joined = s.ManagersServer!.Name;
+        // The change that ended the join writes the mark right after it: a few moments of real time at most.
+        for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)?.Joined is null; i++) await Task.Delay(10);
+        var kept = Agents.ManagerSetupMark.Read(rig.Choices);
+        Assert.IsNotNull(kept, "the mark from the claim on");
+        Assert.AreEqual(("juno", "db-1", "claude", joined), (kept.Agent, kept.Db, kept.Provider, kept.Joined));
+
+        // The next start: the PC is the owner's computer of the claimed hub, with a current reading of it, and no first run.
+        var now = DateTimeOffset.UtcNow;
+        var state = new Founderizer.Core.StoreState { Hub = new Uri(s.Install.ClaimedHub!), Role = Founderizer.Core.HubRole.Owner, Fleet = rig.Fleet, LastRead = now, Clock = now };
+        var mark = Agents.ManagerSetupMark.Shown(state, rig.Choices);
+        Assert.IsNotNull(mark, "the window shows the manager's setup");
+        var hub = new SetupHub { Servers = SetupHub.ServerList(managerOn: null, server: joined) };
+        var setup = new Agents.ManagerSetup(new Agents.ManagerSetupSettings { Calls = hub, Fleet = () => rig.Fleet, Choices = rig.Choices }, mark);
+        Assert.IsTrue(Agents.ManagerSetupScreens.TakesWindow(setup.View));
+        await setup.StepAsync();
+        Assert.IsTrue(Agents.ManagerSetupScreens.TakesWindow(setup.View), "it fills the window");
+        var moves = hub.PostsTo("/move");
+        Assert.AreEqual(1, moves.Count, "the setup gives the manager the server that joined, by itself");
+        StringAssert.Contains(moves[0], $"\"server\":\"{joined}\"");
+        StringAssert.Contains(moves[0], "\"runtime\":\"claude\"");
+    }
+
     /// <summary>**A join that waits for the owner's yes at Tailscale shows its link on the install's page, with its one
     /// press** (the Mac's <c>MachineInstallRun.approve</c>): the fleet's key may not give the tags of the hub's join line,
     /// so the manager's own server signs in by Tailscale's link. The build page has no place for it, so the install's page

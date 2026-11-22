@@ -1379,7 +1379,7 @@ struct NeedRequestCard: View {
     }
 
     /// **The key's name in the title of a request for its new value is the key's badge** (the owner's "Yes, both" of 21
-    /// November 2026 to its drawing, "New value for DOOR_BACKBLAZE_AMURA_KEY"), and no other card's title has badges
+    /// November 2026 to its drawing, "New value for DOOR_BACKBLAZE_ACME_KEY"), and no other card's title has badges
     /// (the area Needs-you and the manager): a press opens the key's own card over the page, as the badge in the words
     /// does (`FleetStore.openCardLink`). Only where one secret of the list has that name (`cardSecrets`), so the badge
     /// always opens a card, and only where that one secret is the key that the request replaces: a key of the same name

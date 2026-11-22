@@ -178,7 +178,8 @@ Mac, and a device route is all that the PC reaches.
   the change of an agent's provider (wave C, the agent's page).
 - **The slider of "Your fleet's servers" in the manager's setup, with its root step on the hub's own server** (the Mac's
   `fleetServers` with `HubShareModel`, found by piece U3): a manager with no server of a fleet whose first run did not
-  keep a step, or whose "1 server" needs that root step, shows the frame of its page alone (wave B, piece L6). Where the
+  keep a step, or whose "1 server" needs that root step, does not have its page: the setup does not take the window
+  there, and the manager's page shows with the pane (wave B, pieces L6 and U3b). Where the
   wait for the hub's own server stops, the PC says the Mac's words over Try again, which waits again; the Mac shows its
   slider there with Continue.
 - **Enter on the hub's checks that did not pass** (the Mac's `MachineInstallRun`, found by piece U3): the Mac's "Open

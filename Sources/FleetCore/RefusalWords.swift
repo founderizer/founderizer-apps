@@ -117,6 +117,14 @@ enum RefusalWords {
         case "browser_no_room":
             guard let server, let agent else { return nil }
             return say("\(server) has no room for the browser of \(agent) beside its other agents: turn its Browser box off first, or move it to a server with more memory")
+        // The move's two cases of D6 (20 November 2026): a server whose room is full with the agent counted there,
+        // and one whose reading does not say its room yet. `browser_no_room` stays for a hub that sends it.
+        case "browser_no_place":
+            guard let server, let agent else { return nil }
+            return say("\(server) has no room for the browser of \(agent): turn its Browser box off first, or move it to a server with more memory")
+        case "browser_room_unknown":
+            guard let server, let agent else { return nil }
+            return say("\(server) has not said how much memory it has for browsers: turn the Browser box of \(agent) off first, or move it to another server")
         // **Take over for an agent on a Linux server** (build plan 04, S6; UI-API.md 1.225): the item, the agent's
         // screen, and what its server said. The owner's "Yes, as written" of 19 November 2026 to these words in
         // English and Spanish.

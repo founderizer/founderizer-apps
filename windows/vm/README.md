@@ -53,6 +53,7 @@ In this folder:
 | `test_channel.py` | the test channel of the update on the Mac: manifests that a test key signed, and the builds' zips, over HTTPS on 127.0.0.1 |
 | `../release/build-release.ps1` | the build of a release: the zip and the setup of each kind of PC (`../release/README.md`) |
 | `release-proofs/` | the release's proofs in the VM: the install's state (`state.ps1`), and the zips whose file has another signer or none (`make-refusals.ps1`) |
+| `proof-a/` | the rig of step 2's proof A: the clean PC beside the build VM, the setup with the welcome page, the window watcher, the hidden prompt, the read of the hub's team and its reference, the servers of run 2 (see "Proof A: the rig") |
 
 ## The downloads
 
@@ -290,7 +291,7 @@ A proofs' build with the welcome page, started on the manager's page with `-open
 `FOUNDERIZER_SETUP_READINGS`, shows the manager's first setup over the files of that folder. Each state is a folder of
 four files (`servers.json`, `machines.json`, `fleet.json`, `team.json`) that `setup_states.py` writes (the install of
 picture 18, the sign-ins of pictures 19 and 20, the session's start, a manager with no server yet, the manager that
-runs); a proof copies one into the readings folder,
+runs, and the server's page of Other VPS with "2 servers", which keeps the window's pane); a proof copies one into the readings folder,
 and the next read of the setup (2 to 5 seconds) shows it. `fleet.json` holds the manager's row (`runtime`, `alive`,
 `title`) and the mark that a hand-over would have kept (`provider`, `joined`), which the setup reads once, at its start.
 The data are set 8's examples (`worker-2`, `KDRT-7QXP`); a code typed into Claude Code's field goes nowhere but the
@@ -442,6 +443,221 @@ python3 -I app/windows/vm/test_channel.py offer --folder <folder> --zip <build's
   that zip after half of its bytes. `none` offers nothing. Each request is a line of `requests.log` in the folder.
 - The channel listens on 127.0.0.1 only: QEMU's user network brings the VM's calls to 10.0.2.2 there, and nothing of
   the private network or the LAN reaches it.
+
+## Proof A: the rig
+
+Proof A of step 2 (`~/dev/founderizer-plans/windows-app-plan-v2.md`, section 11; the rig's plan
+`windows-proof-a-rig-plan-2026-11-22.md`) runs the release build's setup on a clean PC, with the owner's sitting. Its
+tools are in `proof-a/`. The clean PC is a second VM beside the build VM, in a folder of its own; the build VM keeps
+its own hold rules and is used only to build. The tools write their files to `$HOME/VMs/founderizer-windows-proof-a-files`
+(`FZ_PROOF_A_FILES`), outside any repository: the setup, the test certificate's public part, the logs, the references.
+
+| Tool | What it does |
+| --- | --- |
+| `build-setup.sh` | holds the build VM (`vm.sh hold`), stops when a variable whose name starts with `Founderizer` is set there (`FounderizerProofsOn=true` turns the proofs' parts on in any build), builds this checkout's commit with a copy of `release/build-release.ps1` in which `-p:FounderizerWelcome` is `true` (the copy is in the build VM only), checks that `builds.json` says no proofs, that `Founderizer.App.dll` names no `GetEnvironmentVariable` and that the setup's signature is valid, and copies out the setup and the test certificate's public part |
+| `clean-pc.sh` | `base`: the clean PC's base VM with `vm.sh create` (no Tailscale, no developer tool; the checks of `check-clean.ps1`); `copy <name>`: an APFS copy of the stopped base (`cp -c`) on its own SSH port, the test certificate trusted (`trust-certificate.ps1`), the session's helpers copied in, the clean checks, `vm.sh hold`; `env`, `check`, `list`, `remove` |
+| `watch.sh` (`watch.ps1`, `watch-task.ps1`) | the window watcher in the copy's desktop session (a scheduled task under `conhost --headless`, so it has no window): each top-level window that becomes visible, with its class and its program, from Windows' own show events and a sweep every 100 ms; `stop` and `read` give the log and a summary that fails on a console (`ConsoleWindowClass`, Windows Terminal's window, or a console program) or on a window that could not be read |
+| `secret.sh` (`focus.ps1`; `type-pipe.ps1`, `type-task.ps1` on a PC with no QEMU keyboard) | the hidden prompt (from `add-test-pc.sh`): it types into the field that has the focus only when that field is an empty field of Founderizer's window (and, with `--field`, the one of that automation id); it reads the value with no echo and types it with `vm.sh type`, which also takes `_` and `#` now (Shift on the VM's US keyboard, for a sign-in code); after the keys, on every path, it reads the focus (the program and the element's automation id) and the field's length against the count of characters, and presses Enter only when the focus is still on that field of Founderizer.App and the field holds them all (only a password box may give no length; a field with no value is refused); it says whether the field is empty or gone after, and logs the field's name, never the value. From the keys until the field is empty or gone, the mark `value-on-screen` in the copy's folder makes `vm.sh picture` and `vm.sh screen` refuse (a token's field shows each character); when the keys did not all stay in the field, the mark stays whatever the field says, because some can have gone to another window or element; `logs/secret.log` names where the focus is and, apart from it, how many characters the field itself holds (read by its automation id; names and counts, no value). The way out, in that line and in the refusal of `vm.sh`, is both steps, never one of them: empty the field (`pictures/pick.ps1 -Field`) and close the window that took the keys with no save and no picture (in Founderizer's own window, which stays open until the claim: empty that element), then remove the mark. A password box shows no character, and `pick.ps1 -Field` may not empty one (it sets the value through UI Automation's ValuePattern, which a WinUI PasswordBox may not give): for a password box only the window step applies, and the log line and the refusal say so. Before `secret.sh` runs again for a password box that took a part of a value, the session empties the box (a click in it, Ctrl+A, Delete): a password box gives no length, so `secret.sh` takes it with the part in it, and the whole value goes after the part (that step then fails, with no leak). When the desktop or the taskbar took a key (`focus.ps1` names explorer), nothing is closed: a character there shows no text, and explorer is not ended. `vm.sh desktop` refuses `pictures/frames.ps1`, `notify.ps1` and `toastpress.ps1` while the mark is there too. A mark left behind on a failure or a Ctrl-C is the safe side: the session looks, empties, and removes it. On the Server PC at Azure the value goes on SSH's standard input to a named pipe of the desktop session, whose typer sends Windows' own key events into that field only: it reads UI Automation's focused element before the first key, the window in front before each key (it stops at the first change), and the focused element and the field's length again before Enter |
+| `team.sh` (`team-read.ps1`, `team_compare.py`) | `read`: in the copy's desktop session, the PC's own key for the hub from the app's secret box (in memory only), `GET /ui/mobile`, `GET /ui/team` and `GET /ui/servers`, and a file with no key and no address: each agent's line, each machine with an agent, each server (the hub's or not, its placed agents, its SSH user and port), whether the hub's server takes agents, and the step of the fleet's servers. `compare`: that read against a reference, "but for the names". What stays outside, because no owner read gives it: each agent's start line, the goals, the hub's port, the servers' `kind` and `user` entries, and the addresses |
+| `team-reference.sh` | the reference, made with no owner in the agent-install rig of `~/dev/founderizer-plans/agent-install-test/rig` (Tart VMs on a Headscale test network). It is the Mac's install line for the same choices (the programs of `app/vectors/remote-install.json`, the Mac's own plans), and for "2 servers" this script's own join and move with the hub's owner routes (`POST /ui/servers/join`, the join line, `POST /ui/team/agents/juno/move` with Codex): what the Mac app sends there, but not a run of the Mac app. `one` (1 server, the manager on Codex) and `two`; `keep-one`, `keep-two`, `place-two` go on from a run that broke off. It keeps `team.json` and the hub's own reads of it (`GET /ui/team` and `GET /ui/servers`), and their compare must find no difference |
+| `bare-server.sh` | run 2's server for "Other VPS": a bare Ubuntu 24.04 server in the hcloud context `founderizer-test`, no SSH key, label `temporary=true`, root's password from a SHA-512 crypt hash that cloud-init sets; the password at a hidden prompt, then typed by `secret.sh` into the copy's password field; `delete` only a server with the labels of proof A |
+| `azure-pc-make.sh`, `azure-pc-delete.sh` (`azure-pc.json`, `azure-pc-setup.ps1`, `azure-pc-elevated.ps1`) | the x64 clean PC of run 2 at Azure: Windows Server 2025 Datacenter with Desktop Experience, licence included, `Standard_D2s_v6` (never an Arm "p" size), Trusted launch with a vTPM, SSH by key from this Mac's public address only, no RDP, no boot diagnostics; the host key comes back through Azure's run command and the first SSH checks it; `what-if` changes nothing; each resource made and removed is a line of `azure/record.log`; the delete also removes the deployments at the subscription and names each group that was not there before the make. Both take only the subscription of that name in the tenant that `FZ_AZURE_TENANT` names (below). `elevated <since>` lists the run's elevated starts (the new process's user is the event's `TargetUserName`, else its `SubjectUserName`), and `probe` is the run's first step there: one elevated start on purpose, which the list must hold; `elevated` refuses on a PC whose probe did not pass, and a list from before the probe holds the probe's own `whoami.exe` |
+| `team_standin.py`, `standin-key.ps1`, `standin-team.json` | the dry run's stand-in of the hub's three reads, and a key of the PC kept in the app's secret box as the app keeps one |
+| `vps-check.sh` (`vps-build.ps1`) | one "Other VPS" check with the SSH library that the app carries (`Renci.SshNet.dll`): the proofs' build with the welcome page from a commit (`--want 2026.0.1`), in a copy, against a test server in a container of the Remote tests' image on 127.0.0.1:58452 (root by password, systemd's mark, a `tailscale` that waits and fails) and `provider_standin.py`; "1 server", the stand-in's Tailscale token and the password through `secret.sh`, Other VPS, the server's read, and Install |
+| `primary-ips.sh` | before run 1: the primary IPs in use in the Hetzner projects of this Mac's hcloud contexts (each IP once) against the account's limit; read only |
+
+A run, for the session (the owner's acts are his items of the rig's plan):
+
+```
+FZ_VM_USER=<session> app/windows/vm/proof-a/build-setup.sh                 # once for both runs
+FZ_VM_USER=<session> app/windows/vm/proof-a/clean-pc.sh copy run1
+export FZ_PROOF_A_COPY=run1; eval "$(app/windows/vm/proof-a/clean-pc.sh env run1)"   # vm.sh acts on the copy
+app/windows/vm/proof-a/watch.sh start
+app/windows/vm/vm.sh copy "$HOME/VMs/founderizer-windows-proof-a-files/build/<version>-<build>/Founderizer-Setup-<version>-arm64.exe" vm:C:/fz/proof-a/
+app/windows/vm/vm.sh desktop 'Start-Process C:\fz\proof-a\Founderizer-Setup-<version>-arm64.exe'
+app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Click "#first-run-set-up"'   # each page as a person presses it
+app/windows/vm/proof-a/secret.sh "Tailscale token" --field first-run-tailscale-key   # the owner, in his Terminal
+app/windows/vm/proof-a/team.sh read; app/windows/vm/proof-a/team.sh compare <reference> <read>
+app/windows/vm/proof-a/watch.sh stop
+app/windows/vm/proof-a/clean-pc.sh remove run1
+```
+
+- The base VM is made once and never started again for a run: a copy is made from it while it is stopped.
+- The clean PC has 2 cores and 8 GB (`lib.sh`; the build VM keeps 6 and 16 GB), and its screen is 2880 x 1800 at
+  200 % (`check-clean.ps1` checks it: at 1024 x 768 the app's window stayed black).
+- **How the base VM was made on 22 November 2026, and what to do the next time.** `vm.sh create` did not end by itself,
+  three times. (1) Windows stopped at "Start boot option" (its boot manager): its cores busy, no disk write. This
+  happened at a restart with the setup disc attached (cold or warm), with 6 cores and with 2. (2) At the first
+  sign-in, the first-logon script did not run (no SSH came). (3) When the script was started by hand, its first step
+  (`pnputil /install` of the setup disc's drivers, which Windows Setup had installed already) ended in a bug check
+  0x50 (Windows Error Reporting's BlueScreen event in the copies), then in a stop at the boot manager. A hard stop in
+  a Windows that started left it unable to start ("couldn't be repaired"). What worked: when the boot manager stops
+  (no disk write for 150 s and a busy core), end QEMU and start the setup run again cold; at the desktop, start the
+  first-logon script from the Run box as an administrator (Win+R, Ctrl+Shift+Enter, then Left and Enter on the
+  question; "No" has the focus) with its `pnputil` line left out; then set the screen to 2880 x 1800 in the desktop
+  session (`ChangeDisplaySettings` with `CDS_UPDATEREGISTRY`), stop, start cold, and run `clean-pc.sh check`. The
+  base then started at once, every time, with no disc attached.
+- No Start again exists on a window page yet, so each run uses a new copy, and the session removes what the app made at
+  the providers from the app's own records.
+- Before each hidden prompt, the session closes Edge in the copy (Tailscale's sign-in link opens it): a value typed into
+  a browser's address field goes to its search suggestions, also with no Enter.
+- Nobody closes the app's window before the claim: on the PC its X ends the app, and the first run then starts again at
+  the welcome page (the Mac does the same after Quit; plan v2, section 12, "The rig of proof A as built").
+- The setup is signed with the build VM's test certificate; each copy trusts its public part. SmartScreen and a file
+  with the mark of the web are not proved (no download from the internet).
+
+**Run 2 on Windows Server at Azure** (the owner's choice of 22 November 2026, "Windows Server (Recommended)"). Its clean
+PC is `azure-pc-make.sh create` (only at the run, after his yes; `what-if` changes nothing), with the x64 setup
+(`build-setup.sh --arch arm64,x64`); `azure-pc-make.sh forward` makes it the copy `azure` of the other tools, and
+`azure-pc-delete.sh` removes it right after the run. Both Azure tools need `FZ_AZURE_TENANT`, the id of the tenant of the
+subscription that pays, set in the shell of the session and in no file of the repository: `export FZ_AZURE_TENANT=<the
+tenantId that az account list --all gives for that subscription>` (the rig's plan in `~/dev/founderizer-plans` names
+the subscription). With no variable or another tenant, they stop before any call that changes something.
+
+On that PC no session can press Windows' administrator question (no QEMU keyboard, and the question is on the secure
+desktop). So `azure-pc-setup.ps1` lets an administrator's rise go on with no question there (`ConsentPromptBehaviorAdmin`
+0), and keeps UAC on (`EnableLUA` 1). Azure makes the admin user from the built-in Administrator (its SID ends in
+-500), whose Admin Approval Mode is off on Windows Server: with no limited token at all, nothing would start limited and
+no start would count as a rise. So the setup also sets `FilterAdministratorToken` 1 (its restart puts it in force), and
+the record says whether the user's SID ends in -500: the app and `vm.sh desktop` then keep their limited rights. The
+loss: an elevation that
+must not happen (for example, the x64 setup asking for one) passes unseen there. So the setup turns on Windows' audit of
+process creation, and `azure-pc-make.sh elevated <the run's start>` lists each start of the run with a full
+administrator's token, for the run's record. Its checks of proof A:
+
+| Proved on the Server PC | Stays with the ARM VM (Windows 11) |
+| --- | --- |
+| the x64 build and the x64 setup run; Tailscale's x64 (amd64) installer through the app; a TPM 2.0 that is not swtpm (Trusted launch's vTPM); "Other VPS" with a password; the window watcher, the hidden prompt (through its pipe) and the team's read | Windows' administrator question (it shows, it names Tailscale, the app goes on after Yes: run 1 proves it); every page against its picture of set 8 (Windows 11's look, fonts and title bar); the welcome page's motion; run 1 with "2 servers" at Hetzner |
+
+**The session's own step on the Azure PC, before the owner's item 9** (the rig's plan, section 8), in the same PC's
+life as run 2. Each minute of that life counts in his yes (one small VM for about 2 hours), from `create` to the end of
+`azure-pc-delete.sh`: so the session starts `create` when run 1's clean-up starts (after item 8, the first reply and the
+records), and the make ends about when item 9 starts, with no idle wait through run 1. If the sitting stops, the PC
+goes at once, as "When the PC's life does not go as planned" says below. Then, before he types anything for run 2:
+
+1. `create` ends with "ready" only when its SSH session as builder can run `Get-Process -IncludeUserName`, which needs
+   an elevated session: that proves SSH's full token for the built-in Administrator with `FilterAdministratorToken` 1
+   on Windows Server 2025. A stop after 10 minutes ("no SSH answer with a desktop session of builder") means no such
+   token or no signed-in desktop; the PC costs until `azure-pc-delete.sh`.
+2. `azure-pc-make.sh probe`: it passes only when the list holds its elevated `whoami.exe` with `%%1937` under builder,
+   in `TargetUserName` or `SubjectUserName`: that proves the fields of event 4688 on Windows Server 2025.
+3. The watcher, the setup, and the pages to run 2's name page, as in run 1. There, the typer's stop once, with a test
+   value of 298 characters (about 10 s of keys) and Founderizer's window minimized by a timer during the keys. Windows
+   can refuse the front to a program that a scheduled task starts (more so while the typer sends keys), so a new
+   Notepad may not change the window in front; a minimize always does:
+
+```
+export FZ_PROOF_A_COPY=azure; eval "$(app/windows/vm/proof-a/clean-pc.sh env azure)"
+app/windows/vm/vm.sh desktop '& C:\fz\setup\pick.ps1 -Field "Name"'          # the name field: empty, with the focus
+printf 'proofa-test-value-%s\n' "$(printf '0123456789%.0s' $(seq 28))" |
+    app/windows/vm/proof-a/secret.sh "Test value" --field first-run-name --no-enter & typing=$!
+while kill -0 "$typing" 2>/dev/null &&
+    ! app/windows/vm/vm.sh desktop '& C:\fz\proof-a\focus.ps1 -Id first-run-name' | grep -Eq 'length=[1-9]'; do :; done
+app/windows/vm/vm.sh desktop 'Add-Type -Namespace Fz -Name Win -MemberDefinition "[DllImport(`"user32.dll`")] public static extern bool ShowWindow(System.IntPtr h, int c);"; $h = (Get-Process Founderizer.App | Select-Object -First 1).MainWindowHandle; if ($h -eq 0) { "no window handle: nothing minimized" } else { [void][Fz.Win]::ShowWindow($h, 6); "shown with 6: $h" }'
+wait                                                       # the timer above: the window minimized during the keys
+tail -1 "$HOME/VMs/founderizer-windows-proof-a-files/logs/secret.log"
+```
+
+   The stop is proved when the log says "the typer typed k of 298; front" and another program with k under 298, and
+   the field's own count apart from it; the mark stays and `vm.sh picture` refuses. The minimize's line says "shown
+   with 6" and the window's handle; "no window handle" means that nothing was minimized, and then the log proves
+   nothing about the stop. If the line said "shown with 6" and the log says that the field still holds characters
+   (all 298 stayed in it), the minimize came after the keys: empty the field and run it once more. Then the way out:
+   the same `vm.sh desktop` line with 9 (restore) in place of 6, `pick.ps1 -Field "Name"` (its click brings the window
+   to the front and empties the field), and, if `focus.ps1` names a window that took a key, that window closed with no
+   save (not explorer: when the desktop or the taskbar took a key, a character there shows no text, and nothing is
+   closed); `focus.ps1 -Id first-run-name` says `length=0`; the mark goes; run 2 goes on with its real name.
+
+The PC's life, all in the 2 hours: the make (not measured yet: Azure's deployment, its run command and one restart),
+this step (about 10 minutes: `probe` about 1, the stage about 5, a second try about 4), run 2 (items 9 to 12) and the
+delete. The session writes the times of `create` and of the delete's end into the run's record.
+
+**When the PC's life does not go as planned** (his yes is one small VM for about 2 hours; the make's time is not
+measured):
+
+- When the sitting stops, at any item: stop `create` if it runs (Ctrl-C), and wait until `az deployment sub list
+  --subscription <id> --query "[?starts_with(name,'proof-a-pc-')].properties.provisioningState"` shows no "Running"
+  (while the deployment runs, Azure can refuse the delete with a conflict); then run `azure-pc-delete.sh`.
+- When `azure-pc-delete.sh` does not end with "each resource of proof-a-pc-rg is gone" (or "no resource group
+  proof-a-pc-rg" when nothing was made): it runs under `set -e`, so an `az resource delete` that fails stops it with
+  az's own error and no "STILL THERE" line; its other faults end with "STILL THERE: <id>", "the group proof-a-pc-rg
+  still exists" or a group that was not there before the make, and exit 1. Run it once more. If it fails again, tell
+  the owner at once, through the coordinating session ("Windows app version"), that the PC still costs past his yes,
+  with `az group delete -n proof-a-pc-rg --subscription <id> --yes` or the group's page in the Azure portal.
+- When the PC is still there 2 hours after `create` started: tell him so (through the coordinating session), and go on
+  only with his word.
+
+What is known to differ on Windows Server 2025 (Desktop Experience): WinUI 3 and the Windows App SDK need Desktop
+Experience (Server Core has no WinUI), and the app carries its Windows App SDK, so no Store is needed; Server has no
+Microsoft Store; its console host is conhost, not Windows Terminal (the watcher counts both); Server Manager opens at
+each sign-in of an administrator (`azure-pc-setup.ps1` turns that off); Azure's D sizes have no graphics card, so WARP
+draws, as in the ARM VM; updates are off for the VM's life (`patchMode` Manual) instead of `vm.sh hold`. Not checked:
+whether Tailscale's MSI, its service and `tailscale up` behave on Server 2025 as on Windows 11; Segoe UI Variable on
+Server; Edge's first start on Server for Tailscale's sign-in link.
+
+**The dry run, 22 November 2026** (no owner, no cost; the setup of `main` 229035ba7 with SSH.NET 2026.0.1, ARM64):
+
+| Step | Result | Time |
+| --- | --- | --- |
+| a copy of the base (`clean-pc.sh copy`) | clone, start, certificate, clean checks, hold | 30 to 54 s |
+| the watcher, shown a console on purpose | it logged Windows Terminal's window and its pseudo console: "consoles: 2" | start 11 s |
+| the setup, started as a double-click | installed in 13 s with no administrator's question; the welcome page showed | about 40 s |
+| the pages to Connect Tailscale | Welcome, "Don't send", the name, Codex, "2 servers" (and "1 server" at the slider's left end, `click.ps1 -X 488 -Y 398`) | 2.5 min |
+| Connect | the MSI from Tailscale, then Windows' administrator question for "Tailscale Inc." ("No" has the focus: `vm.sh keys left ret` is Yes), then `tailscale up` with its link; Edge opened over the app with its own first-start pages | 1.5 min to the question, 15 s to the link |
+| the hidden prompt | refused a field that was not empty, and the focus in Edge; typed a test value with "_" and "#" whole; with Enter, a token's field left and the page moved on | 15 s a value |
+| the window watcher, the whole run | no console: the app, Windows Installer's dialog, WebView2, Tailscale's own tray program, Edge | |
+| the window closed and opened again (launcher) at "Waiting for Tailscale" | the app opened on the welcome page, not on the page where it was | 20 s |
+| the team's read against `team_standin.py` | the key from the secret box, both reads with it; the file has no key, no address and no live field; the compare: 0 differences with the stand-in's team, 1 with another runtime | 40 s |
+| the references (`team-reference.sh`) | "1 server" and "2 servers" kept; each team.json and its GET /ui/team compare with 0 differences. The installer in the rig stopped at "security updates" when an update restarted Tart's agent (its start step has a scope of its own now); team.json and the claim come before it. Round 2 made "1 server" again with GET /ui/servers in the compare (below) | 20 min each |
+| `vps-check.sh` with SSH.NET 2026.0.1 | the server's read with the password (keyboard-interactive), then the PC's own key (publickey, twice): "Ubuntu 24.04 · 8 GB · Arm", Install, "Joining your private network"; by hand, then once more as the script runs it | 5.5 min scripted |
+| `bare-server.sh` | syntax; its cloud-init text valid (`cloud-init schema`) with a hash of a probe value; nothing made | |
+| `azure-pc-make.sh what-if`, `azure-pc-delete.sh --what-if` | the subscription by its name, both providers Registered, `Standard_D2s_v6` offered with no restriction (NVMe, Trusted launch), 10 vCPUs free in its family; what-if: 6 creations; nothing made | 1 min |
+
+Two faults that the dry run found in the rig and that are fixed: the team's read lost its port to a second `-match`,
+and the clean PC's screen was 1024 x 768 (the app's window stayed black).
+
+**Round 2, after Fable's read of `35a39b970`** (the same day; no server, no Azure VM, no token):
+
+| Check | Result |
+| --- | --- |
+| Fable's changed teams against the references | each gives at least 1 difference now (they gave 0 before): "1 server" with no `shared`, no `shape` and no `servers` (2), a "2 servers" team whose manager never moved (3 against "1 server", 11 against "2 servers"), one more empty server (4), `shared` alone (1), `shape` alone (1 and 1); a team with only another start line, hub port and goals gives 0 |
+| the team's read in a copy against `team_standin.py` | `GET /ui/mobile`, `/ui/team` and `/ui/servers` with the key from the box; the file has each server, `hub_shared` and `shape`, and no key or address; 0 differences with the stand-in's team, 1 with its shape changed |
+| `team-reference.sh one` again | the installer reached READY in 6 minutes (its start step has a scope of its own now), and team.json against GET /ui/team and GET /ui/servers: 0 differences in 22 values. `two-team.json` stays the round-1 reference; its GET reads were not kept again |
+| `bare-server.sh make` with a stand-in `hcloud` | a server made whose answer is not read: "the server proof-a-vps exists ... bare-server.sh delete proof-a-vps" (`35a39b970` said "nothing costs"); no server made: "nothing costs"; its cloud-init text the same as before, from `printf` |
+| the Azure tools' tenant | with no `FZ_AZURE_TENANT`, or another tenant, they stop; with the right one, `azure-pc-delete.sh --what-if` reads the subscription |
+| `secret.sh` in a copy | a value with no Enter: the mark stays and `vm.sh picture` refuses; with Enter on the same field: the page went on, and the mark went |
+| the rig's PowerShell files in a copy | each parses; the C# of `type-pipe.ps1`, `watch.ps1` and `azure-pc-setup.ps1` compiles; `azure-pc-elevated.ps1` runs; `check-clean.ps1` with its Tailscale state check passes on a clean copy |
+
+Fable's answers to round 2 (the same day): the "2 servers" reference stays valid, because its view equals the hub's own
+rule value for value; make both references again if `hub.sh` or `hubsetup.py` changes before the sitting; the Azure
+PC's host key cannot be fooled (it comes back through Azure's own run command); a mark left behind on a failure or a
+Ctrl-C is the safe side.
+
+**Round 3, after Fable's read of `3e01cc5e4`:**
+
+| Check | Result |
+| --- | --- |
+| the focus left the field during the keys (a copy: Notepad open, Alt+Tab during the hidden prompt's keys, a test value; run at 18:40 UTC with round 4's `secret.sh`) | no Enter; the mark stayed and `vm.sh picture` refused; the log named Notepad as where the focus was (no value). The test value was whole in the app's field (52 of 52) and Notepad's text was empty: the Alt+Tab took effect after the last key |
+| one elevated start on purpose with the Azure PC's settings (in a copy: no question for an administrator, the audit of process creation on) | the list held `whoami.exe` and its `conhost.exe` (2 of 18 starts). On Windows 11 the event had `SubjectUserName` builder, `TargetUserName` "-" and `%%1937`: the user of this rise was in `SubjectUserName`, and the list takes either. Not run on Windows Server 2025 |
+| `bare-server.sh make` with a stand-in `hcloud` | no server made: "nothing costs"; made, answer not read: the delete line; no server made, then no answer from Hetzner: "Hetzner did not say ... If it does, it costs until: bare-server.sh delete" (only Hetzner's own "not found" says "nothing costs") |
+| `team_compare.py` on two reads of round 1 (no servers part) | refused: "a read with no servers part ... read again" (before, two such reads gave 0 and exit 0) |
+
+**Round 4, after the read of `b2c58833e` by two Opus readers** (no server, no Azure VM, no token):
+
+| Check | Result |
+| --- | --- |
+| `bare-server.sh` with a stand-in `hcloud` | make: no server, "nothing costs"; made but not read, the delete line; no answer, "If it does, it costs until"; a proxy's "404 Not Found", "Hetzner did not say ... nothing was made". delete: Hetzner's "not found", "nothing to delete"; no answer or a proxy's 404, "it can still cost. Run ... again"; a server there, deleted |
+| `vm.sh` with the mark in the folder | `picture`, `screen`, and `desktop` with `frames.ps1`, `notify.ps1` or `toastpress.ps1` refuse, and the refusal names the window that took the keys as a way out |
+| the field's length after the keys, the Azure typer (`type-pipe.ps1`), the PowerShell files (in the copy of the round-3 stage) | the QEMU path with the focus taken away: above. The typer's path (the copy with the mark "remote" for the time of the step): "typed 4 of 4, Enter", the page went on and the mark went. Each PowerShell file parses, and the C# of `type-pipe.ps1`, `watch.ps1` and `azure-pc-setup.ps1` compiles. The -500 account, `FilterAdministratorToken` and the gate of `elevated` run only on the Azure PC |
+
+**Round 5, after the read of `b70ab8b80` by Fable and two Opus readers** (no server, no Azure VM, no token):
+
+| Check | Result |
+| --- | --- |
+| `secret.sh`, `vm.sh` | `bash -n` |
+| `secret.sh` with a stand-in `vm.sh` (no VM): the focus on Notepad with the field whole; back on the field with 30 of 52; the field gone; a field with no value; a password box; after the keys no length and no password box; a password box with the focus on Notepad after the keys; the typer's stop at 30 of 52; the typer's Enter | not run yet: in the tests lock with the stage |
+| the log line when the focus leaves the field during the keys, and the parse of `focus.ps1` and `type-pipe.ps1` (a copy, as in round 3's (A)) | not run yet: the stage waits in the tests lock |
+| the trigger of the Azure PC's step (Founderizer's window minimized during the keys; its handle is not 0) and its way out, in the same copy through the typer | not run yet: the stage waits in the tests lock |
 
 ## Limits
 

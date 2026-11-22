@@ -284,7 +284,7 @@ public sealed partial class MainWindow : Window
         if (taskbar is not null) _ = taskbar.Show(Screens.TaskbarCount(next), Screens.TaskbarWords(next));
         if (WaitingPage(next) != waitingPage) ShowPage();
         // The manager's first setup comes with the reading that says that this PC owns its hub, and goes when it ends.
-        else if ((SetupOf(history.Current) is not null) != (PageHost.Content is ManagerSetupPage)) ShowPage();
+        else if ((SetupOf(history.Current) is not null) != ShowsSetup) ShowPage();
         ShowLine();
         page?.Show(next, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         var now = pane;
@@ -390,14 +390,20 @@ public sealed partial class MainWindow : Window
             source.OpenChat(null);
             source.OpenTask(null);
             page = null;
-            band = null;
             bar = null;
-            if (setupPage?.Setup != managerSetup)
+            if (setupPage?.Setup != managerSetup || setupFrame is null || setupBand is null)
             {
                 setupPage?.Close();
                 setupPage = new ManagerSetupPage(managerSetup, DispatcherQueue, title => AutomationProperties.SetName(PageHost, title), SetupChanged);
+                setupBand = new LineBand(services);
+                setupFrame = Banded.Wrap(setupPage, setupBand);
             }
-            PageHost.Content = setupPage;
+            // **The window's line over the setup** (the read of U3, fault 3; the Mac's filled wizard keeps its notices'
+            // band): with the hub not reached, "Setting up" or "Installing" would move with no end and no words, and
+            // the sentences of a refused key of this PC would not show at all.
+            band = setupBand;
+            PageHost.Content = setupFrame;
+            ShowLine();
             ShowPane();
             return;
         }
@@ -479,14 +485,24 @@ public sealed partial class MainWindow : Window
     private ManagerSetup? SetupOf(Page page)
     {
         if (page.Kind != PageKind.Chat || (source as StoreSource)?.ManagerSetup() is not { } setup || setup.Mark.Agent != page.Agent) return null;
-        return setup.View is { Shows: true, Ended: false } ? setup : null;
+        // A page that this build draws as its frame alone does not take the window (the read of U3, fault 2): the
+        // manager's page shows with the pane until piece U3b draws it.
+        return ManagerSetupScreens.TakesWindow(setup.View) ? setup : null;
     }
 
     /// <summary>The setup's own change: once it ends or no longer shows, the manager's chat takes its page.</summary>
     private void SetupChanged()
     {
-        if ((SetupOf(history.Current) is not null) != (PageHost.Content is ManagerSetupPage)) ShowPage();
+        if ((SetupOf(history.Current) is not null) != ShowsSetup) ShowPage();
     }
+
+    /// <summary>The setup's page with the window's line over it (the read of U3, fault 3): made with the page, so that the
+    /// page keeps its one place in the window's tree while it comes and goes.</summary>
+    private Grid? setupFrame;
+    private LineBand? setupBand;
+
+    /// <summary>The content area shows the manager's setup now.</summary>
+    private bool ShowsSetup => setupFrame is not null && ReferenceEquals(PageHost.Content, setupFrame);
 
     /// <summary>**The first run fills the window** (set 8; the Mac's <c>fillsWindow</c>): no pane, no Back, Forward or
     /// Search in the title bar, the product's mark and name at its left, and one canvas under it with no band and no

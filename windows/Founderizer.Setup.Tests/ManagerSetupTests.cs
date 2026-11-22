@@ -286,6 +286,98 @@ public sealed class ManagerSetupTests
         Assert.AreEqual(1, moves.Count, "the hub's own server takes the manager, by itself");
         StringAssert.Contains(moves[0], "\"server\":\"worker-1\"");
     }
+
+    /// <summary>**A page that this build draws as its frame alone does not take the window** (the read of U3, fault 2):
+    /// Other VPS with "2 servers", the slider's default, makes no server for the manager, so its setup opens on the
+    /// manager's server's page, which piece U3b draws; the window then shows the manager's page with its pane. The bug: a
+    /// window that shows a frame alone, with no Back and no pane, and no way to any other page.</summary>
+    [TestMethod]
+    public async Task A_page_drawn_as_its_frame_alone_does_not_take_the_window()
+    {
+        var fleet = Fleet(features: ["servers", "machines", "machine_signin", "agent_setup", "manager_server", "fleet_shape", "hub_shared_later"]);
+        var (setup, hub, _) = Setup(new ManagerSetupMark(Hub, "db-1", "juno", "claude"), () => fleet);
+        Assert.IsTrue(ManagerSetupScreens.TakesWindow(setup.View), "\"Setting up\" from the first frame");
+        // The hub's own server alone, and "2 servers" kept: no server is there for the manager.
+        hub.Servers = "{\"db\": \"db-1\", \"time\": 1763700100, \"shape\": {\"step\": \"two\"}, \"servers\": [" +
+                      "{\"name\": \"worker-1\", \"hub\": true, \"joined\": true, \"agents\": [], \"available\": false, \"why\": []}]}";
+        await setup.StepAsync();
+        var screen = ManagerSetupScreens.Of(setup.View);
+        Assert.AreEqual(("server", false), (screen.Name, screen.Drawn));
+        Assert.IsFalse(ManagerSetupScreens.TakesWindow(setup.View), "the manager's page with the pane");
+
+        var (provider, providerHub, _) = Setup(new ManagerSetupMark(Hub, "db-1", "juno"), () => fleet);
+        providerHub.Servers = hub.Servers;
+        await provider.StepAsync();
+        Assert.AreEqual("provider", ManagerSetupScreens.Of(provider.View).Name);
+        Assert.IsTrue(ManagerSetupScreens.TakesWindow(provider.View), "a page that the build draws takes the window");
+    }
+
+    /// <summary>**The setup's reads go on after a read that throws** (the read of U3: one error that was not the window's
+    /// leave ended them for good, while the Mac's <c>try?</c> reads on): the hub's client that gives up throws a cancel of
+    /// its own, and an answer of no form an error of another kind. The bug: a page that stands still at its last read, and
+    /// a manager whose install and sign-in it never shows.</summary>
+    [TestMethod]
+    public async Task The_reads_go_on_after_a_read_that_throws()
+    {
+        var fleet = Fleet();
+        var thrown = new Queue<Exception>([new TaskCanceledException("the hub's client gave up"), new ArgumentException("an answer of no form")]);
+        var hub = new SetupHub { Servers = SetupHub.ServerList(managerOn: null) };
+        hub.Throws = route => route == "ui/servers" && thrown.TryDequeue(out var error) ? error : null;
+        using var leave = new CancellationTokenSource();
+        var pauses = 0;
+        var setup = new ManagerSetup(new ManagerSetupSettings
+        {
+            Calls = hub, Fleet = () => fleet, Choices = new MemoryChoices(),
+            Pause = (_, _) =>
+            {
+                if (++pauses == 3) leave.Cancel();
+                return Task.CompletedTask;
+            },
+        }, new ManagerSetupMark(Hub, "db-1", "juno"));
+        await setup.RunAsync(leave.Token);
+        Assert.AreEqual(0, thrown.Count, "both errors came");
+        Assert.AreEqual(3, pauses, "three turns, and only the window's leave ended them");
+        Assert.IsTrue(setup.View.Answered, "the third read answered");
+        Assert.AreEqual("provider", ManagerSetupScreens.Of(setup.View).Name);
+    }
+
+    /// <summary>**A current reading of a manager with no server keeps its mark on the owner's computer** (the read of U3,
+    /// fault 1; the Mac's <c>notePlacing</c>), also with no first run in this app, as after an app that ended between the
+    /// claim and the first reading of the hub. A device, an old reading and a hub without the manager's own setup keep
+    /// none; a mark that is there keeps its provider; a manager on its server is read once in a run. The bugs: a PC that
+    /// owns a hub whose manager's page is a chat that cannot answer; a reading that takes the provider out of the mark; a
+    /// read of the servers at each reading of a fleet whose manager runs.</summary>
+    [TestMethod]
+    public async Task A_current_reading_of_a_manager_with_no_server_keeps_its_mark()
+    {
+        var choices = new MemoryChoices();
+        var hub = new SetupHub { Servers = SetupHub.ServerList(managerOn: null) };
+        var placing = new ManagerPlacing(hub, choices);
+        var now = DateTimeOffset.UtcNow;
+        var state = new StoreState { Hub = Hub, Role = HubRole.Owner, Fleet = Fleet(), LastRead = now, Clock = now };
+        await placing.NoteAsync(state with { Role = HubRole.Device }, now);
+        await placing.NoteAsync(state with { LastRead = now - TimeSpan.FromMinutes(5) }, now);
+        await placing.NoteAsync(state with { Fleet = Fleet(features: ["servers", "machines", "machine_signin", "agent_setup"]) }, now);
+        Assert.AreEqual((null as ManagerSetupMark, 0), (ManagerSetupMark.Read(choices), hub.Reads));
+
+        await placing.NoteAsync(state, now);
+        var mark = ManagerSetupMark.Read(choices);
+        Assert.IsNotNull(mark, "the manager with no server has its mark");
+        Assert.AreEqual(("juno", "db-1", null as string, null as string), (mark.Agent, mark.Db, mark.Provider, mark.Joined));
+        Assert.AreEqual(mark, ManagerSetupMark.Shown(state, choices), "the window shows its setup");
+        Assert.IsNull(ManagerSetupMark.Shown(state with { Role = HubRole.Device }, choices));
+
+        new ManagerSetupMark(Hub, "db-1", "juno", "claude", "worker-2").Keep(choices);
+        await placing.NoteAsync(state, now);
+        Assert.AreEqual(("claude", "worker-2"), (ManagerSetupMark.Read(choices)!.Provider, ManagerSetupMark.Read(choices)!.Joined));
+
+        ManagerSetupMark.Forget(choices);
+        hub.Servers = SetupHub.ServerList(managerOn: "worker-2");
+        var reads = hub.Reads;
+        await placing.NoteAsync(state, now);
+        await placing.NoteAsync(state, now);
+        Assert.AreEqual((null as ManagerSetupMark, reads + 1), (ManagerSetupMark.Read(choices), hub.Reads));
+    }
 }
 
 /// <summary>**The hub's owner routes of an agent's setup**, as the test sets them: its list of servers, its machines, its
@@ -296,6 +388,8 @@ internal sealed class SetupHub : OwnerReads.ICalls
     public string Servers { get; set; } = ServerList(managerOn: null);
     public string Machines { get; set; } = "{\"db\": \"db-1\", \"machines\": []}";
     public bool ServersFail { get; set; }
+    /// <summary>An error of a read, by its route, that is not the hub's (the hub's client that gives up, an answer of no form).</summary>
+    public Func<string, Exception?>? Throws { get; set; }
     public Func<string, HubException?>? Refuses { get; set; }
     /// <summary>Called with a write's route after the write reached the hub and before its answer (a page that leaves
     /// then cancels the write's wait).</summary>
@@ -315,6 +409,7 @@ internal sealed class SetupHub : OwnerReads.ICalls
                                             CancellationToken cancel) where T : class
     {
         Interlocked.Increment(ref reads);
+        if (Throws?.Invoke(route) is { } error) throw error;
         var json = route switch
         {
             "ui/servers" when ServersFail => throw HubException.NoAnswer(),

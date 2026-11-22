@@ -845,6 +845,16 @@
         }
       }
     },
+    "%@ has no room for the browser of %@: turn its Browser box off first, or move it to a server with more memory" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no tiene espacio para el navegador de %@: desactiva primero su navegador o muévelo a un servidor con más memoria"
+          }
+        }
+      }
+    },
     "%@ has no server free now." : {
       "localizations" : {
         "es" : {
@@ -881,6 +891,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ aún no lo ha leído: tus palabras lo reemplazan."
+          }
+        }
+      }
+    },
+    "%@ has not said how much memory it has for browsers: turn the Browser box of %@ off first, or move it to another server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no ha indicado cuánta memoria tiene para navegadores: desactiva primero el navegador de %@ o muévelo a otro servidor"
           }
         }
       }

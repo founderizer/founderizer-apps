@@ -12,10 +12,13 @@
 #                             session, wait for it, and print its output
 #   vm.sh picture [file.png]  a picture of the Windows desktop, taken in the VM
 #   vm.sh screen [file.png]   a picture of the VM's display, taken by QEMU (also before Windows runs)
+#                             (both refuse while the mark "value-on-screen" is in the VM's folder: proof-a/secret.sh
+#                             writes it before it types a value, and removes it once the value's field is empty or gone;
+#                             so does desktop with pictures/frames.ps1, notify.ps1 or toastpress.ps1)
 #   vm.sh keys <key...>       press keys through QEMU (QEMU key names: ret, spc, esc, ...)
-#   vm.sh type                types one line that it reads on its input (letters, digits and "-") through QEMU's
-#                             keyboard, into what has the focus: a code goes in as a person types it, in no
-#                             argument, no file and no log
+#   vm.sh type                types one line that it reads on its input (letters, digits, "-", "_" and "#", the last
+#                             two with Shift on the VM's US keyboard) through QEMU's keyboard, into what has the
+#                             focus: a code goes in as a person types it, in no argument, no file and no log
 #   vm.sh hold                before a proof run: take the VM for FZ_VM_USER (refused while another user has it), pause
 #                             Windows' updates for a day and make the next 18 hours its active hours, so that Windows
 #                             restarts in none of them; refuse while a restart waits
@@ -409,6 +412,13 @@ create_vm() {
 # Windows' update pause off under that session's run (U2, 22 November 2026). A release restores Windows first and frees
 # the VM after: a restore that fails keeps the hold, so that no other session takes a VM whose updates stay paused.
 in_use="$dir/in-use"
+# A value of the hidden prompt (a token) shows character by character in a text field until the page takes it: no
+# picture of the VM is taken while proof-a/secret.sh's mark says that one can be on the screen. That covers picture,
+# screen, and a desktop command that runs one of the scripts that take the screen (pictures/frames.ps1, notify.ps1,
+# toastpress.ps1).
+no_value_on_screen() {
+    [ ! -f "$dir/value-on-screen" ] || die "a value of the hidden prompt can be on the VM's screen: no picture. Do both steps: empty its field (pictures/pick.ps1 -Field), and close the window that took the keys, if any, with no save and no picture (in Founderizer's own window: empty that element). A password box shows no character: for it, only the window step. proof-a's logs/secret.log names where the focus is and what the field holds; after a failure or a Ctrl-C, read them with proof-a/focus.ps1. Only then remove $dir/value-on-screen"
+}
 vm_user() {
     [ -n "${FZ_VM_USER:-}" ] || die "say who holds the VM: FZ_VM_USER=<your session's name> vm.sh $1"
     printf '%s' "$FZ_VM_USER"
@@ -499,9 +509,12 @@ case "$command" in
         fi ;;
     run) [ $# -gt 0 ] || die "run needs a command"; vm_ps "$*" ;;
     copy) [ $# -ge 2 ] || die "copy needs a source and a destination"; copy_files "$@" ;;
-    desktop) desktop "$@" ;;
-    picture) picture "${1:-}" ;;
+    desktop)
+        case "$*" in *frames.ps1*|*notify.ps1*|*toastpress.ps1*) no_value_on_screen ;; esac
+        desktop "$@" ;;
+    picture) no_value_on_screen; picture "${1:-}" ;;
     screen)
+        no_value_on_screen
         out="${1:-$PWD/windows-screen-$(date +%Y%m%d-%H%M%S).png}"
         # UTM's QEMU writes no PNG, so it writes a PPM, and Python turns it into a PNG.
         ppm="$run_dir/screen-$$.ppm"
@@ -544,8 +557,10 @@ PY
         python3 -I -c '
 import json, socket, sys
 line = sys.stdin.readline().strip()
-if not all(c.isascii() and (c.isalnum() or c == "-") for c in line):
-    sys.exit("type takes letters, digits and \"-\" only")
+# "_" and "#" are Shift with "-" and "3" on the US keyboard of the VM: a sign-in code can have them.
+shifted = {"_": "minus", "#": "3"}
+if not all(c.isascii() and (c.isalnum() or c == "-" or c in shifted) for c in line):
+    sys.exit("type takes letters, digits, \"-\", \"_\" and \"#\" only")
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.connect(sys.argv[1])
 f = s.makefile("rw")
@@ -558,8 +573,8 @@ def send(command):
             return reply
 send({"execute": "qmp_capabilities"})
 for c in line:
-    keys = [{"type": "qcode", "data": "minus" if c == "-" else c.lower()}]
-    if c.isupper():
+    keys = [{"type": "qcode", "data": shifted.get(c) or ("minus" if c == "-" else c.lower())}]
+    if c.isupper() or c in shifted:
         keys.insert(0, {"type": "qcode", "data": "shift"})
     if "error" in send({"execute": "send-key", "arguments": {"keys": keys}}):
         sys.exit("QEMU refused a key")

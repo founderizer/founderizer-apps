@@ -706,12 +706,14 @@ extension SampleFleetTests {
     }
 }
 
-/// **A hub with the manager's chat** (owner feature `corrections`): it takes a message and a correction with the hub's
-/// receipt, and its chat's read has each message that it took, with the client that sent it. While `holdsReceipts` is
-/// set it holds each receipt until `letGo`. It keeps the words of each message and correction that came, in order.
+/// **A hub with the manager's chat** (owner features `corrections` and `attachments`): it takes a message and a
+/// correction with the hub's receipt, and a file with its number 61, and its chat's read has each message that it took,
+/// with the client that sent it. While `holdsReceipts` is set it holds each receipt until `letGo`. It keeps the words
+/// of each message and correction that came, in order. Its generation is `database`, which a check can change.
 private final class ChatHub: LoopbackHub, @unchecked Sendable {
     private var taken: [(id: String, text: String, client: String, replaces: String?)] = []
     private var holding = false
+    private var generation = "gen-chat"
     private var held: [(connection: NWConnection, reply: Data)] = []
 
     init() { super.init(label: "founderizer.check.chat-hub") }
@@ -721,6 +723,10 @@ private final class ChatHub: LoopbackHub, @unchecked Sendable {
     var holdsReceipts: Bool {
         get { lock.withLock { holding } }
         set { lock.withLock { holding = newValue } }
+    }
+    var database: String {
+        get { lock.withLock { generation } }
+        set { lock.withLock { generation = newValue } }
     }
 
     /// The receipts that it holds go.
@@ -745,7 +751,13 @@ private final class ChatHub: LoopbackHub, @unchecked Sendable {
         note("\(request.method) \(request.path)")
         switch (request.method, request.path) {
         case ("GET", "/ui/mobile"):
-            send(Self.reply(200, Self.fleet), on: connection)
+            send(Self.reply(200, Self.text(Self.fleet.merging(["db": database]) { _, new in new })), on: connection)
+        case ("POST", "/ui/attachments"):
+            let file: [String: Any] = ["id": 61, "name": request.headers["x-fleet-name"] ?? "file",
+                                       "mime": request.headers["content-type"] ?? "", "size": request.body.count,
+                                       "sha256": MessageAttachment.digest(request.body), "created": 1_800_000_200,
+                                       "kept": NSNull()]
+            send(Self.reply(200, Self.text(file)), on: connection)
         case ("GET", "/ui/mobile/chat/manager"):
             let items = lock.withLock { taken }.enumerated().map { index, message -> [String: Any] in
                 var item: [String: Any] = ["kind": "message", "ts": 1_800_000_100 + index, "id": message.id,
@@ -753,7 +765,7 @@ private final class ChatHub: LoopbackHub, @unchecked Sendable {
                 if let replaces = message.replaces { item["replaces"] = replaces }
                 return item
             }
-            let page: [String: Any] = ["db": "gen-chat", "agent": "manager", "items": items,
+            let page: [String: Any] = ["db": database, "agent": "manager", "items": items,
                                        "cursor": 1_800_000_100 + max(items.count - 1, 0)]
             send(Self.reply(200, Self.text(page)), on: connection)
         case ("POST", "/ui/messages"):
@@ -776,12 +788,12 @@ private final class ChatHub: LoopbackHub, @unchecked Sendable {
         }
     }
 
-    /// The hub's compact read: the manager alone, on a hub that takes corrections.
-    private static let fleet: String = ChatHub.text([
-        "schema_version": 1, "db": "gen-chat", "time": 1_800_000_000, "ui_features": ["mobile", "corrections"],
-        "agents": [["name": "manager", "role": "manager", "runtime": "claude", "open_tasks": 0, "usage": []]],
-        "needs": [], "tasks": [], "recent": [], "holds": [], "outcomes": [],
-    ])
+    /// The hub's compact read, with no generation: the manager alone, on a hub that takes corrections and files.
+    private static var fleet: [String: Any] {
+        ["schema_version": 1, "time": 1_800_000_000, "ui_features": ["mobile", "corrections", "attachments"],
+         "agents": [["name": "manager", "role": "manager", "runtime": "claude", "open_tasks": 0, "usage": []]],
+         "needs": [], "tasks": [], "recent": [], "holds": [], "outcomes": []]
+    }
 
     private static func text(_ value: Any) -> String {
         (try? JSONSerialization.data(withJSONObject: value)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
@@ -789,15 +801,18 @@ private final class ChatHub: LoopbackHub, @unchecked Sendable {
 }
 
 extension SampleFleetTests {
-    /// **Words that look like a key do not go from the chat's composer** (`KeyInText`; `MobileStore.send(to:)` and
-    /// `sendCorrection(in:)`), as on Needs you: a message and a correction that hold one save nothing and send nothing,
-    /// their words stay in the composer, and the send gives the hold that the composer's line shows. The send decides
-    /// it once, on the words that it would send: also while another write is on its way, and a good message after a
-    /// held key goes. The bugs that this stops: a key typed or pasted into the chat goes to the agent in clear text; a
-    /// hold that a later read of the composer decides lets a key go after a write, or drops a good message.
-    @MainActor @Test("a chat message and a correction that look like a key send nothing, and a good message goes",
+    /// **Words that look like a key wait for his choice in the chat's composer** (`KeyInText`; `MobileStore.send(to:keeping:)`
+    /// and `sendCorrection(in:keeping:)`; the owner, 22 November 2026: "Keep it, as on the Mac"): a message and a
+    /// correction that hold one save nothing and send nothing, their words stay in the box, and the send gives back the
+    /// hold that the composer's line and its Keep it show. His Keep it sends exactly those words, once; an edit of the
+    /// box asks again, and a correction has its own hold. The send decides it once, on the words that it would send:
+    /// also while another write is on its way, where a Keep it sends nothing and its hold stands. The bugs that this
+    /// stops: a key typed or pasted into the chat goes to the agent in clear text; a Keep it sends words that he
+    /// changed after it, or sends them twice; a hold that a later read of the box decides lets a key go after a write,
+    /// or drops a good message.
+    @MainActor @Test("a chat message and a correction that look like a key wait for Keep it, and a good message goes",
                      .timeLimit(.minutes(1)))
-    func aKeyInTheChatSendsNothing() async throws {
+    func aKeyInTheChatWaitsForKeepIt() async throws {
         try await Self.withoutHub {
             try await Self.keepingReadings {
                 let drafts = UserDefaults.standard.object(forKey: "agentDrafts")
@@ -825,54 +840,318 @@ extension SampleFleetTests {
                 store.chatRoute = [.chat("manager")]
                 try #require(store.canWrite && store.canChat(with: "manager"))
                 let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+                typealias Hold = MobileStore.ChatKeyHold
 
-                // a key in a message: nothing is saved or sent, and the words stay in the composer with its line
+                // a key in a message waits: nothing is saved or sent, and the words stay in the box
                 store.setDraft(key, for: "manager")
-                #expect(await store.send(to: "manager"), "the composer shows no line about the key")
+                let held = try #require(await store.send(to: "manager"), "the composer shows no line about the key")
+                #expect(held == Hold(agent: "manager", replaces: nil, words: key))
                 #expect(store.pending == nil && hub.messages.isEmpty && store.draft(for: "manager") == key)
+                // an edit of the box asks again: his Keep it of the old words sends nothing, and the new words wait
+                let edited = key + " for the shop"
+                store.setDraft(edited, for: "manager")
+                let heldAgain = try #require(await store.send(to: "manager", keeping: held))
+                #expect(heldAgain.words == edited && store.pending == nil && hub.messages.isEmpty)
+                // Keep it: exactly the kept words go, once
+                #expect(await store.send(to: "manager", keeping: heldAgain) == nil)
+                #expect(hub.messages == [edited] && store.pending == nil && store.draft(for: "manager").isEmpty)
+                #expect(await store.send(to: "manager", keeping: heldAgain) == nil)
+                #expect(hub.messages == [edited])
 
                 // a good message goes
                 let first = "Ship the newsletter on Monday."
                 store.setDraft(first, for: "manager")
-                #expect(await store.send(to: "manager") == false)
-                #expect(hub.messages == [first] && store.pending == nil && store.draft(for: "manager").isEmpty)
+                #expect(await store.send(to: "manager") == nil)
+                #expect(hub.messages == [edited, first] && store.pending == nil && store.draft(for: "manager").isEmpty)
 
-                // a key in its correction: nothing goes, and the correction stays open with its words; good words go
+                // a key in its correction waits, and the correction stays open with its words; the Keep it of a
+                // message with the same words sends nothing there, and its own Keep it sends it
                 await store.refresh()
                 let sent = try #require(store.correctable(in: "manager"))
                 store.beginCorrection(sent, in: "manager")
                 store.correctionText = key
-                #expect(await store.sendCorrection(in: "manager"), "the composer shows no line about the key")
-                #expect(store.pending == nil && hub.messages == [first])
-                #expect(store.correcting != nil && store.correctionText == key)
+                let correction = try #require(await store.sendCorrection(in: "manager"), "the composer shows no line about the key")
+                #expect(correction == Hold(agent: "manager", replaces: sent.key, words: key))
+                #expect(store.pending == nil && hub.messages == [edited, first])
+                #expect(await store.sendCorrection(in: "manager", keeping: held) == correction)
+                #expect(store.pending == nil && hub.messages == [edited, first] && store.correctionText == key)
+                #expect(await store.sendCorrection(in: "manager", keeping: correction) == nil)
+                #expect(hub.messages == [edited, first, key] && store.correcting == nil)
+                // a good correction goes
+                await store.refresh()
+                let last = try #require(store.correctable(in: "manager"))
+                store.beginCorrection(last, in: "manager")
                 let corrected = "Ship the newsletter on Tuesday."
                 store.correctionText = corrected
-                #expect(await store.sendCorrection(in: "manager") == false)
-                #expect(hub.messages == [first, corrected] && store.correcting == nil)
+                #expect(await store.sendCorrection(in: "manager") == nil)
+                #expect(hub.messages == [edited, first, key, corrected] && store.correcting == nil)
 
-                // a key while another write is on its way: held at the press, and nothing of it goes after that write
+                // a key while another write is on its way: held at the press, a Keep it sends nothing then and its
+                // hold stands, and nothing of it goes after that write
                 hub.holdsReceipts = true
                 let second = "Then tell the customer."
                 store.setDraft(second, for: "manager")
                 let going = Task { await store.send(to: "manager") }
-                try await Self.until { hub.messages.count == 3 }
+                try await Self.until { hub.messages.count == 5 }
                 try #require(store.sending && store.draft(for: "manager").isEmpty)
                 store.setDraft(key, for: "manager")
-                #expect(await store.send(to: "manager"), "the composer shows no line about the key")
+                let waiting = try #require(await store.send(to: "manager"), "the composer shows no line about the key")
+                #expect(await store.send(to: "manager", keeping: waiting) == waiting, "the line went, and nothing was sent")
                 hub.holdsReceipts = false
                 hub.letGo()
-                #expect(await going.value == false)
+                #expect(await going.value == nil)
                 try await Self.until { store.pending == nil && !store.sending }
                 try await Task.sleep(for: .milliseconds(500))
-                #expect(hub.messages == [first, corrected, second] && store.draft(for: "manager") == key)
+                #expect(hub.messages == [edited, first, key, corrected, second] && store.draft(for: "manager") == key)
                 // his good words after the held key go, with no hold of before
                 let third = "And send me the list."
                 store.setDraft(third, for: "manager")
-                #expect(await store.send(to: "manager") == false)
-                #expect(hub.messages == [first, corrected, second, third] && store.pending == nil)
-                #expect(!hub.messages.contains { $0.contains("EXAMPLE") }, "a key went to the hub")
+                #expect(await store.send(to: "manager", keeping: waiting) == nil)
+                #expect(hub.messages == [edited, first, key, corrected, second] && store.draft(for: "manager") == third)
+                #expect(await store.send(to: "manager") == nil)
+                #expect(hub.messages == [edited, first, key, corrected, second, third] && store.pending == nil)
             }
         }
+    }
+}
+
+extension SampleFleetTests {
+    /// **The chat page shows the line about a key with Keep it only for the hold of its box** (`ChatPage.keyLine`, its
+    /// `onChange` and its Keep it; a Fable reader's probe of 22 November 2026): no line before a Send; after a Send of
+    /// words that look like a key, the line and Keep it, and nothing goes; an edit takes them away, and the same words
+    /// again do not bring them back; two presses of Keep it in one turn send the words once; a correction's hold shows
+    /// in the correction's box and never in the message's box. The bugs that this stops: a Keep it with no hold, or of
+    /// the other mode, and a line that stays after an edit.
+    @MainActor @Test("the chat page's line about a key has Keep it, which sends once, and an edit or the other mode takes it away",
+                     .timeLimit(.minutes(1)))
+    func theChatPagesKeepIt() async throws {
+        try await Self.withoutHub { try await Self.keepingReadings { try await Self.keepingComposers {
+            let hub = ChatHub()
+            defer { hub.stop() }
+            let address = try await hub.start()
+            // A key of the check's own, which holds none: an enrolled phone's key is never touched.
+            let holder = DeviceKey(account: "device-key-chat-page-check")
+            try holder.remove()
+            defer { try? holder.remove() }
+            let store = MobileStore(deviceKey: holder)
+            try #require(store.pending == nil, "the simulator holds a request of its own")
+            defer {
+                if let left = store.pending {
+                    try? Outbox(file: Self.support.appendingPathComponent("pending.json")).clear(matching: left.requestID)
+                }
+            }
+            store.addressText = address
+            await store.connect()
+            store.chatRoute = [.chat("manager")]
+            try #require(store.canWrite && store.canChat(with: "manager"))
+            let window = CardWindow(ChatPage(store: store, agent: "manager"))
+            defer { window.close() }
+            let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+            let line = "That looks like a key. Never send a key in a message."
+
+            // no line before a Send; after it, the line and Keep it, and nothing goes
+            store.setDraft(key, for: "manager")
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(!window.parts.keys.contains("keep-key"), "a line about a key before any Send")
+            #expect(window.press("send-goal"))
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(window.parts.keys.contains("keep-key") && window.labels.contains(line), "no line after the Send")
+            #expect(hub.messages.isEmpty && store.pending == nil)
+            // an edit takes the line away, and the same words again do not bring it back
+            store.setDraft(key + " x", for: "manager")
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(!window.parts.keys.contains("keep-key"), "the line stays after an edit")
+            store.setDraft(key, for: "manager")
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(!window.parts.keys.contains("keep-key") && !window.labels.contains(line), "the line is back with the same words")
+            // Send again, then Keep it twice in one turn: the words go once
+            #expect(window.press("send-goal"))
+            try await Task.sleep(for: .milliseconds(500))
+            try #require(window.parts.keys.contains("keep-key"))
+            #expect(window.press("keep-key") && window.press("keep-key"))
+            try await Self.until { !hub.messages.isEmpty && store.pending == nil && !store.sending }
+            try await Task.sleep(for: .milliseconds(600))
+            #expect(hub.messages == [key], "Keep it sent \(hub.messages.count) messages")
+            #expect(store.draft(for: "manager").isEmpty && !window.parts.keys.contains("keep-key"))
+            // a correction's hold shows in the correction's box, and not in the message's box after Cancel
+            await store.refresh()
+            store.beginCorrection(try #require(store.correctable(in: "manager")), in: "manager")
+            try await Task.sleep(for: .milliseconds(300))
+            store.correctionText = key + " again"
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(window.press("send-correction"))
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(window.parts.keys.contains("keep-key"), "no line for a correction")
+            store.cancelCorrection()
+            store.setDraft(key + " again", for: "manager")
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(!window.parts.keys.contains("keep-key"), "a correction's hold shows in the message's box")
+            #expect(hub.messages == [key])
+            store.setDraft("", for: "manager")
+        } } }
+    }
+}
+
+extension SampleFleetTests {
+    /// **The chats' drafts and the files that he picked belong to their generation** (`MobileStore.readSnapshot`,
+    /// `composersPlace`, `forgetComposers`): at the first read of another generation they go, from memory, from the
+    /// disk and with the files' bytes; a read of the same one keeps them, also at another form of the hub's address,
+    /// and so does a first read with no record, as after an update from a build before it. The bugs that this stops:
+    /// the files of an old item 7 stood in the new item 7's box and went with a Send, with the attachment numbers of the
+    /// old generation; the same generation at another address (a new code link, the address typed another way) lost
+    /// every draft and file (an Opus reader's probe of 22 November 2026).
+    @MainActor @Test("a chat's draft and the files that he picked leave at a read of another generation, and stay at the same one",
+                     .timeLimit(.minutes(1)))
+    func composersLeaveWithTheirGeneration() async throws {
+        try await Self.withoutHub { try await Self.keepingReadings { try await Self.keepingComposers {
+                UserDefaults.standard.removeObject(forKey: "composersPlace")
+                let hub = ChatHub()
+                defer { hub.stop() }
+                let address = try await hub.start()
+                // A key of the check's own, which holds none: an enrolled phone's key is never touched.
+                let holder = DeviceKey(account: "device-key-generation-check")
+                try holder.remove()
+                defer { try? holder.remove() }
+                let store = MobileStore(deviceKey: holder)
+                try #require(store.pending == nil, "the simulator holds a request of its own")
+                store.addressText = address
+                await store.connect()
+                try #require(store.canWrite && store.snapshot?.db == "gen-chat")
+                let chat = MobileStore.stageKey(agent: "manager"), card = MobileStore.stageKey(need: 7)
+                defer { for composer in [chat, card] { for file in store.stagedFiles(for: composer) { store.removeStaged(file, for: composer) } } }
+                let picture = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).pngData { context in
+                    UIColor.systemTeal.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+                }
+                store.setDraft("Ship it on Monday.", for: "manager")
+                await store.stage(picture, name: "plan.png", mime: "image/png", for: chat)
+                await store.stage(picture, name: "plan.png", mime: "image/png", for: card)
+                try #require(store.readyFiles(for: chat) == [61] && store.readyFiles(for: card) == [61])
+                let bytes = (store.stagedFiles(for: chat) + store.stagedFiles(for: card)).map {
+                    Self.support.appendingPathComponent("staged").appendingPathComponent($0.requestID.uuidString.lowercased())
+                }
+                try #require(bytes.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+
+                // a first read with no record, as after an update from a build before it, keeps what was there before it
+                UserDefaults.standard.removeObject(forKey: "composersPlace")
+                let restarted = MobileStore(deviceKey: holder)
+                await restarted.refresh()
+                try #require(restarted.snapshot?.db == "gen-chat")
+                #expect(restarted.draft(for: "manager") == "Ship it on Monday.", "a first read with no record took a draft")
+                #expect(restarted.readyFiles(for: chat) == [61] && restarted.readyFiles(for: card) == [61],
+                        "a first read with no record took the files")
+
+                // a visit to the sample fleet and back keeps them, and a draft that looks like a key, in memory only
+                let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+                store.setDraft(key, for: "wren")
+                store.startSample()
+                try await Self.until { store.sample && store.lastRead != nil }
+                store.leaveSample()
+                try await Self.until { !store.sample && store.lastRead != nil && store.snapshot?.db == "gen-chat" }
+                try #require(!store.sample && store.snapshot?.db == "gen-chat")
+                #expect(store.draft(for: "manager") == "Ship it on Monday.", "a visit to the sample took a draft")
+                #expect(store.readyFiles(for: chat) == [61] && store.readyFiles(for: card) == [61]
+                        && bytes.allSatisfy { FileManager.default.fileExists(atPath: $0.path) },
+                        "a visit to the sample took the files")
+                #expect(store.draft(for: "wren") == key, "a visit to the sample took a draft that looks like a key")
+
+                // a read of the same generation keeps them
+                await store.refresh()
+                #expect(store.draft(for: "manager") == "Ship it on Monday.")
+                #expect(store.readyFiles(for: chat) == [61] && store.readyFiles(for: card) == [61])
+                // so does the same generation at another form of the hub's address
+                try #require(address.contains("127.0.0.1"))
+                store.addressText = address.replacingOccurrences(of: "127.0.0.1", with: "localhost")
+                await store.connect()
+                try #require(store.hub.host == "localhost" && store.snapshot?.db == "gen-chat")
+                #expect(store.draft(for: "manager") == "Ship it on Monday.", "the same generation lost its draft")
+                #expect(store.readyFiles(for: chat) == [61] && store.readyFiles(for: card) == [61],
+                        "the same generation lost its files")
+
+                // the first read of another generation: they go, from memory, from the disk and with their bytes
+                hub.database = "gen-new"
+                await store.refresh()
+                try #require(store.snapshot?.db == "gen-new")
+                #expect(store.draft(for: "manager").isEmpty, "a chat's draft of the old generation stays")
+                #expect(store.stagedFiles(for: chat).isEmpty && store.stagedFiles(for: card).isEmpty,
+                        "a file of the old generation stays in its box")
+                #expect(!bytes.contains { FileManager.default.fileExists(atPath: $0.path) })
+                let next = MobileStore(deviceKey: holder)
+                #expect(next.draft(for: "manager").isEmpty && next.stagedFiles(for: chat).isEmpty
+                        && next.stagedFiles(for: card).isEmpty)
+                // what he writes in the new generation stays at its next read
+                store.setDraft("Then tell the customer.", for: "manager")
+                await store.refresh()
+                #expect(store.draft(for: "manager") == "Then tell the customer.")
+        } } }
+    }
+
+    /// Runs `body` and puts back the chats' drafts, the staged files and their generation's record, as this phone had
+    /// them.
+    @MainActor private static func keepingComposers(_ body: () async throws -> Void) async throws {
+        let kept = ["agentDrafts", "stagedFiles", "composersPlace"].map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        defer {
+            for (name, value) in kept {
+                if let value { UserDefaults.standard.set(value, forKey: name) }
+                else { UserDefaults.standard.removeObject(forKey: name) }
+            }
+        }
+        try await body()
+    }
+}
+
+/// How often a share sheet closed itself (`ShareModel`'s `finish`).
+@MainActor private final class SheetCloses { var count = 0 }
+
+extension SampleFleetTests {
+    /// **Shared words that look like a key wait for his choice in the share sheet** (`ShareModel.send(to:keeping:)`,
+    /// `edited`; the owner, 22 November 2026: "Keep it, as on the Mac"), as in the app's chat: nothing is sent and the
+    /// sheet stays; a Keep it of words that he changed since sends nothing and asks again; his Keep it sends exactly
+    /// those words, once, and the sheet closes; plain words go at once. The bug that this stops: a key in a text that he
+    /// shared from any app went to the agent's chat in clear text.
+    @MainActor @Test("the share sheet holds shared words that look like a key for Keep it, and plain words go at once",
+                     .timeLimit(.minutes(1)))
+    func theShareSheetHoldsAKey() async throws {
+        let hub = ChatHub()
+        defer { hub.stop() }
+        let address = try await hub.start()
+        // A key of the check's own, which holds none, and a roster of the check's own: the phone's are never touched.
+        let holder = DeviceKey(account: "device-key-share-check")
+        try holder.remove()
+        defer { try? holder.remove() }
+        let roster = SharedRoster(hub: try MobileClient.address(address), installation: "founderizer-ios/1/share-check",
+                                  snapshot: nil, features: [])
+        let closes = SheetCloses()
+        let sheet = ShareModel(roster: roster, deviceKey: holder, finish: { closes.count += 1 }, cancel: {})
+        await sheet.take([])
+        let key = "Use this one: " + "sk-" + "ant-api03-" + String(repeating: "EXAMPLE", count: 4)
+
+        // shared words with a key wait: nothing goes, the sheet stays, and the words stay in the field
+        sheet.text = key + "\n"
+        await sheet.send(to: "manager")
+        let held = try #require(sheet.keyHold, "the sheet shows no line about the key")
+        #expect(held == ShareModel.KeyHold(agent: "manager", words: key + "\n"))
+        #expect(hub.messages.isEmpty && closes.count == 0 && sheet.text == key + "\n")
+        // an edit of the field ends the line, and a Keep it of the old words sends nothing: the new words wait
+        sheet.text = key + "\nfor the shop"
+        sheet.edited(sheet.text)
+        #expect(sheet.keyHold == nil)
+        await sheet.send(to: "manager", keeping: held)
+        let again = try #require(sheet.keyHold, "the sheet shows no line about the key")
+        #expect(again.words == key + "\nfor the shop" && hub.messages.isEmpty && closes.count == 0)
+        // Keep it: exactly those words go, once, and the sheet closes
+        await sheet.send(to: "manager", keeping: again)
+        #expect(hub.messages == [key + "\nfor the shop"] && closes.count == 1 && sheet.keyHold == nil)
+        await sheet.send(to: "manager", keeping: again)
+        #expect(hub.messages.count == 1 && closes.count == 1, "a Keep it sent its words twice")
+
+        // plain words go at once, from a new sheet
+        let plain = ShareModel(roster: roster, deviceKey: holder, finish: { closes.count += 1 }, cancel: {})
+        await plain.take([])
+        plain.text = "https://example.com/post\nRead this one.\n"
+        await plain.send(to: "manager")
+        #expect(plain.keyHold == nil && closes.count == 2)
+        #expect(hub.messages == [key + "\nfor the shop", "https://example.com/post\nRead this one."])
     }
 }
 

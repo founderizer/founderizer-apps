@@ -670,13 +670,18 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   window opens is only ever `SignInPage.Link`, which is a link of the provider's own hosts.
 - **The manager's first setup in the window** (piece U3, `Agents/ManagerSetup.cs`): `ManagerSetupMark` (what this PC
   keeps of it in the first run's kept answers, `ISetupChoices`: the hub's address, its generation, the manager, the chosen
-  provider and the server that joined; the hand-over writes it, the manager's run and Start again take it away),
+  provider and the server that joined; the first run writes it at each change after the claim and last at its hand-over,
+  `ManagerPlacing.NoteAsync(state, now)` writes it at a current reading of a manager with no server, the manager's run
+  and Start again take it away, and `ManagerSetupMark.Shown(state, choices)` is the mark that the window shows),
   `ManagerSetup(new ManagerSetupSettings { Calls, Fleet, Choices, Refresh }, mark)` with `View` (a `ManagerSetupView`),
   `Changed`, `RunAsync(cancel)` (a read every 2 s while something goes on, else every 5, and what runs by itself after
-  each read, until `View.Ended`), the presses `ChooseAsync(provider)` and `SendCodeAsync(code)`, and `TakeOpening()` and
+  each read, until `View.Ended` or the cancel; a read that throws is tried again at the next turn), the presses `ChooseAsync(provider)` and `SendCodeAsync(code)`, and `TakeOpening()` and
   `Opened()` for the provider's page; `ManagerSetupScreens.Of(view)` gives each page as a `ManagerSetupScreen` (with
   `SetupControlKind.Bar` for the job's steps and `Code` for Codex's code; `Drawn` false for a page of wave B or C, whose
-  frame alone shows). `View.Shows` is the Mac's `fillsWindow` (`AgentSetupFlow.FillsWindow`).
+  frame alone would show). `View.Shows` is the Mac's `fillsWindow` (`AgentSetupFlow.FillsWindow`), and
+  `ManagerSetupScreens.TakesWindow(view)` is that with a page that this build draws: a page that is not drawn leaves the
+  window to the manager's page with its pane. One gap stays until wave C: with "1 server", an app that ends in the
+  seconds between the claim and the first reading keeps no mark, so the manager's sign-in has no page at the next start.
 - **The reads**: `OwnerReads.ServersAsync`, `MachinesAsync`, `TeamAsync` (the Mac's caps and checks), and the writes
   `JoinCodeAsync`, `MoveAsync`, `SignInAsync`, `SignInCodeAsync`, through `OwnerReads.Of(store)`. The text of a
   `SignInPage`, a `JobPrompt`, a `MachineLogin` and a `JoinCode` names no link, no code and no command. A field that the Mac reads
@@ -743,13 +748,17 @@ How the window draws the library's first run, for the window pieces after it (U2
   the switch has no such class.
 - **The manager's setup (piece U3, `Pages/Agents/Setup/ManagerSetupPage.cs`)**: once the first run hands over, the
   window goes to the manager's page (`MainWindow.HandedOver`), where the setup stands in place of its chat and fills the
-  window while `StoreSource.ManagerSetup()` gives one whose view shows (the mark of this hub and generation, the
-  manager in the reading), also after a new start of the app; when the manager runs, its chat takes the page. The page
+  window while `StoreSource.ManagerSetup()` gives one that takes the window (the mark of this hub and generation, the
+  manager in the reading, a page that this build draws), also after a new start of the app; when the manager runs, its
+  chat takes the page. The window's line (`Screens.Line`) stands over the setup as over every page: with the hub not
+  reached, the moving title is not alone. The page
   draws pictures 18 to 20 and the Mac's other pages of that setup (the provider's cards, "Setting up <Manager>"): the
   manager's four steps on Back's line, no Back, the provider's logo at 48 or the manager's mark (96 while it waits for
   the session), the job's steps as a bar (`StepsBar`), Claude Code's field (`PasteField`, a code of `MachineLogin.CodeOf`'s
   shape) and Codex's code with Copy (`CodeBox`). The first step's link opens the model's link only (`SetupParts.Steps`
-  with `open`), and puts Codex's code on the clipboard. The install's page has "Open Founderizer" under checks that did
+  with `open`), and puts Codex's code on the clipboard. Each Copy of the app writes the clipboard through
+  `Pages/ClipboardText.cs` (`Fleet/ClipboardGuard.cs`): a write that Windows refuses, as while another program holds the
+  clipboard, copies nothing, says no Copied, and does not end the app. The install's page has "Open Founderizer" under checks that did
   not pass, and Tailscale's link of a join with Open link; the checks' footer, which sends the owner to the server's own
   page, waits for that page (piece U7).
 - **A proofs' build** with `FOUNDERIZER_SETUP_READINGS=<folder>` gives the manager's setup the readings of that folder in
@@ -846,13 +855,13 @@ process at a time.
   30 July 2026), and `packages.lock.json` holds its checksum. A new version is at least 7 days old.
 - **SSH.NET** in `Founderizer.Remote` only (`[2026.0.1]`, on nuget.org since 14 November 2026, 18:56 UTC; MIT), with
   its logging package Microsoft.Extensions.Logging.Abstractions (`[8.0.3]`; no logger is ever given to it, so it logs
-  nothing) and BouncyCastle at the library's version. From 2026.0.0 it changes two things for this app. A message of
-  the call no longer goes out after the PC's part of a key exchange that the server started (a strict server, such as
-  ProFTPD's, ended the connection; OpenSSH takes the message). An RSA signature of a host whose leading zero bytes
-  were removed is checked as a whole one: Windows' own RSA refuses the short form (measured in the build VM, .NET
+  nothing) and BouncyCastle at the library's version. From 2026.0.0 it fixes two faults that this app can meet. A
+  message of the call no longer goes out after the PC's part of a key exchange that the server started (a strict server,
+  such as ProFTPD's, ended the connection; OpenSSH takes the message). An RSA signature of a host whose leading zero
+  bytes were removed is checked as a whole one: Windows' own RSA refuses the short form (measured in the build VM, .NET
   SDK 10.0.404; macOS's takes it), so 2026.0.0 on a PC failed about 1 in 256 key exchanges with a server that sends
   that form (OpenSSH sends the whole form). Its two security fixes are in `SftpClient` and `ScpClient`, which the app
-  does not use. No test covers the two changes: OpenSSH, which the tests run, shows neither fault. Four more of its
+  does not use. No test covers the two fixes: OpenSSH, which the tests run, shows neither fault. Four more of its
   changes are on the app's path: the socket's buffer sizes (SSH.NET's pull request 1821), the socket's waits (1850),
   the read of a program's output (1849) and the read of a field's bytes in each message (1848); the tests of
   `Founderizer.Remote`, the 30-minute run included, pass with them.

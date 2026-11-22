@@ -179,6 +179,10 @@ public enum OwnerDevices {
     public static let namePattern = "^[a-z][a-z0-9-]{1,30}$"
     /// An enrollment code works for ten minutes, and once.
     public static let codeLife: Double = 600
+    /// The side of a code's picture in Your devices, in points (F7 A6 of the owner's feedback of 22 November 2026).
+    /// The link holds about 125 characters, a QR of 45 modules a side: at the 104 points of before, a module was about
+    /// 0.4 mm on a MacBook screen, which a phone's camera may not read. It is the size that `QRCodeView` has by itself.
+    public static let pictureSize: Double = 168
 
     public static func isName(_ text: String) -> Bool {
         text.range(of: namePattern, options: .regularExpression) != nil
@@ -224,6 +228,20 @@ public enum OwnerDevices {
         // A query and a fragment allow the same characters, so the query's own encoding is a valid fragment.
         parts.percentEncodedFragment = values.percentEncodedQuery
         return parts.url?.absoluteString ?? code
+    }
+
+    /// **A phone took the code of Add device**, so its block goes. A device that the list did not hold when the code
+    /// was made (`known`) is a new phone, as before. A device that it held and whose key is newer than the code took
+    /// it too: since F7 A2 of the owner's feedback of 22 November 2026 the hub gives that code to a phone whose
+    /// address is a device already, which then has a new key and no new row. A key from before the code keeps the
+    /// block. `expires` is the code's time on the hub's clock (`since` is on that clock too), 0 when Founderizer did
+    /// not get it: then only a new device counts.
+    public static func codeTaken(by devices: [OwnerDevice], known: [String], expires: Double) -> Bool {
+        devices.contains { device in
+            guard known.contains(device.device) else { return true }
+            guard expires > 0, let since = device.since else { return false }
+            return since > expires - codeLife
+        }
     }
 
     /// A code as the hub gives it: eight characters of its own alphabet, as `XXXX-XXXX`. Anything else is not a code

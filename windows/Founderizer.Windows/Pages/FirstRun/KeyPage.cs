@@ -3,7 +3,6 @@ using Founderizer.Setup.FirstRun;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace Founderizer.Windows.Pages.FirstRun;
 
@@ -79,9 +78,7 @@ internal sealed class KeyPage : IStepView
     /// <summary>Copy takes the lines as they are; its words say Copied until the next lines.</summary>
     private void Copy()
     {
-        var package = new DataPackage();
-        package.SetText(policyLines.Text);
-        Clipboard.SetContent(package);
+        if (!ClipboardText.Copy(policyLines.Text)) return;
         copied = true;
         ShowCopy();
     }

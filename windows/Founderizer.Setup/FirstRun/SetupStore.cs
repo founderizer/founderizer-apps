@@ -1124,6 +1124,7 @@ public sealed class SetupStore
     /// comes between that wait's reads and leaves the manager's server unjoined.</summary>
     private void HandOverIfDue()
     {
+        KeepClaimedMark();
         var s = State;
         if (s.HandedOver || s.Page != SetupPage.Installing || s.Install.Running || s.Install.Checklist is null || !(s.Install.Passed || s.OpenAsked)) return;
         if (s.ManagerInstall.Running || JoinWorks || ManagersHolds || FleetNow() is null) return;
@@ -1137,6 +1138,35 @@ public sealed class SetupStore
 
     /// <summary>Asks the hand-over again (for a test: the window's changes ask by themselves).</summary>
     internal void Recheck() => HandOverIfDue();
+
+    /// <summary>One write of the manager's mark at a time from this run, and none from a change of the run once the
+    /// hand-over wrote it, or while Start again takes it away.</summary>
+    private readonly object markGate = new();
+    private bool marksEnded;
+
+    /// <summary>**The manager's first setup is this PC's to show from the claim on** (the read of U3, fault 1): the hub's
+    /// install claims the hub minutes before it ends, and an app that ends in that time (the window closed, an update, a
+    /// restart of the PC) would start again as the owner's computer of a hub with no welcome page and no mark, on a chat
+    /// that cannot answer. So each change of this run after the claim keeps the mark of the claimed hub as its reading
+    /// gives it: its generation, the manager, the provider that the owner chose and, once the manager's own server joined
+    /// that hub, that server (the Mac's <c>noteJoined</c>). The setup uses the provider and the server only while its own
+    /// read says that the manager has no server. The hand-over writes the mark last, and no change of this run writes it
+    /// after that: the setup then changes it, and takes it away when the manager runs.</summary>
+    private void KeepClaimedMark()
+    {
+        var s = State;
+        if (s.HandedOver || s.Install.ClaimedHub is not { } claimed || !Uri.TryCreate(claimed, UriKind.Absolute, out var hub)) return;
+        if (FleetNow() is not { } fleet || fleet.Agents.FirstOrDefault(a => a.Role == "manager") is not { } manager) return;
+        var mark = new ManagerSetupMark(hub, fleet.Db, manager.Name, s.ChosenAi, JoinedHere(s));
+        // A reading of another hub than the claimed one, which the owner's store held a moment before the claim, is none.
+        if (settings.Owner.State.Hub is { } reads && !mark.IsOf(reads)) return;
+        lock (markGate)
+            if (!marksEnded) mark.KeepChanged(settings.Choices);
+    }
+
+    /// <summary>The manager's own server that joined the claimed hub in this run, or null.</summary>
+    private static string? JoinedHere(SetupState s) =>
+        s.ManagerInstall.Checklist is not null && s.ManagerInstall.JoinHub == s.Install.ClaimedHub ? s.ManagerInstall.Server ?? s.ManagersServer?.Name : null;
 
     /// <summary>**Into the app, at the manager's setup** (the Mac's <c>finish</c>): the manager's AI provider that the owner
     /// chose in this first run is not asked again. A manager with no server gets it with its server; a manager that the
@@ -1178,11 +1208,13 @@ public sealed class SetupStore
         // also when the read of the servers did not answer here (`placed` null): the setup uses them only while its own
         // read says that the manager has no server, and without them it would ask for the provider again and never give
         // the manager the server that joined for it.
-        var markJoined = placed != true && s.ManagerInstall.Checklist is not null && s.ManagerInstall.JoinHub == s.Install.ClaimedHub
-            ? s.ManagerInstall.Server ?? s.ManagersServer?.Name
-            : null;
-        if (fleet is not null && s.Install.ClaimedHub is { } claimed && Uri.TryCreate(claimed, UriKind.Absolute, out var hubAddress))
-            new ManagerSetupMark(hubAddress, fleet.Db, name, placed != true ? provider : null, markJoined).Keep(settings.Choices);
+        var markJoined = placed != true ? JoinedHere(s) : null;
+        lock (markGate)
+        {
+            marksEnded = true;
+            if (fleet is not null && s.Install.ClaimedHub is { } claimed && Uri.TryCreate(claimed, UriKind.Absolute, out var hubAddress))
+                new ManagerSetupMark(hubAddress, fleet.Db, name, placed != true ? provider : null, markJoined).Keep(settings.Choices);
+        }
         lock (gate) handover = new Handover(name, provider, joined, asked, made);
         Set(x => x with { HandedOver = true, HandedTo = name });
     }
@@ -1342,9 +1374,14 @@ public sealed class SetupStore
             S.Records.Builds.Remove(r => r.Hub == hub);
             S.Records.Installs.Remove(r => r.Hub == hub);
             S.Choices.Set(SetupChoiceNames.ReportsWaiting, null);
-            // The manager's first setup of the hub that goes, which no window shows again.
-            if (Agents.ManagerSetupMark.Read(S.Choices) is { } mark && Uri.TryCreate(hub, UriKind.Absolute, out var gone) && mark.IsOf(gone))
-                Agents.ManagerSetupMark.Forget(S.Choices);
+            // The manager's first setup of the hub that goes, which no window shows again; and no change of this run
+            // keeps it again until the run starts as a first one.
+            lock (store.markGate)
+            {
+                store.marksEnded = true;
+                if (Agents.ManagerSetupMark.Read(S.Choices) is { } mark && Uri.TryCreate(hub, UriKind.Absolute, out var gone) && mark.IsOf(gone))
+                    Agents.ManagerSetupMark.Forget(S.Choices);
+            }
             // The run is over: the next first run of this app's run starts as a first one (the Mac's FirstRunWork.drop),
             // with no hand-over, no sign-in asked, no install to try again, no build or choice of a provider, no key.
             lock (store.gate) { store.handover = null; store.signsIn = false; store.installed = null; }
@@ -1358,6 +1395,7 @@ public sealed class SetupStore
                 else S.Owner.ForgetOwnedHub(address, hubServerDeleted);
             }
             store.Set(_ => new SetupState { HoldsFleetKey = S.Tailscale.IsHeld, Cloud = store.hubCloud.Now, ManagersCloud = store.managersCloud.Now });
+            lock (store.markGate) store.marksEnded = false;
             return Task.CompletedTask;
         }
     }

@@ -86,4 +86,18 @@ public sealed class WindowsPartsTests
         StringAssert.StartsWith(status.TrimStart(), "{");
         StringAssert.Contains(status, "BackendState");
     }
+
+    /// <summary>**A write to the clipboard that Windows refuses copies nothing and ends nothing** (the read of U3: the app
+    /// catches no exception of its window's thread). Another program that holds the clipboard open makes Windows refuse a
+    /// write with CLIPBRD_E_CANT_OPEN, as a COMException; a refusal of access comes as another exception. The bug: a Copy
+    /// that ends the app, or one that says Copied for nothing.</summary>
+    [TestMethod]
+    public void AClipboardWriteThatWindowsRefusesCopiesNothingAndEndsNothing()
+    {
+        const int cannotOpen = unchecked((int)0x800401D0);
+        Assert.IsFalse(ClipboardGuard.Write(() => throw new System.Runtime.InteropServices.COMException("OpenClipboard failed", cannotOpen)));
+        Assert.IsFalse(ClipboardGuard.Write(() => throw new UnauthorizedAccessException()));
+        Assert.IsFalse(ClipboardGuard.Write(() => false), "Windows did not take a code with its options");
+        Assert.IsTrue(ClipboardGuard.Write(() => true));
+    }
 }

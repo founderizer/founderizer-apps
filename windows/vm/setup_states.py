@@ -55,6 +55,9 @@ states = {
     "provider": (servers([], True), machines(), fleet(joined="worker-2")),
     # no picture: the manager runs, and its chat takes the page
     "runs": (servers(["juno"], False), machines("claude", True), fleet(alive="manager")),
+    # no picture: Other VPS with "2 servers", the hub's own server alone and the provider chosen: the server's page, which
+    # this build draws as its frame alone, so the window keeps its pane (the read of U3, fault 2)
+    "server": ({"db": "db-1", "time": 1763700100, "servers": [hub_row]}, machines(), fleet(provider="claude")),
 }
 for name, (s, m, f) in states.items():
     folder = os.path.join(out, name)

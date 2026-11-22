@@ -55,6 +55,26 @@ Necesitas Founderizer en un Mac. Añade este teléfono desde la app del Mac: Aju
 
 asistente,automatización,aprobaciones,tareas,equipo,negocio,operaciones,atención al cliente,DevOps
 
+## What's new in 1.4 (4000)
+
+The same words on the pages of Spain and Mexico (the owner's "Yes, submit", 22 November 2026, about 07:45 UTC, to
+these words in a question card of the area App shell and look).
+
+• Una solicitud puede mostrar imágenes como opciones: toca la que quieras.
+• Un valor que el agente escribió como código, como un comando o una dirección, aparece como etiqueta: tócala para copiarlo.
+• Después de responder a una solicitud, tienes 5 segundos para deshacerlo. Mientras su tarea trabaja, la tarjeta muestra Pausar.
+• Una tarjeta respondida muestra qué pasó con tu respuesta: hecha, en curso, fallida o una nueva pregunta para ti. Toca su marca para abrir la tarea.
+• La marca de cada agente se mueve con suavidad mientras trabaja.
+• Textos en español más claros.
+
+## What's new in 1.4, English (4000)
+
+• A request can show pictures as its options: tap the one you want.
+• A value that the agent wrote as code, such as a command or an address, is a chip: tap it to copy it.
+• After you answer a request, you have 5 seconds to undo it. While its task works, Pause stands on the card.
+• An answered card shows what came of your answer: done, at work, failed, or a new question for you. Tap its mark to open the task.
+• An agent's mark moves smoothly while it works.
+
 ## What's new in 1.3 (4000)
 
 The same words on the pages of Spain and Mexico (the owner's "Yes, submit", 21 November 2026).

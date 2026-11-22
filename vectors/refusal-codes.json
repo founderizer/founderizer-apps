@@ -69,6 +69,8 @@
     "browser_shell_off": "{agent} cannot have a browser on a Linux server while its Shell box is off: turn its Shell box on, or its Browser box off",
     "browser_server": "{server} runs no browser for an agent: in this version only a Linux server with x86 Ubuntu 24.04 or 26.04 that is not the hub's own server runs one",
     "browser_no_room": "{server} has no room for the browser of {agent} beside its other agents: turn its Browser box off first, or move it to a server with more memory",
+    "browser_no_place": "{server} has no room for the browser of {agent}: turn its Browser box off first, or move it to a server with more memory",
+    "browser_room_unknown": "{server} has not said how much memory it has for browsers: turn the Browser box of {agent} off first, or move it to another server",
     "no_such_person": "no such person",
     "person_blocked": "you blocked this person",
     "person_handles_most": "a person has at most {most} handles",
@@ -191,6 +193,14 @@
       "server"
     ],
     "browser_no_room": [
+      "server",
+      "agent"
+    ],
+    "browser_no_place": [
+      "server",
+      "agent"
+    ],
+    "browser_room_unknown": [
       "server",
       "agent"
     ],
