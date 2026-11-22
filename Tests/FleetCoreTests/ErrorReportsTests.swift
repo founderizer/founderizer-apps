@@ -871,6 +871,107 @@ struct ErrorReportsDayTests {
         #expect(ErrorReportsDay.take(.noAnswer, hub: Self.hub, now: now, in: defaults) == nil)
     }
 
+    /// **No install from before the switch's "on" goes** (the second reader's M3 of F5 piece 4; the owner's claim 5 of
+    /// the F5 analysis, "Nothing from before his yes goes", which the crashes keep): a stop while the switch is off,
+    /// then "on": the day's block holds no install of it. A stop after the "on" is in the next day's block. A stop
+    /// before an "off" and an "on" again is in none. The start is the first answer "on" of a run of answers "on" of
+    /// one hub: an answer "off", a first-run "Don't send" and another hub's answer end the run.
+    @MainActor @Test func noInstallFromBeforeTheSwitchsOnGoes() async throws {
+        func stop(_ at: Date) -> InstallStop { InstallStop(kind: "server", stop: "timed_out", cause: "none", at: at) }
+        func installs(_ sent: [String: Any]?) -> [Int] {
+            ((sent?["app"] as? [String: Any])?["installs"] as? [[String: Any]] ?? []).compactMap { $0["last"] as? Int }
+        }
+        let h = Harness("ErrorReportsDayFloor")
+        h.switchOn = false
+        await h.tick()
+        #expect(h.reads == 1 && h.sent.isEmpty)
+        let whileOff = Self.t0 + Self.hour
+        h.sources.stops = [stop(whileOff)]
+        h.now = Self.t0 + 2 * Self.hour
+        h.switchOn = true
+        await h.tick()
+        #expect(h.reads == 2 && h.sent.count == 1)
+        #expect(installs(h.sent.last?.body) == [], "a stop from while the switch was off went")
+        let afterOn = Self.t0 + 3 * Self.hour
+        h.sources.stops.insert(stop(afterOn), at: 0)
+        h.now = Self.t0 + 2 * Self.hour + ErrorReportsDay.day
+        await h.tick()
+        #expect(h.sent.count == 2 && installs(h.sent.last?.body) == [Int(afterOn.timeIntervalSince1970)])
+
+        // A stop, then the switch off and on again: the next day holds none of it.
+        let beforeOff = h.now + Self.hour - 60
+        h.sources.stops.insert(stop(beforeOff), at: 0)
+        h.now += Self.hour
+        h.switchOn = false
+        await h.tick()
+        h.now += Self.hour
+        h.switchOn = true
+        await h.tick()
+        #expect(h.reads == 5 && h.sent.count == 2)
+        h.now = Self.t0 + 2 * Self.hour + 2 * ErrorReportsDay.day
+        await h.tick()
+        #expect(h.sent.count == 3 && installs(h.sent.last?.body) == [], "a stop from before an off went")
+
+        // The run of answers "on", answer by answer.
+        let defaults = TestDefaults("ErrorReportsDayFloorRun")
+        ErrorReportsDay.take(.on(Self.releases()), hub: Self.hub, now: Self.t0, in: defaults)
+        ErrorReportsDay.take(.on(nil), hub: Self.hub, now: Self.t0 + Self.hour, in: defaults)
+        #expect(ErrorReportsDay.installsSince(now: Self.t0 + 2 * Self.hour, in: defaults) == Self.t0)
+        FirstRunReports.choose(false, in: defaults)
+        FirstRunReports.forget(in: defaults)
+        ErrorReportsDay.take(.on(nil), hub: Self.hub, now: Self.t0 + 2 * Self.hour, in: defaults)
+        #expect(ErrorReportsDay.installsSince(now: Self.t0 + 3 * Self.hour, in: defaults) == Self.t0 + 2 * Self.hour)
+        ErrorReportsDay.take(.on(nil), hub: "http://other.example:8765/", now: Self.t0 + 3 * Self.hour, in: defaults)
+        ErrorReportsDay.take(.on(nil), hub: Self.hub, now: Self.t0 + 4 * Self.hour, in: defaults)
+        #expect(ErrorReportsDay.installsSince(now: Self.t0 + 5 * Self.hour, in: defaults) == Self.t0 + 4 * Self.hour)
+    }
+
+    /// **A press "on" that the hub took starts the run at the press** (the second reader's R2-M1 of F5 piece 4). In a
+    /// first run the owner presses "Send" at P; the hub answers with its switch off, because the "Send" waits for the end
+    /// of the first run; a join stops; the first run ends and the hub takes the "Send": the first report holds that stop,
+    /// and not a stop from before P. A press "on" in Settings › Help with a stop in the next minutes: the stop goes in
+    /// the next report, before this Mac's next hourly look, and a stop of while the switch was off does not.
+    @MainActor @Test func aPressOnThatTheHubTookStartsTheRunAtThePress() async throws {
+        func stop(_ at: Date) -> InstallStop { InstallStop(kind: "server", stop: "timed_out", cause: "none", at: at) }
+        func installs(_ sent: [String: Any]?) -> [Int] {
+            ((sent?["app"] as? [String: Any])?["installs"] as? [[String: Any]] ?? []).compactMap { $0["last"] as? Int }
+        }
+        let h = Harness("ErrorReportsDayPressFirstRun")
+        let press = Self.t0
+        h.sources.stops = [stop(press - 60)]
+        FirstRunReports.choose(true, at: press, in: h.defaults)
+        h.now = press + 600
+        h.switchOn = false
+        await h.tick()                                      // the hub answers, with its switch off
+        #expect(h.reads == 1 && h.sent.isEmpty)
+        let afterAnswer = h.now + 60
+        h.sources.stops.insert(stop(afterAnswer), at: 0)
+        h.now += 1200                                       // the first run ends, and the hub takes the "Send"
+        #expect(await FirstRunReports.deliver(offered: true, in: h.defaults) { _ in })
+        ErrorReportsDay.pressedOn(hub: Self.hub, at: try #require(FirstRunReports.pressed(in: h.defaults)), now: h.now,
+                                  in: h.defaults)
+        h.switchOn = true
+        h.now += 60
+        await h.tick()
+        #expect(h.reads == 2 && h.sent.count == 1, "no report went after the hub took the first run's Send")
+        #expect(installs(h.sent.last?.body) == [Int(afterAnswer.timeIntervalSince1970)],
+                "a stop of the first run after its hub answered was lost, or one from before the press went")
+
+        let s = Harness("ErrorReportsDayPressSettings")
+        s.switchOn = false
+        await s.tick()                                      // the switch is off
+        let pressedAt = Self.t0 + 600
+        s.now = pressedAt + 30
+        ErrorReportsDay.pressedOn(hub: Self.hub, at: pressedAt, now: s.now, in: s.defaults)
+        s.switchOn = true
+        let soon = pressedAt + 120
+        s.sources.stops = [stop(soon), stop(Self.t0 + 60)]
+        s.now = pressedAt + 180
+        await s.tick()
+        #expect(s.sent.count == 1 && installs(s.sent.last?.body) == [Int(soon.timeIntervalSince1970)],
+                "a stop in the minutes after a press on in Settings was lost")
+    }
+
     /// **While the hub answers, the day goes only on a new read of the switch** (review A, finding 4): a read that
     /// fails sends nothing on the kept answer and moves the day by an hour; a switch that read off is not asked again
     /// for the day before the hourly look.

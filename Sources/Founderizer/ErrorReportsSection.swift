@@ -48,13 +48,16 @@ final class ErrorReportsModel {
         guard !busy, let database = store.state?.db else { return }
         busy = true; error = nil
         defer { busy = false }
+        let pressed = Date()
         do {
             let hub = store.hub
             let receipt = try await HubClient().errorReports(on, hub: hub, database: database, client: store.installation)
             // His press in Settings is newer than any answer of a first run, which a retry must never undo.
             FirstRunReports.forget()
             guard store.hub == hub, store.state?.db == database else { return }
-            // The hub took it: the switch stands so, also when the reading after it does not answer.
+            // The hub took it: the switch stands so, also when the reading after it does not answer. A press "on" starts
+            // his error reports at the press (`ErrorReportsDay.pressedOn`).
+            if on, receipt.send ?? on { ErrorReportsDay.pressedOn(hub: hub.absoluteString, at: pressed) }
             keep(ErrorReportsState(send: receipt.send ?? on, db: database), store: store)
             await read(store: store)
         } catch let HubError.refusal(refused) { error = refused.words }

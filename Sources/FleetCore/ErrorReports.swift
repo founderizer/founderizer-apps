@@ -50,6 +50,9 @@ public enum FirstRunReports {
     public static let choiceKey = "firstRunErrorReports"
     /// The answer that no hub took yet: `send` or `none`.
     public static let waitingKey = "firstRunErrorReportsWaiting"
+    /// The time of the owner's last press on a card, in seconds since 1970: the start of the installs that a report may
+    /// carry once a hub took his "Send" (`ErrorReportsDay.pressedOn`).
+    static let pressedKey = "firstRunErrorReportsPressed"
 
     /// The card that the owner chose last on this Mac: true to send, false not to, nil before the first answer.
     public static func chosen(in defaults: UserDefaults = AppDefaults.store) -> Bool? { answer(defaults.string(forKey: choiceKey)) }
@@ -60,10 +63,16 @@ public enum FirstRunReports {
     /// A press on a card of the page: the check mark, and the answer that the next hub gets. **A "no" is also the
     /// switch's last answer** (`ErrorReportsDay`): the wait of the answer ends at a hub's receipt, at Back to the welcome
     /// page and at a new start of the app, and the day of a hub that does not answer must not go on an older "on" then.
-    public static func choose(_ send: Bool, in defaults: UserDefaults = AppDefaults.store) {
+    public static func choose(_ send: Bool, at now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) {
         defaults.set(word(send), forKey: choiceKey)
         defaults.set(word(send), forKey: waitingKey)
-        if !send { ErrorReportsDay.take(.off, in: defaults) }
+        defaults.set(now.timeIntervalSince1970, forKey: pressedKey)
+        if !send { ErrorReportsDay.take(.off, now: now, in: defaults) }
+    }
+
+    /// The time of the owner's last press on a card of the page, or nil before the first one.
+    public static func pressed(in defaults: UserDefaults = AppDefaults.store) -> Date? {
+        (defaults.object(forKey: pressedKey) as? Double).flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0) : nil }
     }
 
     /// **Gives the waiting answer to a hub**, with `send`, which makes the hub's call. True when the hub took it: the
@@ -989,6 +998,10 @@ public enum ErrorReportsDay {
         public let fleet: String?
         public let channel: String?
         public let releases: AppHealth.HubReleases?
+        /// **The first answer "on" of this run of answers "on" of the same hub**, in seconds since 1970, never after
+        /// `at`: the start of the installs that a report may carry (`installsSince`). nil in an answer "off", and in an
+        /// answer that an app from before this field kept (then `at` stands for it).
+        public let since: Double?
     }
 
     /// What the hub said of the switch now: on (with its releases reading, when the sender has one), off (a hub that
@@ -1039,15 +1052,10 @@ public enum ErrorReportsDay {
         let at = now.timeIntervalSince1970
         switch answer {
         case .off:
-            keep(Answer(send: false, at: at, hub: hub, fleet: nil, channel: nil, releases: nil), in: defaults)
+            keep(Answer(send: false, at: at, hub: hub, fleet: nil, channel: nil, releases: nil, since: nil), in: defaults)
             return nil
         case .on(let releases):
-            let before = lastAnswer(in: defaults).flatMap { $0.send && $0.hub == hub && hub != nil ? $0 : nil }
-            let fleet = releases.map { $0.entitlement.fleet.flatMap { FleetID.isValid($0) ? $0 : nil } } ?? before?.fleet
-            let kept = Answer(send: true, at: at, hub: hub, fleet: fleet, channel: releases?.channel ?? before?.channel,
-                              releases: releases.map(AppHealth.HubReleases.init) ?? before?.releases)
-            keep(kept, in: defaults)
-            return kept
+            return keepOn(releases, hub: hub, at: at, start: at, in: defaults)
         case .noAnswer:
             guard let hub, let kept = lastAnswer(in: defaults), kept.send, kept.hub == hub,
                   let time = valid(kept.at, now: now), at - time <= lasts, let fleet = kept.fleet, FleetID.isValid(fleet),
@@ -1058,6 +1066,32 @@ public enum ErrorReportsDay {
 
     private static func keep(_ answer: Answer, in defaults: UserDefaults) {
         if let data = try? JSONEncoder().encode(answer) { defaults.set(data, forKey: answerKey) }
+    }
+
+    /// An answer "on" of `hub` at `at`, kept: the run of answers "on" goes on from the answer before, of this same hub,
+    /// and starts at `start` when that is earlier; an answer "off" (the switch, a first-run "Don't send", a hub with no
+    /// switch), another hub's answer and no answer start a new run. The start is never after `at`.
+    private static func keepOn(_ releases: ReleaseState?, hub: String?, at: Double, start: Double,
+                               in defaults: UserDefaults) -> Answer {
+        let before = lastAnswer(in: defaults).flatMap { $0.send && $0.hub == hub && hub != nil ? $0 : nil }
+        let fleet = releases.map { $0.entitlement.fleet.flatMap { FleetID.isValid($0) ? $0 : nil } } ?? before?.fleet
+        let since = min(before.map { $0.since ?? $0.at } ?? start, start, at)
+        let kept = Answer(send: true, at: at, hub: hub, fleet: fleet, channel: releases?.channel ?? before?.channel,
+                          releases: releases.map(AppHealth.HubReleases.init) ?? before?.releases, since: since)
+        keep(kept, in: defaults)
+        return kept
+    }
+
+    /// **The hub at `hub` took a press "on" of the owner at `press`** (the second reader's R2-M1 of F5 piece 4): the
+    /// first run's "Send" when its hub took it (`FirstRunReportsSender`, with `FirstRunReports.pressed`), or the switch
+    /// of Settings › Help that he turned on (`ErrorReportsModel.turn`). The switch's answer "on" of that hub is kept,
+    /// with its run started at his press, never after now. So the stops after his press go, also the stops of a first
+    /// run after its hub answered with its switch still off, which waited for the end of the first run; and the hour
+    /// before this Mac's next read of the switch loses nothing. The stops before his press stay out, and so do the stops
+    /// of an earlier "Don't send", because each press moves it. Only a hub's receipt calls it.
+    public static func pressedOn(hub: String, at press: Date, now: Date = Date(),
+                                 in defaults: UserDefaults = AppDefaults.store) {
+        _ = keepOn(nil, hub: hub, at: now.timeIntervalSince1970, start: press.timeIntervalSince1970, in: defaults)
     }
 
     /// **The Mac leaves its hub** (a connect to another hub, "Start again"): the switch's last answer and the hub's last
@@ -1101,11 +1135,27 @@ public enum ErrorReportsDay {
         return times.compactMap { $0 }.max().map { Date(timeIntervalSince1970: $0) }
     }
 
-    /// The installs that the day names stopped after this: the last report with the block that our site took, or a
-    /// `day` ago before the first one.
+    /// **The installs that the day names stopped after this**: the last report with the block that our site took, or a
+    /// `day` ago before the first one, and never before the switch's kept answer "on" began its run (`Answer.since`):
+    /// no install that stopped while the switch was off, or while a first-run "Don't send" stood, goes after the next
+    /// "on" (the second reader's M3; the owner's claim 5 of the F5 analysis, "Nothing from before his yes goes", which
+    /// the crashes keep). The run starts at his press when this Mac made it and the hub took it (`pressedOn`: the first
+    /// run's "Send", Settings › Help), else at this Mac's first read "on", at most an hour after a press on another
+    /// device: the stops of that hour go in no report, which fails closed. An answer kept by a build before this field
+    /// has no start, and its own time stands for it: once, at that update, the stops between the last report that our
+    /// site took and that answer's time go in none. A start ahead of the clock counts as now.
+    ///
+    /// **A known limit** (the second reader's R2-N3): a run can start before the true "on". When another device turns
+    /// the switch off and on again between two reads of this Mac (its hourly look), or while the hub is silent, this Mac
+    /// never sees the "off", its run goes on, and a stop of that time can go. The hub's own time of its last "on" in its
+    /// answer to `GET /ui/error-reports` would close it; that is a change of the owner API, not made here.
+    ///
+    /// **A second known limit** (the validator of 22 November 2026): a stop of a time while the switch was off, on a
+    /// clock that ran ahead and was then put right, carries a time after the run's start, and it can go.
     public static func installsSince(now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) -> Date {
-        valid(state(in: defaults).taken, now: now).map { Date(timeIntervalSince1970: $0) }
-            ?? now.addingTimeInterval(-day)
+        let base = valid(state(in: defaults).taken, now: now) ?? now.addingTimeInterval(-day).timeIntervalSince1970
+        let floor = lastAnswer(in: defaults).flatMap { $0.send ? min($0.since ?? $0.at, now.timeIntervalSince1970) : nil }
+        return Date(timeIntervalSince1970: max(base, floor ?? base))
     }
 
     /// **The answer that the day goes on while the hub at `hub` does not answer**: the day is due, the hub has been

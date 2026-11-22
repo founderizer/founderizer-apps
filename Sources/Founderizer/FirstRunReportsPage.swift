@@ -76,11 +76,18 @@ struct FirstRunReportsPage: View {
         let hub = store.hub, client = store.installation
         working = true
         Task {
+            var tookSend = false
             let took = await FirstRunReports.deliver(offered: true) { send in
-                _ = try await HubClient().errorReports(send, hub: hub, database: database, client: client)
+                let receipt = try await HubClient().errorReports(send, hub: hub, database: database, client: client)
+                tookSend = send && receipt.send != false
             }
             working = false
             notBefore = took ? nil : Date().addingTimeInterval(60)
+            // The hub took his "Send", and no newer press waits: his error reports start at that press, so the stops of
+            // the first run after it go (`ErrorReportsDay.pressedOn`).
+            if took, tookSend, FirstRunReports.waiting() == nil, store.hub == hub, let press = FirstRunReports.pressed() {
+                ErrorReportsDay.pressedOn(hub: hub.absoluteString, at: press)
+            }
             if took, store.hub == hub { await ErrorReportsModel.of(store).read(store: store) }
         }
     }
