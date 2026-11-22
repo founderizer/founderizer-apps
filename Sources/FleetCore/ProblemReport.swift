@@ -254,7 +254,8 @@ enum OurSite {
         return url.appendingPathComponent(path)
     }
 
-    /// Our own host or a host below it: `founderizer.com` and `staging.founderizer.com`, never `xfounderizer.com`.
+    /// Our own host or a host below it: `platform.founderizer.com` and `staging.platform.founderizer.com`, never
+    /// `xplatform.founderizer.com`, and never founderizer.com, the marketing site.
     static func isOurs(_ host: String) -> Bool {
         guard let ours = URLComponents(string: AppUpdate.defaultChannel)?.host?.lowercased(), !ours.isEmpty else {
             return false

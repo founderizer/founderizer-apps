@@ -28,9 +28,10 @@ import Foundation
 /// and this app says that plainly, as what the channel answered. The open channel answers every fleet. Nothing here
 /// refuses to work, nothing here expires, and the app that a person already has stays exactly as useful as it was.
 public enum AppUpdate {
-    /// Our channel, which is the hub's channel too. The hub's own `channel` overrides it when they differ, so a
-    /// fleet pointed at another host needs no change here.
-    public static let defaultChannel = "https://founderizer.com"
+    /// Our channel, which is the hub's channel too: the platform's own address. founderizer.com is the marketing
+    /// site (the owner, 21 November 2026), and no client reads from it. The hub's own `channel` overrides this when
+    /// they differ, so a fleet pointed at another host needs no change here.
+    public static let defaultChannel = "https://platform.founderizer.com"
 
     /// Where the channel answers with the newest Mac build.
     public static let path = "releases/app"

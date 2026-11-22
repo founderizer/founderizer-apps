@@ -10,10 +10,11 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <!-- SSH.NET 2026.0.0 of 9 August 2026 (2026.0.1 of 14 November was 6 days old when this piece was built). Its two
-         dependencies are pinned too: BouncyCastle at Founderizer.Core's version, and its logging package, which logs
-         nothing while no logger is given to it (none ever is). -->
-    <PackageReference Include="SSH.NET" Version="[2026.0.0]" />
+    <!-- SSH.NET 2026.0.1 of 14 November 2026 (on nuget.org at 18:56 UTC, so 7 days old on 21 November); what it
+         changes for this app is in the README's "Packages". Its two dependencies are pinned too: BouncyCastle at
+         Founderizer.Core's version, and its logging package, which logs nothing while no logger is given to it (none
+         ever is). -->
+    <PackageReference Include="SSH.NET" Version="[2026.0.1]" />
     <PackageReference Include="BouncyCastle.Cryptography" Version="[2.7.0]" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="[8.0.3]" />
   </ItemGroup>

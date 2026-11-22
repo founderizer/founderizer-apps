@@ -481,7 +481,7 @@ and 6). These names stay.
   passphrase. Not read, so `NotAKey`: DSA (with or without a passphrase: the type, which OpenSSH's format and PuTTY's
   keep in clear text, says so before any passphrase is asked), a public key, and an ECDSA key in PEM or PKCS#8 whose
   curve is written as numbers and not by its name (what `ssh-keygen` with LibreSSL 3.3.6 writes on macOS; OpenSSL 3
-  names the curve). A key that opens must sign and check its own signature, or it is no key. SSH.NET 2026.0.0 reads
+  names the curve). A key that opens must sign and check its own signature, or it is no key. SSH.NET 2026.0.1 reads
   Ed25519, ECDSA and RSA only, so a security key's file (`sk-ssh-ed25519@openssh.com`) is no key by the same rule (not
   measured: making one needs the hardware).
 - `line` gets each line of standard output and of standard error as it comes, without its line end, one at a time,
@@ -844,10 +844,15 @@ process at a time.
 - **One package that is not in the box of .NET**: BouncyCastle.Cryptography, for X25519, Ed25519 and
   ChaCha20-Poly1305 (.NET 10 has no X25519 and no Ed25519). It is pinned to one version (`[2.7.0]`, released on
   30 July 2026), and `packages.lock.json` holds its checksum. A new version is at least 7 days old.
-- **SSH.NET** in `Founderizer.Remote` only (`[2026.0.0]`, released on 9 August 2026; MIT), with its logging package
-  Microsoft.Extensions.Logging.Abstractions (`[8.0.3]`; no logger is ever given to it, so it logs nothing) and
-  BouncyCastle at the library's version. 2026.0.1 (14 November 2026) has two hardening fixes and a fix of a race in a
-  key exchange that the server starts; it is 7 days old on 21 November 2026, and is the next version to take.
+- **SSH.NET** in `Founderizer.Remote` only (`[2026.0.1]`, on nuget.org since 14 November 2026, 18:56 UTC; MIT), with
+  its logging package Microsoft.Extensions.Logging.Abstractions (`[8.0.3]`; no logger is ever given to it, so it logs
+  nothing) and BouncyCastle at the library's version. From 2026.0.0 it changes two things for this app. A message of
+  the call no longer goes out after the PC's part of a key exchange that the server started (a strict server, such as
+  ProFTPD's, ended the connection; OpenSSH takes the message). An RSA signature of a host whose leading zero bytes
+  were removed is checked as a whole one: Windows' own RSA refuses the short form (measured in the build VM, .NET
+  SDK 10.0.404; macOS's takes it), so 2026.0.0 on a PC failed about 1 in 256 key exchanges with a server that sends
+  that form (OpenSSH sends the whole form). Its two security fixes are in `SftpClient` and `ScpClient`, which the app
+  does not use. No test covers the two changes: OpenSSH, which the tests run, shows neither fault.
 - The tests take MSTest 4.5.1 and Microsoft.NET.Test.Sdk 18.11.0, with their own lock file.
 - `nuget.config` names nuget.org alone, so no source of a machine's own setup is asked.
 - The self-check has no lock file of its own: its one package is the library's, and a lock file there would change

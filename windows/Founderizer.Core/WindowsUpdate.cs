@@ -39,7 +39,7 @@ public sealed record UpdateReading
 /// AppUpdateChannel with "PC" for "Mac". The download is <see cref="BuildDownload"/>. Nothing here installs.</summary>
 public static class WindowsUpdate
 {
-    public const string DefaultChannel = "https://founderizer.com";
+    public const string DefaultChannel = "https://platform.founderizer.com";
     public const string Path = "releases/windows";
     public const string FleetHeader = "Founderizer-Fleet";
 

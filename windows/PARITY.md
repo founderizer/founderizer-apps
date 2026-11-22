@@ -139,6 +139,7 @@ Mac, and a device route is all that the PC reaches.
 
 ## What no feature name carries
 
+- **The background repair of servers that exist** (the Mac's sweep in `OwnerAccessSweep.swift` and `FleetStore.swift`: `ServerHardening`, `ServerMemory`, `ServerRestart`, `ServerUplink`, and the start guard for cloud-init's units that the area Setup, servers and owner tools builds now): **waits.** On a server that exists, the hub's own included, these root steps come only from the owner's Mac, so a fleet whose owner has only a PC gets each guard on new servers (the installers) and never on the servers that exist. The owner, 22 November 2026: "we need something reliable for ALL servers". It adds no element to a screen. Its order is rule 7 of section 0.1 of `~/dev/founderizer-plans/reliability-test-fleet-2026-11-21.md` (tested with the fault made on purpose, one server first, his fleet before the customers' track, one step takes it back), and its root part is read by the area Door and security, as the Mac's is. It needs the owner's computer on a PC (Windows step 2) before it can run.
 - **The hub on this PC's Tailscale** (the Mac's `FleetOnTailscale`): built. `Tailnet` reads `tailscale status --json`,
   asks each device's `/health` in two seconds, and takes the first that answers; the store looks every five seconds while
   it is in front with no hub (`StoreState.Search`). The screens give `ITailscaleStatus`, which runs Windows' Tailscale.

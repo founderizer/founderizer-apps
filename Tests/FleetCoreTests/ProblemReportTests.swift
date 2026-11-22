@@ -119,15 +119,15 @@ struct ProblemReportTests {
     // ------------------------------------------------------------ where it goes
 
     @Test func theReportGoesToTheFleetsOwnChannelAndOursWhenItHasNone() throws {
-        #expect(try ProblemReportClient.endpoint(channel: nil).absoluteString == "https://founderizer.com/api/report")
-        #expect(try ProblemReportClient.endpoint(channel: "  ").absoluteString == "https://founderizer.com/api/report")
-        #expect(try ProblemReportClient.endpoint(channel: "https://staging.founderizer.com").absoluteString
-            == "https://staging.founderizer.com/api/report")
+        #expect(try ProblemReportClient.endpoint(channel: nil).absoluteString == "https://platform.founderizer.com/api/report")
+        #expect(try ProblemReportClient.endpoint(channel: "  ").absoluteString == "https://platform.founderizer.com/api/report")
+        #expect(try ProblemReportClient.endpoint(channel: "https://staging.platform.founderizer.com").absoluteString
+            == "https://staging.platform.founderizer.com/api/report")
     }
 
     @Test func aChannelThisAppCannotReachIsRefusedBeforeAnythingLeaves() {
-        for bad in ["ftp://founderizer.com", "https://", "not a url", "https://user:pw@founderizer.com",
-                    "https://founderizer.com?x=1"] {
+        for bad in ["ftp://platform.founderizer.com", "https://", "not a url", "https://user:pw@platform.founderizer.com",
+                    "https://platform.founderizer.com?x=1"] {
             #expect(throws: ProblemReportError.self) { try ProblemReportClient.endpoint(channel: bad) }
         }
     }
@@ -135,11 +135,13 @@ struct ProblemReportTests {
     /// The hub names the channel, so a hub must not be able to send the customer's words to another site: plain HTTP
     /// and every host outside our own domain are refused (review of 14 November 2026).
     @Test func aChannelWithoutHTTPSOrOutsideOurDomainIsRefused() throws {
-        for bad in ["http://founderizer.com", "http://staging.founderizer.com", "https://example.com",
-                    "https://founderizer.com.example.net", "https://xfounderizer.com"] {
+        // The marketing site is not ours to send to: no client reads from it since 21 November 2026.
+        for bad in ["http://platform.founderizer.com", "http://staging.platform.founderizer.com", "https://example.com",
+                    "https://platform.founderizer.com.example.net", "https://xplatform.founderizer.com",
+                    "https://founderizer.com"] {
             #expect(throws: ProblemReportError.self) { try ProblemReportClient.endpoint(channel: bad) }
         }
-        _ = try ProblemReportClient.endpoint(channel: "HTTPS://Staging.Founderizer.com")
+        _ = try ProblemReportClient.endpoint(channel: "HTTPS://Staging.Platform.Founderizer.com")
     }
 
     /// A redirect is an answer, never a second request: a site that redirects the report gets nothing more, and the
@@ -150,7 +152,7 @@ struct ProblemReportTests {
             _ = try await client.send(report(), channel: nil, fleet: nil)
         }
         let asked = RedirectingSite.asked()
-        #expect(asked.contains("https://founderizer.com/api/report"))
+        #expect(asked.contains("https://platform.founderizer.com/api/report"))
         #expect(!asked.contains { $0.hasPrefix("https://example.com") })
     }
 

@@ -124,7 +124,7 @@ public sealed class InstallTests
         const string early = "VxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4=";
         CollectionAssert.AreEqual(shipped, ReleaseChannel.Keys(early: false).Select(Convert.ToBase64String).ToArray());
         CollectionAssert.AreEqual(shipped.Append(early).ToArray(), ReleaseChannel.Keys(early: true).Select(Convert.ToBase64String).ToArray());
-        Assert.AreEqual("https://founderizer.com", ReleaseChannel.Channel);
+        Assert.AreEqual("https://platform.founderizer.com", ReleaseChannel.Channel);
         Assert.AreEqual(TimeSpan.FromSeconds(120), ReleaseChannel.Away);
         Assert.AreEqual(TimeSpan.FromSeconds(60), ReleaseChannel.Retry(1));
         Assert.AreEqual(TimeSpan.FromSeconds(3600), ReleaseChannel.Every);

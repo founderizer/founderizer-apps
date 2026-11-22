@@ -431,14 +431,14 @@ struct ErrorReportsTests {
     // ------------------------------------------------------------ where it goes
 
     @Test func theReportGoesToTheFleetsOwnChannelAndOursWhenItHasNone() throws {
-        #expect(try ErrorReportClient.endpoint(channel: nil).absoluteString == "https://founderizer.com/api/errors")
-        #expect(try ErrorReportClient.endpoint(channel: " ").absoluteString == "https://founderizer.com/api/errors")
-        #expect(try ErrorReportClient.endpoint(channel: "https://staging.founderizer.com").absoluteString
-            == "https://staging.founderizer.com/api/errors")
-        _ = try ErrorReportClient.endpoint(channel: "HTTPS://Staging.Founderizer.com")
-        for bad in ["http://founderizer.com", "http://staging.founderizer.com", "https://example.com",
-                    "https://founderizer.com.example.net", "https://xfounderizer.com", "ftp://founderizer.com", "https://",
-                    "not a url", "https://user:pw@founderizer.com", "https://founderizer.com?x=1", "https://founderizer.com#x"] {
+        #expect(try ErrorReportClient.endpoint(channel: nil).absoluteString == "https://platform.founderizer.com/api/errors")
+        #expect(try ErrorReportClient.endpoint(channel: " ").absoluteString == "https://platform.founderizer.com/api/errors")
+        #expect(try ErrorReportClient.endpoint(channel: "https://staging.platform.founderizer.com").absoluteString
+            == "https://staging.platform.founderizer.com/api/errors")
+        _ = try ErrorReportClient.endpoint(channel: "HTTPS://Staging.Platform.Founderizer.com")
+        for bad in ["http://platform.founderizer.com", "http://staging.platform.founderizer.com", "https://example.com",
+                    "https://platform.founderizer.com.example.net", "https://xplatform.founderizer.com", "ftp://platform.founderizer.com", "https://",
+                    "not a url", "https://user:pw@platform.founderizer.com", "https://platform.founderizer.com?x=1", "https://platform.founderizer.com#x"] {
             #expect(throws: ErrorReportError.badChannel) { try ErrorReportClient.endpoint(channel: bad) }
         }
     }
@@ -446,22 +446,23 @@ struct ErrorReportsTests {
     /// The rule is one function now, and Report a problem goes where it went: the same address for every channel that
     /// it took, and a refusal for every channel that it refused.
     @Test func reportAProblemGoesWhereItWent() throws {
-        let taken = [nil, "", "  ", "https://founderizer.com", "https://staging.founderizer.com", "https://founderizer.com/"]
+        let taken = [nil, "", "  ", "https://platform.founderizer.com", "https://staging.platform.founderizer.com", "https://platform.founderizer.com/"]
         let addresses = try taken.map { try ProblemReportClient.endpoint(channel: $0).absoluteString }
-        #expect(addresses == ["https://founderizer.com/api/report", "https://founderizer.com/api/report",
-                              "https://founderizer.com/api/report", "https://founderizer.com/api/report",
-                              "https://staging.founderizer.com/api/report", "https://founderizer.com/api/report"])
-        for channel in taken + ["HTTPS://Staging.Founderizer.com"] {
+        #expect(addresses == ["https://platform.founderizer.com/api/report", "https://platform.founderizer.com/api/report",
+                              "https://platform.founderizer.com/api/report", "https://platform.founderizer.com/api/report",
+                              "https://staging.platform.founderizer.com/api/report", "https://platform.founderizer.com/api/report"])
+        for channel in taken + ["HTTPS://Staging.Platform.Founderizer.com"] {
             #expect(try ErrorReportClient.endpoint(channel: channel).absoluteString
                 == ProblemReportClient.endpoint(channel: channel).absoluteString.replacingOccurrences(of: "api/report", with: "api/errors"))
         }
-        for bad in ["http://founderizer.com", "https://example.com", "https://founderizer.com.example.net",
-                    "https://xfounderizer.com", "ftp://founderizer.com", "https://", "not a url",
-                    "https://user:pw@founderizer.com", "https://founderizer.com?x=1"] {
+        for bad in ["http://platform.founderizer.com", "https://example.com", "https://platform.founderizer.com.example.net",
+                    "https://xplatform.founderizer.com", "ftp://platform.founderizer.com", "https://", "not a url",
+                    "https://user:pw@platform.founderizer.com", "https://platform.founderizer.com?x=1"] {
             #expect(throws: ProblemReportError.self) { try ProblemReportClient.endpoint(channel: bad) }
         }
-        #expect(OurSite.isOurs("founderizer.com") && OurSite.isOurs("A.Founderizer.COM"))
-        #expect(!OurSite.isOurs("xfounderizer.com") && !OurSite.isOurs("founderizer.com.example.net"))
+        #expect(OurSite.isOurs("platform.founderizer.com") && OurSite.isOurs("A.Platform.Founderizer.COM"))
+        #expect(!OurSite.isOurs("xplatform.founderizer.com") && !OurSite.isOurs("platform.founderizer.com.example.net"))
+        #expect(!OurSite.isOurs("founderizer.com") && !OurSite.isOurs("www.founderizer.com"))   // the marketing site
     }
 
     /// The one request to our site, as the site gets it: its address, POST, JSON, the report's own body, and no key,
@@ -470,9 +471,9 @@ struct ErrorReportsTests {
         let report = try #require(ErrorReport(fleet: Self.fleet, version: "0.1.285 (286)", system: "macOS 26.6.2",
                                               crashes: [crash(frames: [.init(image: Self.own, offset: 165304), .lib])]))
         try await ErrorReportClient(protocolClasses: [ErrorSite.self])
-            .send(report, channel: "https://errors-ok.founderizer.com")
-        let asked = try #require(ErrorSite.asked(host: "errors-ok.founderizer.com").first)
-        #expect(asked.url == "https://errors-ok.founderizer.com/api/errors")
+            .send(report, channel: "https://errors-ok.platform.founderizer.com")
+        let asked = try #require(ErrorSite.asked(host: "errors-ok.platform.founderizer.com").first)
+        #expect(asked.url == "https://errors-ok.platform.founderizer.com/api/errors")
         #expect(asked.method == "POST")
         #expect(asked.headers["content-type"] == "application/json" && asked.headers["accept"] == "application/json")
         #expect(asked.headers["authorization"] == nil && asked.headers["cookie"] == nil)
@@ -485,7 +486,7 @@ struct ErrorReportsTests {
         for status in [400, 429, 500] {
             await #expect(throws: ErrorReportError.refused(status)) {
                 try await ErrorReportClient(protocolClasses: [ErrorSite.self])
-                    .send(report, channel: "https://status-\(status).founderizer.com")
+                    .send(report, channel: "https://status-\(status).platform.founderizer.com")
             }
         }
         // A redirect is an answer, never a second request: the other site sees nothing.
@@ -493,7 +494,7 @@ struct ErrorReportsTests {
             try await ErrorReportClient(protocolClasses: [RedirectingSite.self]).send(report, channel: nil)
         }
         let asked = RedirectingSite.asked()
-        #expect(asked.contains("https://founderizer.com/api/errors"))
+        #expect(asked.contains("https://platform.founderizer.com/api/errors"))
         #expect(!asked.contains { $0.hasPrefix("https://example.com") })
         // A channel that is not ours sends nothing at all.
         await #expect(throws: ErrorReportError.badChannel) {
@@ -519,7 +520,7 @@ struct ErrorReportsTests {
         }
         for status in [400, 404, 413, 422] {
             try ErrorReport.keep([older], in: file)
-            let error = try #require(await failure("https://status-\(status).founderizer.com"))
+            let error = try #require(await failure("https://status-\(status).platform.founderizer.com"))
             #expect(!ErrorReportError.keeps(error))
             #expect(ErrorReport.settle(batch, carriedKept: true, after: error, in: file).isEmpty)
             #expect(!FileManager.default.fileExists(atPath: file.path))
@@ -530,17 +531,17 @@ struct ErrorReportsTests {
         #expect(ErrorReport.kept(file) == [older])
         for status in [429, 503, 500] {
             try ErrorReport.keep([older], in: file)
-            let error = try #require(await failure("https://status-\(status).founderizer.com"))
+            let error = try #require(await failure("https://status-\(status).platform.founderizer.com"))
             #expect(ErrorReportError.keeps(error))
             #expect(ErrorReport.settle(batch, carriedKept: true, after: error, in: file) == both)
             #expect(ErrorReport.kept(file) == both)
         }
         try ErrorReport.keep([older], in: file)
-        let lost = try #require(await failure("https://errors-lost.founderizer.com", NoAnswer.self))
+        let lost = try #require(await failure("https://errors-lost.platform.founderizer.com", NoAnswer.self))
         #expect(lost is URLError && ErrorReportError.keeps(lost))
         #expect(ErrorReport.settle(batch, carriedKept: false, after: lost, in: file) == both)
         // A 200 that did not carry the file leaves it for the next start; one that carried it takes it away.
-        #expect(await failure("https://errors-sent.founderizer.com") == nil)
+        #expect(await failure("https://errors-sent.platform.founderizer.com") == nil)
         #expect(ErrorReport.settle(batch, carriedKept: false, after: nil, in: file) == both)
         #expect(ErrorReport.settle(batch, carriedKept: true, after: nil, in: file).isEmpty)
         #expect(!FileManager.default.fileExists(atPath: file.path))
@@ -600,7 +601,7 @@ final class NoAnswer: URLProtocol, @unchecked Sendable {
 }
 
 /// Our site as a stand-in: it keeps each request that it is asked, and answers with the status that the host's first
-/// label names ("status-429.founderizer.com" answers 429), else 200 `{"ok": true}`. Each test asks a host of its own,
+/// label names ("status-429.platform.founderizer.com" answers 429), else 200 `{"ok": true}`. Each test asks a host of its own,
 /// so tests that run beside each other read only their own requests.
 final class ErrorSite: URLProtocol, @unchecked Sendable {
     struct Asked: Sendable {
