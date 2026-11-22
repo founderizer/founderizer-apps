@@ -87,7 +87,15 @@
     "secret_value_asked": "This request asks for a new value of {name}: type it in the request's form.",
     "secret_app_setting": "{name} is a setting of an app on a host: its new value changes on that host, not here.",
     "role_sets_contacts_off": "A role's access needs the setting contacts.v2, which is off.",
-    "role_no_set": "The role {role} has no access of its own."
+    "role_no_set": "The role {role} has no access of its own.",
+    "join_no_code": "No device shows this code.",
+    "join_two": "Two devices show this code. Send a new invite.",
+    "join_file": "An answer to this item carries no file.",
+    "link_no_agent": "This person can talk to no agent yet.",
+    "link_active": "A device already joined. Remove the row to share again.",
+    "link_channel": "This fleet's release channel is not Founderizer's own, so it makes no invite.",
+    "link_file": "The hub cannot open the key file of the Founderizer app's links.",
+    "link_from_tool": "An invite is made in Founderizer on the Mac, never by an AI session or a program."
   },
   "holes": {
     "profile_unread": [

@@ -685,7 +685,7 @@ private struct NeedStep: View {
         VStack(spacing: 0) {
             // The step's mark is its subject, not a status: the glyph draws no dot here (`SetupStep`).
             AgentGlyph(name: need.by, size: SetupMetrics.mark, jumps: took).environment(\.glyphDots, false)
-            from.padding(.top, 14)
+            fromLine.padding(.top, 14)
             Text(need.shownTitle).font(SetupMetrics.titleFont).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                 .accessibilityAddTraits(.isHeader).padding(.top, 14)
@@ -742,6 +742,31 @@ private struct NeedStep: View {
             }
         }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
             .animation(.easeOut(duration: 0.25), value: took)
+    }
+
+    /// **Copy prompt and Open in its own window, as on the request's card** (`NeedRequestCard`, `NeedPromptButton`,
+    /// `NeedWindows`; the owner's "Yes, ship it" of 22 November 2026 to the picture of this page with both): at the
+    /// right end of the line of who asks and when, while the request is open and no answer of his is on its way;
+    /// Copy prompt only on a request with steps for him outside the app (`NeedPrompt.offers`).
+    private var tools: some View {
+        HStack(spacing: 12) {
+            if NeedPrompt.offers(need) { NeedPromptButton(need: need) }
+            IconButton(symbol: "rectangle.inset.topright.filled", words: String(l10n: "Open in its own window"),
+                       size: 12, side: IconMetrics.small) { NeedWindows.open(store: store, need: need) }
+                .accessibilityIdentifier("need-window-\(need.id)")
+        }
+    }
+
+    /// The line of who asks, in the middle as it stood, with the request's tools at its right end. The tools take no
+    /// room over or under the line, so the title and the words stand where they stood. The room of the tools stands
+    /// at both ends of the line: it keeps its middle, and a long name wraps before it reaches the tools.
+    private var fromLine: some View {
+        HStack(spacing: 8) {
+            if !ended { tools.hidden().frame(height: 0) }
+            from.frame(maxWidth: .infinity)
+            if !ended { tools.hidden().frame(height: 0) }
+        }
+        .overlay(alignment: .trailing) { if !ended { tools } }
     }
 
     @ViewBuilder private var why: some View {

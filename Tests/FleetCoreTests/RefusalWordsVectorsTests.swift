@@ -36,9 +36,14 @@ struct RefusalWordsVectorsTests {
     /// has not loaded it, 21 November 2026) wait for the owner's yes to their words and to their Spanish.
     /// `role_sets_contacts_off` and `role_no_set` (a role's set of access of Founderizer for Teams, with contacts.v2
     /// off, or for a role that has no set, 22 November 2026) wait for the same.
-    private static let waiting: Set<String> = ["about_unreadable", "card_words_from_tool", "knowledge_unread",
-                                               "profile_unread", "role_no_set", "role_sets_contacts_off",
-                                               "secret_app_setting", "secret_value_asked",
+    /// The eight of a member's Founderizer app (`join_no_code`, `join_two`, `join_file`, `link_no_agent`,
+    /// `link_active`, `link_channel`, `link_file`, `link_from_tool`: Founderizer for Teams, design 4, 22 November 2026)
+    /// wait for the same.
+    private static let waiting: Set<String> = ["about_unreadable", "card_words_from_tool", "join_file", "join_no_code",
+                                               "join_two", "knowledge_unread", "link_active", "link_channel",
+                                               "link_file", "link_from_tool", "link_no_agent", "profile_unread",
+                                               "role_no_set", "role_sets_contacts_off", "secret_app_setting",
+                                               "secret_value_asked",
                                                "signature_unchecked", "teams_off", "teams_part_missing"]
 
     /// The codes that have a case: every code of the hub's table that is not waiting.
