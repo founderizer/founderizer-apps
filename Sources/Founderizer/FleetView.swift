@@ -815,7 +815,10 @@ struct FleetView: View {
     /// Send, while the message itself stays whole where it stands in the conversation above. It was a 190-point panel
     /// with a title, a box of its own, a sentence and a "Send correction" capsule. What Send will do — change the
     /// message where it stands, or go under it as a correction — is its hover, as it is the Correct arrow's. A
-    /// correction carries no file, so the plus is not on its line (as on the phone).
+    /// correction carries no file, so the plus is not on its line (as on the phone). **A key in it waits for his
+    /// choice, as in the chat's box** (`KeyHoldBanner`): one that he pastes is not pasted, and one that he types holds
+    /// Send, until he saves it as a secret (the message's agent gets the secret's name) or keeps it. Until 22 November
+    /// 2026 it sent such words to the agent with no question.
     private func editMessagePanel(_ message: OwnerMessage) -> some View {
         // The phone's words (T-33). The phone corrects only his newest message; this Mac corrects any it sent, so an
         // older one is "your message".
@@ -826,6 +829,7 @@ struct FleetView: View {
         // A correction on its way takes Send away, as a message does; one the hub did not confirm is the request
         // line's, with its words and Try again (`pendingBar`).
         let agent = message.chatRecipient.agentLabel
+        let key = store.correctionKey
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "pencil").accessibilityHidden(true)
@@ -841,6 +845,12 @@ struct FleetView: View {
             .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             .padding(.horizontal, ComposerCapsule<EmptyView, EmptyView>.inset)
             ComposerCapsule(focus: $correctionFocused) {
+                if let held = store.heldKey, held.composer == key {
+                    KeyHoldBanner(hold: held.hold, agent: message.chatRecipient) {
+                        saveHeldKey(held, text: $store.editText, tell: message.chatRecipient)
+                    } goOn: { keepHeldKey(held, text: $store.editText) }
+                }
+            } line: {
                 TextField("Correct your message", text: $store.editText, axis: .vertical)
                     .disabled(store.sending || store.pending != nil)
                     .focused($correctionFocused)
@@ -857,12 +867,13 @@ struct FleetView: View {
                     // The chat's keys: Return sends, Shift+Return makes a new line, Esc is Cancel.
                     .onKeyPress(keys: [.return], phases: .down) { press in
                         if press.modifiers.contains(.shift) { return .ignored }
-                        if canSend { Task { await store.sendEdit() } }
+                        if canSend { sendCorrection(composer: key) }
                         return .handled
                     }
                     .composerField(alone: true)
+                    .onChange(of: store.editText) { _, now in heldKeyCheck(now, composer: key) }
                 SendSlot(shows: canSend) {
-                    Button { Task { await store.sendEdit() } } label: { SendMark(agent: message.chatRecipient) }
+                    Button { sendCorrection(composer: key) } label: { SendMark(agent: message.chatRecipient) }
                         .buttonStyle(FleetIconButtonStyle(filled: true)).keyboardShortcut(.return, modifiers: .command)
                         .disabled(!canSend)
                         .help(inPlace ? "Change this message. \(agent) has not read it yet, so nothing is added under it."
@@ -870,6 +881,18 @@ struct FleetView: View {
                         .accessibilityLabel(inPlace ? "Change message" : "Send correction")
                         .accessibilityIdentifier("send-correction")
                 }
+            }
+            .keyPasteGuard(store: store, composer: correctionFocused && SecretEntryView.isOffered(by: store) ? key : nil)
+            // The question of a key goes with the box, so no other box waits behind it; his "Keep it" goes with the
+            // correction (`FleetStore.correctionKey`), and stays while only another page shows.
+            .onDisappear {
+                if store.heldKey?.composer == key { store.heldKey = nil }
+                if store.editingMessage == nil || store.correctionKey != key { keyAllowed.remove(key) }
+            }
+            // Another correction, in the same place: the question and the choice of the first go.
+            .onChange(of: key) { old, _ in
+                if store.heldKey?.composer == old { store.heldKey = nil }
+                keyAllowed.remove(old)
             }
         }
         .chatColumn().padding(.top, 10).padding(.bottom, FleetSpace.under)
@@ -928,7 +951,7 @@ struct FleetView: View {
                     .font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
             }
             if let held = store.heldKey, held.composer == composer {
-                KeyHoldBanner(hold: held.hold, agent: store.chatAgent) { saveHeldKey(held, text: text) } goOn: { keepHeldKey(held, text: text) }
+                KeyHoldBanner(hold: held.hold, agent: store.chatAgent) { saveHeldKey(held, text: text, tell: store.chatAgent) } goOn: { keepHeldKey(held, text: text) }
             }
             // The number in this Mac's own format, as the phone writes it (T-33, fix round 2).
             if trimmed.count > 16_000 { Text("Use no more than \(16_000.formatted()) characters.").font(ChatStyle.detail).foregroundStyle(.orange) }
@@ -1065,6 +1088,17 @@ struct FleetView: View {
         Task { await store.send() }
     }
 
+    /// Sends the open correction, unless its words hold what looks like a key that the owner did not choose to keep.
+    /// **The press decides, once**: the words that it checked are the words that go (`FleetStore.sendEdit`).
+    private func sendCorrection(composer: String) {
+        let words = store.editText
+        if SecretEntryView.isOffered(by: store) && !keyAllowed.contains(composer) && KeyInText.contains(words) {
+            store.heldKey = HeldKey(composer: composer, hold: .text)
+            return
+        }
+        Task { await store.sendEdit(words) }
+    }
+
     /// A text that holds a key, however it came in, gets the question once; a text without one ends it.
     private func heldKeyCheck(_ text: String, composer: String) {
         guard SecretEntryView.isOffered(by: store) else { return }
@@ -1076,14 +1110,15 @@ struct FleetView: View {
         }
     }
 
-    /// "Save it as a secret": the key goes into the secure form and out of the message. A paste reads the clipboard
-    /// again now; a text gives up the part that looks like a key.
-    private func saveHeldKey(_ held: HeldKey, text: Binding<String>) {
+    /// "Save it as a secret": the key goes into the secure form and out of the message, and `tell` (the agent of the
+    /// chat, or of the message that he corrects) gets the secret's name. A paste reads the clipboard again now; a text
+    /// gives up the part that looks like a key.
+    private func saveHeldKey(_ held: HeldKey, text: Binding<String>, tell: String) {
         store.heldKey = nil
         var key: String?
         if held.hold == .paste { key = KeyCut.onClipboard() }
         else if let cut = KeyCut.split(text.wrappedValue) { text.wrappedValue = cut.rest; key = cut.key }
-        store.secretForm = SecretPreset(tell: store.chatAgent, key: key, kept: SecretValueKept())
+        store.secretForm = SecretPreset(tell: tell, key: key, kept: SecretValueKept())
     }
 
     /// "Paste it anyway" or "Keep it": the owner's choice, and no second question while the key is in the message.

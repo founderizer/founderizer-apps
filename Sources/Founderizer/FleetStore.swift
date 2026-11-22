@@ -877,6 +877,10 @@ final class FleetStore {
     var heldKey: HeldKey?
     var editingMessage: OwnerMessage?
     var editText = ""
+    /// **Each correction that opens is one of its own** (`beginEdit`): the guard of a key keeps his "Keep it" for it
+    /// alone (`correctionKey`), and a press that waits goes only while it is still open (`sendEdit`). A new correction
+    /// of the same message is another one.
+    private(set) var editID = UUID()
     /// Rename… or Deactivate from an agent's row (`AgentMenu`): its Runs on takes it when it opens, and clears it.
     var agentAction: AgentActionRequest?
     /// Delete… from an agent's menu: its confirmation stands over the window until he answers it (`AgentDeleteCard`).
@@ -967,6 +971,10 @@ final class FleetStore {
     /// The composer of one chat, or of one open request of Needs you.
     static func stageKey(agent: String) -> String { "agent:\(agent)" }
     static func stageKey(need: Int) -> String { "need:\(need)" }
+    /// The box of the open correction, for the guard of a key (`KeyHoldBanner`) only: a correction takes no file, and its
+    /// request's files are the chat's (`stageKey(of:)`). It is the correction's own (`editID`), never its message's: a
+    /// "Keep it" of an earlier correction of the same message does not let a key of a later one go with no question.
+    var correctionKey: String { "correction:\(editID.uuidString)" }
     /// The composer of one task's guidance (owner API 1.223, feature `steer_files`), with its hub's database: a task
     /// of another database with the same number never shows these files.
     static func stageKey(task: Int, database: String) -> String { "task:\(database):\(task)" }
@@ -1337,14 +1345,26 @@ final class FleetStore {
         guard canEdit(message) else { return }
         editText = message.text
         editingMessage = message
+        editID = UUID()
     }
     func cancelEdit() { editingMessage = nil; editText = "" }
-    func sendEdit() async {
-        guard let message = editingMessage, canEdit(message) else { return }
+    /// Sends the correction that is open, with `words`: the words of his press, which the press checked for a key
+    /// (`FleetView.sendCorrection`); nil takes the box's words now. **The press decides once**: a write that is on its
+    /// way when the press comes makes the correction wait, as a held answer waits (`writable`), and then it goes only
+    /// while the same correction is open with the words of the press. When he changed the box meanwhile (a key that he
+    /// kept and then took out, more words), pressed Cancel, or opened another correction, nothing goes, and the box
+    /// keeps what he wrote for a new press, as a quick reply does not send words that he changed while it waited
+    /// (`NeedRequestCard.sendQuickReply`). The hub's confirmation closes the correction (`finish`); a send that did not
+    /// go leaves the box and its words as they are. Until 22 November 2026 a send refused by its own checks emptied the
+    /// box, and nothing went.
+    func sendEdit(_ words: String? = nil) async {
+        guard editingMessage != nil else { return }
+        let edit = editID, words = words ?? editText
+        guard await writable(), editID == edit, let message = editingMessage, editText == words, canEdit(message)
+        else { return }
         // a correction is about what its message is about (`HubState.correctionAbout`), and goes also where it is not
-        await sendText(editText, recipient: message.chatRecipient, replaces: message.id,
+        await sendText(words, recipient: message.chatRecipient, replaces: message.id,
                        about: state?.correctionAbout(of: message))
-        if pending == nil { cancelEdit() }
     }
     var chatAgent: String {
         if case .agent(let name) = destination { return name }
