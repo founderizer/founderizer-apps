@@ -108,6 +108,34 @@ struct NeedsLaneTests {
         #expect(NeedsLane.atHand(chosen: 7, order: order, open: [11, 9, 4, 2]) == 4)
     }
 
+    /// Owner API 1.274 (the owner's feedback of 22 November 2026, F13a). The bug it catches: the request at hand that a
+    /// new item replaced stays at hand as one that ended in another way, and he reads the hub's "Replaced by ..." in
+    /// the place of the new card, or of the new card with his answer when it ended too; or a chain of replacements
+    /// that loops hangs the page.
+    @Test("A request that a new item replaced gives its place to the end of its chain, open or ended")
+    func theReplacementComesToHand() throws {
+        func replaced(_ id: Int, by new: Int) -> [String: Any] {
+            var item = row(id, answered: Self.at(10, 16), answer: "Replaced by Fleet Manager with a new item: Need \(new)")
+            item["replaced_by"] = new
+            return item
+        }
+        func needs(_ rows: [[String: Any]]) throws -> [OwnerNeed] {
+            try rows.map { try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(withJSONObject: $0)) }
+        }
+        let once = try needs([replaced(12, by: 15), row(15), row(9)])
+        #expect(NeedsLane.replacement(of: 12, in: once, open: [15, 9]) == 15)
+        let chain = try needs([replaced(12, by: 15), replaced(15, by: 18), row(18), row(9)])
+        #expect(NeedsLane.replacement(of: 12, in: chain, open: [18, 9]) == 18)
+        // the new item ended too (he answered it on his phone): none comes to hand, and the request that ended is that
+        // item, with his answer
+        let ended = try needs([replaced(12, by: 15), replaced(15, by: 18), row(18, answered: Self.at(10, 17)), row(9)])
+        #expect(NeedsLane.replacement(of: 12, in: ended, open: [9]) == nil)
+        #expect(NeedsLane.chainEnd(of: 12, in: ended) == 18)
+        let loop = try needs([replaced(12, by: 15), replaced(15, by: 12), row(9)])
+        #expect(NeedsLane.replacement(of: 12, in: loop, open: [9]) == nil && NeedsLane.chainEnd(of: 12, in: loop) == nil)
+        #expect(NeedsLane.chainEnd(of: 9, in: once) == nil)       // nothing replaced it
+    }
+
     @Test("An answer on its way to a request that ended, and two answers of one moment, change nothing")
     func theEdgesOfTheLane() throws {
         let needs = [try need(1, answered: Self.at(10, 12)), try need(2, answered: Self.at(10, 12)), try need(3)]

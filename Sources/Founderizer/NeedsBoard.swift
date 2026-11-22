@@ -93,8 +93,10 @@ struct NeedsBoard: View {
         let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys).union(waiting),
                              now: now)
         let open = lane.open.map(\.id)
-        // The request at hand, by the one rule of this pass and of what `settle` writes back (`NeedsLane.atHand`).
-        let hand = NeedsLane.atHand(chosen: store.selectedNeed, order: order, open: open)
+        // The request at hand, by the one rule of this pass and of what `settle` writes back: the item that replaced the
+        // one he chose (`NeedsLane.replacement`), else `NeedsLane.atHand`.
+        let hand = store.selectedNeed.flatMap { NeedsLane.replacement(of: $0, in: needs, open: open) }
+            ?? NeedsLane.atHand(chosen: store.selectedNeed, order: order, open: open)
         let atHand = lane.open.first { $0.id == hand }
         let ended = endedAtHand.flatMap { id in open.contains(id) ? nil : needs.first { $0.id == id } }
         let shown = ended ?? atHand
@@ -168,12 +170,16 @@ struct NeedsBoard: View {
             took = took.filter { waiting.contains($0) || settling.contains($0) }
         }
         // A request that something else chose (a task's orange line on the Tasks board, a notification) comes to hand;
-        // one that ended shows with its answer.
+        // one that a new item replaced gives its place to that item, as in `settle`; one that ended shows with its
+        // answer, as the end of its chain when it was replaced (`NeedsLane.chainEnd`).
         .onChange(of: store.selectedNeed) { _, asked in
             guard asked != settled else { return }
             writes = false
-            endedAtHand = asked.flatMap { id in !open.contains(id) && needs.contains { $0.id == id } ? id : nil }
-            choose(NeedsLane.atHand(chosen: asked, order: order, open: open))
+            let renewed = asked.flatMap { NeedsLane.replacement(of: $0, in: needs, open: open) }
+            endedAtHand = renewed != nil ? nil : asked.flatMap { id in
+                !open.contains(id) && needs.contains { $0.id == id } ? NeedsLane.chainEnd(of: id, in: needs) ?? id : nil
+            }
+            choose(renewed ?? NeedsLane.atHand(chosen: asked, order: order, open: open))
         }
         .background { PageKeys { keys($0, open: open, hand: atHand?.id, shows: ended == nil) } }
         .accessibilityIdentifier("needs-board")
@@ -200,23 +206,31 @@ struct NeedsBoard: View {
 
     /// **The lane changed: the request at hand is one that waits** (`NeedsLane.atHand`).
     /// - His answer took the request at hand out of the lane: the one that stood under it comes to hand.
-    /// - **The request at hand ended in another way** (the manager took it back or replaced it, or he answered it on
-    ///   his phone): **it stays at hand, with its answer**, and nothing comes into its place under his pointer and his
-    ///   keys. He goes on with a click on a card or with Down. A request for a key is the one exception: its own form
-    ///   answers it here, with no saved request to tell it by, so the next request comes. Its save here holds it at
-    ///   hand while the ring turns and its check draws (`keySaves`), and then it leaves as an answer that settles does.
+    /// - **A new item replaced the request at hand** (the manager raised it again): the new item comes to hand
+    ///   (`NeedsLane.replacement`); when it ended too, it is the request that ended (`NeedsLane.chainEnd`). The hub's
+    ///   words on the old one ("Replaced by ...") show nowhere.
+    /// - **The request at hand ended in another way** (the manager took it back, or he answered it on his phone): **it
+    ///   stays at hand, with its answer**, and nothing comes into its place under his pointer and his keys. He goes on
+    ///   with a click on a card or with Down. A request for a key is the one exception: its own form answers it here,
+    ///   with no saved request to tell it by, so the next request comes. Its save here holds it at hand while the ring
+    ///   turns and its check draws (`keySaves`), and then it leaves as an answer that settles does.
     private func settle(_ lane: [Int], needs: [OwnerNeed]) {
         let chosen = store.selectedNeed
-        let next = NeedsLane.atHand(chosen: chosen, order: order, open: lane)
-        if let chosen, order.isEmpty, !lane.contains(chosen), needs.contains(where: { $0.id == chosen }) {
+        let renewed = chosen.flatMap { NeedsLane.replacement(of: $0, in: needs, open: lane) }
+        // the request that ended: the one he chose, or the end of its chain when a new item replaced it
+        let end = chosen.flatMap { NeedsLane.chainEnd(of: $0, in: needs) ?? $0 }
+        let next = renewed ?? NeedsLane.atHand(chosen: chosen, order: order, open: lane)
+        if renewed != nil {
+            // The new item is the request at hand now: the old one is no request that ended in another way.
+        } else if let chosen, order.isEmpty, !lane.contains(chosen), needs.contains(where: { $0.id == chosen }) {
             // The page opens on a request that something chose for it and that ended: a notification that he
             // clicks after he answered on his phone. (The page's own choice goes when the page goes.)
-            endedAtHand = chosen
+            endedAtHand = end
         } else if let chosen, order.contains(chosen), !lane.contains(chosen) {
             // His answer here sent it away, and the reading can have that answer already: it is no request that
             // ended in another way.
-            if !his.contains(chosen), let left = needs.first(where: { $0.id == chosen }), !left.isOpen, !left.asksForSecret {
-                endedAtHand = chosen
+            if !his.contains(chosen), let left = needs.first(where: { $0.id == end }), !left.isOpen, !left.asksForSecret {
+                endedAtHand = end
             } else if let next, let title = needs.first(where: { $0.id == next })?.shownTitle {
                 // VoiceOver's focus was on what he pressed, which left: it hears what stands there now.
                 AccessibilityNotification.Announcement(title).post()

@@ -66,6 +66,33 @@ public struct NeedsLane: Sendable {
         return successor(of: chosen, in: order, open: Set(open)) ?? open.first
     }
 
+    /// **The request that comes to hand when a new item replaced `id`** (owner API 1.274, `replaced_by`): the end of
+    /// its chain (`chainEnd`), while that one waits in `open`, the lane. Nil while `id` waits in the lane, and when the
+    /// end of its chain does not wait. The page kept the replaced request at hand as one that ended in another way, so
+    /// he read the hub's "Replaced by ..." in the place of the new card (the owner's feedback of 22 November 2026,
+    /// F13a).
+    public static func replacement(of id: Int, in needs: [OwnerNeed], open: [Int]) -> Int? {
+        guard !open.contains(id), let end = chainEnd(of: id, in: needs), open.contains(end) else { return nil }
+        return end
+    }
+
+    /// **The last item of the chain of items that replaced `id`**, open or ended: the item that its `replaced_by`
+    /// names, and the one that replaced that one, to the item that nothing replaced. Nil when nothing replaced `id`,
+    /// when the reading does not hold an item of the chain, and on a loop. A request that ended stands at hand as this
+    /// item, with his answer, and never with the hub's words of a replaced one.
+    public static func chainEnd(of id: Int, in needs: [OwnerNeed]) -> Int? {
+        let byID = Dictionary(needs.map { ($0.id, $0) }) { first, _ in first }
+        var seen: Set<Int> = [id]
+        var end: Int?
+        var next = byID[id]?.replaced_by
+        while let new = next {
+            guard seen.insert(new).inserted, let need = byID[new] else { return nil }
+            end = new
+            next = need.replaced_by
+        }
+        return end
+    }
+
     /// The words of the mark on a request that agents wait for, for its hover text and for VoiceOver: "ABC Lead waits
     /// for this", "ABC Lead and ABC Developer wait for this".
     public static func waitWords(_ agents: [String]) -> String {
