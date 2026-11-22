@@ -23,6 +23,13 @@ import Security
 /// **Never a call twice**: a child that ended before a call took none of it (its input could not be written), so a new
 /// child takes it, once; a child that took the call and gave no answer, or one past its deadline, may have carried it
 /// out, and the call is not sent again.
+///
+/// **A cancel goes to the child** (the coordinator's D59): while the relay waits for a call's answer, it asks
+/// `cancelled` every `cancelStep` seconds; at the client's cancel it sends the child `notifications/cancelled` with the
+/// relay's own id of the call, and waits no more. The child stops as a new session's program stops (`OwnerMCP`: a
+/// cloud tool starts no other command), and it stays for the next call, which reads past the answer that it may still
+/// give. A call that the client cancelled before it was sent is not sent. Only a program of this release or later
+/// sends the cancel on: an older one is the session's own code.
 public final class ProgramRelay: @unchecked Sendable {
     /// One child program, as the relay speaks to it: a line out (false when it could not be written), the next line in
     /// (nil at the child's end, or when the deadline passed first), and its stop.
@@ -62,6 +69,8 @@ public final class ProgramRelay: @unchecked Sendable {
         /// It took the call and ended with no answer, gave none in time, or gave one that is no result: the call may
         /// have been carried out.
         case lost
+        /// The client cancelled the call: it was not sent, or the child got the cancel.
+        case cancelled
     }
 
     /// The path that this program was started by: the child's, and the one that the words of a refusal name.
@@ -77,6 +86,8 @@ public final class ProgramRelay: @unchecked Sendable {
     /// as its own code runs before each check.
     private var refusedBuild: Int??
     private var lastID: Int64 = 0
+    /// How often the wait for a call's answer asks whether the client cancelled it.
+    static let cancelStep: TimeInterval = 0.25
 
     private struct Running {
         let child: Child
@@ -112,9 +123,10 @@ public final class ProgramRelay: @unchecked Sendable {
         return .object(parts)
     }
 
-    /// One call, through the child; `entry` is this program's own entry of the tool (`entry(description:...)`), and
-    /// `protocolVersion` the one that this program speaks.
-    public func call(_ name: String, arguments: JSONValue?, entry: JSONValue, protocolVersion: String) -> Answer {
+    /// One call, through the child; `entry` is this program's own entry of the tool (`entry(description:...)`),
+    /// `protocolVersion` the one that this program speaks, and `cancelled` whether the client cancelled the call.
+    public func call(_ name: String, arguments: JSONValue?, entry: JSONValue, protocolVersion: String,
+                     cancelled: @escaping @Sendable () -> Bool = { false }) -> Answer {
         lock.lock()
         defer { lock.unlock() }
         if let running, running.build != build() {      // updated again: the program behind the path is another one
@@ -140,14 +152,18 @@ public final class ProgramRelay: @unchecked Sendable {
             guard let current = running else { return .silent }
             guard let theirs = current.tools[name] else { return .gone }
             guard theirs == entry else { return .changed }
-            let reply = request(current.child, "tools/call", .object(params), until: Date().addingTimeInterval(callWait))
+            if cancelled() { return .cancelled }
+            let reply = request(current.child, "tools/call", .object(params), until: Date().addingTimeInterval(callWait),
+                                cancelled: cancelled)
             if case let .result(result) = reply, result.object != nil { return .answered(result) }
+            if case .cancelled = reply { return .cancelled }   // the child has the cancel, and stays
             current.child.stop()
             running = nil
             switch reply {
             case .unsent: continue
             case .refused: return .silent
             case .result, .ended: return .lost
+            case .cancelled: return .cancelled
             }
         }
         return .silent
@@ -194,12 +210,14 @@ public final class ProgramRelay: @unchecked Sendable {
     }
 
     /// What one request got: its result; nothing, because it could not be written (the child had ended, and took none
-    /// of it); a refusal for its form; or no answer (the child's end, the deadline, or another error).
+    /// of it); a refusal for its form; no answer (the child's end, the deadline, or another error); or the client's
+    /// cancel, which went to the child.
     private enum Reply {
         case result(JSONValue)
         case unsent
         case refused
         case ended
+        case cancelled
     }
 
     /// The JSON-RPC errors of a request's form, which a server gives before it carries anything out.
@@ -207,14 +225,26 @@ public final class ProgramRelay: @unchecked Sendable {
 
     /// One request, answered by `deadline`. A request or a notification of the child's own is no reply: the relay
     /// answers a request of the child's (`answerChild`) and reads on. The write itself has no deadline: the child is
-    /// this program's own, which reads each line as it comes.
-    private func request(_ child: Child, _ method: String, _ params: JSONValue?, until deadline: Date) -> Reply {
+    /// this program's own, which reads each line as it comes. With `cancelled`, the wait goes in steps of `cancelStep`,
+    /// and at the client's cancel the child gets `notifications/cancelled` with this request's id.
+    private func request(_ child: Child, _ method: String, _ params: JSONValue?, until deadline: Date,
+                         cancelled: (@Sendable () -> Bool)? = nil) -> Reply {
         lastID += 1
         let id = JSONValue.int(lastID)
         var message: [String: JSONValue] = ["jsonrpc": .string("2.0"), "id": id, "method": .string(method)]
         if let params { message["params"] = params }
         guard child.send(JSONValue.object(message).dumps()) else { return .unsent }
-        while let line = child.receive(deadline) {
+        while true {
+            if let cancelled, cancelled() {
+                _ = child.send(JSONValue.object(["jsonrpc": .string("2.0"), "method": .string("notifications/cancelled"),
+                                                 "params": .object(["requestId": id])]).dumps())
+                return .cancelled
+            }
+            let step = cancelled == nil ? deadline : min(deadline, Date().addingTimeInterval(Self.cancelStep))
+            guard let line = child.receive(step) else {
+                if step < deadline && Date() >= step { continue }     // only a step of the wait passed
+                break
+            }
             guard let answer = JSONValue.parse(line) else { continue }
             if let asked = answer["method"]?.string {
                 answerChild(child, asked, id: answer["id"])

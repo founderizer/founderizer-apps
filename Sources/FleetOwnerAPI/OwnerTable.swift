@@ -84,6 +84,9 @@ public struct OwnerTable: Sendable {
     public let mediaTypes: [String: String]
     /// A SHA-256 of the table's content.
     public let version: String
+    /// **The recipes of a server at AWS, Azure or Google Cloud** (`owner_mcp.py` CLOUD_RECIPES, design 9), which the
+    /// three tools of a cloud read (`OwnerCloud`). A table from before them has none.
+    public var cloudRecipes: JSONValue = .null
 
     public func tool(_ name: String) -> Tool? { tools.first { $0.name == name } }
 
@@ -109,7 +112,8 @@ public struct OwnerTable: Sendable {
                         nulls: tool.nulls)
         }, instructions: instructions, protocolVersion: protocolVersion, supported: supported, pages: pages,
            pageQuery: pageQuery, pageTakes: pageTakes, pageWords: pageWords, pageInPath: pageInPath,
-           historyWords: historyWords, costsWords: costsWords, mediaTypes: mediaTypes, version: version)
+           historyWords: historyWords, costsWords: costsWords, mediaTypes: mediaTypes, version: version,
+           cloudRecipes: cloudRecipes)
     }
 
     /// Why a table could not be read, in words for an agent.
@@ -189,6 +193,6 @@ public struct OwnerTable: Sendable {
                           supported: try words("supported"), pages: pages, pageQuery: try words("PAGE_QUERY"),
                           pageTakes: takes, pageWords: try words("PAGE_WORDS"), pageInPath: try words("PAGE_IN_PATH"),
                           historyWords: try words("HISTORY_WORDS"), costsWords: try words("COSTS_WORDS"), mediaTypes: types,
-                          version: version)
+                          version: version, cloudRecipes: root["cloud_recipes"] ?? .null)
     }
 }

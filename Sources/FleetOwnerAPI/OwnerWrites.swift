@@ -16,6 +16,8 @@ extension OwnerTools {
         "fleet_overview", "fleet_read", "search_history", "see_costs",
         "save_profile", "attach_file", "read_attachment", "take_backup", "grant_access", "share_resource",
         "send_message", "answer_needs_you", "decline_secret_request",
+        // design 9's tools of a cloud (piece B2), in OwnerCloud.swift: no hub
+        "cloud_look", "cloud_step", "cloud_remove",
     ]
 
     func runWritten(_ name: String, _ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {

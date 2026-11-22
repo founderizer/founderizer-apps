@@ -23,6 +23,9 @@ struct OwnerParityTests {
         let outcome: JSONValue
         let olderHub: Int
         let after: JSONValue
+        /// A case of design 9's tools of a cloud: whether each cloud has a `proved` date, whether its programs are
+        /// missing, and each command that `owner_mcp.py` ran, with the files that it named and the answer that it got.
+        let cloud: JSONValue?
     }
 
     static let root: JSONValue = {
@@ -49,7 +52,7 @@ struct OwnerParityTests {
             guard case .int(let older)? = item["older_hub"] else { fatalError("no older_hub in the fixture") }
             return Case(name: item["name"]!.string!, tool: item["tool"]!.string!, arguments: item["arguments"]!,
                         setup: item["setup"]!, answers: answers, requests: item["requests"]!,
-                        outcome: item["outcome"]!, olderHub: Int(older), after: item["after"]!)
+                        outcome: item["outcome"]!, olderHub: Int(older), after: item["after"]!, cloud: item["cloud"])
         }
     }()
 
@@ -57,7 +60,7 @@ struct OwnerParityTests {
         let named = Set(Self.cases.map(\.tool))
         let both = Set(Fixture.table.tools.filter { $0.kind != .absent }.map(\.name))
         #expect(both.subtracting(named).isEmpty, "\(both.subtracting(named).sorted())")
-        #expect(both.count == 57 + 4 + 9)
+        #expect(both.count == 57 + 4 + 12)
         #expect(Self.cases.count > 100)
     }
 
@@ -101,19 +104,47 @@ struct OwnerParityTests {
             return index < answers.count ? answers[index]
                 : (500, ["Content-Type": "application/json"], Data(#"{"error": "no answer scripted"}"#.utf8))
         }
-        let tools = Fixture.tools(hub, home: home, now: { Self.now })
+        let bin = scratch.appendingPathComponent("bin", isDirectory: true).path
+        let places = [(work.path, "<tmp>"), (home.path, "<home>"), (bin, "<bin>"), (hub.base, "<hub>")]
+        let commands = Commands()
+        var table = Fixture.table, programs = CloudPrograms(find: { _ in nil }, run: { _, _, _ in
+            .ended(exit: 99, out: Data(), error: Data("no program in this case".utf8))
+        })
+        if let cloud = one.cloud {
+            table.cloudRecipes = Self.proved(table.cloudRecipes, cloud["proved"]?.truthy == true)
+            let missing = cloud["missing"]?.truthy == true
+            let scripted = cloud["commands"]?.array ?? []
+            programs = CloudPrograms(find: { name in missing ? nil : bin + "/" + name }, run: { _, argv, _ in
+                let index = commands.record(argv: argv, places: places)
+                guard index < scripted.count, case .int(let exit)? = scripted[index]["exit"] else {
+                    return .ended(exit: 99, out: Data(), error: Data("no answer scripted".utf8))
+                }
+                return .ended(exit: Int32(exit), out: Data((scripted[index]["out"]?.string ?? "").utf8),
+                              error: Data((scripted[index]["error"]?.string ?? "").utf8))
+            })
+        }
+        let tools = Fixture.tools(hub, home: home, table: table, now: { Self.now }, programs: programs)
         let arguments = try #require(JSONValue.parse(one.arguments.dumps().replacingOccurrences(of: "<tmp>",
                                                                                                  with: work.path)))
         let (text, isError) = tools.call(one.tool, arguments)
 
-        let places = [(work.path, "<tmp>"), (home.path, "<home>"), (hub.base, "<hub>")]
         var outcome: JSONValue
         if isError {
-            outcome = .object(["refusal": .string(text)])
+            outcome = .object(["refusal": .string(Self.callFiles(text))])
         } else {
-            let mark = OwnerTools.dataMark + "\n"
+            let mark = (one.cloud == nil ? OwnerTools.dataMark : OwnerCloud.dataMark) + "\n"
             #expect(text.hasPrefix(mark))
-            outcome = .object(["result": try #require(JSONValue.parse(String(text.dropFirst(mark.count))))])
+            outcome = .object(["result": Self.callFiles(try #require(JSONValue.parse(String(text.dropFirst(mark.count)))))])
+        }
+        if let cloud = one.cloud {
+            let wanted = JSONValue.array((cloud["commands"]?.array ?? []).map { command in
+                .object(["argv": command["argv"] ?? .null, "files": command["files"] ?? .null])
+            })
+            #expect(commands.seen.dumps() == wanted.dumps(),
+                    "\(name): the commands\n\(commands.seen.dumps(indent: 1))\nare not\n\(wanted.dumps(indent: 1))")
+            for path in commands.paths where path.contains("/founderizer-cloud-") {     // the call's own files
+                #expect(!FileManager.default.fileExists(atPath: path), "\(name): \(path) is still there")
+            }
         }
         let sentence = "\n" + OwnerHub.olderHub
         #expect(Self.count(sentence, in: outcome) == one.olderHub,
@@ -146,6 +177,72 @@ struct OwnerParityTests {
         case .object(let map): return .object(map.mapValues { without(text, $0) })
         default: return value
         }
+    }
+
+    /// Each command of the cloud's program that a case ran, as `parity_fixture` writes it: its words and the text of
+    /// each file that it names (as the stand-in reads them: `file://<path>`, `ssh-keys=<path>`, or a path as a word),
+    /// with the places and the folder of the call's files as their marks.
+    final class Commands: @unchecked Sendable {
+        private let lock = NSLock()
+        private var list: [JSONValue] = []
+        private var files: [String] = []
+        var seen: JSONValue { lock.lock(); defer { lock.unlock() }; return .array(list) }
+        /// The paths of the files that the commands named, which must be gone after the call.
+        var paths: [String] { lock.lock(); defer { lock.unlock() }; return files }
+
+        func record(argv: [String], places: [(String, String)]) -> Int {
+            var files: [String: JSONValue] = [:]
+            for word in argv.dropFirst() {
+                for start in ["file://", "ssh-keys=", ""] where word.hasPrefix(start) {
+                    let path = String(word.dropFirst(start.count))
+                    var folder: ObjCBool = false
+                    if FileManager.default.fileExists(atPath: path, isDirectory: &folder), !folder.boolValue,
+                       let data = FileManager.default.contents(atPath: path) {
+                        files[OwnerParityTests.callFiles(.string(path)).string!] = .string(String(decoding: data,
+                                                                                                   as: UTF8.self))
+                        lock.lock()
+                        self.files.append(path)
+                        lock.unlock()
+                        break
+                    }
+                }
+            }
+            let one = OwnerParityTests.callFiles(OwnerParityTests.placed(
+                .object(["argv": .array(argv.map(JSONValue.string)), "files": .object(files)]), places))
+            lock.lock(); defer { lock.unlock() }
+            list.append(one)
+            return list.count - 1
+        }
+    }
+
+    /// The folder of the files of one cloud command as `<files>` (`PARITY_CALL_FILES` of test_owner_mcp).
+    static func callFiles(_ value: JSONValue) -> JSONValue {
+        switch value {
+        case .string(let text): return .string(callFiles(text))
+        case .array(let list): return .array(list.map(callFiles))
+        case .object(let map):
+            return .object(Dictionary(uniqueKeysWithValues: map.map { (callFiles($0.key), callFiles($0.value)) }))
+        default: return value
+        }
+    }
+
+    static func callFiles(_ text: String) -> String {
+        let regex = try! NSRegularExpression(pattern: #"(?:/[^/\s"']+)*/founderizer-cloud-[^/\s"']+"#)
+        return regex.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                              withTemplate: "<files>")
+    }
+
+    /// The recipes with each cloud's `proved` date of the case: the fixture's cases run with a date but where they say
+    /// not, as `parity_programs` sets them.
+    static func proved(_ recipes: JSONValue, _ proved: Bool) -> JSONValue {
+        guard var root = recipes.object, var clouds = root["clouds"]?.object else { return recipes }
+        for (name, recipe) in clouds {
+            var one = recipe.object ?? [:]
+            one["proved"] = proved ? .string("2026-12-01") : .null
+            clouds[name] = .object(one)
+        }
+        root["clouds"] = .object(clouds)
+        return .object(root)
     }
 
     final class Counter: @unchecked Sendable {

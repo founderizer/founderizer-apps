@@ -27,11 +27,15 @@ public struct OwnerContext: Sendable {
     /// **The program of the app that replaced this one** (`ProgramRelay`), which takes a call after an update: `main`
     /// gives the program behind its start path, a test its own. None refuses each call after an update.
     public var relay: ProgramRelay?
+    /// **The cloud's own programs on this computer** (`aws`, `az`, `gcloud`), for the three tools of a cloud
+    /// (`OwnerCloud`): `main` gives this computer's, a test its own.
+    public var programs: CloudPrograms
 
     public init(hubSetting: @escaping @Sendable () -> String?, transport: HubTransport, home: URL, userAgent: String,
                 ownBuild: Int?, startedBuild: @escaping @Sendable () -> Int?,
                 clientLabel: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date = { Date() },
-                appLink: AppLink = .none, standardInput: StandardInput = .none, relay: ProgramRelay? = nil) {
+                appLink: AppLink = .none, standardInput: StandardInput = .none, relay: ProgramRelay? = nil,
+                programs: CloudPrograms = .thisComputer) {
         self.hubSetting = hubSetting
         self.transport = transport
         self.home = home
@@ -43,6 +47,7 @@ public struct OwnerContext: Sendable {
         self.appLink = appLink
         self.standardInput = standardInput
         self.relay = relay
+        self.programs = programs
     }
 }
 
@@ -82,6 +87,13 @@ public final class OwnerTools: @unchecked Sendable {
     public static func lost(_ name: String) -> String {
         "The Founderizer app was updated, and its new version gave no answer to this call that this program can pass "
             + "on, but it may have carried \(name) out: read the fleet before you send it again. Start a new session."
+    }
+
+    /// **The words after a cancel of a relayed call**, which the MCP form never sends (a cancelled request gets no
+    /// answer): for a caller with no cancel of its own, as the shell's.
+    public static func cancelledWords(_ name: String) -> String {
+        "The call of \(name) was cancelled. A command that ran at the cancel went on to its end: read what is there "
+            + "before you send it again."
     }
 
     /// **The words after an update for a tool that changed in the new version**: the client's list is old for it, so
@@ -137,12 +149,28 @@ public final class OwnerTools: @unchecked Sendable {
         let written = table.writtenIn(Self.written)
         let link = Set(OwnerSetupTools.names + OwnerLinkTools.names)
         return OwnerTable(tools: written.tools.filter { !link.contains($0.name) }.map(withDoorWords)
+                            .map { withCloudWords($0, written.cloudRecipes) }
                             + OwnerSetupTools.tools + OwnerLinkTools.tools,
                           instructions: written.instructions, protocolVersion: written.protocolVersion,
                           supported: written.supported, pages: written.pages, pageQuery: written.pageQuery,
                           pageTakes: written.pageTakes, pageWords: written.pageWords, pageInPath: written.pageInPath,
                           historyWords: written.historyWords, costsWords: written.costsWords,
-                          mediaTypes: written.mediaTypes, version: written.version)
+                          mediaTypes: written.mediaTypes, version: written.version, cloudRecipes: written.cloudRecipes)
+    }
+
+    /// **`cloud_step` in the program's own words**: the table's words without their sentence on the check
+    /// (`CLOUD_RECIPES["app"]["drop"]`), and the program's sentence after them (`["tool"]`): its step check is the
+    /// Founderizer app's own here, on its Add server page. Every other tool as it comes.
+    static func withCloudWords(_ tool: OwnerTable.Tool, _ recipes: JSONValue) -> OwnerTable.Tool {
+        guard tool.name == "cloud_step", tool.kind == .swift, let words = OwnerCloud.programWords(recipes),
+              !tool.description.contains(words) else { return tool }
+        let drop = recipes["app"]?["drop"]?.string ?? ""
+        let kept = drop.isEmpty ? tool.description : tool.description.replacingOccurrences(of: drop, with: "")
+        return OwnerTable.Tool(name: tool.name, description: kept + " " + words,
+                               inputSchema: tool.inputSchema, annotations: tool.annotations, kind: tool.kind,
+                               route: tool.route, fields: tool.fields, what: tool.what, revisionPage: tool.revisionPage,
+                               requestIDFromArguments: tool.requestIDFromArguments, feature: tool.feature,
+                               whole: tool.whole, nulls: tool.nulls)
     }
 
     /// **`answer_needs_you` with the program's own sentences about the door's card** (`AnswerDoor.description`), after
@@ -190,22 +218,25 @@ public final class OwnerTools: @unchecked Sendable {
 
     /// **One call, as the MCP form answers it**: the result of `tools/call`. After an update it is the new program's own
     /// result, whole (`ProgramRelay`); else this program's one text block and whether it is a refusal.
-    public func callResult(_ name: String, _ arguments: JSONValue?) -> JSONValue {
-        if updatedUnderUs { return relayed(name, arguments) }
-        let (text, isError) = direct(name, arguments)          // the update was read once, here
+    public func callResult(_ name: String, _ arguments: JSONValue?,
+                           cancelled: @escaping @Sendable () -> Bool = { false }) -> JSONValue {
+        if updatedUnderUs { return relayed(name, arguments, cancelled: cancelled) }
+        let (text, isError) = direct(name, arguments, cancelled: cancelled)  // the update was read once, here
         return Self.result(text: text, isError: isError)
     }
 
     /// **A call after an update**, through the program that replaced this one (`ProgramRelay`): its result as it gave
     /// it, or words that say why not. A tool that this program does not list goes to no program: the client cannot
-    /// have it from this program's list.
-    func relayed(_ name: String, _ arguments: JSONValue?) -> JSONValue {
+    /// have it from this program's list. `cancelled` goes to the relay, which sends the client's cancel on.
+    func relayed(_ name: String, _ arguments: JSONValue?,
+                 cancelled: @escaping @Sendable () -> Bool = { false }) -> JSONValue {
         guard let relay = context.relay, let tool = table.tool(name), tool.kind.listed else {
             return Self.result(text: Self.updated(name, path: nil, verb: nil), isError: true)
         }
         let entry = ProgramRelay.entry(description: tool.description, inputSchema: tool.inputSchema,
                                        annotations: tool.annotations)
-        switch relay.call(name, arguments: arguments, entry: entry, protocolVersion: table.protocolVersion) {
+        switch relay.call(name, arguments: arguments, entry: entry, protocolVersion: table.protocolVersion,
+                          cancelled: cancelled) {
         case let .answered(result): return result
         case .changed: return Self.result(text: Self.changed(name, path: relay.path), isError: true)
         case .gone: return Self.result(text: Self.gone(name), isError: true)
@@ -213,6 +244,7 @@ public final class OwnerTools: @unchecked Sendable {
         case .silent:
             return Self.result(text: Self.updated(name, path: relay.path, verb: Self.verb(of: tool)), isError: true)
         case .lost: return Self.result(text: Self.lost(name), isError: true)
+        case .cancelled: return Self.result(text: Self.cancelledWords(name), isError: true)   // MCP drops it
         }
     }
 
@@ -271,7 +303,10 @@ public final class OwnerTools: @unchecked Sendable {
     }
 
     /// One call by this program itself, with no look at an update.
-    func direct(_ name: String, _ arguments: JSONValue?) -> (text: String, isError: Bool) {
+    /// `cancelled`: whether the client cancelled this call (`OwnerMCP`), which the tools of a cloud ask before each
+    /// command, as `owner_mcp.py`'s `next_step` does.
+    func direct(_ name: String, _ arguments: JSONValue?,
+                cancelled: @escaping @Sendable () -> Bool = { false }) -> (text: String, isError: Bool) {
         // **The setup tools go to the running app**, on its link: no hub, and no command lock.
         if OwnerSetupTools.names.contains(name) {
             if let arguments, !arguments.isNull, arguments.object == nil {
@@ -294,6 +329,11 @@ public final class OwnerTools: @unchecked Sendable {
         if let arguments, !arguments.isNull, arguments.object == nil {
             return ("\(name) could not be sent: its arguments must be an object of its fields, not \(arguments.dumps()).",
                     true)
+        }
+        // **The three tools of a cloud** (design 9) run the cloud's own program on this computer, and call no hub.
+        if OwnerCloud.names.contains(name), tool.kind == .swift {
+            return OwnerCloud.call(name, arguments?.object ?? [:], recipes: table.cloudRecipes,
+                                   programs: context.programs, cancelled: cancelled)
         }
         // `owner_mcp.py`'s `read_page` refuses a page and its words before any other check, also before a hub.
         if tool.name == "fleet_read", let refused = pageRefusal(arguments?.object ?? [:]) { return (refused, true) }

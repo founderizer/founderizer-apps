@@ -308,6 +308,31 @@ public enum OwnerGuide {
           with `grant_secret` to the agent that the owner names: it makes the app sign the grant with the owner's
           key (see "A new login or a new API key").
 
+        ## A server at AWS, Azure or Google Cloud
+
+        When the company has its servers at AWS, Azure or Google Cloud, three tools make one new server there with the
+        cloud's own program on this Mac (`aws`, `az` or `gcloud`), with the login that the owner or their cloud admin made
+        in a terminal. They never ask for a credential and never start a sign-in: when the program is missing or not signed
+        in, the answer says the admin's own step. A cloud is on only after its live proof on a real account. Until then,
+        each tool says so: the owner makes the server in their own way and adds it in the app as "Other VPS".
+
+        1. `~/.founderizer/cli write cloud_look '{"cloud": "aws"}'` gives the recipe: each step, its command, what it
+           changes and what it costs. With "name", "account" and "place" it gives what the recipe made so far for the
+           new server, and "next": the call of the step that comes next.
+        2. Before each call in "next", tell the owner its command, its change and its cost in one or two sentences. The
+           step "server" rents a server, so rule 4 holds. Ask the owner for "ssh_from", the public address of this Mac,
+           and never guess it.
+        3. `~/.founderizer/cli write cloud_step '<the arguments of next>'` runs that one step. Then read "next" again.
+        4. When "next" names the app's page, the owner adds the server in the app: "Add server", then "VPS", then
+           "Other VPS", then "Your VPS" with the address that "next" gives. The app reads the server and joins it. This program has no
+           check of its own.
+        5. After the join, send the call in "after_join" (the step "close_ssh"): no inbound rule is left.
+
+        To remove such a server: `remove_machine` first, then `~/.founderizer/cli write cloud_remove` with the steps that
+        "next" gives, until "next" is null. A removed server and its disk do not come back, so the owner's yes comes
+        first. For a server that the company has already, `cloud_look` with "instance" reads it (and says when it has a
+        role of the cloud); then the owner adds it in the app as above.
+
         ## A fleet that runs
 
         Start with `~/.founderizer/cli call fleet_overview`, and say in a few sentences what the fleet does now and what

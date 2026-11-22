@@ -85,7 +85,9 @@
     "teams_off": "This needs Founderizer for Teams, which this fleet does not have.",
     "teams_part_missing": "This fleet has Founderizer for Teams, but its hub has not loaded this part of it.",
     "secret_value_asked": "This request asks for a new value of {name}: type it in the request's form.",
-    "secret_app_setting": "{name} is a setting of an app on a host: its new value changes on that host, not here."
+    "secret_app_setting": "{name} is a setting of an app on a host: its new value changes on that host, not here.",
+    "role_sets_contacts_off": "A role's access needs the setting contacts.v2, which is off.",
+    "role_no_set": "The role {role} has no access of its own."
   },
   "holes": {
     "profile_unread": [
@@ -213,6 +215,9 @@
     ],
     "secret_app_setting": [
       "name"
+    ],
+    "role_no_set": [
+      "role"
     ]
   }
 }

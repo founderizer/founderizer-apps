@@ -11,12 +11,10 @@ struct OwnerTableTests {
         let table = Fixture.table
         var kinds: [OwnerTable.Kind: Int] = [:]
         for tool in table.tools { kinds[tool.kind, default: 0] += 1 }
-        #expect(kinds[.swift] == 13)
+        #expect(kinds[.swift] == 16)
         #expect(kinds[.later] == nil)
         #expect(Set(table.tools.filter { $0.kind == .swift }.map(\.name)) == OwnerTools.written)
-        // the six of the app's own pages, connect_google (owner API 1.178), and the three tools of a server at a
-        // cloud until piece B2 of design 9 writes them in Swift
-        #expect(kinds[.absent] == 10)
+        #expect(kinds[.absent] == 7)           // the six of the app's own pages, and connect_google (owner API 1.178)
         #expect(table.tools.filter(\.kind.built).count == 57)
         #expect(table.version.count == 64)
         let check = try #require(table.tool("check_machine"))
@@ -361,7 +359,7 @@ final class OwnerRefusalTests {
         #expect(!tools.listed.contains { $0.name == "which_hub" })
         // And the three setup tools and the link's six write tools (save_bot_token, prepare_problem_report,
         // save_secret, grant_secret, share_secret, answer_secret_request).
-        #expect(tools.listed.count == 70 + 3 + 6 && tools.listed.contains { $0.name == "save_profile" })
+        #expect(tools.listed.count == 73 + 3 + 6 && tools.listed.contains { $0.name == "save_profile" })
     }
 
     /// A table of a newer `owner_mcp.py` can name a `swift` tool that this program's code does not have: that tool is
@@ -397,7 +395,7 @@ final class OwnerRefusalTests {
         let writes = tools.listed.filter { OwnerTools.verb(of: $0) == .write }
         // And the link's six: save_bot_token, prepare_problem_report, save_secret, grant_secret, share_secret,
         // answer_secret_request.
-        #expect(writes.count == 66 + 6)
+        #expect(writes.count == 69 + 6)
         #expect(writes.allSatisfy { $0.annotations["readOnlyHint"] == .bool(false) })
         #expect(OwnerTools.verb(of: Fixture.table.tool("install_hub")!) == nil)
     }

@@ -215,6 +215,9 @@ enum Fixture {
 
     static var everyFeature: [String] { Array(Set(table.tools.compactMap(\.feature))).sorted() }
 
+    /// No cloud's program at all: a test of the tools never runs this computer's `aws`, `az` or `gcloud`.
+    static let noPrograms = CloudPrograms(find: { _ in nil }, run: { _, _, _ in .notStarted("no program in a test") })
+
     static func home() -> URL {
         let home = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("owner-api-test-\(UUID().uuidString)", isDirectory: true)
@@ -231,11 +234,13 @@ enum Fixture {
     /// The tools on `hub`, or on the address of the `setting`. Nothing here reads the app's real setting.
     static func tools(_ hub: StandInHub?, home: URL, setting: String?? = nil, ownBuild: Int? = nil,
                       started: @escaping @Sendable () -> Int? = { nil }, table: OwnerTable = Fixture.table,
-                      now: @escaping @Sendable () -> Date = { Date() }, relay: ProgramRelay? = nil) -> OwnerTools {
+                      now: @escaping @Sendable () -> Date = { Date() }, relay: ProgramRelay? = nil,
+                      programs: CloudPrograms = Fixture.noPrograms) -> OwnerTools {
         let address: String? = setting ?? hub?.base
         let context = OwnerContext(hubSetting: { address }, transport: transport(), home: home,
                                    userAgent: "founderizer-cli/test", ownBuild: ownBuild, startedBuild: started,
-                                   clientLabel: { "founderizer-cli/1/test" }, now: now, relay: relay)
+                                   clientLabel: { "founderizer-cli/1/test" }, now: now, relay: relay,
+                                   programs: programs)
         return OwnerTools(table: table, context: context)
     }
 
