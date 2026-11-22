@@ -118,4 +118,59 @@ import Testing
         #expect(seen.chat, "over the chat, where he was")
         #expect(screen.stayedHis)
     }
+
+    /// **The key's name in the title of a request for its new value is its badge** (his "Yes, both" to the drawing
+    /// "New value for DOOR_BACKBLAZE_AMURA_KEY"), and **no other card's title has one** (the area Needs-you and the
+    /// manager). A press on the badge in a Replace card's title opens the key's card, and the title's own press (it
+    /// opens the card's long part) does not take it; in another key request's title the name is words, and a press on
+    /// the title opens the long part and no key's card.
+    @Test func onlyAReplaceCardsTitleHasTheKeysBadge() async throws {
+        struct Seen: Sendable { let badges: [Int]; let keyCard: [Bool]; let longPart: [Bool] }
+        let (seen, screen) = try await ViewHost.onMainLoop { () -> Seen in
+            var badges: [Int] = [], keyCard: [Bool] = [], longPart: [Bool] = []
+            // where the Replace card's badge stood: on the other card the same point is its title's words
+            var badgePoint: NSPoint?
+            for replaces in [true, false] {
+                let now = Int(Date().timeIntervalSince1970)
+                var secret: [String: Any] = ["kind": "api_key", "env": "EXAMPLE_API_KEY"]
+                if replaces { secret["replaces"] = "bws://11111111-2222-4333-8444-555555555551" }
+                let store = ViewHost.store(try ViewHost.reading(
+                    needs: [["id": replaces ? 82 : 83, "title": "New value for EXAMPLE_API_KEY", "raised": now - 300,
+                             "by": "manager", "why": "The old one expired.", "todo": "", "answered": NSNull(),
+                             "details": "Make the new key at Backblaze, under Keys.", "kind": "secret", "secret": secret]],
+                    features: [SecretEntryView.feature, "secret_grants"]))
+                store.destination = .agent("manager")
+                try Self.keepTheKey(in: store)
+                let window = ViewHost.window(store)
+                defer { ViewHost.close(window) }
+                guard try ViewHost.middle(of: "New value for", in: window) != nil else {
+                    throw ViewHost.Missing(description: "the card's title is not drawn")
+                }
+                // the badge's own press (`BadgePress`), where the title draws it: the text reader's box of a name in a
+                // line with a badge's mark stood far from the badge
+                let presses = Self.presses(in: window.contentView!)
+                badges.append(presses.count)
+                if let press = presses.first {
+                    let frame = press.convert(press.bounds, to: nil)
+                    badgePoint = NSPoint(x: frame.midX, y: frame.midY)
+                }
+                guard let point = badgePoint else { throw ViewHost.Missing(description: "the Replace card had no badge") }
+                ViewHost.atOnce(ViewHost.click(point, in: window))
+                ViewHost.turn(replaces ? 10 : 2) { store.secretCard != nil }
+                keyCard.append(store.secretCard != nil)
+                store.secretCard = nil
+                longPart.append(try ViewHost.middle(of: "under Keys", in: window, seconds: replaces ? 2 : 10) != nil)
+            }
+            return Seen(badges: badges, keyCard: keyCard, longPart: longPart)
+        }
+        #expect(seen.badges == [1, 0], "one badge, in the Replace card's title; none in another key request's title")
+        #expect(seen.keyCard == [true, false], "the badge opens the key's card; the other title opens none")
+        #expect(seen.longPart == [false, true], "the badge's press is not the title's; the other title's press is")
+        #expect(screen.stayedHis)
+    }
+
+    /// The badges' presses in a view, deepest first.
+    @MainActor private static func presses(in view: NSView) -> [NSView] {
+        view.subviews.flatMap { presses(in: $0) + ($0 is BadgePress.PressView ? [$0] : []) }
+    }
 }

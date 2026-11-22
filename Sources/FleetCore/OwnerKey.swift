@@ -230,7 +230,7 @@ public struct FleetKeychainItem: Sendable {
         #endif
     }()
 
-    public struct Failure: LocalizedError, Equatable {
+    public struct Failure: LocalizedError, Equatable, Sendable {
         public let label: String
         public let status: OSStatus
         public var errorDescription: String? { String(l10n: "This Mac's keychain did not keep the \(label) (\(Int(status))).") }
@@ -256,6 +256,21 @@ public struct FleetKeychainItem: Sendable {
         var value: CFTypeRef?
         guard SecItemCopyMatching(request as CFDictionary, &value) == errSecSuccess else { return nil }
         return value as? Data
+    }
+
+    /// **The item's data, or the keychain's status when it gives none**: `errSecItemNotFound` says that the item is not
+    /// there; a locked keychain, a refusal, and a build with no Developer ID (`errSecInteractionNotAllowed`, which
+    /// touches nothing) give another status. `read` gives nil for all of them.
+    public func lookup(fleet: String) -> Result<Data, Failure> {
+        guard Self.developerIDSigned else { return .failure(Failure(label: label, status: errSecInteractionNotAllowed)) }
+        var request = query(fleet: fleet)
+        request[kSecReturnData as String] = true
+        request[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        let status = SecItemCopyMatching(request as CFDictionary, &value)
+        guard status == errSecSuccess else { return .failure(Failure(label: label, status: status)) }
+        guard let data = value as? Data else { return .failure(Failure(label: label, status: errSecDecode)) }
+        return .success(data)
     }
 
     /// Takes the item away. One that is not there is no failure.

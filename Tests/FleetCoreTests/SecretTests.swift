@@ -721,3 +721,64 @@ struct SecretTests {
         #expect(odd.logins == nil && odd.lines.count == 1)
     }
 }
+
+/// **A key for a cluster's store** (`secret.store`, `secret.store_writer` and `logins[ref].store`, the door's stage
+/// B): the app takes each part only whole, and a broken part gives no form at all. The bug: a store request saved as a
+/// plain key, which no store gets; or a text of a manifest or of the hub that reaches the path of a call or a record.
+struct StoreRequestTests {
+    static let organization = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
+    static var store: [String: Any] { [
+        "repo": "acme/gitops", "path": "platform/stores/main.yaml", "store_kind": "ClusterSecretStore", "store": "main",
+        "namespace": "shop", "name": "stripe-key-a1b2c3", "provider": "bitwardensecretsmanager", "region": "us",
+        "organization": organization, "project": "11112222-3333-4444-8555-666677778888",
+    ] }
+    static var made: [String: Any] { ["need": 42, "remote": "12345678-9abc-4def-8123-456789abcdef",
+                                      "statement": "{\"v\":1}", "signature": "MEUCIQ=="] }
+
+    private func asked(_ fields: [String: Any]) throws -> NeedSecret {
+        try JSONDecoder().decode(NeedSecret.self, from: JSONSerialization.data(withJSONObject: fields))
+    }
+
+    private func changed(_ base: [String: Any], _ key: String, _ value: Any?) -> [String: Any] {
+        var fields = base
+        fields[key] = value
+        return fields
+    }
+
+    @Test func aStorePartDecodesOnlyWholeAndABrokenOneGivesNoForm() throws {
+        let whole = try asked(["kind": "api_key", "env": "STRIPE_KEY", "store": Self.store])
+        #expect(whole.store?.value?.namespace == "shop" && whole.store?.value?.made == nil && !whole.givesNoForm)
+        let failed = try asked(["kind": "api_key", "env": "STRIPE_KEY", "store": Self.store.merging(Self.made) { $1 }])
+        #expect(failed.store?.value?.made?.remote == "12345678-9abc-4def-8123-456789abcdef")
+        let broken: [(String, Any?)] = [
+            ("organization", Self.organization.uppercased()), ("project", "not-a-uuid"), ("project", nil),
+            ("path", "platform/../main.yaml"), ("path", "platform/main.txt"), ("path", "/main.yaml"),
+            ("region", "self-hosted"), ("provider", "vault"), ("name", "stripe-key"), ("namespace", "Shop"),
+            ("store", "main\n"), ("store_kind", "ExternalSecret"), ("repo", "acme/gitops\n"), ("need", 42),
+            ("remote", "12345678-9abc-4def-8123-456789abcdef"),
+        ]
+        for (key, value) in broken {
+            let request = try asked(["kind": "api_key", "env": "STRIPE_KEY", "store": changed(Self.store, key, value)])
+            #expect(request.store == .broken && request.givesNoForm, "\(key)")
+        }
+        #expect(try asked(["kind": "api_key", "store": Self.store.merging(changed(Self.made, "remote", "X")) { $1 }]).givesNoForm)
+        #expect(try asked(["kind": "api_key", "store": "main"]).givesNoForm)
+        #expect(try asked(["kind": "login", "store": Self.store]).givesNoForm)
+        #expect(try !asked(["kind": "api_key", "env": "STRIPE_KEY", "store": NSNull()]).givesNoForm)
+        // The writer card: whole, or no form; never both parts on one request.
+        let writer: [String: Any] = ["provider": "bitwardensecretsmanager", "region": "eu", "organization": Self.organization,
+                                     "project": "11112222-3333-4444-8555-666677778888"]
+        #expect(try asked(["kind": "api_key", "store_writer": writer]).storeWriter?.value?.region == "eu")
+        #expect(try asked(["kind": "api_key", "store_writer": changed(writer, "region", "local")]).givesNoForm)
+        #expect(try asked(["kind": "api_key", "store_writer": writer, "store": Self.store]).givesNoForm)
+        // A key of the list: its store record only with the record's fields, and a broken one hides nothing else.
+        func login(_ store: Any) throws -> TeamLogin {
+            try JSONDecoder().decode(TeamLogin.self, from: JSONSerialization.data(withJSONObject: [
+                "title": "STRIPE_KEY", "kind": "api_key", "env": "STRIPE_KEY", "protected": true, "store": store]))
+        }
+        #expect(try login(Self.store.merging(Self.made) { $1 }).storeKey?.made?.need == 42)
+        #expect(try login(Self.store).storeBroken)
+        #expect(try login(["repo": 3]).storeBroken && login(["repo": 3]).title == "STRIPE_KEY")
+        #expect(try !login(NSNull()).storeBroken)
+    }
+}

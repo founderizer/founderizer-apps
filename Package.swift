@@ -28,6 +28,9 @@ let package = Package(
         // The import of secrets from another password manager's export file (Bitwarden, 1Password): it reads the file
         // in this process and gives rows to Add secret's own save. The Mac app only; the iPhone app does not link it.
         .target(name: "FleetImport", dependencies: ["FleetCore"]),
+        // The client of a cluster's store (the door's stage B): Bitwarden Secrets Manager in plain HTTPS calls, with
+        // CryptoKit and CommonCrypto, and the steps of a Save that writes the store before the vault. The Mac app only.
+        .target(name: "FleetStoreKeys", dependencies: ["FleetCore"]),
         .executableTarget(name: "Founderizer", dependencies: ["FleetCore", "FleetImport", "FleetMark", "FleetSetupIPC",
                                                              "FleetOwnerAPI"]),
         .executableTarget(name: "FleetSetupService", dependencies: ["FleetCore", "FleetSetupIPC"]),
@@ -37,6 +40,7 @@ let package = Package(
         .testTarget(name: "FleetCoreTests", dependencies: ["FleetCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "FleetVaultTests", dependencies: ["FleetVaultCore", "FleetVaultIPC"]),
         .testTarget(name: "FleetImportTests", dependencies: ["FleetImport", "FleetCore"], exclude: ["make_fixtures.py"]),
+        .testTarget(name: "FleetStoreKeysTests", dependencies: ["FleetStoreKeys", "FleetCore"]),
         .testTarget(name: "FleetMarkTests", dependencies: ["FleetMark"]),
         .testTarget(name: "FleetOwnerAPITests", dependencies: ["FleetOwnerAPI", "FleetCore"], resources: [.copy("Fixtures")]),
         // The tests of the Mac app's views: the real views in a window that no screen shows, on a test's own defaults

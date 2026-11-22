@@ -1378,6 +1378,34 @@ struct NeedRequestCard: View {
         cardWindow?.showMainWindow()
     }
 
+    /// **The key's name in the title of a request for its new value is the key's badge** (the owner's "Yes, both" of 21
+    /// November 2026 to its drawing, "New value for DOOR_BACKBLAZE_AMURA_KEY"), and no other card's title has badges
+    /// (the area Needs-you and the manager): a press opens the key's own card over the page, as the badge in the words
+    /// does (`FleetStore.openCardLink`). Only where one secret of the list has that name (`cardSecrets`), so the badge
+    /// always opens a card, and only where that one secret is the key that the request replaces: a key of the same name
+    /// made after the old one went is another key (review); else the title is its words.
+    private var titleKey: (name: String, key: Bool)? {
+        guard let asked = need.secret, let replaced = asked.replaces, let name = asked.env, !name.isEmpty,
+              SecretEntryView.isOffered(by: store), let kept: LoginReading = store.reading("secrets.logins.fleet"),
+              SecretsList.reference(named: name, in: kept.catalog) == replaced,
+              let entry = kept.catalog[replaced] else { return nil }
+        return (name, entry.isAPIKey)
+    }
+    private var titleNames: CardNames? { titleKey.map { CardNames(agents: [], secrets: [$0]) } }
+
+    /// The card's title: its words, with the key's badge on a request for a key's new value (`titleNames`) where
+    /// `badges`. The badge's look and press come from `cardBadges` on the view around it, which stands over the title's
+    /// own press (its fold), so the badge takes its press and the rest of the title keeps its own.
+    @ViewBuilder private func titleWords(badges: Bool) -> some View {
+        if badges, let names = titleNames {
+            // the badge's name in the link colour of every badge, not the window's accent (review)
+            CardBadgeText.text(AttributedString(heading), names: names, size: ChatStyle.size).font(titleFont)
+                .tint(FleetStyle.link)
+        } else {
+            Text(heading).font(titleFont)
+        }
+    }
+
     /// **A key request's card while his save runs, and folded once a saved key answered it**: its title and the mark at
     /// its end (`KeySaveMark`), with no words. The two stand alike to the point, so the folded card takes the place of
     /// the card whose check has drawn itself with no change on the screen. **The folded card's chevron stands after the
@@ -1385,7 +1413,9 @@ struct NeedRequestCard: View {
     /// and empty, so the check does not move when the folded card takes the card's place.
     private func keyHead(saved: Bool, draws: Bool, folded: Bool = false) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            Text(heading).font(titleFont).foregroundStyle(FleetStyle.text).lineLimit(1)
+            // words, with no badge: the folded card takes this one's place with no change on the screen (review), and the
+            // badge goes with the card's collapse as his save begins
+            titleWords(badges: false).foregroundStyle(FleetStyle.text).lineLimit(1)
             Spacer(minLength: 8)
             KeySaveMark(saved: saved, draws: draws)
             FoldChevron(opens: true).opacity(folded ? 1 : 0)
@@ -1446,7 +1476,7 @@ struct NeedRequestCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(heading).font(titleFont).multilineTextAlignment(.leading)
+                        titleWords(badges: true).multilineTextAlignment(.leading)
                         Spacer(minLength: 8)
                         // No orange "Needs you" on a request that waits (D-2): every open request needs him. **One
                         // opened again has the up chevron where the folded card has its down one** (the owner, 20
@@ -1458,6 +1488,14 @@ struct NeedRequestCard: View {
                     // the hand on the title's row, which folds the card or opens its long part, before the padding
                     // that gives its reach back to the layout
                     .buttonStyle(CardFoldStyle())
+                    // the key's badge in a Replace card's title, over the title's own press (`titleWords`), and its press
+                    // for VoiceOver, which reaches the title as the button's words (review)
+                    .cardBadges(titleNames != nil, links: false)
+                    .accessibilityActions {
+                        if let key = titleKey, let url = CardNames.Target.secret(key.name, key: key.key).url {
+                            Button(String(l10n: "Open \(key.name)")) { _ = cardWindow?.open(url) ?? store.openCardLink(url) }
+                        }
+                    }
                     .accessibilityValue(need.isOpen ? "" : String(l10n: "Answered"))
                     .padding(.vertical, -IconMetrics.reach)
                 // owner feature need_takeover (the owner's "Yes, as drawn"): Take over at the right of the title, beside

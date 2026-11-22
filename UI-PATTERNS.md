@@ -273,7 +273,10 @@ own title, an agent's chat by the pill over the conversation, a **task thread** 
   is no letter and no space, also as the whole of an inline code; a name of words of letters only only as the whole of
   an inline code; the
   owner's "a badge for specific Credentials" and "Yes, both", 21 November 2026), with the key's mark for an API key and
-  `person.badge.key` for a login, which opens the secret's own card over the page (`showSecret(named:)`). An agent, a server, a page and a knowledge file open in this window
+  `person.badge.key` for a login, which opens the secret's own card over the page (`showSecret(named:)`); **a card's
+  title has badges only on a request for a key's new value** ("New value for <KEY>", `NeedRequestCard.titleNames`): the
+  key's name there is its badge, over the title's own press, only on the open card's title row (words while his save
+  runs and once it is folded). An agent, a server, a page and a knowledge file open in this window
   (`FleetStore.openCardLink`, which opens only what the fleet has; a file on the Knowledge page), a repository its page
   on GitHub. A wrong link
   is worse than none. **Each name is a badge** (`CardBadges.swift`; the owner, 20 November 2026: "for servers, show a

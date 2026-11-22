@@ -187,14 +187,28 @@ public struct TeamLogin: Decodable, Equatable, Sendable {
     public let note: String?
     /// Who wrote the words of the note: `owner` or `agent`.
     public let note_by: String?
+    /// **The key's record in a cluster's store** (`logins[ref].store`, the door's stage B): a key that the store has,
+    /// with the spec's fields and the record's `need`, `remote`, `statement` and `signature`. A second Save of such a
+    /// key writes the store before the vault. nil for every other key.
+    public let store: StorePart<StoreKeyTarget>?
 
     public init(title: String, protected: Bool?, kind: String? = nil, env: String? = nil, grants: [String: String]? = nil,
-                note: String? = nil, note_by: String? = nil) {
+                note: String? = nil, note_by: String? = nil, store: StorePart<StoreKeyTarget>? = nil) {
         self.title = title; self.protected = protected; self.kind = kind; self.env = env; self.grants = grants
-        self.note = note; self.note_by = note_by
+        self.note = note; self.note_by = note_by; self.store = store
     }
 
     public var isAPIKey: Bool { kind == "api_key" }
+
+    /// The record of a key that a cluster's store has: whole, with its record, and only for an API key.
+    public var storeKey: StoreKeyTarget? {
+        guard isAPIKey, let target = store?.value, target.made != nil else { return nil }
+        return target
+    }
+
+    /// **A key whose store record this app cannot read whole**: no form changes its value, because a value that only
+    /// the vault gets is not the value that the cluster's store has.
+    public var storeBroken: Bool { store != nil && storeKey == nil }
     /// What Fleet shows: an API key by its variable name, a login by its title ("host · user name").
     public var name: String { isAPIKey ? env ?? title : title }
 }
@@ -885,6 +899,13 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
     /// its reference, and the request asks for a new value of that key. Kept only as a reference, and only for an API
     /// key: a made-up word never makes the card's Replace write under it.
     public let replaces: String?
+    /// **A key for a cluster's store** (`secret.store`, the door's stage B): the store, the namespace and the Secret's
+    /// name, the Bitwarden organization and the write project. The Save writes the store before the vault. For a
+    /// request with `failed`, it has the record of the item too.
+    public let store: StorePart<StoreKeyTarget>?
+    /// **A writer card** (`secret.store_writer`): its key is the Bitwarden token that writes for that store, which stays
+    /// in this Mac's keychain and goes to no list.
+    public let storeWriter: StorePart<StoreWriterTarget>?
 
     /// The hub's most for a note and for an account, which bound what the card takes from a request.
     public static let noteMost = 200
@@ -893,12 +914,15 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
     public static let clarifyMost = 2000
 
     public init(kind: LoginSecret.Kind, env: String? = nil, site: String? = nil, give: [String: SecretGrant] = [:], saved: String? = nil,
-                note: String? = nil, account: String? = nil, clarified: Bool = false, replaces: String? = nil) {
+                note: String? = nil, account: String? = nil, clarified: Bool = false, replaces: String? = nil,
+                store: StorePart<StoreKeyTarget>? = nil, storeWriter: StorePart<StoreWriterTarget>? = nil) {
         self.kind = kind; self.env = env; self.site = site; self.give = give; self.saved = saved
         self.note = note; self.account = account; self.clarified = clarified; self.replaces = replaces
+        self.store = store; self.storeWriter = storeWriter
     }
 
-    private enum Keys: String, CodingKey { case kind, env, site, give, saved, note, account, clarified, replaces }
+    private enum Keys: String, CodingKey { case kind, env, site, give, saved, note, account, clarified, replaces
+        case store, storeWriter = "store_writer" }
 
     public init(from decoder: Decoder) throws {
         let data = try decoder.container(keyedBy: Keys.self)
@@ -916,6 +940,22 @@ public struct NeedSecret: Decodable, Equatable, Sendable {
         clarified = data.contains(.clarified) && (try? data.decodeNil(forKey: .clarified)) != true
         replaces = kind == .apiKey
             ? (try? data.decodeIfPresent(String.self, forKey: .replaces)).flatMap { LoginSecret.isReference($0) ? $0 : nil } : nil
+        // A part that is there and is not whole stays as broken, so that it gives no form (`givesNoForm`).
+        store = Self.part(data, .store)
+        storeWriter = Self.part(data, .storeWriter)
+    }
+
+    /// A store part of the request: nil when the request has none (or null), else whole or broken.
+    private static func part<Value>(_ data: KeyedDecodingContainer<Keys>, _ key: Keys) -> StorePart<Value>? {
+        guard data.contains(key), (try? data.decodeNil(forKey: key)) != true else { return nil }
+        return (try? data.decode(StorePart<Value>.self, forKey: key)) ?? .broken
+    }
+
+    /// **A request that gives no form**: its store part or its writer part is broken, it has both, or it has one and
+    /// asks for no API key. Its card then shows no field to fill, and never the form of a plain key.
+    public var givesNoForm: Bool {
+        if store == nil && storeWriter == nil { return false }
+        return kind != .apiKey || (store != nil && storeWriter != nil) || store == .broken || storeWriter == .broken
     }
 
     /// One line of text of at most `most` characters, or nil.
