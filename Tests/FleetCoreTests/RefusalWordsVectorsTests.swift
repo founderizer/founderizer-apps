@@ -39,10 +39,13 @@ struct RefusalWordsVectorsTests {
     /// The ten of a member's Founderizer app (`join_no_code`, `join_two`, `join_file`, `link_no_agent`,
     /// `link_active`, `link_channel`, `link_file`, `link_from_tool`: Founderizer for Teams, design 4, 22 November 2026;
     /// `link_key`, `link_most`: decision D72) wait for the same.
+    /// `mcp_url_replaced` and `mcp_token_refused` (a Connect of a saved MCP server whose url a session would replace,
+    /// and a Connect whose server gave such an access token, 23 November 2026) wait for the same.
     private static let waiting: Set<String> = ["about_unreadable", "card_words_from_tool", "join_file", "join_no_code",
                                                "join_two", "knowledge_unread", "link_active", "link_channel",
                                                "link_file", "link_from_tool", "link_key", "link_most",
-                                               "link_no_agent", "profile_unread",
+                                               "link_no_agent", "mcp_token_refused", "mcp_url_replaced",
+                                               "profile_unread",
                                                "role_no_set", "role_sets_contacts_off", "secret_app_setting",
                                                "secret_value_asked",
                                                "signature_unchecked", "teams_off", "teams_part_missing"]

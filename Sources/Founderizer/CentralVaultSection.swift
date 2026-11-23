@@ -59,6 +59,8 @@ final class CentralVaultModel {
     private var confirmedPins: [String: String] = [:]
     /// When this session last signed each machine's pin (`VaultFacts.signedAt`).
     private var signedAt: [String: Double] = [:]
+    /// The seed reads of this run of the app, by machine (`MacVaultPin.seedsDue`).
+    private var seeds: [String: VaultTries] = [:]
     /// The servers that the owner removed on this Mac, kept in a file of this Mac (`VaultRemovals`) by the app's one
     /// keeper of it (`VaultRecordFiles`), which the model of each hub address uses and each round reads again; and the
     /// removals and Add servers of this session whose fleet the vault model has not read yet.
@@ -149,7 +151,10 @@ final class CentralVaultModel {
             case .trust(let machines): for machine in machines { await trust(machine, store) }
             case .nothing, .takeOver:
                 await keepTCPWindow(store)
-                if case .nothing = plan.step { await keySwapRound(store) }
+                if case .nothing = plan.step {
+                    await seedRound(store)
+                    await keySwapRound(store)
+                }
                 return
             }
         }
@@ -187,6 +192,10 @@ final class CentralVaultModel {
                 for (machine, at) in marked { record.removed(machine, fleet: fleet, at: at, unpin: true) }
                 for machine in joined { record.added(machine, fleet: fleet) }
             }
+            // This Mac's record after the Remove servers and Add servers of this session from before the fleet was known
+            // (a machine is in one of the two at most).
+            for machine in marked.keys { MacVaultPins.note(.removed, machine: machine, hub: hub, fleet: fleet) }
+            for machine in joined { MacVaultPins.note(.added, machine: machine, hub: hub, fleet: fleet) }
             removedHere = [:]; addedHere = []
         }
         if let fresh, fresh.central == nil {
@@ -220,11 +229,14 @@ final class CentralVaultModel {
     /// Remove server on this Mac, after the hub took it: the mark is written first, and the unpin of that machine goes
     /// in the next round, which this starts at once. The removal never waits for the unpin and never fails because of
     /// it. Before the model has read its fleet, the mark waits in this session and is written at the first reading.
+    /// It is the one change that clears this Mac's record of the key that it last signed for that machine
+    /// (`MacVaultPins`), so the Add server after it gives the machine a first pin.
     func removed(_ machine: String, store: FleetStore) {
         let at = Date().timeIntervalSince1970
         addedHere.remove(machine)
         if let fleet = reading?.fleetID {
             changeRemovals { $0.removed(machine, fleet: fleet, at: at, unpin: true) }
+            MacVaultPins.note(.removed, machine: machine, hub: hub, fleet: fleet)
         } else {
             removedHere[machine] = at
         }
@@ -242,11 +254,14 @@ final class CentralVaultModel {
     /// Add server for `machine` on this Mac: a server that joined with a join code of this Mac. Its mark goes, so it
     /// gets the trust step of a new server again. The change always goes to the keeper: when the file gives no record
     /// now, it waits, and it takes away a mark that only the file holds; when there is no mark, it writes nothing.
+    /// Try again on a server's row runs this first: this Mac's record of the key that it last signed for the machine
+    /// stays as it is (`MacVaultPins.Change.added`).
     func added(_ machine: String) {
         removedHere[machine] = nil
         if let fleet = reading?.fleetID {
             let marked = removals.record.marks(fleet: fleet)[machine] != nil
             changeRemovals { $0.added(machine, fleet: fleet) }
+            MacVaultPins.note(.added, machine: machine, hub: hub, fleet: fleet)
             guard marked else { return }
         } else {
             addedHere.insert(machine)
@@ -662,7 +677,10 @@ final class CentralVaultModel {
     /// One server: its vault key read over SSH, and pinned when it is the key the hub reports for it. The address of
     /// the connection must be that server's, as this Mac's own Tailscale says (`MacNetwork.device(of:)`), because it
     /// can come from the hub's record. A Linux server's key is read as root from its broker's configuration; a Mac's
-    /// is Founderizer Vault's own `status`, asked as the user it serves, with no `sudo` (DevOps plan V4).
+    /// (by the hub's word and this Mac's Tailscale both, `trustTarget`) is Founderizer Vault's own `status`, asked as the
+    /// user it serves, with no `sudo` (DevOps plan V4). A Mac server whose key this Mac signed before gets no other key
+    /// (`MacVaultPin`, VAULT.md limit 10): the guard asks before the read and again with the read key, and the record
+    /// takes each key that it signs.
     private func trust(_ name: String, _ store: FleetStore) async {
         do {
             guard store.hub == hub, store.isFresh, let database = store.state?.db, let fleet = reading?.fleetID,
@@ -675,22 +693,28 @@ final class CentralVaultModel {
             if isRemoved(name) { servers[name] = nil; return }
             if let problem = clockProblem(store) { throw Stop(problem) }
             let kind = try await HubClient().servers(hub: hub, database: database).servers.first(where: { $0.name == name })?.kind
-            let (target, mac) = try await trustTarget(name, kind: kind, database: database)
+            let (target, mac, os) = try await trustTarget(name, kind: kind, database: database)
+            // A Mac server whose key this Mac signed before gets no other key: another bound key stops here, with no SSH
+            // session, and another read key after the read (`MacVaultPin`, VAULT.md limit 10).
+            let otherKey = String(l10n: "The vault key on \(name) is not the one the hub reports for it. Founderizer pinned nothing.")
+            let guarded = MacVaultPin(kind: kind, os: os, record: MacVaultPins.records(hub: hub, fleet: fleet)[name])
+            guard guarded.mayRead(bound: reported) else { throw Stop(otherKey) }
             let program = mac ? CentralVaultRemote.readMacVaultKey : CentralVaultRemote.readBrokerKey
             let answer = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
                                               timeout: 120)
             guard let found = CentralVaultRemote.brokerKey(in: answer.output) else {
                 throw Stop(Self.unread(answer, target: target, machine: name, what: String(l10n: "its vault key")))
             }
-            guard found == reported else {
-                throw Stop(String(l10n: "The vault key on \(name) is not the one the hub reports for it. Founderizer pinned nothing."))
-            }
+            guard let signed = guarded.signs(found: found, bound: reported) else { throw Stop(otherKey) }
             // The owner removed it on this Mac while its key was read: it gets no pin (package 4 of the vault's gates).
             if isRemoved(name) { servers[name] = nil; return }
-            let statement = OwnerStatement.pin(fleet: fleet, machine: name, recipient: found)
+            let statement = OwnerStatement.pin(fleet: fleet, machine: name, recipient: signed)
+            let signature = try key.sign(statement)
+            // The record takes the key before the signature leaves this Mac: a hub that refuses the pin has it all the same.
+            if guarded.keeps { MacVaultPins.note(.signed(signed), machine: name, hub: hub, fleet: fleet) }
             _ = try await VaultClient().pin(hub: hub, database: database, client: store.installation, statement: statement,
-                                            signature: key.sign(statement))
-            confirmedPins[name] = found
+                                            signature: signature)
+            confirmedPins[name] = signed
             signedAt[name] = Date().timeIntervalSince1970
             servers[name] = nil
             resigned.insert(name)           // the key swap step reads that server's vault again
@@ -713,24 +737,87 @@ final class CentralVaultModel {
     }
 
     /// **How this Mac reaches one server for the trust step, and whether it reads that server as a Mac** (R2-M1 of the
-    /// validation of 23 November 2026): the connection that this Mac keeps, else the fleet's record, at an address that
-    /// this Mac's own Tailscale names as that server; then `CentralVaultRemote.trustRead` with the hub's `kind` and the
-    /// node's Tailscale `OS`, read from the same status. A Mac by both words is read as the connection's user, with no
-    /// `sudo`; each other server as root, with no record's user that is not root. `record` and `status`: only a test
-    /// gives them.
+    /// validation of 23 November 2026): `trustPeer`, then `trustReach`, from one read of this Mac's Tailscale status.
+    /// `os` is that node's Tailscale `OS`, which the Mac server pin's guard takes too (`MacVaultPin`). `record` and
+    /// `status`: only a test gives them.
     func trustTarget(_ name: String, kind: String?, database: String, record: MachineReach? = nil,
-                     status: () async -> String? = { await MacNetwork.status() }) async throws -> (target: InstallTarget, mac: Bool) {
-        var target = try await self.target(name, database: database, record: record, rootOnly: false)
+                     status: () async -> String? = { await MacNetwork.status() }) async throws
+        -> (target: InstallTarget, mac: Bool, os: Set<String>) {
+        let peer = try await trustPeer(name, database: database, record: record, status: status)
+        let (target, mac) = try trustReach(name, kind: kind, peer: peer)
+        return (target, mac, peer.os)
+    }
+
+    /// The trust step's connection to one server: the one that this Mac keeps, else the fleet's record, at an address
+    /// that this Mac's own Tailscale names as that server, with that node's Tailscale `OS`. Else it stops, and no SSH
+    /// session opens.
+    func trustPeer(_ name: String, database: String, record: MachineReach? = nil,
+                   status: () async -> String? = { await MacNetwork.status() }) async throws
+        -> (target: InstallTarget, os: Set<String>) {
+        let target = try await self.target(name, database: database, record: record, rootOnly: false)
         let peer = MacNetwork.peer(of: target.host, in: await status() ?? "")
         guard peer?.name == name else {
             throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(name). Founderizer pinned nothing."))
         }
-        guard let read = CentralVaultRemote.trustRead(kind: kind, os: peer?.os ?? [], user: target.user,
+        return (target, peer?.os ?? [])
+    }
+
+    /// `CentralVaultRemote.trustRead` with the hub's `kind` and the node's `OS`: a Mac by both words is read as the
+    /// connection's user, with no `sudo`; each other server as root, with no record's user that is not root.
+    func trustReach(_ name: String, kind: String?, peer: (target: InstallTarget, os: Set<String>)) throws
+        -> (target: InstallTarget, mac: Bool) {
+        var target = peer.target
+        guard let read = CentralVaultRemote.trustRead(kind: kind, os: peer.os, user: target.user,
                                                       kept: InstallTargets.target(machine: name, hub: hub) != nil) else {
             throw Stop(String(l10n: "The fleet has no SSH connection to \(name) on record. Record one on its page in Servers."))
         }
         if read == .agents { target.becomeRoot = false; target.macServer = true }
         return (target, read == .agents)
+    }
+
+    /// **The first run's seed of this Mac's record** (`MacVaultPin.seed`): the Mac servers that this Mac pinned before it
+    /// kept a record get one read each, which signs nothing, so that the guard covers them at once and not only after
+    /// their next re-sign. The record takes the read key only when it is the hub's pin and the hub's bound key too. A
+    /// Linux server gets no SSH session. A read that fails is tried again after `VaultTries.wait`, at most
+    /// `VaultTries.most` times in a row in one run of the app, with no row.
+    private func seedRound(_ store: FleetStore) async {
+        guard store.hub == hub, store.isFresh, let database = store.state?.db, database == self.database,
+              let reading, let fleet = reading.fleetID else { return }
+        let due = MacVaultPin.seedsDue(reading, records: MacVaultPins.records(hub: hub, fleet: fleet), removed: facts.removed,
+                                       removedKnown: removals.known, tries: seeds, now: Date().timeIntervalSince1970)
+        guard !due.isEmpty, let servers = try? await HubClient().servers(hub: hub, database: database).servers else { return }
+        for name in due {
+            await seed(name, kind: servers.first(where: { $0.name == name })?.kind, database: database, fleet: fleet)
+        }
+    }
+
+    private func seed(_ name: String, kind: String?, database: String, fleet: String) async {
+        do {
+            guard let machine = reading?.machines.first(where: { $0.machine == name }), !isRemoved(name) else {
+                seeds[name] = MacVaultPin.seedEnded(at: Date().timeIntervalSince1970)
+                return
+            }
+            let peer = try await trustPeer(name, database: database)
+            guard MacVaultPin(kind: kind, os: peer.os, record: nil).covered else {
+                seeds[name] = MacVaultPin.seedEnded(at: Date().timeIntervalSince1970)
+                return
+            }
+            let (target, mac) = try trustReach(name, kind: kind, peer: peer)
+            let program = mac ? CentralVaultRemote.readMacVaultKey : CentralVaultRemote.readBrokerKey
+            let answer = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
+                                              timeout: 120)
+            guard let found = CentralVaultRemote.brokerKey(in: answer.output) else {
+                throw Stop(Self.unread(answer, target: target, machine: name, what: String(l10n: "its vault key")))
+            }
+            if !isRemoved(name),
+               let kept = MacVaultPin.seed(record: MacVaultPins.records(hub: hub, fleet: fleet)[name], pinned: machine.pinned,
+                                           bound: machine.broker_recipient, found: found) {
+                MacVaultPins.note(.seeded(kept), machine: name, hub: hub, fleet: fleet)
+            }
+            seeds[name] = MacVaultPin.seedEnded(at: Date().timeIntervalSince1970)
+        } catch {
+            seeds[name] = VaultTries.failed(after: seeds[name], at: Date().timeIntervalSince1970, reason: Self.words(error))
+        }
     }
 
     /// How this Mac reaches one machine: the connection it keeps for it, else the fleet's own record of it. A kept user

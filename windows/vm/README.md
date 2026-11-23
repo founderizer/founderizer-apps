@@ -45,7 +45,7 @@ In this folder:
 | `make-setup-iso.sh` | makes the setup disc |
 | `launcher/` | the launcher's source, its build script and its one entitlement |
 | `setup/install-dotnet.ps1` | installs the .NET 10 SDK in the VM |
-| `setup/build-window.ps1` | builds and signs the window of `../Founderizer.Windows` in the VM (`-Proofs`: the proofs' build) |
+| `setup/build-window.ps1` | builds and signs the window of `../Founderizer.Windows` in the VM (`-Proofs`: the proofs' build; `-Arch x64`: the x64 build on an x64 PC, as `cloud/cloud.sh build` runs it) |
 | `readings/` | the readings: keys in the TPM, start time with memory at rest, the processor at rest (`cpu-at-rest.ps1`) |
 | `pictures/` | the proofs with pictures: a scripted run and the writes (`ui.ps1`), frames of motion (`frames.ps1`, `motion.py`, `changes.py`), comparisons with the approved pictures (`compare.py`, `glyphs.py`, `sheet.py`), the desktop for pictures (`look.ps1`) |
 | `scratch_hub.py` | a scratch hub on the Mac that the VM's app reads, and the changes for the proofs |
@@ -53,6 +53,7 @@ In this folder:
 | `test_channel.py` | the test channel of the update on the Mac: manifests that a test key signed, and the builds' zips, over HTTPS on 127.0.0.1 |
 | `../release/build-release.ps1` | the build of a release: the zip and the setup of each kind of PC (`../release/README.md`) |
 | `release-proofs/` | the release's proofs in the VM: the install's state (`state.ps1`), and the zips whose file has another signer or none (`make-refusals.ps1`) |
+| `cloud/` | the x64 build machines at Azure, one for each builder lane, with `vm.sh`'s verbs over SSH (`cloud/README.md`); `vm.sh` reaches one with `FZ_VM_HOST` |
 | `proof-a/` | the rig of step 2's proof A: the clean PC beside the build VM, the setup with the welcome page, the window watcher, the hidden prompt, the read of the hub's team and its reference, the servers of run 2 (see "Proof A: the rig") |
 
 ## The downloads

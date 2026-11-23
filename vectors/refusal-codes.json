@@ -65,6 +65,8 @@
     "mcp_registry_away": "the MCP Registry cannot be reached now",
     "mcp_registry_no_list": "the MCP Registry gave no list of servers",
     "mcp_no_endpoints": "the MCP server {server} gave no OAuth endpoints: {reason}",
+    "mcp_url_replaced": "the MCP server {server} has text in its url that a session would replace with one of its own values, so no session loads it and it takes no sign-in. Change or remove the server with the save_mcp_server tool of an AI session that has the Founderizer tools",
+    "mcp_token_refused": "Fleet did not keep the sign-in of the MCP server {server}: the server gave an access token that a session could fill with one of its own values, or that no header takes. A new sign-in gets the same kind of token, so the server's maker must change it",
     "server_name_kept": "This server is called {name} in Tailscale, and Fleet keeps that name for itself. Rename this server in Tailscale, then run the line again.",
     "browser_shell_off": "{agent} cannot have a browser on a Linux server while its Shell box is off: turn its Shell box on, or its Browser box off",
     "browser_server": "{server} runs no browser for an agent: in this version only a Linux server with x86 Ubuntu 24.04 or 26.04 that is not the hub's own server runs one",
@@ -184,6 +186,12 @@
     "mcp_no_endpoints": [
       "server",
       "reason"
+    ],
+    "mcp_url_replaced": [
+      "server"
+    ],
+    "mcp_token_refused": [
+      "server"
     ],
     "server_name_kept": [
       "name"

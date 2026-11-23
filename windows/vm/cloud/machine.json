@@ -1,0 +1,279 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "0.0.0.1",
+  "metadata": {
+    "about": "One Windows build machine of a builder lane (cloud.sh make): one resource group with one x64 Windows Server 2025 Datacenter VM (Desktop Experience, licence included, Gen2, Trusted launch with Secure Boot and a vTPM), its Premium SSD, NIC, static public IPv4, network and network security group, Azure's auto-shutdown at night (it deallocates the VM), and one role assignment: the VM's own identity may read, start, restart and deallocate this VM only (DevTest Labs User at the VM's scope), for the machine's idle rule. The only inbound rule is SSH from one address (this Mac's public address). No RDP rule. No boot diagnostics. Every resource has the tags temporary=false, build=windows and lane."
+  },
+  "parameters": {
+    "group": { "type": "string" },
+    "location": { "type": "string" },
+    "name": { "type": "string" },
+    "lane": { "type": "string" },
+    "size": { "type": "string", "defaultValue": "Standard_D8s_v6" },
+    "prefix": {
+      "type": "string",
+      "metadata": { "description": "The network's /24, one for each lane: 10.71.<lane>.0/24." }
+    },
+    "from": {
+      "type": "string",
+      "metadata": { "description": "The one public IPv4 address that may reach SSH." }
+    },
+    "adminUser": { "type": "string", "defaultValue": "builder" },
+    "adminPassword": {
+      "type": "securestring",
+      "metadata": { "description": "Random, made by cloud.sh and given on standard input; the machine's setup replaces it with a password made in the machine." }
+    },
+    "diskController": {
+      "type": "string",
+      "defaultValue": "NVMe",
+      "allowedValues": [ "NVMe", "SCSI" ],
+      "metadata": { "description": "NVMe for the v6 sizes, which have no SCSI." }
+    },
+    "shutdownTime": { "type": "string", "defaultValue": "0100" },
+    "shutdownZone": { "type": "string", "defaultValue": "Romance Standard Time" }
+  },
+  "variables": {
+    "tags": {
+      "temporary": "false",
+      "build": "windows",
+      "lane": "[parameters('lane')]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('group')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('name')]",
+      "resourceGroup": "[parameters('group')]",
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('group'))]"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "expressionEvaluationOptions": { "scope": "inner" },
+        "parameters": {
+          "location": { "value": "[parameters('location')]" },
+          "name": { "value": "[parameters('name')]" },
+          "size": { "value": "[parameters('size')]" },
+          "prefix": { "value": "[parameters('prefix')]" },
+          "from": { "value": "[parameters('from')]" },
+          "adminUser": { "value": "[parameters('adminUser')]" },
+          "adminPassword": { "value": "[parameters('adminPassword')]" },
+          "tags": { "value": "[variables('tags')]" },
+          "diskController": { "value": "[parameters('diskController')]" },
+          "shutdownTime": { "value": "[parameters('shutdownTime')]" },
+          "shutdownZone": { "value": "[parameters('shutdownZone')]" }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "0.0.0.1",
+          "parameters": {
+            "location": { "type": "string" },
+            "name": { "type": "string" },
+            "size": { "type": "string" },
+            "prefix": { "type": "string" },
+            "from": { "type": "string" },
+            "adminUser": { "type": "string" },
+            "adminPassword": { "type": "securestring" },
+            "tags": { "type": "object" },
+            "diskController": { "type": "string" },
+            "shutdownTime": { "type": "string" },
+            "shutdownZone": { "type": "string" }
+          },
+          "variables": {
+            "vm": "[resourceId('Microsoft.Compute/virtualMachines', parameters('name'))]",
+            "devTestLabsUser": "76283e04-6283-4c54-8f91-bcf1374a3c64"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-nsg')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "ssh-from-one-address",
+                    "properties": {
+                      "priority": 100,
+                      "direction": "Inbound",
+                      "access": "Allow",
+                      "protocol": "Tcp",
+                      "sourceAddressPrefix": "[concat(parameters('from'), '/32')]",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "22"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-vnet')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('name'), '-nsg'))]"
+              ],
+              "properties": {
+                "addressSpace": { "addressPrefixes": [ "[parameters('prefix')]" ] },
+                "subnets": [
+                  {
+                    "name": "build",
+                    "properties": {
+                      "addressPrefix": "[parameters('prefix')]",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('name'), '-nsg'))]"
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-ip')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": { "name": "Standard" },
+              "properties": {
+                "publicIPAllocationMethod": "Static",
+                "publicIPAddressVersion": "IPv4"
+              }
+            },
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2023-09-01",
+              "name": "[concat(parameters('name'), '-nic')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', concat(parameters('name'), '-vnet'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('name'), '-ip'))]"
+              ],
+              "properties": {
+                "networkSecurityGroup": {
+                  "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('name'), '-nsg'))]"
+                },
+                "ipConfigurations": [
+                  {
+                    "name": "ipv4",
+                    "properties": {
+                      "privateIPAllocationMethod": "Dynamic",
+                      "subnet": {
+                        "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(parameters('name'), '-vnet'), 'build')]"
+                      },
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('name'), '-ip'))]",
+                        "properties": { "deleteOption": "Delete" }
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": { "type": "SystemAssigned" },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('name'), '-nic'))]"
+              ],
+              "properties": {
+                "hardwareProfile": { "vmSize": "[parameters('size')]" },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "MicrosoftWindowsServer",
+                    "offer": "WindowsServer",
+                    "sku": "2025-datacenter-g2",
+                    "version": "latest"
+                  },
+                  "osDisk": {
+                    "name": "[concat(parameters('name'), '-disk')]",
+                    "createOption": "FromImage",
+                    "deleteOption": "Delete",
+                    "diskSizeGB": 128,
+                    "managedDisk": { "storageAccountType": "Premium_LRS" }
+                  },
+                  "diskControllerType": "[parameters('diskController')]"
+                },
+                "osProfile": {
+                  "computerName": "[parameters('name')]",
+                  "adminUsername": "[parameters('adminUser')]",
+                  "adminPassword": "[parameters('adminPassword')]",
+                  "windowsConfiguration": {
+                    "provisionVMAgent": true,
+                    "enableAutomaticUpdates": false,
+                    "patchSettings": { "patchMode": "Manual" }
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('name'), '-nic'))]",
+                      "properties": { "deleteOption": "Delete" }
+                    }
+                  ]
+                },
+                "securityProfile": {
+                  "securityType": "TrustedLaunch",
+                  "uefiSettings": { "secureBootEnabled": true, "vTpmEnabled": true }
+                },
+                "diagnosticsProfile": { "bootDiagnostics": { "enabled": false } }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(variables('vm'), 'idle-rule', variables('devTestLabsUser'))]",
+              "scope": "[concat('Microsoft.Compute/virtualMachines/', parameters('name'))]",
+              "dependsOn": [ "[variables('vm')]" ],
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('devTestLabsUser'))]",
+                "principalId": "[reference(variables('vm'), '2024-03-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "description": "The build machine's idle rule (cloud.sh): it may read, start, restart and deallocate this VM only."
+              }
+            },
+            {
+              "type": "Microsoft.DevTestLab/schedules",
+              "apiVersion": "2018-09-15",
+              "name": "[concat('shutdown-computevm-', parameters('name'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "dependsOn": [ "[variables('vm')]" ],
+              "properties": {
+                "status": "Enabled",
+                "taskType": "ComputeVmShutdownTask",
+                "dailyRecurrence": { "time": "[parameters('shutdownTime')]" },
+                "timeZoneId": "[parameters('shutdownZone')]",
+                "targetResourceId": "[variables('vm')]",
+                "notificationSettings": { "status": "Disabled", "timeInMinutes": 30 }
+              }
+            }
+          ],
+          "outputs": {
+            "address": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('name'), '-ip'))).ipAddress]"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

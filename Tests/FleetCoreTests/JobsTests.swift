@@ -202,6 +202,17 @@ struct JobsTests {
         }
         times = ColumnTimes()
         let first = try reading(Self.now - 3600)
+        let owners = Set(first.tasks.filter { !$0.isTerminal }.map(\.owner))
+        let cards = ([nil] + owners.map(Optional.some)).flatMap { owner in
+            first.board(period: .all, agent: owner).values.flatMap { $0 }
+        }
+        let tracked = first.jobs(of: nil, includingPartsFor: owners)
+        #expect(Set(tracked.map(\.id)) == Set(cards.map(\.id)))
+        #expect(tracked.count == Set(cards.map(\.id)).count)
+        for card in cards {
+            let match = try #require(tracked.first { $0.id == card.id })
+            #expect(match.column == card.column && match.columnSince == card.columnSince)
+        }
         times.note(first)
         let before = try #require(first.board(period: .all, agent: "dev", calendar: Self.utc)[.inProgress]?.first)
         let second = try reading(Self.now - 5)

@@ -766,7 +766,9 @@ public enum MCP {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty, !value.contains(where: \.isWhitespace) else { return nil }
         if !value.contains("://") { value = "https://" + value }
-        guard value.count <= 300, let parts = URLComponents(string: value), let host = parts.host, !host.isEmpty,
+        // The hub refuses a text that a session would replace with its own variable (`lifecycle.MCP_EXPANDS`)
+        guard !["${", "{env:", "{file:"].contains(where: { value.contains($0) }),
+              value.count <= 300, let parts = URLComponents(string: value), let host = parts.host, !host.isEmpty,
               parts.user == nil, parts.password == nil, parts.fragment == nil,
               parts.scheme == "https" || (parts.scheme == "http" && (host == "127.0.0.1" || host == "localhost"))
         else { return nil }
@@ -801,12 +803,17 @@ public enum MCP {
     }
 
     /// One argument: 1 to 300 visible ASCII characters, none of which a shell reads (`"'|;&$` and the backquote, `<>`),
-    /// so a line that looks like a shell line is never taken for one. The hub takes more (`lifecycle.plain_value`).
+    /// so a line that looks like a shell line is never taken for one, and no text that a session would replace
+    /// (`replaced`). The hub takes more (`lifecycle.plain_value`).
     static func argument(_ text: String) -> Bool {
         (1...MCPRules.argMost).contains(text.unicodeScalars.count)
             && text.unicodeScalars.allSatisfy { (0x21...0x7e).contains($0.value) }
-            && !text.contains(where: { "\"'|;&$`<>".contains($0) })
+            && !text.contains(where: { "\"'|;&$`<>".contains($0) }) && !replaced(text)
     }
+
+    /// A text of `{env:...}` or `{file:...}`, which OpenCode replaces with a variable or a file of the session: the hub
+    /// refuses it in a setting and an argument (`lifecycle.MCP_EXPANDS`), and `$` is refused there already.
+    static func replaced(_ text: String) -> Bool { text.contains("{env:") || text.contains("{file:") }
 
     /// **What the Program line runs** (UI-API.md 1.187): a package with the program that servers publish to run it —
     /// `npx [-y] <package>[@<version>]` or `npx [-y] -p <package> <program>`, and `bunx` and `pnpm dlx` the same, for
@@ -947,11 +954,12 @@ public enum MCP {
     /// IGNORECASE.
     public static func isRefused(_ name: String) -> Bool { whole(name.uppercased(), MCPRules.refusedNames) }
 
-    /// A plain value of a program server as the hub takes it (`lifecycle.plain_value`): at most 500 characters, no `$`
-    /// (Claude Code reads `${NAME}` in its MCP file), no character above U+FFFF (Codex's TOML takes no surrogate pair),
-    /// nothing that Python's `isprintable` refuses, and no URL with a password in it.
+    /// A plain value of a program server as the hub takes it (`lifecycle.plain_value`, `mcp_written`): at most 500
+    /// characters, no `$` (Claude Code reads `${NAME}` in its MCP file), no `{env:` or `{file:` (`replaced`), no
+    /// character above U+FFFF (Codex's TOML takes no surrogate pair), nothing that Python's `isprintable` refuses,
+    /// and no URL with a password in it.
     public static func plainValue(_ value: String) -> Bool {
-        value.unicodeScalars.count <= MCPRules.valueMost && !value.contains("$")
+        value.unicodeScalars.count <= MCPRules.valueMost && !value.contains("$") && !replaced(value)
             && value.unicodeScalars.allSatisfy { $0.value <= 0xFFFF && printable($0) }
             && value.range(of: MCPRules.credentialURL, options: .regularExpression) == nil
     }

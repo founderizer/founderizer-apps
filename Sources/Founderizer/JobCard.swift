@@ -91,6 +91,7 @@ struct JobCard: View {
 
     var body: some View {
         let counts = job.countWords
+        let result = ended && job.failed == nil ? job.result : nil
         VStack(alignment: .leading, spacing: 8) {
             let name = Text(job.title).font(read ? FormMetrics.text : FormMetrics.title)
                 .foregroundStyle(read ? FleetStyle.muted : FleetStyle.text).lineLimit(2).multilineTextAlignment(.leading)
@@ -113,7 +114,7 @@ struct JobCard: View {
                     Text(needs).lineLimit(2).foregroundStyle(.orange)
                 }
             }
-            if ended, job.failed == nil, let result = job.result {
+            if let result {
                 Text(result).foregroundStyle(read ? FleetStyle.muted : FleetStyle.text.opacity(0.8)).lineLimit(3)
                     .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
             }
@@ -166,7 +167,7 @@ struct JobCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([job.title, age, showsAgent ? job.agent.agentLabel : nil, needs ?? words,
                              // as much of the result as the card shows, and not a whole report
-                             ended && job.failed == nil ? job.result.map { String($0.prefix(280)) } : nil,
+                             result.map { String($0.prefix(280)) },
                              counts.map { [$0.plain, $0.failed].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ") }]
             .compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(.isButton)

@@ -297,7 +297,9 @@ import Testing
     /// back to `self.target`, and its stop is gone, so the hub's record alone chooses the machine whose root prints
     /// the key that becomes the pin; the install loses the compare with the pin that this Mac holds
     /// (`CentralVaultPins.refusal`), so an update pins any key that it prints. No other test runs these steps, which
-    /// need the owner's Keychain and a hub.
+    /// need the owner's Keychain and a hub. The trust step and the first run's seed give the Mac server pin's guard the
+    /// node's Tailscale OS from that same read (`MacVaultPin`, VAULT.md limit 10). Bug: the guard gets no OS, so a hub
+    /// that calls a Mac Linux takes the guard away; the seed opens an SSH session before it asks the guard.
     @Test func eachRootReadOfTheCentralVaultTakesHubTarget() throws {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Founderizer/CentralVaultSection.swift")
@@ -318,6 +320,39 @@ import Testing
         let end = try #require(source.range(of: "\n    }\n", range: trust.upperBound..<source.endIndex))
         let body = source[trust.lowerBound..<end.lowerBound]
         #expect(body.contains("try await trustTarget(name, kind: kind, database: database)") && !body.contains("self.target("))
+        #expect(body.contains("let (target, mac, os) = try await trustTarget(") &&
+                body.contains("MacVaultPin(kind: kind, os: os, record:"), "the guard takes the trust step's OS")
+        let seed = try #require(source.range(of: "private func seed("), "seed is gone")
+        let seedEnd = try #require(source.range(of: "\n    }\n", range: seed.upperBound..<source.endIndex))
+        let seedBody = source[seed.lowerBound..<seedEnd.lowerBound]
+        let covered = try #require(seedBody.range(of: "MacVaultPin(kind: kind, os: peer.os, record: nil).covered"))
+        let reach = try #require(seedBody.range(of: "try trustReach(name, kind: kind, peer: peer)"))
+        let ssh = try #require(seedBody.range(of: "SSHRun.run("))
+        #expect(covered.lowerBound < reach.lowerBound && reach.lowerBound < ssh.lowerBound && !seedBody.contains("self.target("),
+                "the seed asks the guard before any SSH, and reads a Mac only by both words")
+        // The guard's own calls (path E and MUST A of mac-server-pin-design.md): no SSH session before `mayRead`, only the
+        // key that `signs` gives is signed, the record takes it before the signature leaves this Mac, the seed keeps only
+        // what `MacVaultPin.seed` names, Try again (`added`) keeps the record, and only Remove server clears it.
+        let mayRead = try #require(body.range(of: "guarded.mayRead(bound: reported)"), "the guard's read check is gone")
+        let trustSSH = try #require(body.range(of: "SSHRun.run("))
+        let noted = try #require(body.range(of: "MacVaultPins.note(.signed(signed)"), "the record's write is gone")
+        let sent = try #require(body.range(of: "VaultClient().pin("))
+        #expect(mayRead.lowerBound < trustSSH.lowerBound && noted.lowerBound < sent.lowerBound
+                && body.contains("guarded.signs(found: found, bound: reported)") && body.contains("recipient: signed"),
+                "the trust step signs only the guard's key, and the record takes it first")
+        #expect(seedBody.contains("MacVaultPin.seed(record: MacVaultPins.records(") && seedBody.contains(".seeded(kept)"))
+        let added = try #require(source.range(of: "    func added("), "added is gone")
+        let addedEnd = try #require(source.range(of: "\n    }\n", range: added.upperBound..<source.endIndex))
+        let addedBody = source[added.lowerBound..<addedEnd.lowerBound]
+        #expect(addedBody.contains("MacVaultPins.note(.added") && !addedBody.contains("MacVaultPins.note(.removed"),
+                "Try again keeps the record")
+        let removed = try #require(source.range(of: "    func removed("), "removed is gone")
+        let removedEnd = try #require(source.range(of: "\n    }\n", range: removed.upperBound..<source.endIndex))
+        #expect(source[removed.lowerBound..<removedEnd.lowerBound].contains("MacVaultPins.note(.removed"))
+        #expect(source.components(separatedBy: "MacVaultPins.note(.removed").count - 1 == 2
+                && source.contains("for machine in marked.keys { MacVaultPins.note(.removed")
+                && source.contains("for machine in joined { MacVaultPins.note(.added"),
+                "only Remove server clears the record: in removed, and in the read for a press before the fleet was known")
     }
 
     /// **The central vault's install, update and owner-key read take only the hub's machine** (`CentralVaultModel.
@@ -347,7 +382,8 @@ import Testing
     /// (`CentralVaultModel.trustTarget`; R2-M1 of the validation of 23 November 2026). Bugs: the hub's word "mac" alone
     /// lets the record's user in, so on a Linux server that the hub calls a Mac the step logs in as an agent's OS user,
     /// whose forced command prints the agent's key, and the Mac pins it; the step reads the `OS` of another node than
-    /// the one that it names; a Mac by both words loses the read as the agents' user.
+    /// the one that it names; a Mac by both words loses the read as the agents' user; the Mac server pin's guard gets no
+    /// `OS`, so a Mac that the hub calls Linux gets no record at its first pin.
     @Test func theTrustStepReadsAServerAsAMacOnlyByBothWords() async throws {
         _ = try await ViewHost.onMainLoop { 0 }          // the test's defaults, before anything reads them
         let status = #"""
@@ -367,6 +403,8 @@ import Testing
             address: "100.80.1.4", user: "owner-example", port: 22), status: { status })
         #expect(!linux.mac && !linux.target.macServer)
         #expect(mac.mac && mac.target.macServer && !mac.target.becomeRoot && mac.target.user == "owner-example")
+        // the Mac server pin's guard takes the node's own `OS` from this same read (`MacVaultPin`)
+        #expect(linux.os == ["linux"] && mac.os == ["macOS"])
     }
 
     /// **A closer look keeps no connection with a user of the fleet's record that is not root**

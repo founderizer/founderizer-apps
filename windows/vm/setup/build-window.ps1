@@ -1,10 +1,12 @@
 # Builds the empty window of app/windows/Founderizer.Windows in the build VM and signs it with a test key
 # (README.md in the folder above).
 #
-#   build-window.ps1 -Source C:\fz\src\windows\Founderizer.Windows [-Out C:\fz\out] [-Proofs]
+#   build-window.ps1 -Source C:\fz\src\windows\Founderizer.Windows [-Out C:\fz\out] [-Proofs] [-Arch x64]
 #
 # With -Proofs it builds the proofs' build into <Out>\arm64-proofs (-p:FounderizerProofs=true: the sample fleet and
 # the readings' variables, Proofs.cs), and no x64; without it, the release build into <Out>\arm64, which reads none.
+# With -Arch x64 (an x64 PC: the build machines at Azure, ../cloud/cloud.sh build) it publishes the x64 build in place of
+# the ARM64 one, into <Out>\x64 or <Out>\x64-proofs, and signs that one; step 2 is then the publish itself.
 #
 # Copy app/windows/Directory.Build.props, global.json and nuget.config beside the project folder first: they are
 # the shared build settings of every Windows project (README.md in the folder above shows the commands).
@@ -19,7 +21,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Source,
     [string]$Out = 'C:\fz\out',
-    [switch]$Proofs
+    [switch]$Proofs,
+    [ValidateSet('arm64', 'x64')][string]$Arch = 'arm64'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,17 +31,18 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
 $dotnet = "$env:ProgramFiles\dotnet\dotnet.exe"
 $project = Join-Path $Source 'Founderizer.Windows.csproj'
-$arm64 = Join-Path $Out $(if ($Proofs) { 'arm64-proofs' } else { 'arm64' })
+$built = Join-Path $Out $(if ($Proofs) { "$Arch-proofs" } else { $Arch })
+$platform = if ($Arch -eq 'x64') { 'x64' } else { 'ARM64' }
 # Always an array: an if that gives one string would splat that string's letters, one by one.
 $extra = @(if ($Proofs) { '-p:FounderizerProofs=true' })
 
 function Step([string]$name) { Write-Output ("== {0} {1}" -f (Get-Date -Format o), $name) }
 
-Step 'publish ARM64'
-& $dotnet publish $project -c Release -r win-arm64 -p:Platform=ARM64 -o $arm64 -nologo -clp:NoSummary @extra
-if ($LASTEXITCODE -ne 0) { throw "the ARM64 publish failed: exit $LASTEXITCODE" }
+Step "publish $platform"
+& $dotnet publish $project -c Release -r "win-$Arch" -p:Platform=$platform -o $built -nologo -clp:NoSummary @extra
+if ($LASTEXITCODE -ne 0) { throw "the $platform publish failed: exit $LASTEXITCODE" }
 
-if (-not $Proofs) {
+if (-not $Proofs -and $Arch -eq 'arm64') {
 Step 'build x64'
 & $dotnet build $project -c Release -r win-x64 -p:Platform=x64 -nologo -clp:NoSummary
 if ($LASTEXITCODE -ne 0) { throw "the x64 build failed: exit $LASTEXITCODE" }
@@ -67,13 +71,15 @@ Write-Output "certificate $($certificate.Thumbprint), $subject, until $($certifi
 
 Step 'sign'
 foreach ($name in 'Founderizer.App.exe', 'Founderizer.App.dll') {
-    $file = Join-Path $arm64 $name
+    $file = Join-Path $built $name
     $result = Set-AuthenticodeSignature -FilePath $file -Certificate $certificate -HashAlgorithm SHA256
     if ($result.Status -ne 'Valid') { throw "signing $name failed: $($result.Status) $($result.StatusMessage)" }
 }
-Get-AuthenticodeSignature -FilePath (Join-Path $arm64 'Founderizer.App.exe'), (Join-Path $arm64 'Founderizer.App.dll') |
+Get-AuthenticodeSignature -FilePath (Join-Path $built 'Founderizer.App.exe'), (Join-Path $built 'Founderizer.App.dll') |
     Format-Table -AutoSize @{ n = 'File'; e = { Split-Path $_.Path -Leaf } }, Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } } |
     Out-String | Write-Output
 
-$files = Get-ChildItem -Path $arm64 -Recurse -File
-Write-Output ("ARM64 build: {0}, {1} files, {2:F1} MB" -f $arm64, $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB))
+$files = Get-ChildItem -Path $built -Recurse -File
+$exe = Join-Path $built 'Founderizer.App.exe'
+$machine = [BitConverter]::ToUInt16([IO.File]::ReadAllBytes($exe), [BitConverter]::ToInt32([IO.File]::ReadAllBytes($exe), 0x3C) + 4)
+Write-Output ("{0} build: {1}, {2} files, {3:F1} MB, PE machine 0x{4:x4}" -f $platform, $built, $files.Count, (($files | Measure-Object Length -Sum).Sum / 1MB), $machine)

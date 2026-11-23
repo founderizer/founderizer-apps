@@ -106,11 +106,15 @@ struct MCPTests {
         #expect(MCP.address(" mcp.acme.example ") == "https://mcp.acme.example")   // a pasted host
         #expect(MCP.address("http://127.0.0.1:5015/mcp") == "http://127.0.0.1:5015/mcp")
         for bad in ["http://mcp.example.com/", "https://u:p@mcp.example.com/", "https://mcp.example.com/#x",
-                    "ftp://mcp.example.com/", "https://", "", "https://a b/", String(repeating: "x", count: 400)] {
+                    "ftp://mcp.example.com/", "https://", "", "https://a b/", String(repeating: "x", count: 400),
+                    "https://mcp.example.com/${FLEET_MCP_CRM}", "https://mcp.example.com/{env:SHOP_KEY}",
+                    "https://mcp.example.com/{file:/srv/key}"] {
             #expect(MCP.address(bad) == nil, "\(bad)")
         }
         #expect(MCP.program("notes-mcp stdio")?.program == "notes-mcp")
         #expect(MCP.program("notes-mcp stdio --root /tmp")?.args == ["stdio", "--root", "/tmp"])
+        #expect(MCP.program("notes-mcp --root {file:/srv/notes}") == nil && MCP.program("notes-mcp {env:X}") == nil)
+        #expect(MCP.plainValue("{tenant}/x") && MCP.program("notes-mcp {tenant}")?.args == ["{tenant}"])
         for bad in ["", "/usr/bin/notes", "notes-mcp | tee x", "notes-mcp $HOME", "notes-mcp 'a b'",
                     "notes-mcp " + Array(repeating: "a", count: 17).joined(separator: " ")] {
             #expect(MCP.program(bad) == nil, "\(bad)")
@@ -489,7 +493,8 @@ struct MCPProgramTests {
         #expect(MCP.isServerKey("ACME_GH_TOKEN") && !MCP.isServerKey("acme_gh_token") && !MCP.isServerKey("ACME_REGION"))
         #expect(MCP.plainValue("") && MCP.plainValue("https://acme.example/odoo?db=acme") && MCP.plainValue("Café olé Ω")
                 && MCP.plainValue(String(repeating: "a", count: 500)))
-        for refused in ["$HOME", "${ODOO_KEY}", "a\tb", "a\nb", "a\u{00A0}b", "a\u{200B}b", String(repeating: "a", count: 501),
+        for refused in ["$HOME", "${ODOO_KEY}", "{env:ODOO_KEY}", "x{file:/srv/key}",
+                        "a\tb", "a\nb", "a\u{00A0}b", "a\u{200B}b", String(repeating: "a", count: 501),
                         "acme \u{1F642}", "a\u{10000}b", "postgres://acme" + ":pw-41f9@db.acme.example/acme",
                         "see https://acme" + ":pw@acme.example", "https://admin@acme.example",
                         "https://acme" + ":pw/41f9@acme.example"] {           // each address in two parts: see madeUpKey

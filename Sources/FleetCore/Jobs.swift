@@ -203,7 +203,9 @@ public struct Job: Identifiable, Sendable {
     /// **For one whose tasks all ended: what came of it, in plain words** (`FleetTask.plain` of the task that has its
     /// last word, the one that moved last), else the first words of that task's own result (`what`), which its agent
     /// wrote for its requester; nil while a task of it is open, and for one with no such words.
-    public let result: String?
+    public var result: String? { Self.words(resultPlain) ?? Self.words(resultDetails) }
+    private let resultPlain: String?
+    private let resultDetails: String?
     public let counts: Counts
     /// **Nothing but a time holds it**: each open task of it is parked and waits on nothing else, no hold and no usage
     /// limit holds one, and it waits for nothing of his. Such a job is behind the row "later" of Waiting
@@ -255,8 +257,10 @@ public struct Job: Identifiable, Sendable {
         // a Done job that waits only for the check of his ask's result stands in Waiting since its last word
         columnSince = column == .done ? endedAt : standing.openSince ?? endedAt
         replaced = standing.replaced
-        let last = standing.failed ?? standing.ends.max { ($0.activityTime, $0.id) < ($1.activityTime, $1.id) }
-        result = standing.column == .done ? Self.words(last?.plain) ?? Self.words(last?.what) : nil
+        // The ends are already in descending activity and id order.
+        let last = standing.failed ?? standing.ends.first
+        resultPlain = last?.plain
+        resultDetails = last?.what
         var working = 0, waiting = 0, done = 0, failed = 0
         for task in standing.tasks where task.state != "canceled" {
             switch columns[task.id] ?? .waiting {
@@ -292,7 +296,8 @@ public struct Job: Identifiable, Sendable {
         began = task.created
         columnSince = endedAt
         replaced = []
-        result = Self.words(task.plain) ?? Self.words(task.what)
+        resultPlain = task.plain
+        resultDetails = task.what
         counts = Counts(working: 0, waiting: 0, done: task.state == "canceled" || task.endedBadly ? 0 : 1,
                         failed: task.endedBadly ? 1 : 0)
         onlyLater = false
@@ -389,7 +394,8 @@ extension HubState {
 
     /// The jobs, or for `agent` the board of one agent: a job of that agent whole, and of another agent's job the tasks
     /// that this agent does, under the job's name (`board`).
-    func jobs(of agent: String?) -> [Job] {
+    /// For column times, include the named agents' parts beside the whole jobs in the same pass.
+    func jobs(of agent: String?, includingPartsFor tracked: Set<String> = []) -> [Job] {
         let byID = Dictionary(tasks.map { ($0.id, $0) }) { first, _ in first }
         let keys = jobKeys(byID: byID)
         var members: [Job.Key: [FleetTask]] = [:], order: [Job.Key] = []
@@ -429,25 +435,28 @@ extension HubState {
                 let begins = byID[first] ?? oldest
                 title = Job.words(begins.job_name) ?? begins.title
             }
-            var standing = JobStanding(unsorted, columns: columns, waits: waits, request: request)
+            let standing = JobStanding(unsorted, columns: columns, waits: waits, request: request)
             // A job that he asked for is the job of the agent that he asked, whoever does its tasks. Every other job is
             // the job of the agent that has it now.
             if !whole, let now = standing.waitTask ?? standing.working ?? standing.open.first
                 ?? standing.failed ?? standing.tasks.first {
                 owner = now.owner
             }
-            if let agent, owner != agent {
-                // Another agent's job: this agent's part of it, under the job's name. The request that names what he
-                // asked for stands on the card of the agent that he asked.
-                let mine = unsorted.filter { $0.owner == agent }
-                guard !mine.isEmpty else { continue }
-                id += " of \(agent)"
-                owner = agent
-                whole = false
-                standing = JobStanding(mine, columns: columns, waits: waits, elsewhere: standing.replaced)
+            if agent == nil || agent == owner {
+                jobs.append(Job(key: key, id: id, title: title, agent: owner, asked: whole, standing: standing,
+                                columns: columns, held: held, limited: limited, created: created))
             }
-            jobs.append(Job(key: key, id: id, title: title, agent: owner, asked: whole, standing: standing,
-                            columns: columns, held: held, limited: limited, created: created))
+            // A part has its own id and standing, including work that the whole job has taken over.
+            // For a single board only its agent's part is needed.
+            if tracked.isEmpty && (agent == nil || agent == owner) { continue }
+            let parts = Dictionary(grouping: unsorted.filter {
+                $0.owner != owner && ($0.owner == agent || tracked.contains($0.owner))
+            }, by: \.owner)
+            for (name, tasks) in parts {
+                let part = JobStanding(tasks, columns: columns, waits: waits, elsewhere: standing.replaced)
+                jobs.append(Job(key: key, id: id + " of " + name, title: title, agent: name, asked: false, standing: part,
+                                columns: columns, held: held, limited: limited, created: created))
+            }
         }
         return jobs
     }
@@ -521,11 +530,8 @@ public struct ColumnTimes: Sendable {
     /// jobs (`HubState.jobs(of:)` names such a part apart), for each agent with an open task (the fourth review of 20
     /// November 2026: the parts were never noted, so an agent's own board lost their kept times).
     public mutating func note(_ state: HubState) {
-        var jobs = Array(state.board(period: .all).values.joined())
-        for agent in Set(state.tasks.filter { !$0.isTerminal }.map(\.owner)).sorted() {
-            jobs += state.board(period: .all, agent: agent).values.joined()
-        }
-        note(jobs, hub: state.db, now: state.time)
+        let active = Set(state.tasks.lazy.filter { !$0.isTerminal }.map(\.owner))
+        note(state.jobs(of: nil, includingPartsFor: active), hub: state.db, now: state.time)
     }
 
     /// Since when this job of hub `hub` stands in its column: the kept time while its column is the one kept, else its

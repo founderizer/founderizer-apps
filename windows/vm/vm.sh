@@ -29,6 +29,11 @@
 #   FZ_VM_DIR       the VM's folder, outside any repository ($HOME/VMs/founderizer-windows)
 #   FZ_VM_KEY       the SSH key of this Mac for the VM ($HOME/.ssh/founderizer-windows-vm)
 #   FZ_VM_PORT      the port on 127.0.0.1 that reaches the VM's SSH (52222)
+#   FZ_VM_HOST      the address of a Windows machine that SSH reaches directly, with no QEMU (127.0.0.1: the VM through
+#                   QEMU's forward). cloud/cloud.sh sets it, FZ_VM_DIR and FZ_VM_PORT for a build machine at Azure; then
+#                   only run, copy, desktop, picture, hold and release apply (QEMU's create, start, stop, status, screen,
+#                   keys and type refuse), and known_hosts in FZ_VM_DIR must hold the machine's key: a key that is not
+#                   there is refused, never taken on its first use
 #   FZ_VM_UTM       UTM's app (/Applications/UTM.app); vm.sh runs only with UTM 5.0.8
 #   FZ_VM_CPUS, FZ_VM_MEMORY_MB, FZ_VM_DISK      6, 16384, 100G
 #   FZ_VM_SCREEN    the size of the VM's screen, as the display driver offers it (2880x1800: 1440 x 900 at 200%,
@@ -44,6 +49,9 @@ here="$(cd "$(dirname "$0")" && pwd)"
 dir="${FZ_VM_DIR:-$HOME/VMs/founderizer-windows}"
 key="${FZ_VM_KEY:-$HOME/.ssh/founderizer-windows-vm}"
 port="${FZ_VM_PORT:-52222}"
+host="${FZ_VM_HOST:-127.0.0.1}"
+remote=""
+[ -n "${FZ_VM_HOST:-}" ] && remote=yes
 utm="${FZ_VM_UTM:-/Applications/UTM.app}"
 # The UTM whose QEMU, swtpm and firmware this VM was made and tested with.
 utm_version="5.0.8"
@@ -67,14 +75,14 @@ die() { say "vm.sh: $*"; exit 1; }
 
 ssh_options() {
     printf '%s\n' -F /dev/null -i "$key" -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes \
-        -o UserKnownHostsFile="$dir/known_hosts" -o StrictHostKeyChecking=accept-new \
+        -o UserKnownHostsFile="$dir/known_hosts" -o StrictHostKeyChecking="$([ -z "$remote" ] && echo accept-new || echo yes)" \
         -o ConnectTimeout=5 -o ServerAliveInterval=15 -o LogLevel=ERROR
 }
 
 vm_ssh() {
     local options=()
     while IFS= read -r line; do options+=("$line"); done < <(ssh_options)
-    ssh "${options[@]}" -p "$port" "$user@127.0.0.1" "$@"
+    ssh "${options[@]}" -p "$port" "$user@$host" "$@"
 }
 
 # Runs a PowerShell script (stdin) in the VM with -EncodedCommand, so no quoting reaches the shells between.
@@ -335,7 +343,7 @@ copy_files() {
     while IFS= read -r line; do options+=("$line"); done < <(ssh_options)
     for item in "$@"; do
         case "$item" in
-            vm:*) arguments+=("$user@127.0.0.1:${item#vm:}") ;;
+            vm:*) arguments+=("$user@$host:${item#vm:}") ;;
             *) arguments+=("$item") ;;
         esac
     done
@@ -470,8 +478,9 @@ PS
 release_updates() {
     own_vm
     # A restore that fails stops the script (an error of Set-ItemProperty alone does not stop PowerShell), so the hold
-    # stays with the pause still on; and a VM that is off cannot be restored: it is started first.
-    if ! running; then
+    # stays with the pause still on; and a VM that is off cannot be restored: it is started first. A machine with no QEMU
+    # (FZ_VM_HOST) has no pid here: one that is off fails at its SSH below, with the same hold kept.
+    if [ -z "$remote" ] && ! running; then
         die "the VM is off, so Windows' updates and active hours cannot be restored; the VM stays held by $FZ_VM_USER: start the VM (vm.sh start), then release again"
     fi
     vm_ps "$(cat <<'PS'
@@ -495,6 +504,12 @@ PS
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
+if [ -n "$remote" ]; then
+    case "$command" in
+        create|start|stop|status|screen|keys|type)
+            die "$command is QEMU's, and FZ_VM_HOST names a machine with no QEMU ($host): cloud/cloud.sh drives that machine" ;;
+    esac
+fi
 case "$command" in
     create) create_vm ;;
     start) start_vm; wait_for_ssh 600; say "the VM runs; SSH answers on 127.0.0.1:$port" ;;

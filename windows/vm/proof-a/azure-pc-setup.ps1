@@ -1,9 +1,10 @@
 # The setup of the x64 clean PC at Azure (azure-pc-make.sh runs it once with Azure's run command, as SYSTEM). The
 # caller gives three public values in base64: the SSH public key of this Mac, the one address that may reach SSH, and
 # the build VM's test certificate (its public part). It does what ../setup/first-logon.ps1 does in a VM on this Mac:
-# Windows' OpenSSH server with that key only and from that address only, the test certificate trusted, and the
-# automatic sign-in of the user "builder" with a new password that is made here and never leaves the VM (an LSA secret,
-# never the registry). Then Windows restarts, and the desktop session of "builder" starts by itself. No RDP is opened.
+# Windows' OpenSSH server with that key only and from that address only and with new host keys, the test certificate
+# trusted, and the automatic sign-in of the user "builder" with a new password that is made here and never leaves the
+# VM (an LSA secret, never the registry). Then Windows restarts, and the desktop session of "builder" starts by itself.
+# No RDP is opened.
 # It prints the SSH host key ("hostkey ..."), lets an administrator's rise go on with no question (UAC stays on), and
 # turns on the audit of process creation, so that each elevated start of the run is in Windows' security log.
 param([Parameter(Mandatory = $true)][string]$Key64, [Parameter(Mandatory = $true)][string]$From64,
@@ -30,7 +31,18 @@ Set-Content -Path $keys -Value $key -Encoding ascii
 $config = 'C:\ProgramData\ssh\sshd_config'
 $lines = Get-Content -Path $config | Where-Object { $_ -notmatch '^\s*#?\s*(PasswordAuthentication|KbdInteractiveAuthentication)\s' }
 Set-Content -Path $config -Value (@('PasswordAuthentication no', 'KbdInteractiveAuthentication no') + $lines) -Encoding ascii
-Restart-Service sshd
+# The image's host keys were made when Microsoft built the image (12 November 2026 on the build machines of
+# ../cloud/README.md), so every PC of that image holds the same private keys, and a check of them proves nothing: new
+# ones, made here. (Windows can keep a file's old creation time when a file of the same name comes back at once.)
+Stop-Service sshd
+Remove-Item -Path 'C:\ProgramData\ssh\ssh_host_*' -Force
+& "$env:WINDIR\System32\OpenSSH\ssh-keygen.exe" -A
+if ($LASTEXITCODE -ne 0) { throw "ssh-keygen -A failed: exit $LASTEXITCODE" }
+foreach ($file in Get-ChildItem -Path 'C:\ProgramData\ssh\ssh_host_*_key') {
+    & icacls.exe $file.FullName /inheritance:r /grant 'SYSTEM:F' /grant 'Administrators:F' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "icacls could not set the rights of $($file.Name)" }
+}
+Start-Service sshd
 # The host key goes back through Azure's run command: azure-pc-make.sh writes known_hosts from it.
 "hostkey " + (Get-Content -Path 'C:\ProgramData\ssh\ssh_host_ed25519_key.pub' -Raw).Trim()
 $rule = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
@@ -121,6 +133,14 @@ $sid = (Get-LocalUser -Name $user).SID.Value
 # token's elevation (event 4688), and azure-pc-elevated.ps1 lists the elevated ones of the run for its record.
 & auditpol.exe /set /subcategory:"Process Creation" /success:enable | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'the audit of process creation was not turned on' }
+# Windows' page "Send diagnostic data to Microsoft" covers the whole desktop at each sign-in until somebody answers it
+# (seen on the build machines of ../cloud/README.md, 23 November 2026), over Founderizer's window: Windows' own policy
+# turns the page off, and the diagnostic data is "Required only", the smaller of the page's two choices.
+foreach ($pair in @(@('HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE', 'DisablePrivacyExperience'),
+                    @('HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection', 'AllowTelemetry'))) {
+    New-Item -Path $pair[0] -Force | Out-Null
+    New-ItemProperty -Path $pair[0] -Name $pair[1] -PropertyType DWord -Value 1 -Force | Out-Null
+}
 Set-Content -Path 'C:\ProgramData\fz-proof-a\done' -Value (Get-Date -Format o)
 & shutdown.exe /r /t 20 /c 'fz-proof-a: restart for the automatic sign-in'
 'set up: SSH by key from one address, the test certificate trusted, the automatic sign-in of builder; Windows restarts in 20 seconds'
