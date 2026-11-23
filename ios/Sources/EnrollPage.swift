@@ -67,10 +67,12 @@ struct EnrollPage: View {
                     // refused, to send it again. For a code that went, it says what it does (T-35).
                     // **Its slot has a fixed place** (fix round 3, item 42): a whole code goes by itself, and the way on
                     // came for the one frame before it went, which moved the footer. It shows only for a code that went
-                    // and may go again: never for a refused one (COPY).
+                    // and may go again: never for a refused one (COPY), and never on a phone with no hub, which sends
+                    // no code (F7, piece A4).
                     ZStack(alignment: .leading) {
                         TextAction(title: String(l10n: "Try again"), font: .footnote) {}.hidden().accessibilityHidden(true)
-                        if canSend, sent == MobileClient.normalizedCode(code), !MobileError.refusedCode(problem) {
+                        if canSend, sent == MobileClient.normalizedCode(code), !MobileError.refusedCode(problem),
+                           !store.hasNoHub {
                             TextAction(title: String(l10n: "Try again"), font: .footnote) { Task { await add() } }
                                 .accessibilityIdentifier("enroll-send")
                         }

@@ -226,6 +226,29 @@ struct NeedPressTests {
         }
     }
 
+    /// **A ping's button that only the Mac's step stands behind is not sent** (`NeedPress.refuses`): the first option
+    /// of a card that makes a GitHub App or opens the Add device picture, as Run it once of the door's card of a run;
+    /// "Not now" of those cards and the options of any other card go. The bug that this stops: a press on the lock
+    /// screen answered the card, the hub closed it, and nothing made the App or opened the picture.
+    @Test("A ping's first option of a GitHub App's or an Add device card is not sent, and their other option is")
+    func aPingsMacStepIsNotSent() throws {
+        func card(_ fields: [String: Any]) throws -> OwnerNeed {
+            let base: [String: Any] = ["id": 7, "by": "manager", "title": "Make the shop's own GitHub App in acme",
+                                       "why": "The door holds no way in yet.", "raised": 20, "todo": "",
+                                       "options": ["Make the App", "Not now"]]
+            return try JSONDecoder().decode(OwnerNeed.self, from: JSONSerialization.data(
+                withJSONObject: base.merging(fields) { _, new in new }))
+        }
+        let app = try card(["github_app": "acme"])
+        let scan = try card(["add_device": 1, "options": ["Scan it again", "Not now"]])
+        let plain = try card([:])
+        #expect(NeedPress.refuses(app, choice: 0) && NeedPress.refuses(scan, choice: 0))
+        #expect(!NeedPress.refuses(app, choice: 1) && !NeedPress.refuses(scan, choice: 1))
+        #expect(!NeedPress.refuses(plain, choice: 0) && !NeedPress.refuses(plain, choice: 1))
+        let door = try card(["door_host": "web-1", "options": ["Run it once", "Full access on web-1", "No"]])
+        #expect(NeedPress.refuses(door, choice: 0) && !NeedPress.refuses(door, choice: 2))
+    }
+
     @Test("Each refusal says why the answer did not go, in its own words")
     func eachRefusalHasItsOwnWords() {
         let answered = NeedPress.words(MobileError.refusal(HubRefusal(status: 409, hubWords: "owner request is already answered"),
@@ -568,5 +591,24 @@ struct EnrollLinkTests {
         #expect(values("http://platform.founderizer.com/enroll#code=ABCD-EFGH") == nil)
         #expect(values("https://www.founderizer.com/enroll#code=ABCD-EFGH") == nil)
         #expect(values("fleet://chat?code=ABCD-EFGH") == nil)
+    }
+}
+
+/// **A key made and kept at once, for the checks only**: the app makes a new key in memory and writes it only after the
+/// hub has taken the code (`EnrolmentKeys`; the second reader's round 4 took `make()` out of the app, because a key that
+/// it writes before the hub answers is the fault of before). A check keeps one at once, as an earlier enrolment left it.
+extension DeviceSigningKey {
+    func make() throws -> String {
+        let made = try new()
+        _ = try EnrolmentKeys.moveIn(signing: (holder: self, bytes: made.bytes), recovery: nil)
+        return made.publicKey
+    }
+}
+
+extension DeviceRecoveryKey {
+    func make() throws -> String {
+        let made = try new()
+        _ = try EnrolmentKeys.moveIn(signing: nil, recovery: (holder: self, bytes: made.bytes))
+        return made.publicKey
     }
 }

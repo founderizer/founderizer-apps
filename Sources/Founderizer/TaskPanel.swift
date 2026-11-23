@@ -133,7 +133,7 @@ struct TaskPanel: View {
             }
             .buttonStyle(FleetRowButtonStyle())
             .help(task.why ?? "")
-            .accessibilityLabel([AgentNames.shared.under(task.owner), task.owner.agentLabel].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityLabel([task.owner.agentLabel, AgentNames.shared.role(task.owner)].compactMap { $0 }.joined(separator: ", "))
             .accessibilityHint(String(l10n: "Opens its chat"))
             .accessibilityIdentifier("task-agent")
         } else {

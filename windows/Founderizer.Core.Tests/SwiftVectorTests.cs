@@ -114,7 +114,7 @@ public sealed class SwiftVectorTests
     // ---------------------------------------------------------------- FleetCore's words
 
     [TestMethod]
-    public void AnAgentsLabelAndTheLineUnderItAreFleetCores()
+    public void AnAgentsLabelAndTheRoleBesideItAreFleetCores()
     {
         var words = Vectors.Read("swift-words.json");
         var names = new AgentBook(words.GetProperty("names").EnumerateArray()
@@ -123,7 +123,7 @@ public sealed class SwiftVectorTests
         {
             var name = n.GetProperty("name").GetString()!;
             Assert.AreEqual(n.GetProperty("label").GetString(), names.Label(name), name);
-            Assert.AreEqual(n.TryGetProperty("under", out var under) ? under.GetString() : null, names.Under(name), name);
+            Assert.AreEqual(n.TryGetProperty("role", out var role) ? role.GetString() : null, names.Role(name), name);
             Assert.AreEqual(n.GetProperty("capitalized").GetString(), AgentBook.Capitalized(name), name);
         }
         Assert.IsTrue(names.Matches("wren", "cust", CultureInfo.InvariantCulture));

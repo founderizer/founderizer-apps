@@ -145,6 +145,9 @@ final class OwnerKeyModel {
         var port: Int
         var identityFile: String?
         var becomeRoot: Bool
+        /// The host for which the owner gave the port (`InstallTarget.portGivenFor`); none in a copy from before 22
+        /// November 2026, whose port other than 22 is then checked with the host key of the address's port 22.
+        var portGivenFor: String?
     }
 
     /// The connection is kept by the hub's host and port, as the key's own file is (`OwnerMacKey.name`), so the
@@ -154,7 +157,8 @@ final class OwnerKeyModel {
     static func keep(_ target: InstallTarget, hub: URL, defaults: UserDefaults = AppDefaults.store) {
         var all = (defaults.data(forKey: keptKey).flatMap { try? JSONDecoder().decode([String: Kept].self, from: $0) }) ?? [:]
         all[name(hub)] = Kept(host: target.host, user: target.user, port: target.port,
-                              identityFile: target.identityFile, becomeRoot: target.becomeRoot)
+                              identityFile: target.identityFile, becomeRoot: target.becomeRoot,
+                              portGivenFor: target.portGivenFor)
         if let data = try? JSONEncoder().encode(all) { defaults.set(data, forKey: keptKey) }
     }
 
@@ -162,7 +166,7 @@ final class OwnerKeyModel {
         guard let all = defaults.data(forKey: keptKey).flatMap({ try? JSONDecoder().decode([String: Kept].self, from: $0) }),
               let kept = all[name(hub)] else { return nil }
         let target = InstallTarget(host: kept.host, user: kept.user, port: kept.port, identityFile: kept.identityFile,
-                                   becomeRoot: kept.becomeRoot)
+                                   becomeRoot: kept.becomeRoot, portGivenFor: kept.portGivenFor)
         return target.isValid ? target : nil
     }
 }

@@ -168,7 +168,7 @@ struct AgentStatusPanel: View {
         .buttonStyle(FleetRowButtonStyle())
         // "Last reading" says the state is old; when it was read is on hover, as every old reading of the panel.
         .help(store.isFresh ? "\(words) · Agent details" : "Last reading \(fleetDate(time)) · Agent details")
-        .accessibilityLabel([AgentNames.shared.under(agent.name), agent.name.agentLabel, words].compactMap { $0 }
+        .accessibilityLabel([agent.name.agentLabel, AgentNames.shared.role(agent.name), words].compactMap { $0 }
             .joined(separator: ", "))
         .accessibilityHint("Opens Agent details")
         .accessibilityIdentifier("agent-details")

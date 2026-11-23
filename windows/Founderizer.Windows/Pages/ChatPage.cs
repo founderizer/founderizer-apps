@@ -7,6 +7,7 @@ using Founderizer.Windows.Marks;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
@@ -218,7 +219,17 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
             }
         }
         pillMark.Mark = model.PillMark;
-        pillWords.Text = model.Label;
+        // The name in the words' colour, then " · " and the role muted, as the Mac's chat header (`AgentNameLine`); an
+        // assistive app reads "Chat with <name>", as VoiceOver reads the Mac's header.
+        if (pillWords.Inlines.Count != 2)
+        {
+            pillWords.Inlines.Clear();
+            pillWords.Inlines.Add(new Run());
+            pillWords.Inlines.Add(new Run { Foreground = Look.Muted });
+        }
+        ((Run)pillWords.Inlines[0]).Text = model.Label;
+        ((Run)pillWords.Inlines[1]).Text = model.PillTrail;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pillWords, model.PillWords);
         panel.Show(model.Panel);
 
         composer.Visibility = model.Composer.ShowsField ? Visibility.Visible : Visibility.Collapsed;

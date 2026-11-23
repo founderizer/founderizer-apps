@@ -65,6 +65,12 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
     /// The rows that have a check mark besides the row of `selection`: a menu with two groups, each with its own
     /// present value (an agent of the Reporting lines graph).
     private let checked: Set<Value>
+    /// What VoiceOver reads as the control's name, where it differs from `title` (a node of the Reporting lines graph:
+    /// "Nova, Customer Support, Lead reports to"); nil: `title`.
+    private let voiceLabel: String?
+    /// What VoiceOver reads as the control's value, where no row is its selection (a node of the Reporting lines graph:
+    /// the agent that it reports to); nil: the selected row's title.
+    private let voiceValue: String?
     private let onSelect: (Value) -> Void
     private let label: Label
     /// The zoom of the window it stands in (View › Bigger), which its list takes: the list is a window of its own.
@@ -76,9 +82,10 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
     /// row of `checked`.
     @_disfavoredOverload
     init(_ title: String, options: [FleetOption<Value>], selection: Value? = nil, checked: Set<Value> = [],
-         onSelect: @escaping (Value) -> Void, @ViewBuilder label: () -> Label) {
+         voiceLabel: String? = nil, voiceValue: String? = nil, onSelect: @escaping (Value) -> Void,
+         @ViewBuilder label: () -> Label) {
         self.title = title; self.options = options; self.selection = selection; self.checked = checked
-        self.onSelect = onSelect; self.label = label()
+        self.voiceLabel = voiceLabel; self.voiceValue = voiceValue; self.onSelect = onSelect; self.label = label()
     }
 
     var body: some View {
@@ -91,8 +98,8 @@ struct FleetSelect<Value: Hashable, Label: View>: View {
             if Label.self == FleetSelectLabel.self { button.buttonStyle(FleetOutlineButtonStyle()) } else { button }
         }
         .background(FleetMenuAnchor(spot: anchor) { value in if let value = value.base as? Value { onSelect(value) } })
-        .accessibilityLabel(title)
-        .accessibilityValue(options.first { $0.value == selection }?.title ?? "")
+        .accessibilityLabel(voiceLabel ?? title)
+        .accessibilityValue(voiceValue ?? options.first { $0.value == selection }?.title ?? "")
     }
 
     /// The list under the control, its selection highlighted; a menu of actions opens with no row highlighted, as a

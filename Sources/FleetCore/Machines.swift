@@ -174,21 +174,36 @@ public struct ScreenSharingConnection: Codable, Hashable, Sendable {
     /// The agent whose screen this is on a Linux server, or nil for a Mac's own screen: two agents of one server have
     /// two tunnels and two records (`FleetStore.takeOvers`), never one.
     public let agent: String?
+    /// The address for which the owner gave the port himself (`InstallTarget.portGivenFor`), from this Mac's kept record
+    /// of a Linux server; nil for a port of the hub's record. The master's host key rule reads it (`masterArguments`).
+    public let portGivenFor: String?
 
     public init(address: String, user: String, port: Int, remotePort: Int = 5900, identityFile: String? = nil,
-                agent: String? = nil) {
+                agent: String? = nil, portGivenFor: String? = nil) {
         self.address = address; self.user = user; self.port = port
         self.remotePort = remotePort; self.identityFile = identityFile; self.agent = agent
+        self.portGivenFor = portGivenFor
     }
 
-    private enum CodingKeys: String, CodingKey { case address, user, port, remotePort, identityFile, agent }
+    private enum CodingKeys: String, CodingKey { case address, user, port, remotePort, identityFile, agent, portGivenFor }
     public init(from decoder: Decoder) throws {
         let keys = try decoder.container(keyedBy: CodingKeys.self)
         self.init(address: try keys.decode(String.self, forKey: .address), user: try keys.decode(String.self, forKey: .user),
                   port: try keys.decode(Int.self, forKey: .port),
                   remotePort: try keys.decodeIfPresent(Int.self, forKey: .remotePort) ?? 5900,
                   identityFile: try keys.decodeIfPresent(String.self, forKey: .identityFile),
-                  agent: try keys.decodeIfPresent(String.self, forKey: .agent))
+                  agent: try keys.decodeIfPresent(String.self, forKey: .agent),
+                  portGivenFor: try keys.decodeIfPresent(String.self, forKey: .portGivenFor))
+    }
+
+    /// **The host key rule of the tunnel's master** (`InstallTarget.hostKeyOptions`, strict): the host key that this Mac
+    /// knows already, never a new one. A Mac's own Screen Sharing (`agent` nil) is a Mac's, whose port 22 is no proof,
+    /// and its port is the hub's record: so only the line of its port 22 opens it, never a `[host]:port` line that an
+    /// earlier run kept, which until 22 November 2026 sent the Mac's password to whatever program answered there. An
+    /// agent's screen on a Linux server takes the rule of its connection.
+    var hostKeyOptions: [String] {
+        InstallTarget(host: address, user: user, port: port, portGivenFor: portGivenFor, macServer: agent == nil)
+            .hostKeyOptions(strict: true)
     }
 
     public var isValid: Bool {
@@ -206,7 +221,7 @@ public struct ScreenSharingConnection: Codable, Hashable, Sendable {
     public func masterArguments(controlPath: String, ledger: SSHKeyLedger = .shared) -> [String]? {
         guard isValid else { return nil }
         let call = SSHCall(host: address, user: user, port: port, identityFile: identityFile, options: [
-            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+            "-o", "BatchMode=yes"] + hostKeyOptions + [
             "-o", "ExitOnForwardFailure=yes", "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2",
             "-o", "PermitLocalCommand=no", "-o", "RemoteCommand=none",

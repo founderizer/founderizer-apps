@@ -183,7 +183,11 @@ public final class NeedRunJob: @unchecked Sendable {
         case .thisMac:
             return (shell, ["-l"])
         case .machine(_, let address, let user, let port):
-            return (ssh, ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15",
+            // The address and the port are the hub's record of a Mac: the host key that this Mac knows for the Mac's
+            // port 22, never a new one, and never a `[host]:port` line that an earlier run kept
+            // (`InstallTarget.hostKeyOptions`), whatever the owner's own `~/.ssh/config` says.
+            let hostKey = InstallTarget(host: address, user: user, port: port, macServer: true).hostKeyOptions(strict: true)
+            return (ssh, ["-T", "-o", "BatchMode=yes"] + hostKey + ["-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15",
                           "-o", "ServerAliveCountMax=4", "-p", String(port), "\(user)@\(address)",
                           "exec \"${SHELL:-/bin/sh}\" -l 2>&1"])
         }

@@ -6,8 +6,9 @@ import Vision
 
 /// **The @ list of the chat's box, by its keys and the pointer, and the tags that go with his message** (the owner, 20
 /// November 2026: "@<agent-name> or @<agent-role> allows tagging an agent", and "Yes, as drawn" to the list: one row for
-/// each other agent, ↑ ↓ and Return or Tab, Esc, a pick writes "@<role> ", one Backspace removes it). The real composer,
-/// in the window of a test, on a stand-in hub that keeps what the app sends. Example names only.
+/// each other agent, ↑ ↓ and Return or Tab, Esc, one Backspace removes it; his answer of 22 November 2026: a row
+/// shows the name and the role, and a pick writes "@" and the name). The real composer, in the window of a test, on a stand-in hub that keeps what
+/// the app sends. Example names only.
 @Suite(.serialized, .timeLimit(.minutes(3))) struct AgentTagListTests {
     struct Seen: Sendable {
         var firstRow: String?, keptDraft: String?, opened = false, closedByEsc = false, afterEsc: String?, closedWhileTyping = false
@@ -19,7 +20,8 @@ import Vision
 
     private static let now = Int(Date().timeIntervalSince1970)
 
-    /// The manager's team: its chat's rows are Marketing, DevOps Lead and DevOps, in this order.
+    /// The manager's team: its chat's rows are "Atlas · Marketing", "Nova · DevOps Lead" and "Iris · DevOps", in this
+    /// order.
     private static let team: [(name: String, title: String)] = [("manager", "Fleet Manager"), ("atlas", "Marketing"),
                                                                 ("nova", "DevOps Lead"), ("iris", "DevOps")]
 
@@ -102,8 +104,8 @@ import Vision
 
     /// The bug that this catches: Return sends the half-written words while the list is open, or ↑ opens a correction;
     /// ↑ and ↓ do not stop at the ends; the list reopens as he types after Esc; Return picks the first row where his
-    /// letters are another row's whole label; a pick leaves the caret before its space; a Backspace leaves "@DevOps"
-    /// behind, or on the first of two spaces takes a space and not the tag; a selection of words keeps the list open; a
+    /// letters are another row's whole role; a pick writes the role and not the name; a pick leaves the caret before
+    /// its space; a Backspace leaves "@Nova" behind, or on the first of two spaces takes a space and not the tag; a selection of words keeps the list open; a
     /// click picks nothing or takes the keyboard from the box; an input method's Return picks a row or sends; the
     /// message reaches the hub with no `mentions`, or with them on a hub without the feature, which refuses a field
     /// that it does not know; the box's selection, bound for the list, selects a kept draft as the box takes the keys.
@@ -165,12 +167,12 @@ import Vision
             seen.sentWhilePicking = hub.requests.contains { $0.method == "POST" }
             // the caret stands after the pick's space; two Backspaces take "hi", the third the space and the whole tag
             Self.type("hi", in: window)
-            ViewHost.turn(2) { words() == "@DevOps Lead hi" }
+            ViewHost.turn(2) { words() == "@Nova hi" }
             seen.typedAfterPick = words()
             for _ in 0..<3 { press(back) }
             ViewHost.turn(2) { words() == "" }
             seen.afterBackspaces = words()
-            // letters that are a row's whole label light that row, not the first that they start
+            // letters that are a row's whole role light that row, not the first that they start
             Self.type("@devops", in: window)
             _ = try Self.list(true, "DevOps Lead", in: window)
             press(enter) { words()?.hasSuffix(" ") == true }
@@ -179,10 +181,10 @@ import Vision
             // two spaces after a tag: a Backspace on the first takes the tag, by the caret's place
             Self.type("@ma", in: window)
             _ = try Self.list(true, "Marketing", in: window)
-            press(tab) { words() == "@Marketing " }
+            press(tab) { words() == "@Atlas " }
             Self.type(" ", in: window)
             press(left)
-            press(back) { words() != "@Marketing " }
+            press(back) { words() != "@Atlas " }
             seen.firstSpace = words()
             clear()
             // a selection of words closes the list, also one that begins after the "@"
@@ -195,10 +197,10 @@ import Vision
             // a click on a row picks it, and the box keeps the keys
             _ = try Self.list(true, "Marketing", in: window)
             if let row = try Self.place(of: "Marketing", plain: true, in: window) {
-                press(ViewHost.click(row, in: window)) { words() == "@Marketing " }
+                press(ViewHost.click(row, in: window)) { words() == "@Atlas " }
                 seen.clicked = words()
                 Self.type("x", in: window)
-                ViewHost.turn(2) { words() == "@Marketing x" }
+                ViewHost.turn(2) { words() == "@Atlas x" }
                 seen.keepsKeys = words()
             }
             clear()
@@ -224,10 +226,10 @@ import Vision
             // the letters filter, and Tab picks; Return with the list closed sends, with the tag
             Self.type("@ma", in: window)
             _ = try Self.list(true, "Marketing", in: window)
-            press(tab) { words() == "@Marketing " }
+            press(tab) { words() == "@Atlas " }
             seen.tabbed = words()
             Self.type("now", in: window)
-            ViewHost.turn(2) { words() == "@Marketing now" }
+            ViewHost.turn(2) { words() == "@Atlas now" }
             // the app writes only within a moment of the hub's answer, and this test is long
             Task { await store.refresh() }
             ViewHost.turn(10) { store.canWrite }
@@ -249,20 +251,20 @@ import Vision
         #expect(seen.closedByEsc && seen.afterEsc == "@", "Esc closes the list and does nothing else")
         #expect(seen.closedWhileTyping, "the list that Esc closed stays closed while he types")
         #expect(seen.reopened, "a new \"@\" opens it again")
-        #expect(seen.firstRow == "@Marketing ", "↑ at the first row stays there: \(String(describing: seen.firstRow))")
-        #expect(seen.picked == "@DevOps Lead " && !seen.sentWhilePicking,
+        #expect(seen.firstRow == "@Atlas ", "↑ at the first row stays there: \(String(describing: seen.firstRow))")
+        #expect(seen.picked == "@Nova " && !seen.sentWhilePicking,
                 "↑ and ↓ stop at the ends, and Return picks and sends nothing: \(String(describing: seen.picked))")
-        #expect(seen.typedAfterPick == "@DevOps Lead hi", "the caret stands after the pick's space")
+        #expect(seen.typedAfterPick == "@Nova hi", "the caret stands after the pick's space")
         #expect(seen.afterBackspaces == "", "one Backspace at the space after the tag takes the whole tag")
-        #expect(seen.wholeLabel == "@DevOps ", "his letters light the row of their label: \(String(describing: seen.wholeLabel))")
+        #expect(seen.wholeLabel == "@Iris ", "his letters light the row of their role, and the pick writes its name: \(String(describing: seen.wholeLabel))")
         #expect(seen.firstSpace == " ", "a Backspace on the first of two spaces takes the tag: \(String(describing: seen.firstSpace))")
         #expect(seen.rangeCloses, "a selection of words closes the list")
-        #expect(seen.clicked == "@Marketing " && seen.keepsKeys == "@Marketing x",
+        #expect(seen.clicked == "@Atlas " && seen.keepsKeys == "@Atlas x",
                 "a click picks the row, and the box keeps the keys: \(String(describing: seen.clicked)) \(String(describing: seen.keepsKeys))")
-        #expect(seen.composing?.contains("Marketing") == false && !seen.sentWhileComposing,
+        #expect(seen.composing?.contains("Atlas") == false && !seen.sentWhileComposing,
                 "an input method's Return picks no row and sends nothing: \(String(describing: seen.composing))")
-        #expect(seen.tabbed == "@Marketing ", "the letters filter the rows, and Tab picks")
-        #expect(seen.mentions == ["atlas 0 10"], "the message carries its tag: \(String(describing: seen.mentions))")
+        #expect(seen.tabbed == "@Atlas ", "the letters filter the rows by the role, and Tab picks")
+        #expect(seen.mentions == ["atlas 0 6"], "the message carries its tag: \(String(describing: seen.mentions))")
         #expect(seen.otherChat == ["manager", "nova", "iris"], "each chat has its own table: \(String(describing: seen.otherChat))")
         #expect(seen.noFeature, "a hub without agent_tags gets no list and no field")
         #expect(screen.stayedHis)

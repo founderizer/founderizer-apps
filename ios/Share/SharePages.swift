@@ -16,18 +16,19 @@ struct ShareRoot: View {
     }
 }
 
-/// **The agents, as Chats lists them**: each one's mark and role, in the hub's order, and only the agents that take a
-/// message. A tap opens its composer. The marks rest and carry no state: the reading is the app's last one, and the
-/// list is for choosing, not for news.
+/// **The agents, as Chats lists them**: each one's mark, its name and its role in muted, in the hub's order, and only
+/// the agents that take a message. A tap opens its composer. The marks rest and carry no state: the reading is the
+/// app's last one, and the list is for choosing, not for news.
 struct ShareAgentsPage: View {
     let model: ShareModel
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         List {
             ForEach(model.agents, id: \.self) { agent in
                 Button { model.choose(agent) } label: { row(agent) }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(agentName(agent))
+                    .accessibilityLabel(agentNameSpoken(agent))
                     .accessibilityIdentifier("share-to-\(agent)")
                     .listRowSeparator(.hidden)
                     .brandRows(cards: false)
@@ -61,7 +62,8 @@ struct ShareAgentsPage: View {
     private func row(_ agent: String) -> some View {
         HStack(spacing: 12) {
             AgentAvatar(name: agent, state: .online, base: 40, moves: false)
-            Text(agentName(agent)).font(.headline)
+            // One line, the role cut at its end; at the accessibility text sizes it wraps, as Chats' row does.
+            agentNameLine(agent).font(.headline).lineLimit(typeSize.isAccessibilitySize ? nil : 1)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
@@ -87,7 +89,7 @@ private struct CloseButton: View {
     }
 }
 
-/// **The chosen agent's composer, as its chat draws it**: the agent's mark and role in the glass pill over the page,
+/// **The chosen agent's composer, as its chat draws it**: the agent's mark and name in the glass pill over the page,
 /// and the one capsule of glass at the bottom, with the shared pictures and files in its row and the shared link or
 /// text in its field, the cursor on the line under it for the owner's own words. Send is the agent's colour. The page
 /// over the composer stays empty: the message is what the composer shows.
@@ -122,7 +124,7 @@ struct ShareComposePage: View {
             }
     }
 
-    /// The agent's mark and role in one glass pill, as over its chat; it opens nothing here.
+    /// The agent's mark and name in one glass pill, as over its chat; it opens nothing here.
     private var pill: some View {
         HStack(spacing: 8) {
             AgentMark(name: agent, size: 20, moves: false)

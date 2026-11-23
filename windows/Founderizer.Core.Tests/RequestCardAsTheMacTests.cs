@@ -246,10 +246,10 @@ public sealed class RequestCardAsTheMacTests
         var ids = new long[] { 11, 14, 15, 13, 24, 25, 22, 26, 999 };
         var answered = Answered(true, ids.Select((task, i) => Pressed(41 + i, Marks(task: task))).ToArray());
         var marks = answered.Fleet!.AnsweredNeeds!.Select(n => Screens.Card(answered, n, [], Clock, Utc).AnswerMark).ToArray();
-        var work = new AnswerMark(AnswerSymbol.Working, "Customer Support · Answer today's support tickets", "wren",
+        var work = new AnswerMark(AnswerSymbol.Working, "Wren · Answer today's support tickets", "wren",
                                   "Answer today's support tickets")
         {
-            Badge = new AgentBadge("Customer Support", MarkLook.Of(answered.MarkOf("wren"), AgentState.Online, moves: false)),
+            Badge = new AgentBadge("Wren", MarkLook.Of(answered.MarkOf("wren"), AgentState.Online, moves: false)),
         };
         CollectionAssert.AreEqual(new[]
         {
@@ -258,7 +258,7 @@ public sealed class RequestCardAsTheMacTests
             new AnswerMark(AnswerSymbol.Failed, "Failed"), new AnswerMark(AnswerSymbol.Failed, "Not accepted"),
             Done("Done"), Done("Awaiting check"), Done("Fleet Manager has your answer"),
         }, marks, "work, at rest, queued, a question, failed, not accepted, checked, awaiting its check, not in the reading");
-        Assert.AreEqual(((string?)null, "Customer Support", "Answer today's support tickets"),
+        Assert.AreEqual(((string?)null, "Wren", "Answer today's support tickets"),
                         (marks[0].Hover, marks[0].Badge?.Label, marks[0].Title),
                         "a task's work: its tag under the pointer, the agent's badge and the task's title, and no plain words");
         Assert.IsTrue(marks.Skip(1).All(m => m.Badge is null && m.Hover == m.Words && !string.IsNullOrEmpty(m.Words)),

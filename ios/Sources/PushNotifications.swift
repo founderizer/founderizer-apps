@@ -133,13 +133,25 @@ enum NeedPress {
         return index
     }
 
-    static func answer(need: Int, choice: Int, options: [String], agent: String = "") async {
+    /// **A press of a ping's button that the phone does not send** (it says "Open Founderizer to answer." instead):
+    /// - Run it once of the door's card of a run (the lane "Give on the iPhone"): a ping shows no script, so a press on
+    ///   it never signs it (the owner's "Show the script" of 19 November 2026); he answers it on the card, which shows
+    ///   the script. A hub of API 1.247 sends such a ping no buttons; this holds for an older ping.
+    /// - The first option of a GitHub App's or an Add device card (`OwnerNeed.firstOptionStartsOnTheMac`): only the
+    ///   Mac starts its step, and the hub would close the card on a phone's press that started nothing.
+    static func refuses(_ item: OwnerNeed, choice: Int) -> Bool {
+        (choice == 0 && item.door_host?.isEmpty == false) || MobileStore.startsOnTheMac(item, choice)
+    }
+
+    /// `keys`: where this phone's key is read; a check passes a holder of its own, which holds none.
+    static func answer(need: Int, choice: Int, options: [String], agent: String = "",
+                       keys: DeviceKey = DeviceKey()) async {
         // **A notification names the agent that asked, never the hub's number** (fix round 3, item 47 and COPY).
         let named = agent.trimmingCharacters(in: .whitespaces).isEmpty ? nil : agent
         let hub = MobileStore.savedHub()
         let client = MobileClient()
         let key: String?
-        do { key = try DeviceKey().pressKey() } catch {
+        do { key = try keys.pressKey() } catch {
             return await tell(named ?? String(l10n: "Answer not sent"), String(l10n: "This phone could not read its key. Open Founderizer to answer."),
                               need: need)
         }
@@ -151,10 +163,7 @@ enum NeedPress {
             }
             database = read.snapshot.db
             let item = read.snapshot.needs.first { $0.id == need }
-            // the lane "Give on the iPhone": a ping shows no script, so a press on it never signs Run it once of the
-            // door's card of a run (the owner's "Show the script" of 19 November 2026): he answers it on the card,
-            // which shows the script. A hub of API 1.247 sends such a ping no buttons; this holds for an older ping.
-            if let item, choice == 0, item.door_host?.isEmpty == false {
+            if let item, refuses(item, choice: choice) {
                 return await tell(named ?? String(l10n: "Answer not sent"), String(l10n: "Open Founderizer to answer."),
                                   need: need)
             }

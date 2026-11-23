@@ -98,6 +98,23 @@ final class CentralVaultModel {
         plan.servers + keySwapNeeds.filter { need in !plan.servers.contains { $0.machine == need.machine } }
     }
 
+    /// **The stops that this model holds for one server**, in the words of its steps (`InstallTarget.refusedHostKey`
+    /// among them): the trust step's last try, the key swap step's last try (its record, from its first stop on, and
+    /// not only its row after six; the words are inside its own sentence, `KeySwapWords.notSwitchedOn`), and for the
+    /// hub's own server (`isHub`) the install's and the update's last try. The server's page reads them for the one
+    /// step whose way out is on that page, the port (`MachineChecksModel.portStepIsDue`).
+    func stops(of machine: String, isHub: Bool) -> [String] {
+        let swaps = reading?.fleetID.map { keySwap.record.records(fleet: $0) } ?? [:]
+        return Self.stops(of: machine, isHub: isHub, trust: servers, keySwap: swaps, install: install, update: update)
+    }
+
+    /// The same, out of the tries and the records given.
+    nonisolated static func stops(of machine: String, isHub: Bool, trust: [String: VaultTries],
+                                  keySwap: [String: KeySwapRecord], install: VaultTries?, update: VaultTries?) -> [String] {
+        let own = [trust[machine]?.reason, keySwap[machine]?.tries?.reason].compactMap { $0 }
+        return own + (isHub ? [install?.reason, update?.reason].compactMap { $0 } : [])
+    }
+
     // MARK: the poll
 
     /// Called from the store's poll, every few seconds on every page: it reads the vault once a minute (a hub without
@@ -484,9 +501,7 @@ final class CentralVaultModel {
             }
             let output = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
                                               timeout: 600)
-            if output.lines.contains(where: { $0.contains("Host key verification failed") }) {
-                throw Stop(Self.unread(output, machine: row.name, what: ""))
-            }
+            if let step = target.refusedHostKey(in: output.lines, server: row.name) { throw Stop(step) }
             let answer = KeySwapAnswer.read(output.output, status: output.status)
             changeKeySwap { state in
                 let earlier = state.records(fleet: fleetID)[server]
@@ -509,9 +524,9 @@ final class CentralVaultModel {
     /// or nil: then only the reading runs, and no switch. These keys become owner keys of each server's vault, the trust
     /// of each handover, so the read is bound to the hub's machine by this Mac's own knowledge and not by the hub's pages
     /// (the manager's read of 16 November): this Mac's Tailscale names the connection's host as the hub's machine, and
-    /// names the host of this Mac's own hub address as that same machine, and the file's fleet is the fleet that this
-    /// Mac reads. The install and the update of the central vault need less: there this Mac gives its own public key,
-    /// and it pins the vault's key only when the hub then names that same key.
+    /// names the host of this Mac's own hub address as that same machine (`CentralVaultRemote.hubMachineStop`), and
+    /// the file's fleet is the fleet that this Mac reads. The install and the update of the central vault check the
+    /// same two names since 22 November 2026: the key that they print is the pin.
     private func keySwapCentral(database: String) async -> KeySwapCentral? {
         let machine: String
         if let own = reading?.hub?.machine {
@@ -520,9 +535,8 @@ final class CentralVaultModel {
             guard let machines = try? await HubClient().machines(hub: hub, database: database).machines else { return nil }
             machine = CentralVault.hubMachine(in: machines)
         }
-        guard let fleet = reading?.fleetID, let address = hub.host,
-              let target = try? await self.target(machine, database: database, record: reading?.hub?.reach),
-              await MacNetwork.device(of: target.host) == machine, await MacNetwork.device(of: address) == machine,
+        guard let fleet = reading?.fleetID,
+              let target = try? await hubTarget(machine, database: database, record: reading?.hub?.reach),
               let answer = try? await SSHRun.run(CentralVaultRemote.arguments(target: target,
                                                                               program: KeySwapRemote.central),
                                                  to: target, timeout: 120),
@@ -568,9 +582,11 @@ final class CentralVaultModel {
     }
 
     /// The install on the hub's machine, from root's own clone there, the pin of the key it printed, and the hub's
-    /// reading of that same key. `own`: the app's own install, which leaves a vault that another Mac's key holds as it
-    /// is (`--keep-owner`). `program`: the update to that program of the hub's release, which is done only when the
-    /// hub reads the vault running it.
+    /// reading of that same key. It runs only on the machine that this Mac's own Tailscale names as the hub's, at the
+    /// connection's address and at this Mac's hub address (`CentralVaultRemote.hubMachineStop`): until 22 November
+    /// 2026 the hub's record alone chose the machine whose root printed the key that became the pin. `own`: the app's
+    /// own install, which leaves a vault that another Mac's key holds as it is (`--keep-owner`). `program`: the update
+    /// to that program of the hub's release, which is done only when the hub reads the vault running it.
     private func installed(_ store: FleetStore, own: Bool, program release: String? = nil) async -> Outcome {
         do {
             guard store.hub == hub, store.isFresh, let database = store.state?.db else {
@@ -588,7 +604,9 @@ final class CentralVaultModel {
             } else {
                 machine = CentralVault.hubMachine(in: try await HubClient().machines(hub: hub, database: database).machines)
             }
-            let target = try await self.target(machine, database: database, record: reading.hub?.reach)
+            // The key that this run prints is the pin: only from the machine that this Mac's own Tailscale names as
+            // the hub's, at the connection's address and at this Mac's hub address (`hubTarget`).
+            let target = try await hubTarget(machine, database: database, record: reading.hub?.reach)
             let answer = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target, timeout: 900)
             let recipient: String
             switch CentralVaultRemote.installed(answer.output) {
@@ -599,9 +617,14 @@ final class CentralVaultModel {
                 recipient = vaultKey
             case .otherOwner?: return .otherOwner
             case .refused(let says)?: throw Stop(String(l10n: "The install on \(machine) stopped: \(says)"))
-            case nil: throw Stop(Self.unread(answer, machine: machine, what: String(l10n: "the install's answer")))
+            case nil: throw Stop(Self.unread(answer, target: target, machine: machine, what: String(l10n: "the install's answer")))
             }
             // The key the machine printed is the pin. Nothing is sealed to the vault before the hub names that same key.
+            // An update, and the app's own install, never move a pin that this Mac holds (`CentralVaultPins.refusal`).
+            if let refused = CentralVaultPins.refusal(of: recipient, held: CentralVaultPins.recipient(hub: hub, fleet: fleet),
+                                                      setUp: !own) {
+                throw Stop(refused)
+            }
             CentralVaultPins.pin(recipient, hub: hub, fleet: fleet)
             // The hub reads the vault's status at most once a minute, so a reading from before the install can still
             // name nothing, or the key of a vault this install replaced. Three minutes is three of its readings.
@@ -651,17 +674,13 @@ final class CentralVaultModel {
             // The owner removed it on this Mac after this round's plan was made: no SSH session, and no pin.
             if isRemoved(name) { servers[name] = nil; return }
             if let problem = clockProblem(store) { throw Stop(problem) }
-            var target = try await self.target(name, database: database)
-            guard await MacNetwork.device(of: target.host) == name else {
-                throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(name). Founderizer pinned nothing."))
-            }
-            let mac = try await HubClient().servers(hub: hub, database: database).servers.first(where: { $0.name == name })?.kind == "mac"
-            if mac { target.becomeRoot = false }
+            let kind = try await HubClient().servers(hub: hub, database: database).servers.first(where: { $0.name == name })?.kind
+            let (target, mac) = try await trustTarget(name, kind: kind, database: database)
             let program = mac ? CentralVaultRemote.readMacVaultKey : CentralVaultRemote.readBrokerKey
             let answer = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
                                               timeout: 120)
             guard let found = CentralVaultRemote.brokerKey(in: answer.output) else {
-                throw Stop(Self.unread(answer, machine: name, what: String(l10n: "its vault key")))
+                throw Stop(Self.unread(answer, target: target, machine: name, what: String(l10n: "its vault key")))
             }
             guard found == reported else {
                 throw Stop(String(l10n: "The vault key on \(name) is not the one the hub reports for it. Founderizer pinned nothing."))
@@ -680,9 +699,49 @@ final class CentralVaultModel {
         }
     }
 
-    /// How this Mac reaches one machine: the connection it keeps for it, else the fleet's own record of it. A user
-    /// who is not root becomes root with `sudo -n`, so nothing waits for a password.
-    private func target(_ machine: String, database: String, record: MachineReach? = nil) async throws -> InstallTarget {
+    /// **How this Mac reaches the hub's machine for a step that reads the central vault as root** (its install, its
+    /// update, the key swap's read of its owner keys): `target`, and only when this Mac's own Tailscale names that
+    /// connection's host and this Mac's hub address as one node (`CentralVaultRemote.hubMachineStop`); else it stops
+    /// with those words and nothing runs. `status`: this Mac's `tailscale status --json`, which only a test gives.
+    func hubTarget(_ machine: String, database: String, record: MachineReach?,
+                   status: () async -> String? = { await MacNetwork.status() }) async throws -> InstallTarget {
+        let target = try await self.target(machine, database: database, record: record)
+        if let stop = CentralVaultRemote.hubMachineStop(target: target, hub: hub, machine: machine, status: await status()) {
+            throw Stop(stop)
+        }
+        return target
+    }
+
+    /// **How this Mac reaches one server for the trust step, and whether it reads that server as a Mac** (R2-M1 of the
+    /// validation of 23 November 2026): the connection that this Mac keeps, else the fleet's record, at an address that
+    /// this Mac's own Tailscale names as that server; then `CentralVaultRemote.trustRead` with the hub's `kind` and the
+    /// node's Tailscale `OS`, read from the same status. A Mac by both words is read as the connection's user, with no
+    /// `sudo`; each other server as root, with no record's user that is not root. `record` and `status`: only a test
+    /// gives them.
+    func trustTarget(_ name: String, kind: String?, database: String, record: MachineReach? = nil,
+                     status: () async -> String? = { await MacNetwork.status() }) async throws -> (target: InstallTarget, mac: Bool) {
+        var target = try await self.target(name, database: database, record: record, rootOnly: false)
+        let peer = MacNetwork.peer(of: target.host, in: await status() ?? "")
+        guard peer?.name == name else {
+            throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(name). Founderizer pinned nothing."))
+        }
+        guard let read = CentralVaultRemote.trustRead(kind: kind, os: peer?.os ?? [], user: target.user,
+                                                      kept: InstallTargets.target(machine: name, hub: hub) != nil) else {
+            throw Stop(String(l10n: "The fleet has no SSH connection to \(name) on record. Record one on its page in Servers."))
+        }
+        if read == .agents { target.becomeRoot = false; target.macServer = true }
+        return (target, read == .agents)
+    }
+
+    /// How this Mac reaches one machine: the connection it keeps for it, else the fleet's own record of it. A kept user
+    /// who is not root becomes root with `sudo -n`, so nothing waits for a password. **A record's user other than root is
+    /// no connection of a root step** (`rootOnly`; the validation of 23 November 2026, M1): that user owns its
+    /// `~/.ssh/authorized_keys`, so a forced command there prints what it likes for the whole session, the `sudo` and
+    /// root's read included, and `hub.sh` records the hub's own user, `fleet`, for its server. Such a record stops the
+    /// step with the words of no record, whose way out (the server's page) gives a connection of the owner's. The trust
+    /// read of a Mac's vault, as the agents' user, keeps its own rule (`rootOnly` false; limit 10 of VAULT.md).
+    private func target(_ machine: String, database: String, record: MachineReach? = nil,
+                        rootOnly: Bool = true) async throws -> InstallTarget {
         if var kept = InstallTargets.target(machine: machine, hub: hub) {
             kept.becomeRoot = kept.user != "root"
             // A public address lets no SSH in once the machine's installer has run (`MachineReach.reaching`). The list
@@ -700,7 +759,7 @@ final class CentralVaultModel {
         } else {
             fleets = MachineReach.of(machine, in: try await HubClient().machines(hub: hub, database: database).machines)
         }
-        guard let known = fleets?.onRecord else {
+        guard let known = fleets?.onRecord, known.user == "root" || !rootOnly else {
             throw Stop(String(l10n: "The fleet has no SSH connection to \(machine) on record. Record one on its page in Servers."))
         }
         let target = InstallTarget(host: known.address, user: known.user, port: known.port, becomeRoot: known.user != "root")
@@ -708,12 +767,10 @@ final class CentralVaultModel {
         return target
     }
 
-    /// What an answer over SSH says when it lacks the line Founderizer reads: the host key this Mac does not know
-    /// (the vault's steps check it strictly), or the machine's own last line.
-    private static func unread(_ answer: LocalShell.Answer, machine: String, what: String) -> String {
-        if answer.lines.contains(where: { $0.contains("Host key verification failed") }) {
-            return String(l10n: "This Mac does not know the host key of \(machine) yet. Connect to it once with ssh from Terminal.")
-        }
+    /// What an answer over SSH says when it lacks the line Founderizer reads: the owner's step for a host key that `ssh`
+    /// refused (the vault's steps check it strictly; `InstallTarget.refusedHostKey`), or the machine's own last line.
+    private static func unread(_ answer: LocalShell.Answer, target: InstallTarget, machine: String, what: String) -> String {
+        if let step = target.refusedHostKey(in: answer.lines, server: machine) { return step }
         // Plain words only (T-35): the machine's own last line was appended to this one.
         return String(l10n: "Founderizer could not read \(what) on \(machine).")
     }

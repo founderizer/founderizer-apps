@@ -66,7 +66,9 @@ struct SSHKeyLedgerTests {
 
     /// **The gate of app mode** (`SSHRun.prove`): an account of the app's own key gets app mode only after one run with
     /// that key alone, under `-F /dev/null` and with a host key that this Mac knows, printed the proof; a run that did
-    /// not get in holds the account at today's arguments for a day. Bugs: an account goes to app mode with no such run,
+    /// not get in holds the account at today's arguments for a day. At a port that the owner did not give, the known key
+    /// is the one of the host's port 22 (bug: a `[host]:port` line that an earlier `accept-new` run kept at the hub's
+    /// port lets another program there answer the proof). Bugs: an account goes to app mode with no such run,
     /// so a server that lets this Mac in only with a `Host *` key of the owner's stops working; a refused gate runs
     /// again at each call, one refused login after another against the server's MaxAuthTries and fail2ban.
     @Test func onlyARunWithTheAppsKeyAloneThatGotInPutsAnAccountInAppMode() async throws {
@@ -88,7 +90,7 @@ struct SSHKeyLedgerTests {
             "-o", "PreferredAuthentications=publickey", "-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0",
             "-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no",
             "-o", "ControlMaster=no", "-o", "ControlPath=none", "-o", "ProxyCommand=none",
-            "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20",
+            "-o", "StrictHostKeyChecking=yes", "-o", "HostKeyAlias=100.84.1.2", "-o", "ConnectTimeout=20",
             "-p", "2222", "deploy@100.84.1.2", "echo founderizer-key=works"]])
         #expect(!ledger.confined(account) && ledger.row(account)?.tried == start)
         await prove(target, "founderizer-key=works\n", after: 0.5)          // within the day: no run

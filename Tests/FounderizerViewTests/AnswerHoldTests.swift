@@ -218,6 +218,123 @@ import Testing
         #expect(screen.stayedHis)
     }
 
+    struct Reply: Sendable {
+        var boxWhileHeld: String?, boxAfterUndo: String?, boxAfterSend: String?
+        var sentBeforeUndo = true, sentDone = false
+    }
+
+    /// **A reply that he presses never stands in his box** (the owner's report of 22 November 2026: he pressed Done,
+    /// and "Done" stood in his Your answer box). Done waits with Undo as an option's press does; his own unsent words
+    /// stay in the box through the wait, through Undo and after the reply went, and the reply reaches the hub as his
+    /// answer.
+    @Test func aReplyHePressesNeverStandsInHisBox() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Reply in
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(53)]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            store.destination = .agent("manager")
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            let posts = { hub.requests.filter { $0.method == "POST" && $0.path == "/ui/needs/53" } }
+            store.answers["53"] = "half a thought"
+            var seen = Reply()
+            guard let done = try ViewHost.middle(of: String(l10n: "Done"), in: window) else {
+                throw ViewHost.Missing(description: "the card's reply Done is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.click(done, in: window))
+            ViewHost.turn(5) { holds.held[53] != nil }
+            seen.boxWhileHeld = store.answers["53"]
+            guard let undo = try ViewHost.middle(of: String(l10n: "Undo"), in: window) else {
+                throw ViewHost.Missing(description: "the folded card has no Undo")
+            }
+            ViewHost.atOnce(ViewHost.click(undo, in: window))
+            seen.sentBeforeUndo = !posts().isEmpty
+            ViewHost.turn(5) { holds.held[53] == nil }
+            seen.boxAfterUndo = store.answers["53"]
+            // a press that he does not take back
+            holds.wait = .milliseconds(300)
+            Task { await store.refresh() }
+            ViewHost.turn(10) { store.canWrite }
+            guard let again = try ViewHost.middle(of: String(l10n: "Done"), in: window) else {
+                throw ViewHost.Missing(description: "the card did not open again with Done")
+            }
+            ViewHost.atOnce(ViewHost.click(again, in: window))
+            // the store has ended its send (the stand-in hub refuses it): what it does to his box is done
+            ViewHost.turn(15) { !posts().isEmpty && !store.sending }
+            seen.sentDone = posts().first?.body.contains(#""answer":"Done""#) == true
+            seen.boxAfterSend = store.answers["53"]
+            return seen
+        }
+        #expect(seen.boxWhileHeld == "half a thought", "his box keeps his words while Done waits")
+        #expect(!seen.sentBeforeUndo && seen.boxAfterUndo == "half a thought",
+                "Undo sends nothing and leaves his words")
+        #expect(seen.sentDone, "Done reaches the hub as his answer")
+        #expect(seen.boxAfterSend == "half a thought", "his box keeps his words after Done went")
+        #expect(screen.stayedHis)
+    }
+
+    /// **The take-over card's ✓ Done leaves his words in the request's box** (the same fault as the card's own Done,
+    /// the owner's report of 22 November 2026): it wrote "Done" into his box and sent it from there, and his unsent
+    /// words were gone. It goes as its own words now, and reaches the hub as his answer.
+    @Test func aTakeOversDoneLeavesHisWordsInTheBox() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 60) { () -> (box: String?, sent: Bool) in
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(54)]))
+            defer { hub.stop() }
+            // no window here, whose end removes it (`ViewHost.close`): the refused Done in the outbox, which the next
+            // test's store would read as its own unsent request, and write nothing
+            defer { try? FileManager.default.removeItem(at: AppFolders.support.appendingPathComponent("Founderizer")) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            ViewHost.turn(10) { store.openNeeds.contains { $0.id == 54 } }
+            store.answers["54"] = "half a thought"
+            Task { _ = await store.answerTakeOver(54) {} }
+            let posts = { hub.requests.filter { $0.method == "POST" && $0.path == "/ui/needs/54" } }
+            // the store has ended its send (the stand-in hub refuses it)
+            ViewHost.turn(15) { !posts().isEmpty && !store.sending }
+            return (store.answers["54"], posts().first?.body.contains(#""answer":"Done""#) == true)
+        }
+        #expect(seen.sent, "Done reaches the hub as his answer")
+        #expect(seen.box == "half a thought", "his box keeps his words")
+        #expect(screen.stayedHis)
+    }
+
+    /// **A reply over a file that waits with no upload still ends its wait** (the readers of 23 November 2026): a file
+    /// whose upload a quit cut off comes back "Waiting", with no number and no failure, and nothing sends it up again.
+    /// A reply that waited for such a file never went, its card stood on its way with no Undo, and a quit never ended.
+    @Test func aReplyOverAWaitingFileEndsItsWait() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 60) { () -> (pressed: Bool, ended: Bool) in
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(55)]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .milliseconds(300)
+            defer { holds.wait = .seconds(5) }
+            _ = ViewHost.store(try HubState.decode(Self.reading(needs: [])))   // the test's own defaults and folder
+            AppDefaults.store.set(hub.address, forKey: "hubAddress")
+            // a file of the request's box whose upload a quit cut off: no number, no failure
+            let waiting = FleetStore.StagedFile(requestID: UUID(), name: "notes.txt", mime: "text/plain", size: 12)
+            AppDefaults.store.set(try JSONEncoder().encode([FleetStore.stageKey(need: 55): [waiting]]),
+                                  forKey: "stagedFiles")
+            let store = FleetStore()
+            Task { await store.refresh() }
+            ViewHost.turn(10) { store.canWrite }
+            store.destination = .agent("manager")
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            guard let done = try ViewHost.middle(of: String(l10n: "Done"), in: window) else {
+                throw ViewHost.Missing(description: "the card's reply Done is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.click(done, in: window))
+            let pressed = ViewHost.turn(5) { holds.held[55] != nil }
+            // the hold ends, and so does the press that it let go: nothing waits for the file
+            return (pressed, ViewHost.turn(10) { !holds.busy })
+        }
+        #expect(seen.pressed, "Done waits with Undo")
+        #expect(seen.ended, "nothing waits for a file that no upload sends")
+        #expect(screen.stayedHis)
+    }
+
     /// A quit sends what waits: the app ends once the held answer went, and at once when nothing waits.
     @Test func aQuitSendsTheAnswerThatWaits() async throws {
         @MainActor final class Flags { var went = false, replied = false }

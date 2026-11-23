@@ -51,8 +51,8 @@ public struct ReportingTree: Equatable, Sendable {
     public static func markX(_ depth: Int) -> CGFloat { firstX + columnStep * CGFloat(depth - 1) }
     public static func wordsX(_ depth: Int) -> CGFloat { markX(depth) + mark + wordsGap }
 
-    /// `wordsWidth` gives the width of an agent's words (its role, or its name) in the graph's type, so that the line
-    /// to a lead's agents starts after the lead's words.
+    /// `wordsWidth` gives the width of an agent's words (its name and the line under it) in the graph's type, so that
+    /// the line to a lead's agents starts after the lead's words.
     public init(lines: [ReportingLine], wordsWidth: (String) -> CGFloat) {
         let manager = lines.first { $0.role == "manager" }?.agent
         let known = Dictionary(lines.map { ($0.agent, $0) }, uniquingKeysWith: { first, _ in first })

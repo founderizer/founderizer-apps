@@ -174,13 +174,29 @@ struct FleetShapeTests {
         #expect(graph.islands.map(\.rect) == [CGRect(x: 108, y: 8, width: 364, height: 123), CGRect(x: 0, y: 8, width: 88, height: 92)])
     }
 
-    @Test func theDottedLineStartsAfterTheRoleOfAnAgentThatUsesSomething() {
+    /// The dotted line runs on the name's axis, after the name's words (F16: an agent by its name, its role under it).
+    @Test func theDottedLineStartsAfterTheNameOfAnAgentThatUsesSomething() {
         let rows = graph(small, .two).rows
         #expect(rows[0].dotted == nil)
         #expect(rows[1].dotted == 332...484)
         var plan = small
-        plan.agents[1].role = String(repeating: "m", count: 30)
+        plan.agents[1].name = String(repeating: "m", count: 30)
         #expect(graph(plan, .two).rows[1].dotted == nil)
+        plan = small
+        plan.agents[1].role = String(repeating: "m", count: 30)        // a long role stands under the name
+        #expect(graph(plan, .two).rows[1].dotted == 332...484)
+    }
+
+    /// **A planned agent is its name, with its role under it** (the owner's answers of 22 November 2026 to F16), and its
+    /// row takes a line for each line under the name. The bug that this catches: a row as high as one line under the
+    /// name, so a role and "Asks first" run into the next row.
+    @Test func aRowHasALineForTheRoleBesideTheNameAndOneForWhatItAsksFirst() {
+        let support = FleetPlan.Agent(name: "nova", role: "Customer Support", asksFirst: "before it refunds")
+        #expect((support.label, support.roleBeside) == ("Nova", "Customer Support"))
+        let mail = small.agents[1]                                       // "Mail" holds its name: one word
+        #expect((mail.label, mail.roleBeside) == ("Mail", nil))
+        let graph = graph(FleetPlan(manager: "Juno", agents: [support, small.agents[0]]), .two)
+        #expect(abs((graph.rows[1].y - graph.rows[0].y) - CGFloat(55 + 24)) < 0.001)       // the row's 55 and the gap's 24
     }
 
     @Test func eachPartStandsInItsOwnMachineAtEachStep() {

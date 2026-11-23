@@ -317,24 +317,25 @@ struct ChatRow<Mark: View, Trailing: View>: View {
 /// **An agent's name and role on one line** (the owner, 20 November 2026, of the sidebar's agent rows: "on the first
 /// row we can show the name, a middle dot (·) and the role name in a muted style maybe?", and of the agent's card on its
 /// chat's panel: "make the agent card the same size as the row on the left, so it is consistent"): its name, a middle
-/// dot and its role in muted, "Nova · Customer Support". One word where a second would say it again, as `AgentNames.under`
-/// decides: an agent with no role is its name, and a role that says the name already stands alone ("Fleet Manager").
+/// dot and its role in muted, "Nova · Customer Support". One word where a second would say it again, as `AgentNames.role`
+/// decides: an agent with no role is its name, and a role that holds the name stands alone ("Fleet Manager").
 /// The line ends with its role when it is too long. VoiceOver reads the name and the role with a pause, not the dot.
 struct AgentNameLine: View {
     let agent: String
-    /// The name in semibold: a new reply in the agent's chat (`ChatRow`).
+    /// The name in semibold: a new reply in the agent's chat (`ChatRow`). Otherwise the name takes the weight of the font
+    /// around the line, so a header in a medium font never draws the name lighter than its role.
     var emphasized = false
 
     var body: some View {
         let names = AgentNames.shared
         let label = names.label(agent)
-        if let name = names.under(agent) {
-            (Text(verbatim: name).fontWeight(emphasized ? .semibold : .regular)
-                + Text(verbatim: " · \(label)").foregroundStyle(FleetStyle.muted))
+        if let role = names.role(agent) {
+            (Text(verbatim: label).fontWeight(emphasized ? .semibold : nil)
+                + Text(verbatim: " · \(role)").foregroundStyle(FleetStyle.muted))
                 .lineLimit(1)
-                .accessibilityLabel(Text(verbatim: "\(name), \(label)"))
+                .accessibilityLabel(Text(verbatim: "\(label), \(role)"))
         } else {
-            Text(verbatim: label).fontWeight(emphasized ? .semibold : .regular).lineLimit(1)
+            Text(verbatim: label).fontWeight(emphasized ? .semibold : nil).lineLimit(1)
         }
     }
 }

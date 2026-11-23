@@ -113,9 +113,21 @@ public enum MacNetwork {
     /// Mac's network is that host, or Tailscale does not answer. A server's vault key is pinned only when this names the
     /// server: the address of a connection can come from the hub, and the hub's word alone pins nothing.
     public static func device(of host: String) async -> String? {
+        await peer(of: host)?.name
+    }
+
+    /// The device that a host is, as `device(of:)` finds it, with the system that this Mac's Tailscale says it runs
+    /// (its `OS`: "macOS", "linux" and so on), from one `tailscale status --json`.
+    public struct Peer: Equatable, Sendable {
+        public let name: String
+        /// The `OS` of each node that the host names: one, unless two nodes have the one name.
+        public let os: Set<String>
+    }
+
+    public static func peer(of host: String) async -> Peer? {
         guard let command = command() else { return nil }
         let answer = try? await LocalShell.sh("TAILSCALE_BE_CLI=1 \(InstallPlan.quote(command)) status --json", timeout: 20)
-        return device(of: host, in: answer?.output ?? "")
+        return peer(of: host, in: answer?.output ?? "")
     }
 
     /// This Mac's own `tailscale status --json`, or nil when Tailscale does not answer.
@@ -128,17 +140,44 @@ public enum MacNetwork {
 
     /// The same answer out of `tailscale status --json`, so it is proved without Tailscale.
     public static func device(of host: String, in json: String) -> String? {
+        peer(of: host, in: json)?.name
+    }
+
+    /// The same answer out of `tailscale status --json`, with the `OS` of the device.
+    public static func peer(of host: String, in json: String) -> Peer? {
         guard let data = json.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let wanted = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
         let peers = (object["Peer"] as? [String: Any])?.values.compactMap { $0 as? [String: Any] } ?? []
-        let names = ([object["Self"] as? [String: Any]].compactMap { $0 } + peers).compactMap { node -> String? in
+        let found = ([object["Self"] as? [String: Any]].compactMap { $0 } + peers).compactMap { node -> (String, String?)? in
             let full = ((node["DNSName"] as? String) ?? "").lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
             guard let name = full.split(separator: ".").first.map(String.init), !name.isEmpty else { return nil }
             let addresses = ((node["TailscaleIPs"] as? [String]) ?? []).map { $0.lowercased() }
-            return addresses.contains(wanted) || wanted == full || wanted == name ? name : nil
+            return addresses.contains(wanted) || wanted == full || wanted == name ? (name, node["OS"] as? String) : nil
         }
-        return Set(names).count == 1 ? names.first : nil
+        guard Set(found.map(\.0)).count == 1, let name = found.first?.0 else { return nil }
+        return Peer(name: name, os: Set(found.compactMap(\.1)))
+    }
+
+    /// **The one node of this Mac's Tailscale that a host is**, out of `tailscale status --json`: its stable node ID
+    /// (`ID`), else its whole MagicDNS name. The host is one of the node's Tailscale addresses, its whole MagicDNS name,
+    /// or that name's first label, as for `device(of:in:)`; nil when no node is that host, or more than one is. Two
+    /// nodes can have one first label (a node that another tailnet shares into this one), and then a host of that first
+    /// label is nil, while each node's address and whole name still give it (the validation of 23 November 2026,
+    /// R2-S2). The central vault's steps compare these, never first labels (`CentralVaultRemote.hubMachineStop`).
+    public static func node(of host: String, in json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let wanted = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        let peers = (object["Peer"] as? [String: Any])?.values.compactMap { $0 as? [String: Any] } ?? []
+        let found = ([object["Self"] as? [String: Any]].compactMap { $0 } + peers).compactMap { node -> String? in
+            let full = ((node["DNSName"] as? String) ?? "").lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            guard let name = full.split(separator: ".").first.map(String.init), !name.isEmpty else { return nil }
+            let addresses = ((node["TailscaleIPs"] as? [String]) ?? []).map { $0.lowercased() }
+            guard addresses.contains(wanted) || wanted == full || wanted == name else { return nil }
+            return (node["ID"] as? String).flatMap { $0.isEmpty ? nil : "id:" + $0 } ?? "name:" + full
+        }
+        return found.count == 1 ? found.first : nil
     }
 
     /// Gets Tailscale's own installer, makes sure Tailscale signed it, and gives it to the macOS installer, which

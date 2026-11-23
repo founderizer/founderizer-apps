@@ -24,7 +24,7 @@ public struct ChatAskRow: Identifiable, Sendable, Equatable {
     /// The mark turns: a turn of its task in work runs now (`FleetTask.mark(...).inWork`). A mark that turns says work
     /// now, so a task between two turns keeps the mark at rest.
     public let moves: Bool
-    /// **The row's one muted line**: "Waits for you"; the agent that works on it, by its role when it is not the agent
+    /// **The row's one muted line**: "Waits for you"; the agent that works on it, by its name when it is not the agent
     /// of this chat, and what its running turn does; the state word of its task; "Done"; or the word of a result that
     /// did not succeed, which the row draws in red.
     public let line: String

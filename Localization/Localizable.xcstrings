@@ -25290,12 +25290,32 @@
         }
       }
     },
+    "This phone has no fleet yet. Point its camera at the picture on your Mac." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este teléfono aún no pertenece a ningún equipo. Apunta la cámara a la imagen que aparece en tu Mac."
+          }
+        }
+      }
+    },
     "This phone is not enrolled. On your Mac press New code, then add this phone in Settings." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este teléfono no está registrado. En tu Mac pulsa Código nuevo y luego añade este teléfono en Ajustes."
+          }
+        }
+      }
+    },
+    "This phone is not on your private network. Turn on Tailscale on this phone, with your Mac's account." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este teléfono no está conectado a tu red privada. Activa Tailscale en este teléfono con la misma cuenta que usas para Tailscale en tu Mac."
           }
         }
       }
@@ -25896,6 +25916,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escríbelo en Founderizer en tu teléfono: Ajustes, Añadir este teléfono."
+          }
+        }
+      }
+    },
+    "Type the port that the SSH of %@ listens on, on its page in Servers, then check again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe el puerto en el que escucha el SSH de %@, en su página de Servidores, y vuelve a comprobarlo."
           }
         }
       }

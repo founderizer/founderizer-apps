@@ -91,7 +91,7 @@ public static partial class Screens
             {
                 Name = agent.Name,
                 Label = s.Names.Label(agent.Name),
-                Under = s.Names.Under(agent.Name),
+                Role = s.Names.Role(agent.Name),
                 Line = line,
                 LineText = more is { Success: true } ? line![..more.Index] : line,
                 LineCount = more is { Success: true } ? more.Value : null,
@@ -187,6 +187,7 @@ public static partial class Screens
         {
             Agent = agent,
             Label = s.Names.Label(agent),
+            Role = s.Names.Role(agent),
             PillMark = MarkLook.Of(s.MarkOf(agent), moving ? AgentState.Working : status.MarkState, !reduceMotion),
             PillWords = "Chat with " + s.Names.Label(agent),
             Rows = ValueList.Of(rows),
@@ -582,7 +583,7 @@ public static partial class Screens
         return "Direct chat is unavailable for this agent. Send a task to Manager.";
     }
 
-    /// <summary>The panel beside a chat: the agent's mark, its role and the name under it, its usage while it has
+    /// <summary>The panel beside a chat: the agent's mark, its name and the role under it, its usage while it has
     /// something to say, and where it runs.</summary>
     public static AgentPanel Panel(StoreState s, string agent, DateTimeOffset now, ScreenContext context, bool reduceMotion = false)
     {
@@ -611,7 +612,7 @@ public static partial class Screens
             Mark = MarkLook.Of(s.MarkOf(agent), status.MarkState, moves: !reduceMotion),
             ShowsDot = status.HasDot(reduceMotion),
             Label = s.Names.Label(agent),
-            Under = s.Names.Under(agent),
+            Role = s.Names.Role(agent),
             Status = status,
             Warning = warning,
             LimitWords = entry?.Limit is { } limit ? "Usage limit until " + ComingTime(limit.Until, hubNow, context) : null,
@@ -1404,11 +1405,17 @@ public sealed record AgentRow
     public string Key => Name;
     public string Name { get; init; } = "";
     public string Label { get; init; } = "";
-    /// <summary>**The agent's own name before its role** (the Mac's <c>AgentNameLine</c> since Founderizer 0.1.380; set 8,
-    /// picture 21: "Juno · Fleet Manager"): its name with capitals, then a middle dot and the role in the muted colour;
-    /// null for an agent with no role and for a role that says the name already (<see cref="AgentBook.Under"/>), whose
-    /// row shows <see cref="Label"/> alone.</summary>
-    public string? Under { get; init; }
+    /// <summary>**The role after the agent's name** (the Mac's <c>AgentNameLine</c> since Founderizer 0.1.380; set 8,
+    /// picture 21: "Juno · Fleet Manager"): the row shows <see cref="Label"/>, then a middle dot and this role in the muted
+    /// colour; null for an agent with no role and for a role that is the label already (<see cref="AgentBook.Role"/>),
+    /// whose row shows <see cref="Label"/> alone.</summary>
+    public string? Role { get; init; }
+    /// <summary>The name line's first part, in the words' colour: the label.</summary>
+    public string Lead => Label;
+    /// <summary>The name line's second part, muted: " · " and the role, or nothing.</summary>
+    public string Trail => Role is null ? "" : " · " + Role;
+    /// <summary>What an assistive app reads for the row: the name, then the role ("Wren, Customer Support").</summary>
+    public string Spoken => Role is null ? Label : Label + ", " + Role;
     /// <summary>The line under the name, or null: the row shows the name alone.</summary>
     public string? Line { get; init; }
     /// <summary>The line without its " · +N" count, which a narrow row cuts with "…" (the Mac's splitCount).</summary>
@@ -1479,7 +1486,14 @@ public sealed record ChatModel
 {
     public string Agent { get; init; } = "";
     public string Label { get; init; } = "";
+    /// <summary>The role after the name in the pill over the chat (<see cref="AgentBook.Role"/>), or null: the pill shows
+    /// <see cref="Label"/> alone. The Mac's chat header (F16 piece 5; the owner's answer of 22 November 2026: "The name
+    /// with the role in grey ... in the chat header").</summary>
+    public string? Role { get; init; }
+    /// <summary>The pill's second part, muted: " · " and the role, or nothing.</summary>
+    public string PillTrail => Role is null ? "" : " · " + Role;
     public MarkLook PillMark { get; init; } = null!;
+    /// <summary>What an assistive app reads for the pill: "Chat with Wren", as the Mac's VoiceOver label of its header.</summary>
     public string PillWords { get; init; } = "";
     public ValueList<ChatRow> Rows { get; init; } = ValueList<ChatRow>.Empty;
     public WaitingLineModel? Waiting { get; init; }
@@ -1535,7 +1549,8 @@ public sealed record AgentPanel
     public MarkLook Mark { get; init; } = null!;
     public bool ShowsDot { get; init; }
     public string Label { get; init; } = "";
-    public string? Under { get; init; }
+    /// <summary>The role under the name, muted (<see cref="AgentBook.Role"/>), or null.</summary>
+    public string? Role { get; init; }
     public AgentStatus Status { get; init; } = new(AgentState.Unknown);
     public string? Warning { get; init; }
     public string? LimitWords { get; init; }

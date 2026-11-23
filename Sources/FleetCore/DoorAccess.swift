@@ -995,10 +995,13 @@ public enum DoorAccess {
     }
 
     /// **The connection of the round's `ssh` to a device** (`sshArguments`): the kept one at the device's address, else
-    /// root there with `key` at `port`. nil when `ssh` cannot take it.
+    /// root there with `key` at `port`. nil when `ssh` cannot take it. `port` is 22 or the one that the owner's own
+    /// `~/.ssh/config` names for the device (`configured`), so it is his for that address. A kept port is his only
+    /// where he gave it for that same address (`InstallTarget.hostKeyOptions`): a kept connection from before 22
+    /// November 2026, or one at another address, is checked with the host key of the address's port 22.
     public static func sshTarget(kept: InstallTarget?, address: String, key: String? = nil,
                                  port: Int = 22) -> InstallTarget? {
-        var target = kept ?? InstallTarget(host: address, user: "root", port: port, identityFile: key)
+        var target = kept ?? InstallTarget(host: address, user: "root", port: port, identityFile: key, portGivenFor: address)
         target.host = address
         target.becomeRoot = target.user != "root"
         return target.isValid ? target : nil
@@ -1043,7 +1046,7 @@ public enum DoorAccess {
     /// Known and not changed: a `Host` line that names the address with a key of its own makes `ssh` offer that key
     /// beside the files of `Host *` and the one key of `LoginKeys`, which can be six keys in one try. An entry's
     /// `HostKeyAlias` is not used: the round knows a host key by the device's address, with or without the port
-    /// (`ssh` takes a key that it knows for the address alone also at another port).
+    /// (`ssh` takes a key that it knows for the address alone also at another port, when it knows none for the port).
     public static func configured(_ device: Device, address: String, byName: Bool = true, ssh: String = "/usr/bin/ssh",
                                   home: String = NSHomeDirectory(), localUser: String = NSUserName(),
                                   run: ShellRunner = Shell.local,

@@ -162,7 +162,8 @@ struct SearchPalette: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// An agent: its glyph, its name, and the newest thing it did, as its row in the sidebar says it.
+    /// An agent: its glyph, its name and its role in muted (`AgentNameLine`), and the newest thing it did, as its row
+    /// in the sidebar says it. A search by role finds the row, and the row shows the role that it found.
     private func agentRow(_ agent: FleetAgent, highlighted: Bool) -> some View {
         let entries = store.chatTimeline.entries(for: agent.name, limit: ChatList.rowReads)
         // The line of its sidebar row, in the same one order (`ChatList.line`): a request that waits for him in orange,
@@ -174,7 +175,7 @@ struct SearchPalette: View {
             // The `row` step, 22 pt, with its dot (D-8; fix round 2: a search avatar is 18–24, and this was 28).
             RowMark { AgentGlyph(name: agent.name, size: GlyphSize.row, ground: highlighted ? FleetStyle.bubble : FleetStyle.canvas) }
             VStack(alignment: .leading, spacing: 2) {
-                Text(agent.name.agentLabel).font(FormMetrics.title).lineLimit(1)
+                AgentNameLine(agent: agent.name).font(FormMetrics.title)
                 if let preview, savedKey {
                     KeyMarkLine(word: preview)
                 } else if let preview {
@@ -183,7 +184,8 @@ struct SearchPalette: View {
             }
             Spacer(minLength: 0)
         }
-        .accessibilityLabel([agent.name.agentLabel, preview].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([agent.name.agentLabel, AgentNames.shared.role(agent.name), preview].compactMap { $0 }
+            .joined(separator: ", "))
         .accessibilityIdentifier("search-agent-\(agent.name)")
     }
 

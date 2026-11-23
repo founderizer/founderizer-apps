@@ -739,33 +739,38 @@ extension NeedAnswerBox {
         }
     }
 
-    /// One of the app's three replies, pressed: its words are the answer, with the files that wait in the box, and
-    /// they go by the path of words that he wrote (`FleetStore.send`: the outbox, its receipt and its retry). Words
-    /// that he had written in the box give way to them. **A press that comes while the hub cannot take it waits, and
-    /// goes when it can**, as an option's press does (`AnswerWaits`): another answer still on its way held it, and the
-    /// words only stood in the box. Meanwhile they stand there, and they stay there for Return or Send when the press
-    /// cannot go: a file still going up, another hub or hub generation, or words that he changed while it waited. The
-    /// wait ends when the request leaves, as `AnswerWaits`' does: no clock ends it.
-    /// **It waits 5 seconds first, with Undo** (`AnswerHolds`), which puts his own words back in the box.
+    /// One of the app's three replies, or the agent's recommended words, pressed: its words are the answer, with the
+    /// files that wait in the box, and they go by the path of words that he wrote (`FleetStore.send`: the outbox, its
+    /// receipt and its retry). **His box is never their place** (the owner's report of 22 November 2026: he pressed
+    /// Done, and "Done" stood in his Your answer box): they wait 5 seconds with Undo as an option's press does
+    /// (`AnswerHolds`), and his own words stay in the box as they were, through Undo and after. **A press whose wait
+    /// ends while the hub cannot take it, or while a file of the box still goes up, waits, and goes when it can**, as an
+    /// option's press does (`AnswerWaits`): only to the hub and generation of the press, while the request is open. No
+    /// clock ends the wait; an upload ends, or fails. Not covered, as for an option's press: a reply whose box holds a
+    /// file that failed to go up or waits with no upload, or whose send another write takes the turn from, goes nowhere,
+    /// and no line says so.
     private func sendQuickReply(_ reply: String, from index: Int) {
-        let draft = text.wrappedValue
-        text.wrappedValue = reply
-        guard !(composer.map(store.filesAreWaiting) ?? false) else { focused = true; return }
+        guard let database = store.state?.db else { return }
         answered?(false, tops[index] ?? 0)
-        let store = store, id = need.id, hub = store.hub, database = store.state?.db
-        guard let database else { return }
+        let store = store, id = need.id, hub = store.hub, composer = composer
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id, text: reply)
-        AnswerHolds.shared.hold(need, store: store, shown: shown, draft: draft) { @MainActor in
-            // The store's own pace for a write that waits for it (`FleetStore.writable`).
-            while !store.canWrite {
+        AnswerHolds.shared.hold(need, store: store, shown: shown) { @MainActor in
+            // The store's own pace for a write that waits for it (`FleetStore.writable`), and a file of the box that
+            // still goes up: the reply carries the box's files.
+            while !store.canWrite || composer.map({ Self.uploading(in: $0, store: store) }) == true {
                 guard store.hub == hub, store.state?.db == database, store.storageError == nil,
                       store.openNeeds.contains(where: { $0.id == id }) else { return }
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             }
-            guard store.hub == hub, store.state?.db == database,
-                  store.answers[String(id)]?.trimmingCharacters(in: .whitespacesAndNewlines) == reply else { return }
-            await store.send(needID: id)
+            guard store.hub == hub, store.state?.db == database else { return }
+            await store.send(needID: id, words: reply)
         }
+    }
+
+    /// A file of this box goes up now: its upload runs (`FleetStore.uploading`). A file that waits with no upload (one
+    /// that a quit cut off, "Waiting") or whose upload failed is none: no wait for it would ever end, a quit's neither.
+    private static func uploading(in composer: String, store: FleetStore) -> Bool {
+        store.stagedFiles(for: composer).contains { store.uploading.contains($0.requestID) }
     }
 
     /// "Save it as a secret": the key goes into the secure form and out of his words (the answer, or his message under
@@ -1100,6 +1105,8 @@ struct NeedRequestCard: View {
     /// **His key save on this card**, as its form tells it (`KeySaveCard`): the card stands as its title and the ring,
     /// then the check, and folds once the check has drawn itself.
     @State private var keySave = KeySaveCard()
+    /// The width that its key's form draws (`SecretFormWidth`), which his talk over it takes; nil until it said so.
+    @State private var formWidth: CGFloat?
     /// The width of a form page's cards, where the card stands on one; in a chat, nil, and the card takes the column's.
     @Environment(\.formMeasure) private var measure
     @Environment(\.colorSchemeContrast) private var contrast
@@ -1393,17 +1400,55 @@ struct NeedRequestCard: View {
     }
     private var titleNames: CardNames? { titleKey.map { CardNames(agents: [], secrets: [$0]) } }
 
+    /// **A Replace card reads the secrets list once where the kept list lacks the key that it replaces** (Fable's read
+    /// of 22 November 2026): the store reads the list once a launch (`PageReadings.prefetch`), so a key that the fleet
+    /// took after that read, as on the morning of his drawing, had no badge in the title until Settings › Secrets
+    /// opened. One read for each request a launch (`keyListReads`), through the store's one read of that reading
+    /// (`FleetStore.read`), and kept only while the hub and its generation stay and while no newer list came meanwhile
+    /// (Settings › Secrets, another card). A read that fails, or that a card's leave cut off, changes nothing and may
+    /// come again. The same read gives the card's words their badge of that key (`CardLinks`).
+    private func readKeyList() async {
+        guard need.isOpen, let replaced = need.secret?.replaces, SecretEntryView.isOffered(by: store),
+              let database = store.state?.db else { return }
+        let name = "secrets.logins.fleet", hub = store.hub
+        let kept: LoginReading? = store.reading(name)
+        let once = "\(hub.absoluteString)\n\(database)\n\(replaced)"
+        guard kept?.catalog[replaced] == nil, Self.keyListReads.insert(once).inserted else { return }
+        let before = store.readingKept(name), reader = SecretsPage.prefetch.read
+        // (`prefetch.read` gives any reading; this one is the list's)
+        let list = try? await store.read(name) { () async throws -> LoginReading? in
+            try await reader(hub, database, "") as? LoginReading
+        }
+        // a read that a card's leave cut off, or that failed, may come again at the card's next appearance
+        guard let list, !Task.isCancelled else { Self.keyListReads.remove(once); return }
+        guard store.hub == hub, store.state?.db == database, store.readingKept(name) == before else { return }
+        store.keep(list, as: name)
+    }
+
+    /// The requests whose card read the secrets list for its key, by hub, generation and reference (`readKeyList`).
+    @MainActor private static var keyListReads: Set<String> = []
+
     /// The card's title: its words, with the key's badge on a request for a key's new value (`titleNames`) where
     /// `badges`. The badge's look and press come from `cardBadges` on the view around it, which stands over the title's
     /// own press (its fold), so the badge takes its press and the rest of the title keeps its own.
     @ViewBuilder private func titleWords(badges: Bool) -> some View {
-        if badges, let names = titleNames {
+        if badges, let names = titleNames, let key = titleKey {
             // the badge's name in the link colour of every badge, not the window's accent (review)
-            CardBadgeText.text(AttributedString(heading), names: names, size: ChatStyle.size).font(titleFont)
+            CardBadgeText.text(Self.marked(key.name, in: heading), names: names, size: ChatStyle.size).font(titleFont)
                 .tint(FleetStyle.link)
         } else {
             Text(heading).font(titleFont)
         }
+    }
+
+    /// The title's words with the key's name as an inline code, its last place in them: **in this title the name is the
+    /// hub's own word for the key** ("New value for {env}"), so a name of letters only (TOKEN) is a badge as one with a
+    /// digit or an underscore is (`CardNames`, `wholeCode`), and VoiceOver's "Open TOKEN" has a badge to go with it
+    /// (Fable's read of 22 November 2026). The badge's words lose the code's look (`CardBadgeText`).
+    static func marked(_ name: String, in heading: String) -> AttributedString {
+        var words = AttributedString(heading)
+        if let range = words.range(of: name, options: .backwards) { words[range].inlinePresentationIntent = .code }
+        return words
     }
 
     /// **A key request's card while his save runs, and folded once a saved key answered it**: its title and the mark at
@@ -1453,11 +1498,18 @@ struct NeedRequestCard: View {
                             // box draws it over its answers (`NeedAnswerBox`), and as Needs you draws it over every
                             // request's answers: a key request that took another's place carries his question
                             let talk = need.isOpen ? need.shownTalk(features: store.state?.ui_features) : []
-                            if !talk.isEmpty { NeedTalkLines(talk: talk, font: FormMetrics.text).padding(.bottom, 2) }
+                            if !talk.isEmpty {
+                                NeedTalkLines(talk: talk, font: FormMetrics.text)
+                                    // his bubble ends where the form under it ends (`SecretFormWidth`)
+                                    .frame(maxWidth: formWidth ?? SecretEntryView.width(of: need, onStep: false),
+                                           alignment: .leading)
+                                    .padding(.bottom, 2)
+                            }
                             SecretRequestForm(store: store, need: need, onLook: { took($0) }) {
                                 withAnimation(reduceMotion ? nil : FleetMotion.keySave) { keySave.end() }
                             }
                         }
+                        .onPreferenceChange(SecretFormWidth.self) { width in if let width { formWidth = width } }
                         // the request's note shows only with Details open (`requestNoteShows`)
                         .environment(\.requestNoteShows, expanded)
                     } else {
@@ -1488,16 +1540,19 @@ struct NeedRequestCard: View {
                     // the hand on the title's row, which folds the card or opens its long part, before the padding
                     // that gives its reach back to the layout
                     .buttonStyle(CardFoldStyle())
-                    // the key's badge in a Replace card's title, over the title's own press (`titleWords`), and its press
-                    // for VoiceOver, which reaches the title as the button's words (review)
-                    .cardBadges(titleNames != nil, links: false)
+                    // the key badge's press for VoiceOver, which reaches the title as the button's words (review), on the
+                    // button alone (Fable's read of 22 November 2026)
                     .accessibilityActions {
                         if let key = titleKey, let url = CardNames.Target.secret(key.name, key: key.key).url {
                             Button(String(l10n: "Open \(key.name)")) { _ = cardWindow?.open(url) ?? store.openCardLink(url) }
                         }
                     }
                     .accessibilityValue(need.isOpen ? "" : String(l10n: "Answered"))
+                    // the key's badge in a Replace card's title, over the title's own press (`titleWords`)
+                    .cardBadges(titleNames != nil, links: false)
                     .padding(.vertical, -IconMetrics.reach)
+                    // a key that the fleet took after the app's read of the list (`readKeyList`)
+                    .task(id: need.secret?.replaces) { await readKeyList() }
                 // owner feature need_takeover (the owner's "Yes, as drawn"): Take over at the right of the title, beside
                 // the title's own button and not in it, so that each press does one thing
                 if let way = takeOverWay {

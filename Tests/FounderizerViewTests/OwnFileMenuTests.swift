@@ -11,6 +11,7 @@ import Testing
 /// the row's press did. The menu's choices are VoiceOver's actions of the file (`OwnFileMenu.choices`), so the tests
 /// read them there; the "…" itself is counted by the view that places its menu (`FleetMenuAnchor`). The menu itself is
 /// not opened: its window would stand on the owner's screen.
+/// **VoiceOver reads each file's words, "Open <name> (<size>)", on its press** (its help), and once only.
 @Suite(.serialized, .timeLimit(.minutes(1)))
 struct OwnFileMenuTests {
     private final class Window: NSWindow {
@@ -52,18 +53,33 @@ struct OwnFileMenuTests {
         object.responds(to: NSSelectorFromString(name)) ? object.perform(NSSelectorFromString(name))?.takeUnretainedValue() : nil
     }
 
-    /// VoiceOver's actions of each file's element, by the file's number.
-    @MainActor private static func actions(in host: NSView) -> [Int: [NSAccessibilityCustomAction]] {
-        var queue: [NSObject] = [host], found: [Int: [NSAccessibilityCustomAction]] = [:]
+    /// Each file's element, by the file's number.
+    @MainActor private static func files(in host: NSView) -> [Int: NSObject] {
+        var queue: [NSObject] = [host], found: [Int: NSObject] = [:]
         while !queue.isEmpty {
             let object = queue.removeFirst()
             if let name = get(object, "accessibilityIdentifier") as? String, name.hasPrefix("file-"),
                let id = Int(name.dropFirst(5)) {
-                found[id] = get(object, "accessibilityCustomActions") as? [NSAccessibilityCustomAction] ?? []
+                found[id] = object
             }
             queue += (get(object, "accessibilityChildren") as? [Any] ?? []).compactMap { $0 as? NSObject }
         }
         return found
+    }
+
+    /// VoiceOver's actions of each file's element, by the file's number.
+    @MainActor private static func actions(in host: NSView) -> [Int: [NSAccessibilityCustomAction]] {
+        files(in: host).mapValues { get($0, "accessibilityCustomActions") as? [NSAccessibilityCustomAction] ?? [] }
+    }
+
+    /// What VoiceOver reads as the help of each file's element (its hint), by the file's number.
+    @MainActor private static func helps(in host: NSView) -> [Int: String] {
+        files(in: host).compactMapValues { file in
+            get(file, "accessibilityHelp") as? String
+                ?? (file.responds(to: NSSelectorFromString("accessibilityAttributeValue:"))
+                    ? file.perform(NSSelectorFromString("accessibilityAttributeValue:"), with: "AXHelp")?
+                        .takeUnretainedValue() as? String : nil)
+        }
     }
 
     /// The "…"s that the view draws: each one has the view that places its menu (and SwiftUI's host of that view,
@@ -82,7 +98,7 @@ struct OwnFileMenuTests {
 
     @Test func hisFilesHaveTheRowsChoicesInTheirMenuAndAnAgentsFileHasNone() async throws {
         // VoiceOver's actions by their names: AppKit gives them in an order of its own
-        typealias Seen = (actions: [Int: Set<String>], menus: Int)
+        typealias Seen = (actions: [Int: Set<String>], menus: Int, helps: [Int: String])
         let (seen, screen) = try await ViewHost.onMainLoop { () -> Seen in
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
             NSApp.accessibilitySetValue(true, forAttribute: enhanced)
@@ -90,10 +106,10 @@ struct OwnFileMenuTests {
             let store = ViewHost.store(try ViewHost.reading(needs: [], features: ["attachment_knowledge"]))
             let (window, host) = Self.host(store)
             defer { window.orderOut(nil); window.contentView = nil; window.close() }
-            var seen: Seen = ([:], 0)
+            var seen: Seen = ([:], 0, [:])
             ViewHost.turn(20) {
-                seen = (Self.actions(in: host).mapValues { Set($0.map(\.name)) }, Self.menus(in: host))
-                return seen.actions.count == 6 && seen.actions[1]?.isEmpty == false && seen.menus > 0
+                seen = (Self.actions(in: host).mapValues { Set($0.map(\.name)) }, Self.menus(in: host), Self.helps(in: host))
+                return seen.actions.count == 6 && seen.actions[1]?.isEmpty == false && seen.menus > 0 && seen.helps.count == 6
             }
             return seen
         }
@@ -104,6 +120,11 @@ struct OwnFileMenuTests {
         #expect(seen.actions[5] == [String(l10n: "Save to Downloads")], "an agent's file keeps its save, and no keep")
         #expect(seen.actions[6] == [], "a guidance's file has neither")
         #expect(seen.menus == 4, "one \"…\" on each of his files, none on an agent's or a guidance's: \(seen)")
+        // VoiceOver reads the file's words on its press (`FileHoverRuleTests`: its hover is on its row and picture)
+        for file in Self.his + [Self.agents, Self.guidance] {
+            #expect(seen.helps[file.id] == String(l10n: "Open \(file.name) (\(file.sizeWords))"),
+                    "VoiceOver's words of \(file.name): \(seen.helps[file.id] ?? "none")")
+        }
         #expect(screen.stayedHis)
     }
 

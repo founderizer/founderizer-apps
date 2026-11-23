@@ -25,8 +25,10 @@ public sealed record ScreenContext(TimeZoneInfo Zone, CultureInfo Culture)
         .TotalSeconds;
 }
 
-/// <summary>An agent by its role (FleetCore's AgentNames): both apps name an agent by its team.json `title` wherever they
-/// name it, and an agent with no role by its name with capitals. One book for one reading of the hub.</summary>
+/// <summary>An agent by its name (FleetCore's AgentNames; the owner's answers of 22 November 2026 to F16, option (a)):
+/// the apps name an agent by its name with capitals wherever they name it, and its role, its team.json `title`, stands
+/// beside the name where a place shows the agent as an entry of its own. A role that holds the name is the label alone
+/// ("Fleet Manager" for `manager`). One book for one reading of the hub.</summary>
 public sealed class AgentBook
 {
     private readonly Dictionary<string, string> roles;
@@ -48,14 +50,20 @@ public sealed class AgentBook
 
     public IReadOnlyDictionary<string, string> Roles => roles;
 
-    /// <summary>The agent as both apps name it: its role, else its name with capitals ("web-dev" is "Web-Dev").</summary>
-    public string Label(string name) => roles.TryGetValue(name, out var role) ? role : Capitalized(name);
+    /// <summary>The agent as the apps name it: its name with capitals ("web-dev" is "Web-Dev"), or its role when one word
+    /// of the role is the name ("Fleet Manager" for `manager`).</summary>
+    public string Label(string name) =>
+        roles.TryGetValue(name, out var role) && Says(role, name) ? role : Capitalized(name);
 
-    /// <summary>The small line under the role on the agent's panel: its name with capitals; null for an agent with no
-    /// role, and for a role that says the name already ("Fleet Manager" over "Manager").</summary>
-    public string? Under(string name)
+    /// <summary>The role beside the label: after " · " in the pane's row, under the name on the agent's panel; null for an
+    /// agent with no role, and for a role that is the label already ("Fleet Manager").</summary>
+    public string? Role(string name) =>
+        roles.TryGetValue(name, out var role) && !Says(role, name) ? role : null;
+
+    /// <summary>True when one word of the role is the name: the role in small letters, cut at each character that is no
+    /// letter and no digit.</summary>
+    private static bool Says(string role, string name)
     {
-        if (!roles.TryGetValue(name, out var role)) return null;
         var words = new List<string>();
         var word = new StringBuilder();
         foreach (var c in role.ToLowerInvariant())
@@ -64,18 +72,19 @@ public sealed class AgentBook
             if (word.Length > 0) { words.Add(word.ToString()); word.Clear(); }
         }
         if (word.Length > 0) words.Add(word.ToString());
-        return words.Contains(name.ToLowerInvariant()) ? null : Capitalized(name);
+        return words.Contains(name.ToLowerInvariant());
     }
 
-    /// <summary>True when <paramref name="words"/> find this agent by its role or by its name, ignoring case and marks,
-    /// as a search field does.</summary>
+    /// <summary>True when <paramref name="words"/> find this agent by its label, its name or its role, ignoring case and
+    /// marks, as a search field does.</summary>
     public bool Matches(string name, string words, CultureInfo? culture = null)
     {
         // An empty text finds nobody, as Swift's localizedStandardContains("") (swift-words.json, "matches").
         if (words.Length == 0) return false;
         var compare = (culture ?? CultureInfo.CurrentCulture).CompareInfo;
         const CompareOptions loose = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace | CompareOptions.IgnoreWidth;
-        return compare.IndexOf(Label(name), words, loose) >= 0 || compare.IndexOf(name, words, loose) >= 0;
+        return compare.IndexOf(Label(name), words, loose) >= 0 || compare.IndexOf(name, words, loose) >= 0
+               || (roles.TryGetValue(name, out var role) && compare.IndexOf(role, words, loose) >= 0);
     }
 
     /// <summary>A name as Swift's `capitalized` writes it: each letter after a character that is no letter (or at the

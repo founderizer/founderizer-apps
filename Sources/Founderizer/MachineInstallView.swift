@@ -14,18 +14,23 @@ struct InstallTargets {
         var user: String
         var port: Int
         var identityFile: String?
+        /// The host for which the owner gave the port himself (`InstallTarget.portGivenFor`). A connection kept before
+        /// 22 November 2026 has none, so its port, when it is not 22, is checked as a port of the hub's record: with
+        /// the host key of its address's port 22, never one that an earlier run kept for that port.
+        var portGivenFor: String?
     }
 
     static func remember(_ target: InstallTarget, machine: String, hub: URL) {
         var all = read()
         all[name(machine, hub: hub)] = Kept(host: target.host, user: target.user, port: target.port,
-                                            identityFile: target.identityFile)
+                                            identityFile: target.identityFile, portGivenFor: target.portGivenFor)
         if let data = try? JSONEncoder().encode(all) { AppDefaults.store.set(data, forKey: key) }
     }
 
     static func target(machine: String, hub: URL) -> InstallTarget? {
         guard let kept = read()[name(machine, hub: hub)] else { return nil }
-        let target = InstallTarget(host: kept.host, user: kept.user, port: kept.port, identityFile: kept.identityFile)
+        let target = InstallTarget(host: kept.host, user: kept.user, port: kept.port, identityFile: kept.identityFile,
+                                   portGivenFor: kept.portGivenFor)
         return target.isValid ? target : nil
     }
 
@@ -186,9 +191,14 @@ final class MachineInstallModel {
     /// try stopped before its plan ran.
     private var failedStep: String?
 
+    /// The connection of the form, which is the owner's own word: the address and the port he typed, or what his
+    /// check of that address (`InstallTarget.named`) or a provider's server gave, and after an install the machine's
+    /// own private address (`MachineInstaller.reached`). No part of it comes from the hub's record, so its port is his
+    /// for its host (`InstallTarget.portGivenFor`).
     var target: InstallTarget {
-        InstallTarget(host: host.trimmingCharacters(in: .whitespaces), user: user.trimmingCharacters(in: .whitespaces),
-                      port: Int(port) ?? 0, identityFile: identityFile, becomeRoot: user != "root")
+        let host = host.trimmingCharacters(in: .whitespaces)
+        return InstallTarget(host: host, user: user.trimmingCharacters(in: .whitespaces), port: Int(port) ?? 0,
+                             identityFile: identityFile, becomeRoot: user != "root", portGivenFor: host)
     }
 
     /// Why Install cannot go now, or nil. A typed name is checked against the names the fleet already has.

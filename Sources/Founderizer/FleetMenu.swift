@@ -104,20 +104,29 @@ struct FleetMenuItem {
     var buttonFrame: CGRect?
     var press: () -> Void = {}
 
-    init(items: [FleetMenuItem], filters: Bool, highlighted: Int?, maxHeight: CGFloat, ticks: FleetMenu.Ticks? = nil) {
+    /// The roles of the agents, for a filter that finds an agent's row by its role (`shown`): the app's book, or a
+    /// test's own.
+    let names: AgentNames
+
+    init(items: [FleetMenuItem], filters: Bool, highlighted: Int?, maxHeight: CGFloat, ticks: FleetMenu.Ticks? = nil,
+         names: AgentNames = .shared) {
         self.items = items; self.filters = filters; self.highlighted = highlighted; self.maxHeight = maxHeight
-        self.ticks = ticks != nil; ticked = ticks?.ticked ?? []; button = ticks?.button
+        self.ticks = ticks != nil; ticked = ticks?.ticked ?? []; button = ticks?.button; self.names = names
     }
 
     /// Whether a row has its check mark: a list of several ticks says it by `ticked`, any other list by its item.
     func checked(_ index: Int) -> Bool { ticks ? ticked.contains(index) : items[index].checked }
 
-    /// The rows that show, as indices of `items`.
+    /// The rows that show, as indices of `items`: the rows whose words hold the filter's words, and an agent's row
+    /// also when its role holds them, as Search finds an agent (`AgentNames.matches`): the row's title is the agent's
+    /// name since the owner's answers of 22 November 2026, and its role is no word of the row.
     var shown: [Int] {
         let text = query.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return Array(items.indices) }
         return items.indices.filter { index in
-            [items[index].title, items[index].detail, items[index].subtitle].contains { $0?.localizedStandardContains(text) == true }
+            if case .agent(let name, _) = items[index].mark, names.matches(name, text) { return true }
+            return [items[index].title, items[index].detail, items[index].subtitle]
+                .contains { $0?.localizedStandardContains(text) == true }
         }
     }
 

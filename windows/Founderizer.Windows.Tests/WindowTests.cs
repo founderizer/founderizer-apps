@@ -37,10 +37,11 @@ public sealed class WindowTests
         Assert.AreEqual(2, pane.NeedsCount);
         Assert.IsTrue(pane.ShowsSearch);
         var rows = pane.Agents;
-        CollectionAssert.AreEqual(new[] { "Fleet Manager", "Customer Support", "Developer", "DevOps", "Marketing" },
-            rows.Select(r => r.Label).ToArray());
+        CollectionAssert.AreEqual(new[] { "Fleet Manager", "Wren", "Theo", "Pax", "Orla" }, rows.Select(r => r.Label).ToArray());
+        CollectionAssert.AreEqual(new[] { null, "Customer Support", "Developer", "DevOps", "Marketing" },
+            rows.Select(r => r.Role).ToArray());
         // Each row's time is its chat's last message (the Mac's rule of 14 November 2026, ChatList.lastTime), also while the
-        // line names a task: Customer Support 14:31 and the Developer 13:12, where picture 1 drew 15:06 and 15:00.
+        // line names a task: Wren 14:31 and Theo 13:12, where picture 1 drew 15:06 and 15:00.
         CollectionAssert.AreEqual(new[] { "15:04", "14:31", "13:12", "12:12", "14:46" }, rows.Select(r => r.Time).ToArray());
         Assert.IsTrue(rows[0].Line!.StartsWith("Yes. Marketing has the email ready, and Developer", StringComparison.Ordinal));
         Assert.AreEqual("Answer today's support tickets", rows[1].Line);
@@ -97,7 +98,7 @@ public sealed class WindowTests
         Assert.IsTrue(cards.All(c => c.MoreClosed == "Show all" && !c.Folded));
         Assert.AreEqual("Message Fleet Manager", chat.Composer.Placeholder);
         Assert.IsFalse(chat.Composer.CanSend);
-        Assert.AreEqual(("Fleet Manager", (string?)null, "Claude Code", "hub"), (chat.Panel.Label, chat.Panel.Under, chat.Panel.Provider, chat.Panel.Machine));
+        Assert.AreEqual(("Fleet Manager", (string?)null, "Claude Code", "hub"), (chat.Panel.Label, chat.Panel.Role, chat.Panel.Provider, chat.Panel.Machine));
     }
 
     [TestMethod]
@@ -108,7 +109,7 @@ public sealed class WindowTests
         Assert.AreEqual(ChatWaiting.Working, chat.Waiting?.Line.Says);
         Assert.IsTrue(chat.Waiting!.Shows && chat.Waiting.Line.Moving && chat.WaitingMark.Moves);
         Assert.AreEqual("Which order is it?", chat.Rows[^1].Text);
-        Assert.AreEqual("Wren", chat.Panel.Under);
+        Assert.AreEqual("Customer Support", chat.Panel.Role);
         var row = Screens.Pane(state, Page.Chat("wren"), DateTimeOffset.UtcNow, British).Agents.First(r => r.Name == "wren");
         Assert.AreEqual(("You: Which order is it?", "15:11"), (row.Line, row.Time));
     }
@@ -306,7 +307,7 @@ public sealed class WindowTests
 
             Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", "no-messages");
             var empty = Screens.Chat(SampleAt1512(), "theo", DateTimeOffset.UtcNow, British);
-            Assert.AreEqual((true, false, "No messages with Developer yet"), (empty.Empty, empty.Loading, empty.EmptyWords));
+            Assert.AreEqual((true, false, "No messages with Theo yet"), (empty.Empty, empty.Loading, empty.EmptyWords));
 
             Environment.SetEnvironmentVariable("FOUNDERIZER_SAMPLE_STATE", "first-read");
             var first = Screens.Chat(SampleAt1512(), "orla", DateTimeOffset.UtcNow, British);

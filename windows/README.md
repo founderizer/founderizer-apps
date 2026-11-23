@@ -114,7 +114,7 @@ renamed or removed without a word to the screens lane.
     `ComposerModel.PlusHover` (the plus's hover, as the answer box's), `Screens.TaskbarWords(state)` (the taskbar
     count for assistive apps, the Mac's "1 item needs you" and "N items need you"; null with no count),
     `UsageRow.ShareWords` ("42%", as both apps write a share), `ChatModel.EmptyWords` (what an assistive app says for
-    the empty chat's mark: "No messages with <role> yet") and `ChatModel.LoadingWords` ("Reading…", a chat's first
+    the empty chat's mark: "No messages with <name> yet") and `ChatModel.LoadingWords` ("Reading…", a chat's first
     read, after a second), and `ResultModel.OutputLabel` and `HowLabel`. The empty chat and its first read wait for
     their pictures before a screen draws them.
   - the time at the end of an agent's row (`AgentRow.Time`) is the time of its chat's last message
@@ -155,7 +155,7 @@ renamed or removed without a word to the screens lane.
     hold of kind "pause" in the hub's state "stopped"), the gray pause mark (`AnswerSymbol.Paused`): the row's
     `TaskSymbol.Paused` in `Row`, drawn with the search card's pause icon in its muted gray, and the row's words,
     "Paused". A pause that waits for its helper's report and a stop stay the check. `Hover` shows under the pointer as the system's tooltip, and
-    `Words` are its automation name. The work of a task has `Badge` (`AgentBadge.Of`: the agent's role and its mark at
+    `Words` are its automation name. The work of a task has `Badge` (`AgentBadge.Of`: the agent's name and its mark at
     rest, grey where the agent is not there) and `Title` in place of `Hover`: its tooltip is the Mac's tag (the
     owner's "Yes, badge as drawn", 21 November 2026; `AnswerMarkView.WorkTag`), the badge then " · " and the title,
     wrapping at 360, under the mark with its words at the answer line's left edge (above it only where the window's

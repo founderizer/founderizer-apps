@@ -431,13 +431,23 @@ struct SecretEntryView: View {
     /// November 2026 to the picture of a request at hand: a Key field, Save, Decline): its site, and for a key its
     /// variable, stand in the request's own title. Any other request keeps the rows of its card there.
     /// A request for a new value of a key (`replace`) names its key in its title: its Key field alone, and the note.
-    private var fieldsAlone: Bool {
-        onStep && (knowsSite && (login.kind == .login || !preset.env.isEmpty) || preset.replace != nil) || preset.keyStep
+    private var fieldsAlone: Bool { Self.fieldsAlone(preset, kind: login.kind, onStep: onStep) }
+    private static func fieldsAlone(_ preset: SecretPreset, kind: LoginSecret.Kind, onStep: Bool) -> Bool {
+        onStep && (knowsSite(preset) && (kind == .login || !preset.env.isEmpty) || preset.replace != nil) || preset.keyStep
+    }
+    /// **The width that a request's form draws before it has said so** (`SecretFormWidth`): on a step, the fields of a
+    /// request that names all but the value (`fieldsAlone`) are a step's field wide, in the middle; every other form
+    /// stands up to the form's width (`body`). His talk over the form takes it in its first frame, so the bubble does not
+    /// jump. A request's form has no Kind choice, so its kind is the request's.
+    static func width(of need: OwnerNeed, onStep: Bool) -> CGFloat {
+        let preset = SecretPreset(need: need)
+        return fieldsAlone(preset, kind: preset.kind, onStep: onStep) ? SetupMetrics.field : FormMetrics.formWidth
     }
     /// Save can go: the vault's key is known, and what he typed is a login or a key.
     private var canSave: Bool { !busy && central != nil && login.problem == nil && context != nil }
     /// A request that names its site keeps it: the card's title already says the host, so the form asks for no address.
-    private var knowsSite: Bool { (isRequest || preset.keyStep) && !preset.url.isEmpty }
+    private var knowsSite: Bool { Self.knowsSite(preset) }
+    private static func knowsSite(_ preset: SecretPreset) -> Bool { (preset.need != nil || preset.keyStep) && !preset.url.isEmpty }
     /// A request whose proposal names one agent is for that agent: the save gives it what it asked for, with no list.
     private var forOneAgent: Bool { isRequest && preset.give.count == 1 }
     private var need: OwnerNeed? { preset.need.flatMap { id in store.state?.needs.first { $0.id == id } } }
@@ -470,36 +480,42 @@ struct SecretEntryView: View {
 
     var body: some View {
         VStack(alignment: onStep ? .center : .leading, spacing: 14) {
-            switch phase {
-            // **An error is its line and one sentence, with no footer that explains** (fix round 3, item 35).
-            case .noVault:
-                FormSection(compact ? nil : String(l10n: "Add secret")) {
-                    FormRow("Founderizer Vault does not answer", detail: Self.noVaultDetail) {
-                        Button("Try again") { Task { await start() } }.buttonStyle(FleetOutlineButtonStyle()).disabled(busy)
-                            .accessibilityIdentifier("secret-vault-retry")
+            // **The parts that the form draws, apart from its line and its buttons**: their width, that of their widest
+            // part, is the one that his talk over the form takes (`SecretFormWidth`). The line wraps at the column's
+            // width on a step, and the buttons stand in the middle, so neither says where the form ends.
+            VStack(alignment: onStep ? .center : .leading, spacing: 14) {
+                switch phase {
+                // **An error is its line and one sentence, with no footer that explains** (fix round 3, item 35).
+                case .noVault:
+                    FormSection(compact ? nil : String(l10n: "Add secret")) {
+                        FormRow("Founderizer Vault does not answer", detail: Self.noVaultDetail) {
+                            Button("Try again") { Task { await start() } }.buttonStyle(FleetOutlineButtonStyle()).disabled(busy)
+                                .accessibilityIdentifier("secret-vault-retry")
+                        }
                     }
+                // **The part "Value" at rest, while its Replace runs and as its check draws**: one case of two patterns, so it
+                // is one view through his whole Replace (Fable's review of 22 November 2026). As two cases, SwiftUI made a
+                // new view at each change between .form and .saved: the ring started again, and the check drew itself a
+                // second time. The mark stands at the start of its row (`KeyValueMark`); the form's rows only for a step
+                // that failed.
+                case .form where preset.valuePart, .saved where preset.valuePart && valueLook != .failed: valueForm
+                case .form:
+                    // **A request for a new value of a key that the fleet holds** (`replace`) has no secret of the list to
+                    // answer with, and no "Who can use it": the same agents keep the key.
+                    if !fitting.isEmpty && preset.replace == nil { fits }
+                    form
+                    if !holders.isEmpty && !forOneAgent && !preset.keyStep && preset.replace == nil { accessChoice.disabled(busy) }
+                // A key page goes on by itself once the vault has the key: until then its field and its moving words.
+                // **While the vault takes the key: "Saving…" and no button** (review M3); a failed intake is the form's one
+                // orange line, with Save again for the same reference.
+                case .saved where preset.keyStep:
+                    stepField(String(l10n: "Key"), text: .constant(""), secure: true, id: "secret-password").disabled(true)
+                    // In the middle, as the field's own wait stands (`stepFields`).
+                    waitRow.fixedSize()
+                case .saved(let progress): saved(progress)
                 }
-            // **The part "Value" at rest, while its Replace runs and as its check draws**: one case of two patterns, so it
-            // is one view through his whole Replace (Fable's review of 22 November 2026). As two cases, SwiftUI made a
-            // new view at each change between .form and .saved: the ring started again, and the check drew itself a
-            // second time. The mark stands at the start of its row (`KeyValueMark`); the form's rows only for a step
-            // that failed.
-            case .form where preset.valuePart, .saved where preset.valuePart && valueLook != .failed: valueForm
-            case .form:
-                // **A request for a new value of a key that the fleet holds** (`replace`) has no secret of the list to
-                // answer with, and no "Who can use it": the same agents keep the key.
-                if !fitting.isEmpty && preset.replace == nil { fits }
-                form
-                if !holders.isEmpty && !forOneAgent && !preset.keyStep && preset.replace == nil { accessChoice.disabled(busy) }
-            // A key page goes on by itself once the vault has the key: until then its field and its moving words.
-            // **While the vault takes the key: "Saving…" and no button** (review M3); a failed intake is the form's one
-            // orange line, with Save again for the same reference.
-            case .saved where preset.keyStep:
-                stepField(String(l10n: "Key"), text: .constant(""), secure: true, id: "secret-password").disabled(true)
-                // In the middle, as the field's own wait stands (`stepFields`).
-                waitRow.fixedSize()
-            case .saved(let progress): saved(progress)
             }
+            .background(GeometryReader { Color.clear.preference(key: SecretFormWidth.self, value: $0.size.width) })
             if let message = message ?? keyStepProblem ?? (busy ? nil : note) {
                 Text(message).font(FormMetrics.onStep(onStep ? stepText : nil) ?? FormMetrics.detail).foregroundStyle(.orange)
                     .multilineTextAlignment(onStep ? .center : .leading).fixedSize(horizontal: false, vertical: true)
@@ -1466,4 +1482,14 @@ extension SecretEntryView {
                                           kind: kind, variable: variable, address: address,
                                           fingerprints: SecretFingerprint.of(value, salts: salts))
     }
+}
+
+/// **The width that a key's form draws, which his talk over it takes** (the owner's "not aligned, please fix" of 22
+/// November 2026: his bubble stood past the right edge of the form under it): the widest of the parts that the form
+/// draws, from its own layout, so the bubble ends where the form ends whatever the form shows: its fields alone on a
+/// step, its rows, the secrets of the list that fit, who can use it, a vault that does not answer. Its orange line and
+/// its buttons do not count. Before the form has said it, the talk takes `SecretEntryView.width(of:onStep:)`.
+struct SecretFormWidth: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) { value = nextValue() ?? value }
 }

@@ -118,6 +118,16 @@ public struct ServerEntry: Decodable, Identifiable, Sendable {
     public let model_providers: [String]?
     public var id: String { name }
     public var isMac: Bool { kind == "mac" }
+
+    /// **Whether the hub's report says that this server is a Linux machine**, whose port 22 only root's `sshd` can hold:
+    /// its kind is linux, or it has no kind and the reading of one of its agents names a system that is not macOS, as
+    /// the hub reads a kind (`hub.server_kind`). A server of no kind and no reading yet (a new Mac with no agent) is not,
+    /// so its page keeps no first host key at port 22 either (`InstallTarget.macServer`).
+    public func reportsLinux(readings: [MachineStatus]) -> Bool {
+        if let kind { return kind == "linux" }
+        guard let system = readings.first(where: { $0.machine == name })?.os.name, !system.isEmpty else { return false }
+        return !system.hasPrefix("macOS")
+    }
     /// Add agent's Other models card: a Linux server that the hub says takes such an agent.
     public var takesModelAccounts: Bool { !isMac && !(model_providers ?? []).isEmpty }
     public var symbol: String { isMac ? "desktopcomputer" : "server.rack" }

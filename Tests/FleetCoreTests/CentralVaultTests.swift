@@ -418,22 +418,64 @@ struct CentralVaultTests {
         #expect(CentralVaultPins.recipient(hub: hub, fleet: "0000000000000000", in: defaults) == nil)
     }
 
+    /// **A server is a Mac for the trust step only when the hub's list and this Mac's own Tailscale both say so**
+    /// (`CentralVaultRemote.trustRead`; R2-M1 of the validation of 23 November 2026): then its key is read as the
+    /// connection's user; else as root, and a record's user that is not root reads nothing. Bug: the hub's word "mac"
+    /// alone lets the record's user in, so a hub that is broken into calls a Linux server a Mac, names an agent's OS user,
+    /// and that agent's forced command prints the agent's key, which the hub binds too, and the Mac pins it.
+    @Test func aServerIsAMacForTheTrustStepOnlyByBothWords() {
+        func read(_ kind: String?, _ os: Set<String>, _ user: String, kept: Bool = false) -> CentralVaultRemote.TrustRead? {
+            CentralVaultRemote.trustRead(kind: kind, os: os, user: user, kept: kept)
+        }
+        #expect(read("mac", ["macOS"], "owner-example") == .agents)
+        #expect(read("mac", ["linux"], "fleet-writer") == nil && read("mac", [], "fleet-writer") == nil)
+        #expect(read("linux", ["macOS"], "owner-example") == nil && read(nil, ["macOS"], "owner-example") == nil)
+        #expect(read("mac", ["linux"], "root") == .root && read("linux", ["linux"], "root") == .root)
+        // a connection that this Mac keeps is as it was: as root through sudo
+        #expect(read("mac", ["linux"], "admin", kept: true) == .root)
+    }
+
+    /// **An update, and the app's own install, never move a pin that this Mac holds** (`CentralVaultPins.refusal`; M2
+    /// of the validation of 23 November 2026): the vault's keys never change in an install or an update, so another key
+    /// at one of them comes only from a fault, and the pin stays, with the words of a hub that names another key. Only
+    /// the owner's Set up and a first install, with no pin held, write a pin. Bug: an update pins each key that its run
+    /// prints, so one fault (a forced command, a program of the hub's user) silently replaces a good pin.
+    @Test func anUpdateNeverMovesAPinThatThisMacHolds() {
+        let pin = Self.recipient, other = "age1" + String(repeating: "q", count: 58)
+        #expect(CentralVaultPins.refusal(of: other, held: pin, setUp: false) == VaultPlan.otherKey)
+        #expect(CentralVaultPins.refusal(of: pin, held: pin, setUp: false) == nil)
+        #expect(CentralVaultPins.refusal(of: other, held: nil, setUp: false) == nil)       // a first install
+        #expect(CentralVaultPins.refusal(of: other, held: pin, setUp: true) == nil)        // the owner's Set up
+    }
+
     // MARK: over SSH
 
     /// The owner's key gets today's arguments whole. The app's own key, once a run with it alone got in to the account
     /// (`SSHKeyLedger`), goes with no configuration (`-F /dev/null`) and keeps the strict host key. Bugs: app mode
     /// takes the install's `accept-new`, so a pin is read from a machine that this Mac never met; an app-mode call
     /// with no `-F /dev/null` lets `Host *` keys in beside the app's.
+    ///
+    /// **A port that the owner did not give for that host takes the host key of the host's port 22** (the hole of 22
+    /// November 2026): bug, the strict check reads the `[host]:2222` line that an earlier `accept-new` run kept at a
+    /// port that the hub named, where an agent's own SSH server answered, so every vault step after it takes that
+    /// program's answer for root's (the central vault's key of the hub's own server too).
     @Test func theVaultsStepsCheckTheHostKeyStrictly() {
         let target = InstallTarget(host: "100.80.1.2", user: "sam", port: 2222, identityFile: "/Users/owner/.ssh/id_ed25519", becomeRoot: true)
         let arguments = CentralVaultRemote.arguments(target: target, program: "echo 'hi'")
         let remote = #"sudo -n -i -- /bin/sh -c 'echo '\''hi'\'''"#
         #expect(arguments == ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no",
-                              "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20",
+                              "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "HostKeyAlias=100.80.1.2",
+                              "-o", "ConnectTimeout=20",
                               "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0", "-p", "2222",
                               "-o", "IdentitiesOnly=yes", "-i", "/Users/owner/.ssh/id_ed25519", "sam@100.80.1.2", remote])
+        // the port that the owner gave for this host: its own `[host]:2222` line, as before
+        var given = target
+        given.portGivenFor = "100.80.1.2"
+        let owners = CentralVaultRemote.arguments(target: given, program: "echo 'hi'")
+        #expect(owners.contains("StrictHostKeyChecking=yes") && !owners.contains(where: { $0.hasPrefix("HostKeyAlias") }))
         let root = InstallTarget(host: "100.80.1.2")
         #expect(CentralVaultRemote.arguments(target: root, program: "echo hi").suffix(2) == ["root@100.80.1.2", "echo hi"])
+        #expect(!CentralVaultRemote.arguments(target: root, program: "echo hi").contains(where: { $0.hasPrefix("HostKeyAlias") }))
 
         let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ssh-ledger-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -447,6 +489,45 @@ struct CentralVaultTests {
         #expect(confined.contains("StrictHostKeyChecking=yes") && !confined.contains(where: { $0.contains("accept-new") }))
         #expect(confined.filter { $0 == "-a" || $0 == "ClearAllForwardings=yes" }.count == 2)
         #expect(confined.suffix(4) == ["-p", "2222", "sam@100.80.1.2", remote])
+    }
+
+    /// **The central vault's install and update run only where this Mac's own Tailscale names the connection's host and
+    /// this Mac's hub address as one device**, because the key that they print is the pin. Bugs: the update round
+    /// takes the hub's record alone (until 22 November 2026), so a hub that is broken into gets a key of its choosing
+    /// pinned as the central vault's; or it checks the connection's address only, so the hub names a device of its own
+    /// and that device's address, and the root there prints the key; or it compares with the hub's name of its machine,
+    /// which is not the device's Tailscale name for good on some fleets (the hub renames its machine only while the
+    /// central vault does not answer, and never to a name that Fleet refuses), so their install and update stop for
+    /// good (M3 of the validation of 23 November 2026).
+    @Test func theCentralVaultsStepsRunOnlyOnTheMachineThatThisMacsTailscaleNames() {
+        let status = #"""
+        {"BackendState": "Running",
+         "Self": {"DNSName": "owner-mac.tail1234.ts.net.", "TailscaleIPs": ["100.70.0.1"]},
+         "Peer": {"a": {"DNSName": "hub-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.2", "fd7a:115c:a1e0::12"]},
+                  "b": {"DNSName": "agent-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.3"]}}}
+        """#
+        let hub = URL(string: "http://100.80.1.2:8765")!
+        func stop(_ host: String, machine: String = "hub-box", hub: URL = hub, status: String? = status) -> String? {
+            CentralVaultRemote.hubMachineStop(target: InstallTarget(host: host), hub: hub, machine: machine, status: status)
+        }
+        // the hub's machine, by its address, its MagicDNS name or its name
+        #expect(stop("100.80.1.2") == nil && stop("hub-box.tail1234.ts.net") == nil && stop("hub-box") == nil)
+        #expect(stop("100.80.1.2", hub: URL(string: "http://hub-box:8765")!) == nil)
+        // an address that the hub's record names and this Mac's Tailscale does not name as that machine: nothing runs
+        #expect(stop("100.80.1.3")?.contains("100.80.1.3") == true)
+        #expect(stop("203.0.113.5") != nil && stop("100.80.9.9") != nil)
+        // the hub names another device as its machine, with that device's own address: this Mac's hub is not there
+        #expect(stop("100.80.1.3", machine: "agent-box")?.contains("100.80.1.3") == true)
+        // the hub's name of its machine is not its Tailscale name: the one device decides
+        #expect(stop("100.80.1.2", machine: "hub") == nil && stop("hub-box", machine: "hub") == nil)
+        // a node that another tailnet shares in, with the hub's first label: that short name is no one node (R2-S2),
+        // while each node's address and whole name still are
+        let shared = status.replacingOccurrences(of: #""b": {"#, with: #""c": {"DNSName": "hub-box.example.ts.net.", "TailscaleIPs": ["100.90.0.9"]}, "b": {"#)
+        #expect(stop("hub-box", status: shared) != nil && stop("100.90.0.9", status: shared) != nil)
+        #expect(stop("100.80.1.2", status: shared) == nil && stop("hub-box.tail1234.ts.net", status: shared) == nil)
+        // no answer of Tailscale, or a hub address that is no device of it: nothing runs
+        #expect(stop("100.80.1.2", status: nil) != nil && stop("100.80.1.2", status: "") != nil)
+        #expect(stop("100.80.1.2", hub: URL(string: "http://127.0.0.1:8765")!) != nil)
     }
 
     /// DevOps plan V2: the install runs from root's own clone at its one fixed place, never from a path that the hub

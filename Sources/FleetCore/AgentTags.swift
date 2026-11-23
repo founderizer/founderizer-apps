@@ -12,10 +12,12 @@ import Foundation
 /// Python string (`String.unicodeScalars`): a count in characters or in UTF-16 units puts the hub's range on other
 /// words after an emoji or an accent.
 public struct AgentTags: Equatable, Sendable {
-    /// One row of the list: an agent, and its label, which the row shows and a pick writes after "@".
+    /// One row of the list: an agent, its label, which the row shows first and a pick writes after "@", and the role
+    /// that the row shows beside the label in muted ("Nova · Customer Support"), nil for none.
     public struct Row: Equatable, Sendable, Identifiable {
         public let agent: String
         public let label: String
+        public let role: String?
         public var id: String { agent }
     }
 
@@ -60,6 +62,8 @@ public struct AgentTags: Equatable, Sendable {
     private let roles: [String: String]
     /// Each agent's label, by its name.
     private let labels: [String: String]
+    /// The role beside each agent's label in its row, by its name: the agents that have one.
+    private let beside: [String: String]
     /// The roles of the team, for the tags of his words (rule 1 of the hub's reading).
     private let reading: [Role]
     /// The names of the team, the longest first, for rule 2.
@@ -76,22 +80,27 @@ public struct AgentTags: Equatable, Sendable {
     /// `agents`: the team, each agent's name and role (its `title`, nil for none), in its own order (the sidebar's);
     /// `except`: the chat's own agent, which is no row and no tag.
     ///
-    /// **The label of each agent is the hub's** (`tag_label`, design 1.1): its role on single spaces, when no other
-    /// agent has that role or that role as its name, without regard to case; else its name as the apps show it
-    /// (`capitalized`, which is the hub's `shown_name`). So each label names one agent, as `CardNames` does: a role
-    /// that two agents hold names neither.
+    /// **The label of each agent is the one of both apps** (`AgentNames.label`; the owner's answer of 22 November 2026:
+    /// a row shows the name and the role, and a pick writes "@" and the name): its name with capitals (`capitalized`,
+    /// which is the hub's `shown_name`), or its role where a word of the role is the name ("Fleet Manager"); its row
+    /// shows the role beside it (`AgentNames.role`). A name is one agent's alone. **A label that is a role names its agent only
+    /// where no other agent has that role or that role as its name**, without regard to case (a team.json written by
+    /// hand); else the label is the name and the role stands beside it. So a pick always reads back as the agent he
+    /// picked. The hub's own line about a tag, which agents read, keeps the role first (`tag_label`).
     public init(agents: [(name: String, role: String?)], except: String) {
-        var roles: [String: String] = [:], labels: [String: String] = [:]
+        var roles: [String: String] = [:], labels: [String: String] = [:], beside: [String: String] = [:]
         for agent in agents where roles[agent.name] == nil { roles[agent.name] = Self.spaced(agent.role ?? "") }
+        let book = roles.filter { !$0.value.isEmpty }
         // each agent's role and name as two of them compare, once
         let folded = agents.map { (name: $0.name, role: Self.fold($0.role ?? ""), said: Self.fold($0.name)) }
         let named = Set(folded.map(\.said))
         for agent in folded where labels[agent.name] == nil {
-            let role = roles[agent.name] ?? ""
-            let unique = !role.isEmpty && !folded.contains {
+            let name = agent.name.capitalized, label = AgentNames.label(agent.name, roles: book)
+            let shared = label != name && folded.contains {
                 $0.name != agent.name && ($0.role == agent.role || $0.said == agent.role)
             }
-            labels[agent.name] = unique ? role : agent.name.capitalized
+            labels[agent.name] = shared ? name : label
+            beside[agent.name] = shared ? book[agent.name] : AgentNames.role(agent.name, roles: book)
         }
         var grouped: [(said: String, role: String, holders: [String])] = []
         for agent in folded {
@@ -105,6 +114,7 @@ public struct AgentTags: Equatable, Sendable {
         }
         self.roles = roles
         self.labels = labels
+        self.beside = beside
         self.except = except
         reading = grouped.map { group in
             Role(words: group.role.split(separator: " ").map { Array($0.unicodeScalars) }, holders: group.holders,
@@ -114,10 +124,10 @@ public struct AgentTags: Equatable, Sendable {
             ? $0.unicodeScalars.count > $1.unicodeScalars.count : $0 < $1 }.map { Array($0.unicodeScalars) }
         var seen = Set<String>()
         rows = agents.filter { $0.name != except && seen.insert($0.name).inserted }
-            .map { Row(agent: $0.name, label: labels[$0.name] ?? $0.name.capitalized) }
+            .map { Row(agent: $0.name, label: labels[$0.name] ?? $0.name.capitalized, role: beside[$0.name]) }
     }
 
-    /// The label of an agent of the team: what its row shows and what a pick writes after "@".
+    /// The label of an agent of the team: what its row shows first and what a pick writes after "@".
     public func label(of agent: String) -> String? { labels[agent] }
 
     /// **The open "@" before the caret, and the letters between it and the caret** (design 4.3), or nil: the nearest
@@ -196,12 +206,14 @@ public struct AgentTags: Equatable, Sendable {
         return nil
     }
 
-    /// **The lighter row when the rows change**: the row whose label his letters already are, without regard to case
-    /// and spaces ("@Customer Support" lights Customer Support, not Customer Support Lead above it, so Return picks what
-    /// he wrote), else the first.
+    /// **The lighter row when the rows change**: the row whose label his letters already are, else the row whose
+    /// whole role they are, without regard to case and spaces ("@Customer Support" lights the agent of Customer
+    /// Support, not the one of Customer Support Lead above it, so Return picks the agent that he wrote), else the first.
     public func start(for letters: String, in rows: [Row]) -> Int {
         let said = Self.fold(letters)
-        return rows.firstIndex { Self.fold($0.label) == said } ?? 0
+        guard !said.isEmpty else { return 0 }
+        return rows.firstIndex { Self.fold($0.label) == said }
+            ?? rows.firstIndex { Self.fold(roles[$0.agent] ?? "") == said } ?? 0
     }
 
     /// **The tags of the words that he sends** (design 4.5; rules 1 and 2 of the hub's reading, `tag_at`): at each "@"

@@ -232,7 +232,8 @@ struct ChatsPage: View {
                 // points in from the edge that the search field and the cards keep, and at the accessibility sizes it
                 // took a line of its own.
                 heading {
-                    Text(agentName(agent.name)).font(.headline)
+                    agentNameLine(agent.name).font(.headline)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                     if typeSize.isAccessibilitySize {
                         if rowTime != nil || unread {
                             HStack(spacing: 6) {
@@ -280,7 +281,7 @@ struct ChatsPage: View {
     /// twice, once for the mark and once for the words.
     private func spoken(_ agent: MobileAgent) -> String {
         let state = state(of: agent)
-        var parts = [agentName(agent.name), state.words]
+        var parts = [agentNameSpoken(agent.name), state.words]
         if let rowTime = rowTime(of: agent) { parts.append(ChatList.time(rowTime, now: store.hubNow)) }
         if store.hasNewReply(from: agent.name) { parts.append(String(l10n: "Unread reply")) }
         parts.append(line(of: agent, state).text)
@@ -292,7 +293,7 @@ struct ChatsPage: View {
     /// of day for today, "Yesterday", the weekday within the last week, else the date in numbers. It was the time of
     /// day alone, so a line of yesterday evening read "20:51" beside one of this morning.
     private func time(_ ts: Double) -> some View {
-        Text(ChatList.time(ts, now: store.hubNow)).font(.subheadline).foregroundStyle(Brand.muted)
+        Text(ChatList.time(ts, now: store.hubNow)).font(.subheadline).foregroundStyle(Brand.muted).fixedSize()
     }
 
     /// A reply he has not read: the one violet dot.

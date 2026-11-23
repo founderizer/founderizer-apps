@@ -4,10 +4,11 @@ import SwiftUI
 /// **The list of @ tags in the chat's box** (the owner, 20 November 2026: "@<agent-name> or @<agent-role> allows tagging
 /// an agent", and "Yes, as drawn" to the list; `AgentTags` has its rules): the first part over the line in the
 /// composer's capsule, one row for each other agent of the team, its glyph as its row of the sidebar shows it and its
-/// label in the chat's font, and the lighter row in the fill of the highlighted row of the app's menu
-/// (`FleetMenuMetrics`). No heading, no second line, no hint and no words for no match: an empty list is closed. **At
-/// most six rows show**, and the list scrolls to keep the lighter row in view. The pointer over a row makes it the
-/// lighter row, and a click picks it; the keys are the box's (`FleetView.composer`).
+/// label in the chat's font with its role beside it in muted, "Nova · Customer Support" (the owner's answer of 22
+/// November 2026: a row shows the name and the role, and a pick writes "@" and the name), and the lighter row in the fill of the highlighted row of
+/// the app's menu (`FleetMenuMetrics`). No heading, no second line, no hint and no words for no match: an empty list is
+/// closed. **At most six rows show**, and the list scrolls to keep the lighter row in view. The pointer over a row
+/// makes it the lighter row, and a click picks it; the keys are the box's (`FleetView.composer`).
 struct AgentTagList: View {
     let rows: [AgentTags.Row]
     /// The lighter row: Return or Tab picks it.
@@ -28,7 +29,7 @@ struct AgentTagList: View {
                             .buttonStyle(.plain)
                             .onHover { inside in if inside { hover(index) } }
                             .accessibilityElement(children: .ignore)
-                            .accessibilityLabel(Text(verbatim: row.label))
+                            .accessibilityLabel(Text(verbatim: row.role.map { "\(row.label), \($0)" } ?? row.label))
                             .accessibilityAddTraits(index == lighter ? .isSelected : [])
                             .id(row.id)
                     }
@@ -45,7 +46,10 @@ struct AgentTagList: View {
     private func line(_ row: AgentTags.Row, lighter: Bool) -> some View {
         HStack(spacing: FleetMenuMetrics.markGap + 2) {
             AgentGlyph(name: row.agent, size: GlyphSize.row, ground: FleetStyle.composer)
-            Text(verbatim: row.label).font(ChatStyle.font).foregroundStyle(FleetStyle.text).lineLimit(1)
+            // the label, then its role in muted, as `AgentNameLine` draws an agent; a long role ends first
+            (Text(verbatim: row.label).foregroundStyle(FleetStyle.text)
+                + Text(verbatim: row.role.map { " · \($0)" } ?? "").foregroundStyle(FleetStyle.muted))
+                .font(ChatStyle.font).lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, FleetMenuMetrics.lead)

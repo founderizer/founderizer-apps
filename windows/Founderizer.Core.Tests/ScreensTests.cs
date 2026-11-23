@@ -40,10 +40,12 @@ public sealed class ScreensTests
         snapshot["agents"]![0]!["title"] = "Chief of Staff";
         snapshot["agents"]!.AsArray().Add(SampleFleet.Agent("ivy", "worker", "Research"));
         var after = before with { Fleet = SampleFleet.Decode(snapshot) };
-        Assert.AreEqual("Chief of Staff", after.Names.Label("manager"));
-        Assert.AreEqual("Research", after.Names.Label("ivy"));
+        // A role that holds no word of the name stands beside the name: "Manager · Chief of Staff".
+        Assert.AreEqual(("Manager", "Chief of Staff"), (after.Names.Label("manager"), after.Names.Role("manager")));
+        Assert.AreEqual("Research", after.Names.Role("ivy"));
         Assert.AreEqual(GlyphLook.Team(["manager", "wren", "theo", "pax", "orla", "ivy"])["ivy"], after.Marks["ivy"]);
-        Assert.AreEqual("Research", Screens.Pane(after, Page.Tasks, Now, Utc).Agents.Last().Label);
+        var ivy = Screens.Pane(after, Page.Tasks, Now, Utc).Agents.Last();
+        Assert.AreEqual(("Ivy", "Research"), (ivy.Label, ivy.Role));
         Assert.AreEqual("Fleet Manager", before.Names.Label("manager"), "the state before keeps its own reading");
         var same = after with { Drafts = after.Drafts.SetItem("ivy", "hello") };
         Assert.AreSame(after.Names, same.Names, "a change that keeps the reading keeps its cache");
@@ -57,12 +59,17 @@ public sealed class ScreensTests
         Assert.IsTrue(pane.ShowsNeeds);
         Assert.AreEqual(2, pane.NeedsCount);
         Assert.AreEqual("2 items need you", pane.NeedsHover);
-        CollectionAssert.AreEqual(new[] { "Fleet Manager", "Customer Support", "Developer", "DevOps", "Marketing" },
+        CollectionAssert.AreEqual(new[] { "Fleet Manager", "Wren", "Theo", "Pax", "Orla" },
                                   pane.Agents.Select(a => a.Label).ToArray());
         // Each row's name before its role, as the Mac's AgentNameLine (set 8, picture 21: "Juno · Fleet Manager"); none
-        // where the role says the name already ("Fleet Manager" of "manager"). The bug: a pane that names an agent by its
-        // role alone, which the Mac left with Founderizer 0.1.380, so two agents of one role read the same.
-        CollectionAssert.AreEqual(new[] { null, "Wren", "Theo", "Pax", "Orla" }, pane.Agents.Select(a => a.Under).ToArray());
+        // where the role is the label ("Fleet Manager" of "manager"). The bug: a pane that names an agent by its role
+        // alone (the owner's answers of 22 November 2026 to F16), or that loses the role beside the name.
+        CollectionAssert.AreEqual(new[] { null, "Customer Support", "Developer", "DevOps", "Marketing" },
+                                  pane.Agents.Select(a => a.Role).ToArray());
+        // The row draws the name, then the role muted, and an assistive app reads them in that order.
+        Assert.AreEqual(("Wren", " · Customer Support", "Wren, Customer Support"),
+                        (pane.Agents[1].Lead, pane.Agents[1].Trail, pane.Agents[1].Spoken));
+        Assert.AreEqual(("Fleet Manager", "", "Fleet Manager"), (pane.Agents[0].Lead, pane.Agents[0].Trail, pane.Agents[0].Spoken));
         var manager = pane.Agents[0];
         Assert.AreEqual("Yes. Marketing has the email ready.", manager.Line);
         Assert.AreEqual("15:04", manager.Time);
@@ -106,7 +113,8 @@ public sealed class ScreensTests
         Assert.AreEqual("Message Fleet Manager", chat.Composer.Placeholder);
         Assert.IsFalse(chat.Composer.CanSend, "Send shows only with words");
         Assert.IsTrue(Screens.Chat(s with { Drafts = s.Drafts.SetItem("manager", "Go") }, "manager", Now, Utc).Composer.CanSend);
-        Assert.IsNull(chat.Panel.Under, "\"Fleet Manager\" names the manager");
+        Assert.IsNull(chat.Panel.Role, "\"Fleet Manager\" names the manager");
+        Assert.AreEqual(((string?)null, "", "Chat with Fleet Manager"), (chat.Role, chat.PillTrail, chat.PillWords));
         Assert.AreEqual(("Claude Code", "hub"), (chat.Panel.Provider, chat.Panel.Machine));
         Assert.IsFalse(chat.Panel.ShowsUsage);
     }
@@ -121,8 +129,11 @@ public sealed class ScreensTests
         var chat = Screens.Chat(s, "wren", Now, Utc);
         Assert.AreEqual("Thinking", chat.Waiting!.Line.Says);
         Assert.IsTrue(chat.Waiting.Shows && chat.Waiting.Line.Moving && chat.WaitingMark.Moves);
-        Assert.AreEqual("Customer Support", chat.Label);
-        Assert.AreEqual("Wren", chat.Panel.Under);
+        Assert.AreEqual("Wren", chat.Label);
+        Assert.AreEqual("Customer Support", chat.Panel.Role);
+        // The pill over the chat: the name, then the role muted, as the Mac's chat header; an assistive app reads
+        // "Chat with <name>", as VoiceOver reads the Mac's. The bug: a pill with the name alone.
+        Assert.AreEqual((" · Customer Support", "Chat with Wren"), (chat.PillTrail, chat.PillWords));
         // Its server not answering: two words that stand still.
         var gone = WithChat(Sample(x => x["agents"]![1]!["last_seen"] = SampleFleet.Now - 600), "wren",
             SampleFleet.Message(mine, SampleFleet.Now - 60, "Which order is it?"));
@@ -205,7 +216,7 @@ public sealed class ScreensTests
         CollectionAssert.AreEqual(new long[] { 2, 1 }, needs.Cards.Select(c => c.Id).ToArray());
         Assert.IsTrue(needs.Cards[0].Selected);
         Assert.IsTrue(needs.Cards[0].Waits, "Marketing's task waits on request 2");
-        Assert.AreEqual("Marketing waits for this", needs.Cards[0].WaitWords);
+        Assert.AreEqual("Orla waits for this", needs.Cards[0].WaitWords);
         var step = needs.AtHand!;
         Assert.AreEqual("Fleet Manager · 25 min ago", step.From);
         Assert.AreEqual("Details", step.MoreClosed, "the request at hand says Details where its chat card says Show all");
@@ -335,7 +346,7 @@ public sealed class ScreensTests
             var state = SampleFleet.State(SampleFleet.Decode(snapshot), Now);
             return state with { TaskPages = state.TaskPages.SetItem(12, page) };
         }
-        Assert.AreEqual("Developer is at its usage limit until 16:12.", Screens.Task(Limited(), 12, Now, Utc)!.LimitWords);
+        Assert.AreEqual("Theo is at its usage limit until 16:12.", Screens.Task(Limited(), 12, Now, Utc)!.LimitWords);
         Boxes(snapshot, "theo", "web");
         Assert.IsNull(Screens.Task(Limited(), 12, Now, Utc)!.LimitWords, "a Shell-off agent's check is the owner's, and comes first");
     }
@@ -366,7 +377,7 @@ public sealed class ScreensTests
         var model = Screens.Task(s, 12, Now, Utc)!;
         Assert.AreEqual("Some orders fail at checkout on iPhone.", model.Asks);
         Assert.AreEqual("Started: Fix the checkout error on iPhone.", model.Notes.Single().Text);
-        Assert.AreEqual("Developer", model.Who);
+        Assert.AreEqual("Theo", model.Who);
         Assert.AreEqual(("Working", true, true, false), (model.Controls!.StateWord, model.Controls.ShowsPause, model.Controls.ShowsStop, model.Controls.ShowsResume));
         Assert.AreEqual("Guide this task…", model.Guidance!.Placeholder);
         CollectionAssert.AreEqual(new[] { "Asked by", "Agent", "State", "Last activity", "Done when" }, model.Facts.Select(f => f.Label).ToArray());
@@ -392,7 +403,7 @@ public sealed class ScreensTests
         Assert.IsNull(model.Pending);
         var request = PendingRequest.New(s.Hub!, "gen1", "c", "hi", recipient: "wren") with { Refusal = "Not sent: No." };
         var waiting = Screens.Settings(s with { Pending = request }, "", Now, Utc, null).Pending!;
-        Assert.AreEqual(("Message to Customer Support", "Refused", WriteAction.Discard), (waiting.Title, waiting.Value, waiting.Action));
+        Assert.AreEqual(("Message to Wren", "Refused", WriteAction.Discard), (waiting.Title, waiting.Value, waiting.Action));
         var old = Screens.Settings(s with { LastRead = Now.AddMinutes(-5) }, "", Now, Utc, null);
         Assert.AreEqual("5 min ago", old.LastReading);
         Assert.AreEqual("Your hub did not answer. Check that its server is on.",

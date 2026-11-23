@@ -165,7 +165,8 @@ public sealed class ManagerSetupSettings
 public sealed record ManagerSetupView
 {
     public required string Agent { get; init; }
-    /// <summary>The manager as both apps name it: its role, else its name with capitals (the Mac's <c>agentLabel</c>).</summary>
+    /// <summary>The manager as the apps name it: its name with capitals, or its role when one word of the role is the
+    /// name (the Mac's <c>agentLabel</c>).</summary>
     public required string Label { get; init; }
     /// <summary>A read of this setup answered: the page comes from it (the Mac's <c>readingsCurrent</c>).</summary>
     public bool Answered { get; init; }

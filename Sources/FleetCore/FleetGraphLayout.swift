@@ -13,7 +13,7 @@ public struct FleetGraphLayout: Equatable, Sendable {
     public struct Row: Equatable, Sendable {
         /// The agent's place in the plan's list.
         public let agent: Int
-        /// The one axis of the row: the line from the manager ends on it, the agent's mark and its role are centred
+        /// The one axis of the row: the line from the manager ends on it, the agent's mark and its name are centred
         /// on it, and the dotted line runs on it.
         public let y: CGFloat
         /// The start and the end of the dotted line, for an agent that uses something and has the room for the line.
@@ -23,8 +23,9 @@ public struct FleetGraphLayout: Equatable, Sendable {
     public static let width: CGFloat = 688
     /// An island's inner margin, the room between two rows, and between two islands.
     static let pad: CGFloat = 16, rowGap: CGFloat = 24, islandGap: CGFloat = 14, edge: CGFloat = 8
-    /// The height of an agent's row: its mark, or its role with one line under it.
-    static let row: CGFloat = 28, rowWithLine: CGFloat = 39
+    /// The height of an agent's row: its mark, or its name with one line under it (its role, or what it asks first),
+    /// or with both.
+    static let row: CGFloat = 28, rowWithLine: CGFloat = 39, rowWithTwoLines: CGFloat = 55
     /// The least height of the island that holds the manager: its mark and its two lines of words.
     static let managerIsland: CGFloat = 112, ownIsland: CGFloat = 108
     /// The x of each column: the hub's tile, the agents' islands, an agent's mark and its words, and what it uses.
@@ -41,8 +42,9 @@ public struct FleetGraphLayout: Equatable, Sendable {
     public let hubAt: CGPoint
     public let height: CGFloat
 
-    /// `roleWidth` gives the width of a role's words in the card's type, so the dotted line starts after them.
-    public init(plan: FleetPlan, step: ServersStep, roleWidth: (String) -> CGFloat) {
+    /// `nameWidth` gives the width of an agent's name's words in the card's type, so the dotted line, on the name's
+    /// axis, starts after them.
+    public init(plan: FleetPlan, step: ServersStep, nameWidth: (String) -> CGFloat) {
         let places = plan.places(step)
         let together = step != .each
         // The agents' groups, one for each island of agents. At the first two steps the first group shares its island
@@ -60,7 +62,7 @@ public struct FleetGraphLayout: Equatable, Sendable {
             var inner = y + Self.pad, own: [(agent: Int, y: CGFloat)] = []
             for agent in group.agents {
                 own.append((agent, inner + Self.agentMark / 2))
-                inner += (plan.agents[agent].asksFirst == nil ? Self.row : Self.rowWithLine) + Self.rowGap
+                inner += Self.height(plan.agents[agent]) + Self.rowGap
             }
             var bottom = group.agents.isEmpty ? top + 2 * Self.pad : inner - Self.rowGap + Self.pad
             if withManager, bottom - top < Self.managerIsland {
@@ -100,9 +102,18 @@ public struct FleetGraphLayout: Equatable, Sendable {
         hubAt = CGPoint(x: Self.hubX, y: middle)
         rows = anchors.map { anchor in
             let agent = plan.agents[anchor.agent]
-            let start = Self.wordsX + roleWidth(agent.role) + 12
+            let start = Self.wordsX + nameWidth(agent.label) + 12
             return Row(agent: anchor.agent, y: anchor.y,
                        dotted: agent.uses != nil && start + 12 <= Self.dottedEnd ? start...Self.dottedEnd : nil)
+        }
+    }
+
+    /// The height of an agent's row, by the lines under its name: its role beside the name, and what it asks first.
+    static func height(_ agent: FleetPlan.Agent) -> CGFloat {
+        switch [agent.roleBeside, agent.asksFirst].compactMap({ $0 }).count {
+        case 0: row
+        case 1: rowWithLine
+        default: rowWithTwoLines
         }
     }
 

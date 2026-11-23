@@ -41,7 +41,7 @@ import SwiftUI
                                accountLeast: Double(width("founder@").rounded(.up)))
     }
 
-    /// The widest role of a server's agents, at most 200 points.
+    /// The widest label of a server's agents (`agentLabel`: its name, or a role that holds it), at most 200 points.
     static func roleWidth(_ names: [String]) -> Double {
         Double(min(200, (names.map { width($0.agentLabel) }.max() ?? 0).rounded(.up)))
     }
@@ -92,8 +92,9 @@ struct AgentUsageLine: View {
                     Text(name.agentLabel).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            // **Cut in the middle**: the roles of one team often differ only at their end ("Growth Lead", "Growth Writer"),
-            // and a cut at the end gave five lines that read the same at 420 points.
+            // **Cut in the middle**: two labels of one team can differ only at their end (roles that hold their
+            // agents' names, "Growth Lead", "Growth Writer"), and a cut at the end gave five lines that read the same at
+            // 420 points.
             .foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle).help(name.agentLabel)
             .padding(.leading, CGFloat(parts.small))
             Group {

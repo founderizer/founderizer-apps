@@ -244,8 +244,8 @@ public sealed class ThreadAsTheMacTests
             return column == ActivityColumn.Waiting ? card : card with { Why = "in progress" };
         }
         var waits = Card(s);
-        Assert.AreEqual("Waiting for Developer, DevOps", waits.Why);
-        StringAssert.EndsWith(waits.Hover, "Waiting for Developer, DevOps");
+        Assert.AreEqual("Waiting for Theo, Pax", waits.Why);
+        StringAssert.EndsWith(waits.Hover, "Waiting for Theo, Pax");
 
         Assert.AreEqual("in progress", Card(State(Fleet(works: true), Clock)).Why, "its session works, to check a result");
         Assert.AreEqual("in progress", Card(State(Fleet(works: null), Clock)).Why, "a hub that does not say changes nothing");

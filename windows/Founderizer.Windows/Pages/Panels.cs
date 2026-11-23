@@ -16,14 +16,14 @@ using Windows.UI;
 namespace Founderizer.Windows.Pages;
 
 /// <summary>The panel at the right of a chat (AgentStatusPanel), as pictures 1 and 2 draw it: a card with the agent's mark
-/// at 48, its role and the name under it; "Usage" with a card of its windows while it has a reading (picture 7 of the second
+/// at 48, its name and the role under it; "Usage" with a card of its windows while it has a reading (picture 7 of the second
 /// set: each window's length, a bar of 4 on a quiet track, its share, and when it resets); then "Runs on", with the
 /// provider's logo and name and the machine.</summary>
 internal sealed class AgentPanelView : Grid
 {
     private readonly AgentGlyph mark = new() { Side = 48 };
     private readonly TextBlock label = Look.Words("", semibold: true, wrap: false);
-    private readonly TextBlock under = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly TextBlock role = Look.Words("", 12, 16, Look.Muted, wrap: false);
     private readonly TextBlock limit = Look.Words("", 12, 16, Look.Orange);
     private readonly TextBlock warning = Look.Words("", 12, 16, Look.Orange);
     private readonly TextBlock usageHeading = Look.Words("", semibold: true, wrap: false);
@@ -44,7 +44,7 @@ internal sealed class AgentPanelView : Grid
     {
         Widths.FollowPanel(this);
 
-        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { label, under } };
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { label, role } };
         var who = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -94,8 +94,8 @@ internal sealed class AgentPanelView : Grid
     {
         mark.Mark = panel.Mark;
         label.Text = panel.Label;
-        under.Text = panel.Under ?? "";
-        under.Visibility = panel.Under is null ? Visibility.Collapsed : Visibility.Visible;
+        role.Text = panel.Role ?? "";
+        role.Visibility = panel.Role is null ? Visibility.Collapsed : Visibility.Visible;
         // The agent's usage limit and the manager's warning, in orange under its card (the Mac's panel lines).
         limit.Text = panel.LimitWords ?? "";
         limit.Margin = new Thickness(2, 10, 2, 0);

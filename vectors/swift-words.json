@@ -1,5 +1,5 @@
 {
-  "about" : "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC.",
+  "about" : "Words that FleetCore makes: AgentNames.label and role with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC.",
   "ages" : [
     {
       "locale" : "en_GB",
@@ -2076,14 +2076,16 @@
         "theo",
         "pax",
         "dev-lead",
-        "web_dev"
+        "web_dev",
+        "dev"
       ],
       "words" : "dev"
     },
     {
       "names" : [
         "pax",
-        "ops"
+        "ops",
+        "dev"
       ],
       "words" : "ops"
     },
@@ -2163,31 +2165,31 @@
     },
     {
       "capitalized" : "Wren",
-      "label" : "Customer Support",
+      "label" : "Wren",
       "name" : "wren",
-      "title" : "Customer Support",
-      "under" : "Wren"
+      "role" : "Customer Support",
+      "title" : "Customer Support"
     },
     {
       "capitalized" : "Theo",
-      "label" : "Developer",
+      "label" : "Theo",
       "name" : "theo",
-      "title" : "Developer",
-      "under" : "Theo"
+      "role" : "Developer",
+      "title" : "Developer"
     },
     {
       "capitalized" : "Pax",
-      "label" : "DevOps",
+      "label" : "Pax",
       "name" : "pax",
-      "title" : "DevOps",
-      "under" : "Pax"
+      "role" : "DevOps",
+      "title" : "DevOps"
     },
     {
       "capitalized" : "Orla",
-      "label" : "Marketing",
+      "label" : "Orla",
       "name" : "orla",
-      "title" : "Marketing",
-      "under" : "Orla"
+      "role" : "Marketing",
+      "title" : "Marketing"
     },
     {
       "capitalized" : "Nova",
@@ -2216,10 +2218,10 @@
     },
     {
       "capitalized" : "Qa",
-      "label" : "Quality assurance",
+      "label" : "Qa",
       "name" : "qa",
-      "title" : "  Quality   assurance ",
-      "under" : "Qa"
+      "role" : "Quality assurance",
+      "title" : "  Quality   assurance "
     },
     {
       "capitalized" : "Ops",
@@ -2241,10 +2243,10 @@
     },
     {
       "capitalized" : "Sales-Bot",
-      "label" : "Sales bot",
+      "label" : "Sales-Bot",
       "name" : "sales-bot",
-      "title" : "Sales bot",
-      "under" : "Sales-Bot"
+      "role" : "Sales bot",
+      "title" : "Sales bot"
     },
     {
       "capitalized" : "X",
@@ -2253,10 +2255,17 @@
     },
     {
       "capitalized" : "Bistro",
-      "label" : "Café helper",
+      "label" : "Bistro",
       "name" : "bistro",
-      "title" : "Café helper",
-      "under" : "Bistro"
+      "role" : "Café helper",
+      "title" : "Café helper"
+    },
+    {
+      "capitalized" : "Dev",
+      "label" : "Dev",
+      "name" : "dev",
+      "role" : "DevOps",
+      "title" : "DevOps"
     }
   ],
   "texts" : [

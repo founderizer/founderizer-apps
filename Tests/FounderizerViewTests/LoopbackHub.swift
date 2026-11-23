@@ -2,9 +2,9 @@ import Darwin
 import Foundation
 
 /// **A stand-in hub on 127.0.0.1 for a view test that needs the hub's answer**: the app writes only within a moment of
-/// one (`FleetStore.canWrite`). It answers `GET /ui/state` with the reading that it holds, and every other request with
-/// 404, and keeps each request's method, path, body and time, so a test reads what the app sent and when. `stop` ends
-/// it. Synthetic data only.
+/// one (`FleetStore.canWrite`). It answers `GET /ui/state` with the reading that it holds, a `GET` of a path that the
+/// test gave an answer for (`give(_:at:)`) with that answer, and every other request with 404, and keeps each request's
+/// method, path, body and time, so a test reads what the app sent and when. `stop` ends it. Synthetic data only.
 final class LoopbackHub: @unchecked Sendable {
     struct Request: Sendable {
         let method: String
@@ -17,6 +17,7 @@ final class LoopbackHub: @unchecked Sendable {
     private let lock = NSLock()
     private var kept: [Request] = []
     private var reading: Data
+    private var answers: [String: Data] = [:]
     private let listener: Int32
 
     var requests: [Request] { lock.withLock { kept } }
@@ -51,6 +52,9 @@ final class LoopbackHub: @unchecked Sendable {
     /// The reading that the next `GET /ui/state` gives.
     func give(_ state: Data) { lock.withLock { reading = state } }
 
+    /// What the next `GET` of this path (without its query) gives: a knowledge file's text, say.
+    func give(_ answer: Data, at path: String) { lock.withLock { answers[path] = answer } }
+
     func stop() { Darwin.close(listener) }
 
     private func answer(_ peer: Int32) {
@@ -83,7 +87,7 @@ final class LoopbackHub: @unchecked Sendable {
         let body = String(decoding: data[head.upperBound...], as: UTF8.self)
         let state: Data? = lock.withLock {
             kept.append(Request(method: method, path: path, body: body, at: Date()))
-            return method == "GET" && path == "/ui/state" ? reading : nil
+            return method != "GET" ? nil : path == "/ui/state" ? reading : answers[path]
         }
         let status = state == nil ? "404 Not Found" : "200 OK"
         let text = state ?? Data(#"{"error":"not here"}"#.utf8)

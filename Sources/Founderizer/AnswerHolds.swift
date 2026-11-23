@@ -5,10 +5,10 @@ import Foundation
 /// make a mistake replying to a card... we need a way to be able to UNDO very easily", and his "Yes, 5 seconds
 /// (Recommended)" to its picture: "Nothing goes to the hub until the 5 seconds end. A click on Undo opens the card again
 /// as it was."). Each answer that a card sends waits here first, whole, and then goes on the path that it took before:
-/// an option's press (`AnswerWaits`, with a door call's signature and a Give), the ticked options, and his words with
-/// their files. Nothing of it reaches the hub during the hold, so the hub has no part in it. The card of a key or a
-/// login keeps its own form (a held secret would stay in memory and in a view), and a message under a card
-/// (Needs clarification) is no answer.
+/// an option's press (`AnswerWaits`, with a door call's signature and a Give), the ticked options, a reply that he
+/// pressed (its words, which never stand in his box), and his words with their files. Nothing of it reaches the hub
+/// during the hold, so the hub has no part in it. The card of a key or a login keeps its own form (a held secret would
+/// stay in memory and in a view), and a message under a card (Needs clarification) is no answer.
 ///
 /// **One hold for each request, for the whole app**, so the card in a chat, on Needs you and in its own window show the
 /// same Undo. Meanwhile the card stands folded with his answer, as an answer on its way does (`shown`), with Undo in
@@ -29,9 +29,6 @@ import Foundation
         let shown: PendingRequest
         /// The options that he had ticked, which Undo ticks again (`restored`).
         let ticked: Set<Int>
-        /// The words of his box before a reply that the app wrote there for him (a quick reply), which Undo puts back;
-        /// nil where the box holds his own words, which stay.
-        let draft: String?
         fileprivate let mark: UUID
         fileprivate weak var store: FleetStore?
         fileprivate let go: @MainActor () async -> Void
@@ -58,13 +55,13 @@ import Foundation
 
     /// **His press waits** `wait`, and then `go` does it. A second press on the same request while one waits takes its
     /// place: the card is folded meanwhile, so only a key can make one.
-    func hold(_ need: OwnerNeed, store: FleetStore, shown: PendingRequest, ticked: Set<Int> = [], draft: String? = nil,
+    func hold(_ need: OwnerNeed, store: FleetStore, shown: PendingRequest, ticked: Set<Int> = [],
               go: @escaping @MainActor () async -> Void) {
         guard let database = store.state?.db else { return }
         waits[need.id]?.cancel()
         let mark = UUID()
-        held[need.id] = Held(hub: store.hub, database: database, shown: shown, ticked: ticked, draft: draft, mark: mark,
-                             store: store, go: go)
+        held[need.id] = Held(hub: store.hub, database: database, shown: shown, ticked: ticked, mark: mark, store: store,
+                             go: go)
         let wait = wait
         waits[need.id] = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: wait) } catch { return }
@@ -88,13 +85,12 @@ import Foundation
         return held
     }
 
-    /// **Undo**: the answer goes nowhere, and the card opens as it was: the box's words that a reply took the place of,
-    /// and the options that he had ticked (`restoredTicks`). His own words and his files stayed in the box.
+    /// **Undo**: the answer goes nowhere, and the card opens as it was, with the options that he had ticked
+    /// (`restoredTicks`). His own words and his files stayed in the box: no answer writes there.
     func undo(_ need: OwnerNeed, store: FleetStore) {
         guard let taken = held(need, in: store) else { return }
         waits.removeValue(forKey: need.id)?.cancel()
         held[need.id] = nil
-        if let draft = taken.draft { store.answers[String(need.id)] = draft }
         if !taken.ticked.isEmpty { restored[need.id] = taken.ticked }
     }
 

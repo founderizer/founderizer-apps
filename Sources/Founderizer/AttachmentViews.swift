@@ -252,7 +252,10 @@ struct MessageFilesView: View {
                     // The drag is on the button's content: on the button itself, a press that moved began no drag.
                     Button { open(file) } label: { item(file).dragsOut(saves ? file : nil, store: store) { hovered = nil } }
                         .buttonStyle(.plain)
-                        .help("Open \(file.name) (\(file.sizeWords))")
+                        // The file's words under the pointer are on the row's kind and name and on the picture itself
+                        // (`FileRowLook`, `PictureTile`), not on the press: a hover around the icons takes the place of
+                        // their words (macOS 27.0). VoiceOver reads the words here, as before.
+                        .accessibilityHint("Open \(file.name) (\(file.sizeWords))")
                         .accessibilityIdentifier("file-\(file.id)")
                         .accessibilityActions {
                             if saves { Button("Save to Downloads") { save(file) } }
@@ -288,7 +291,8 @@ struct MessageFilesView: View {
         if file.isImage {
             PictureTile(store: store, file: file, side: alignment,
                         save: saves && hovered == file.id ? { save(file) } : nil,
-                        menu: menus ? OwnFileMenu(store: store, file: file, onPicture: true) : nil, menuShows: hovered == file.id)
+                        menu: menus ? OwnFileMenu(store: store, file: file, onPicture: true) : nil, menuShows: hovered == file.id,
+                        words: String(l10n: "Open \(file.name) (\(file.sizeWords))"))
         } else {
             // "Not loaded" as a picture's tile says it (fix round 3, item 4): orange while the hub answers.
             let unloaded = store.unloadedFiles.contains(file.id)
@@ -547,13 +551,18 @@ struct FileRowLook: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).font(IconMetrics.symbol(18)).foregroundStyle(FleetStyle.accent)
-                .frame(width: 36, height: 36)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(name).font(ChatStyle.font).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
-                Text(detail).font(ChatStyle.detail).foregroundStyle(late ? Color.orange : FleetStyle.muted)
+            // The row's words are on its kind and its name and on its fill (`background`), not around the row: a hover
+            // around the icons at its end takes the place of theirs, also an empty one (macOS 27.0).
+            HStack(spacing: 10) {
+                Image(systemName: symbol).font(IconMetrics.symbol(18)).foregroundStyle(FleetStyle.accent)
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name).font(ChatStyle.font).foregroundStyle(FleetStyle.text).lineLimit(1).truncationMode(.middle)
+                    Text(detail).font(ChatStyle.detail).foregroundStyle(late ? Color.orange : FleetStyle.muted)
+                }
             }
+            .help(openWords)
             Spacer(minLength: 8)
             HStack(spacing: 4) {
                 // Hidden from VoiceOver: the row's own press opens the file, its Save to Downloads action saves it, and
@@ -569,7 +578,12 @@ struct FileRowLook: View {
         }
         .padding(12)
         // a little lighter under the pointer, as a row that opens its detail (`FleetRowButtonStyle`)
-        .background(hovered ? Color(white: 0.23) : FleetStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .background {
+            // The row's words also in its gaps and its room: a hover on the fill is beside the row's views, not around
+            // them, so it hides no words of theirs.
+            RoundedRectangle(cornerRadius: FormMetrics.inner).fill(hovered ? Color(white: 0.23) : FleetStyle.bubble)
+                .help(openWords)
+        }
         // the hand under the pointer, as a link shows it: a press on the row opens the file (a picture keeps the arrow)
         .pointerStyle(.link)
         .frame(maxWidth: 380, alignment: .leading)
@@ -624,6 +638,9 @@ struct PictureTile: View {
     /// The "…" of his own picture at its top right (`OwnFileMenu`), shown while the pointer is on it (`menuShows`).
     var menu: OwnFileMenu? = nil
     var menuShows = false
+    /// The words of the press around the tile, under the pointer on the picture and on its plate, and not around the
+    /// icons on them (a hover around them takes the place of theirs, macOS 27.0); none where the press has its own.
+    var words = ""
     /// **A square as wide as it is given, the picture whole in it** (owner feature `need_pictures`: a picture over an
     /// option of a request, `NeedAnswerBox`), on the plate's fill and in a hairline, in the place of the chat's box. Its
     /// states are the chat's own: the plate, "Reading…", and "Not loaded" with ↻.
@@ -664,6 +681,7 @@ struct PictureTile: View {
                     .frame(maxWidth: square ? .infinity : min(Self.widest, Self.height * ratio))
                     .clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
                     .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+                    .help(words)
                     .overlay(alignment: .topTrailing) {
                         if let save {
                             SaveFileIcon(words: String(l10n: "Save \(file.name) to Downloads"), action: save)
@@ -760,6 +778,7 @@ struct PictureTile: View {
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FleetStyle.bubble, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
+        .help(words)
         .overlay(alignment: .topTrailing) {
             // Only while it can act: the hub answers and no read is on its way.
             if !reading, store.isFresh, store.unloadedFiles.contains(file.id) {

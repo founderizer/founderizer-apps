@@ -821,6 +821,21 @@ func hubWords(_ value: String) -> String { value.replacingOccurrences(of: "_", w
 /// An agent's name as the pages show it.
 func agentName(_ name: String) -> String { name.agentLabel }
 
+/// **An agent's name, a middle dot and its role in muted** (the owner's answer of 22 November 2026: "The name with the
+/// role in grey ... in the chat header and the iPhone's Chats list"), as the Mac's sidebar row draws it
+/// (`AgentNameLine`): "Nova · Customer Support". One word for an agent with no role, and for one whose role holds its
+/// name ("Fleet Manager"). The rows of Chats and of the Share sheet's list; on one line the role is cut at its end.
+func agentNameLine(_ name: String) -> Text {
+    let label = agentName(name)
+    guard let role = AgentNames.shared.role(name) else { return Text(verbatim: label) }
+    return Text(verbatim: label) + Text(verbatim: " · \(role)").foregroundStyle(Brand.muted)
+}
+
+/// What VoiceOver reads for the line of `agentNameLine`: the name, then the role.
+func agentNameSpoken(_ name: String) -> String {
+    [agentName(name), AgentNames.shared.role(name)].compactMap { $0 }.joined(separator: ", ")
+}
+
 /// A time of day, for a message or a note.
 func fleetTime(_ timestamp: Double) -> String {
     Date(timeIntervalSince1970: timestamp).formatted(date: .omitted, time: .shortened)

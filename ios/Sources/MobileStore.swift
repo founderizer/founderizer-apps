@@ -240,6 +240,11 @@ final class MobileStore {
     /// The keychain holder of this phone's own key. A check gives a holder of its own (`DeviceKey(account:)`), so that
     /// it never touches the key of an enrolled phone.
     let deviceKey: DeviceKey
+    /// This phone's signing key, its recovery key and its copy of the recovery code, in the keychain. A check gives
+    /// items of its own, as it does for the key.
+    let signingKey: DeviceSigningKey
+    let recoveryKey: DeviceRecoveryKey
+    let recoveryCopy: RecoveryCodeCopy
     private(set) var keyState: KeyState = .locked
     /// The key while the app is in front. The keychain gives it once, behind the owner's presence; it is dropped when
     /// the app leaves the front and it is written nowhere else.
@@ -277,11 +282,19 @@ final class MobileStore {
     private(set) var sendError: String?
     /// How often the hub refused registered login text (422). A view that holds text of its own watches it.
     private(set) var secretRefusals = 0
-    /// One draft for each agent, by its name, and one for each open item of Needs you, by its number. Both are kept
-    /// across a force quit. The keys are the Mac app's, because `Outbox.rejectSecret` removes exactly these on a 422;
-    /// this app has its own `UserDefaults`, so the two apps never share a draft.
+    /// One draft for each agent's chat, by its name (`drafts`), and one for the answer of each open item of Needs you,
+    /// by its number (`answers`). Both are kept across a force quit, **but not a draft whose words look like a key**, a
+    /// chat's (`keepChatDrafts`) or an answer's (`keepAnswerDrafts`): it stays in memory only, so a force quit loses
+    /// it, the price of no key on the phone's disk. Each follows its generation (`composersPlace`, `answersPlace`).
+    /// The keys are the Mac app's, because `Outbox.rejectSecret` removes exactly these on a 422; this app has its own
+    /// `UserDefaults`, so the two apps never share a draft.
     private(set) var drafts: [String: String]
     private(set) var answers: [String: String]
+    /// The generation that the answers' drafts belong to (`readSnapshot`), kept with them: an item's number names
+    /// another item in another generation. The generation alone, not the hub's address: the hub's database id is
+    /// random for each database, so two hubs never share one, and the same fleet at another address (a new link, a
+    /// restore to a new server, the address written another way) keeps its drafts.
+    @ObservationIgnored private var answersPlace: String?
     /// The message of this phone that the owner corrects now, and the text of the correction. The correction is not a
     /// draft: it stands for one message, so it ends with the send or with Cancel.
     private(set) var correcting: MobileChatItem?
@@ -345,8 +358,9 @@ final class MobileStore {
     private(set) var enrollDetail: String?
 
     /// The one client of every read and write. It answers the sample fleet's address itself (`SampleHub`), and only
-    /// that address, so a request to the sample never leaves the phone, also when it was on its way at Leave.
-    private let client = MobileClient(answering: SampleHub.host, with: SampleHub.self)
+    /// that address, so a request to the sample never leaves the phone, also when it was on its way at Leave. A check
+    /// gives a client of its own, which counts what would leave the phone.
+    private let client: MobileClient
     private let outbox: Outbox
     /// Where the bytes of a file that is not on the hub yet wait, beside the Outbox.
     private let stagedDirectory: URL
@@ -362,8 +376,14 @@ final class MobileStore {
     private var seenReplies: [String: Double] = [:]
     @ObservationIgnored private var seenContext = ""
 
-    init(deviceKey: DeviceKey = DeviceKey()) {
+    init(deviceKey: DeviceKey = DeviceKey(), signingKey: DeviceSigningKey = DeviceSigningKey(),
+         recoveryKey: DeviceRecoveryKey = DeviceRecoveryKey(), recoveryCopy: RecoveryCodeCopy = RecoveryCodeCopy(),
+         client: MobileClient = MobileClient(answering: SampleHub.host, with: SampleHub.self)) {
         self.deviceKey = deviceKey
+        self.signingKey = signingKey
+        self.recoveryKey = recoveryKey
+        self.recoveryCopy = recoveryCopy
+        self.client = client
         let address = UserDefaults.standard.string(forKey: "hubAddress") ?? MobileStore.defaultAddress
         // A phone with no hub shows an empty field with its example: the built-in address names no hub.
         addressText = UserDefaults.standard.string(forKey: "hubAddress") ?? ""
@@ -374,7 +394,11 @@ final class MobileStore {
             seenContext = context; seenReplies = replies
         }
         drafts = UserDefaults.standard.dictionary(forKey: "agentDrafts") as? [String: String] ?? [:]
-        answers = UserDefaults.standard.dictionary(forKey: "answerDrafts") as? [String: String] ?? [:]
+        let answers = UserDefaults.standard.dictionary(forKey: "answerDrafts") as? [String: String] ?? [:]
+        self.answers = answers
+        answersPlace = UserDefaults.standard.string(forKey: "answerDraftsPlace")
+        // (drafts that an earlier build kept with words that look like a key leave the disk now)
+        Self.writeAnswerDrafts(answers)
         if let kept = UserDefaults.standard.data(forKey: "stagedFiles"),
            let files = try? JSONDecoder().decode([String: [StagedFile]].self, from: kept) {
             staged = files
@@ -454,13 +478,23 @@ final class MobileStore {
         guard key == nil, !unlocking else { return }
         unlocking = true
         defer { unlocking = false }
+        let keptBefore = enrolmentsKept, takenBefore = enrolmentsTaken
         do {
-            key = try await deviceKey.key(reason: String(l10n: "Founderizer uses this phone's own key to reach the hub."))
-            keyState = key == nil ? .none : .ready
-            // A phone that enrolled before the pings has no copy for a press on a notification yet.
-            if let key { try? deviceKey.keepForPress(key) }
+            let read = try await deviceKey.key(reason: String(l10n: "Founderizer uses this phone's own key to reach the hub."))
+            // **A key that an enrolment kept while Face ID waited stays** (the second reader's round 4, item 3, and
+            // round 5, N3): the late read of the old key set it back, and wrote the old key into the copy for a press,
+            // so the phone read the hub with a key that the hub no longer takes; also after the leave of the front had
+            // taken the new one out of memory again. Only a code whose keys the phone kept counts (round 6): after one
+            // that it could not keep, the read's key goes on, and the hub's refusal of it asks for a new code.
+            guard key == nil, enrolmentsKept == keptBefore else { return }
+            key = read
+            keyState = read == nil ? .none : .ready
+            // A phone that enrolled before the pings has no copy for a press on a notification yet. Not after a code
+            // that the hub took while Face ID waited (the second reader's round 7): the read's key is then one that
+            // the hub refuses, and a copy of it was all that the keychain held.
+            if let read, enrolmentsTaken == takenBefore { try? deviceKey.keepForPress(read) }
         } catch {
-            key = nil
+            guard key == nil, enrolmentsKept == keptBefore else { return }
             keyState = .failed(error.localizedDescription)
         }
     }
@@ -508,33 +542,99 @@ final class MobileStore {
     /// Gives nil when the phone is enrolled, else what went wrong in the owner's words. With `read` false, the hub is
     /// not read after it: the Mac's code link reads when its join has ended (`openLink`).
     func enroll(code: String, bind: String? = nil, read: Bool = true) async -> String? {
+        // **One enrolment at a time** (the second reader's round 4, items 6 and 7): a second scan while the first
+        // waits, or a scan and a typed code at once, ran side by side, and the last answer's keys moved in, not the
+        // keys of the hub's last yes. Now each waits for the one before it, and one that waited behind a code that the
+        // hub took does not go: the phone is in its fleet, and its refusal would say "This code did not work" on a
+        // phone that just joined. **It gives back the result of that one** (the second reader's round 5, N1), also
+        // when the phone could not keep its keys: the second code was the same, and the hub had used it.
+        // **The hub is the one of the call** (the validator's round 4): one that waited read the phone's hub at its
+        // turn, so a code went to another hub when the phone had moved meanwhile.
+        let before = enrolment, takenBefore = enrolmentsTaken, requested = hub
+        let mine = Task { [weak self] () -> String? in
+            _ = await before?.value
+            guard let self else { return nil }
+            if self.enrolmentsTaken != takenBefore { return self.takenResult }
+            return await self.enrollAlone(code: code, bind: bind, read: read, at: requested)
+        }
+        enrolment = mine
+        return await mine.value
+    }
+
+    /// The enrolment on its way, which the next one waits for (`enroll`), how many codes the hub took, and what the
+    /// last one of them gave: nil when the phone kept its keys, else the line that says it could not.
+    @ObservationIgnored private var enrolment: Task<String?, Never>?
+    @ObservationIgnored private var enrolmentsTaken = 0
+    @ObservationIgnored private var takenResult: String?
+    /// How many codes the hub took whose keys this phone kept: a read of Face ID that one of them passed keeps nothing.
+    @ObservationIgnored private var enrolmentsKept = 0
+
+    private func enrollAlone(code: String, bind: String?, read: Bool, at requested: URL) async -> String? {
         enrollDetail = nil
+        // **A phone with no hub sends no code** (F7, piece A4): the only address that it had was the built-in one, which
+        // names no hub, and after the request's 10 seconds it said "Your hub did not answer. Check that its server is
+        // on." about a server that was on. Only the Mac's picture gives this phone its fleet (`openLink`).
+        guard !hasNoHub else {
+            return String(l10n: "This phone has no fleet yet. Point its camera at the picture on your Mac.")
+        }
         guard MobileClient.normalizedCode(code) != nil else {
             return String(l10n: "A code is eight characters, as the Mac app shows it (XXXX-XXXX).")
         }
+        // The phone went to another hub while this enrolment waited: its code goes nowhere.
+        guard requested == hub else { return String(l10n: "The hub did not take the code.") }
         do {
             // owner feature door_calls: the QR's one-time value binds a new signing key of this phone, which the Mac
-            // then certifies. A typed code has none, and this phone's yes to a door call then stays unsigned.
-            let signing = bind.flatMap { bind -> (key: String, binding: String)? in
-                guard let key = try? DeviceSigningKey().make(),
-                      let binding = DeviceBinding.binding(bind: bind, key: key) else { return nil }
+            // then certifies. A typed code carries none: the hub then drops the phone's signing key, and so does the
+            // phone (below), so its yes to a door call goes unsigned, which the hub refuses. Before, the phone kept
+            // its old key and signed with it, and the hub refused that key.
+            // **The new keys stay in this call until the hub has taken the code** (the read of F9 piece 3, finding 2,
+            // and the validator's finding 1 of its fix): they went into this phone's own items before the hub
+            // answered, so any link with a wrong code took away the key that signs the owner's yes to a door call and
+            // the recovery copy that the hub's record still named; then into one pending item, which a second
+            // enrolment while the first waited took over. Now a refusal or an error changes nothing of the phone's.
+            let signing = bind.flatMap { bind -> (key: NewDeviceKey, binding: String)? in
+                guard let key = try? signingKey.new(),
+                      let binding = DeviceBinding.binding(bind: bind, key: key.publicKey) else { return nil }
                 return (key, binding)
             }
             // owner feature recovery_copy (UI-API 1.95): a second key of this phone's, bound to the same value, that
-            // the Mac seals the recovery code to. A copy of an earlier enrollment goes, as its key does.
-            let recovery = signing == nil ? nil : bind.flatMap { bind -> (key: String, binding: String)? in
-                RecoveryCodeCopy().remove()
-                guard let key = try? DeviceRecoveryKey().make(),
-                      let binding = DeviceBinding.binding(bind: bind, key: key) else { return nil }
+            // the Mac seals the recovery code to.
+            let recovery = signing == nil ? nil : bind.flatMap { bind -> (key: NewDeviceKey, binding: String)? in
+                guard let key = try? recoveryKey.new(),
+                      let binding = DeviceBinding.binding(bind: bind, key: key.publicKey) else { return nil }
                 return (key, binding)
             }
-            recoveryTaken = false
-            let enrollment = try await client.enroll(at: hub, code: code, signing: signing, recovery: recovery)
-            do { try deviceKey.save(enrollment.key) }
-            catch {
+            let enrollment = try await client.enroll(
+                at: requested, code: code, signing: signing.map { (key: $0.key.publicKey, binding: $0.binding) },
+                recovery: recovery.map { (key: $0.key.publicKey, binding: $0.binding) })
+            // The phone went to another hub while this one answered: nothing of that hub's moves in.
+            guard requested == hub else { return String(l10n: "This phone could not keep its key. Make a new code.") }
+            // The hub took the code: one that waits behind this enrolment does not go, and gives this one's result.
+            enrolmentsTaken += 1
+            takenResult = String(l10n: "This phone could not keep its key. Make a new code.")
+            // The hub took the code. The phone keeps what the hub keeps now (the second reader's round 4, items 1 and
+            // 2): the keys that went with it, no key where none went, and no recovery copy, whose record the hub drops
+            // at each enrolment. They and the hub's key move in all together or not at all, and a failure says so
+            // (the validator's finding 2): a key that could not move in went with no word, and the phone signed its
+            // yes to a door call with a key that the hub no longer named.
+            do {
+                let undo = try EnrolmentKeys.moveIn(signing: (holder: signingKey, bytes: signing?.key.bytes),
+                                                    recovery: (holder: recoveryKey, bytes: recovery?.key.bytes))
+                do { try deviceKey.save(enrollment.key) }
+                catch is DeviceKey.KeyStays {
+                    // The hub's key stays (item 5), so the keys that go with it stay too.
+                } catch {
+                    undo()
+                    throw error
+                }
+            } catch {
                 enrollDetail = error.localizedDescription
-                return String(l10n: "This phone could not keep its key. Make a new code.")
+                return takenResult
             }
+            recoveryCopy.remove()
+            recoveryTaken = false
+            takenResult = nil
+            enrolmentsKept += 1
             key = enrollment.key
             keyState = .ready
             authProblem = nil
@@ -542,11 +642,32 @@ final class MobileStore {
             if read { await refresh() }
             return nil
         } catch let error as MobileError {
+            // A join that got no answer says what this phone can see of its private network (F7, piece A5).
+            if error == .noAnswer { return MobileError.noAnswerWords(addresses: Self.ownAddresses()) }
             return MobileError.enrollWords(error)
         } catch {
             enrollDetail = error.localizedDescription
             return String(l10n: "The hub did not take the code.")
         }
+    }
+
+    /// **This phone's own addresses**, as text, on each interface that is up (`getifaddrs`), for the words of a join
+    /// that got no answer (`MobileError.noAnswerWords`). The read stays on the phone: nothing of it is kept or sent.
+    nonisolated static func ownAddresses() -> [String] {
+        var first: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&first) == 0, let first else { return [] }
+        defer { freeifaddrs(first) }
+        var addresses: [String] = []
+        for entry in sequence(first: first, next: { $0.pointee.ifa_next }).map(\.pointee) {
+            guard entry.ifa_flags & UInt32(IFF_UP) != 0, let address = entry.ifa_addr else { continue }
+            let family = Int32(address.pointee.sa_family)
+            guard family == AF_INET || family == AF_INET6 else { continue }
+            let length = socklen_t(family == AF_INET ? MemoryLayout<sockaddr_in>.size : MemoryLayout<sockaddr_in6>.size)
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(address, length, &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }
+            addresses.append(String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self))
+        }
+        return addresses
     }
 
     // MARK: The Mac's picture of a code
@@ -653,7 +774,11 @@ final class MobileStore {
     func forgetKey() -> (words: String, detail: String)? {
         do {
             try deviceKey.remove()
-            try? DeviceSigningKey().remove()
+            // **The recovery key and the copy stay** (the second reader's round 6): they are the phone's only copy of
+            // the vault's recovery code, which the hub's record still names, and A1's drop of a kept key runs before
+            // the hub answers, so a link that then failed lost it. The next code that the hub takes replaces or removes
+            // them, as the hub replaces or drops its records (`EnrolmentKeys.moveIn`).
+            try? signingKey.remove()
             key = nil
             keyState = .none
             device = nil
@@ -671,6 +796,9 @@ final class MobileStore {
         // and an answer that only waited in memory would be lost. Also in the app that hosts the unit tests, which
         // reads no hub for it.
         if !value { releaseHeldAnswers() }
+        // a send that got no answer goes again by itself only while the app stays in front (F10, C1)
+        inFront = value
+        if !value { resend = nil }
         // **The app that hosts the unit tests reads no hub** (fix round 2): it starts with no hub address of a check's
         // own, and the built-in one is the owner's real hub, which no test may reach.
         guard !Self.hostsTests else { return }
@@ -909,6 +1037,7 @@ final class MobileStore {
             authProblem = nil
             replayTakenTalk()
             replayTakenPause()
+            resendUnanswered()
             await preparePush()
         } catch is CancellationError {
             return
@@ -957,6 +1086,24 @@ final class MobileStore {
         // message under a card that closed.
         let open = Set(answer.snapshot.needs.map(\.id))
         if clarifyDrafts.keys.contains(where: { !open.contains($0) }) { clarifyDrafts = clarifyDrafts.filter { open.contains($0.key) } }
+        // **The drafts of an answer belong to their generation**: at the first read of another one they go, from memory
+        // and from the disk, or item 7's words of the old generation stood in the new item 7's box, and a plain Send
+        // sent them there. Not by `forgetGeneration`, which also runs when he leaves the sample fleet, whose end gives
+        // him back the drafts of before. Not in the sample, whose reading is no hub's.
+        let place = answer.snapshot.db
+        if !sample, answersPlace != place {
+            if answersPlace != nil, !answers.isEmpty {
+                answers = [:]
+                keepAnswerDrafts()
+            }
+            answersPlace = place
+            UserDefaults.standard.set(place, forKey: "answerDraftsPlace")
+        }
+        // So do the drafts of an answer to a request that is no longer open, from memory and from the disk.
+        if answers.keys.contains(where: { !open.contains(Int($0) ?? -1) }) {
+            answers = answers.filter { open.contains(Int($0.key) ?? -1) }
+            keepAnswerDrafts()
+        }
         // **A request of another hub or generation leaves at the first read of this one** (F10, A2): it can never go
         // (it goes only to its own, `canRetry`), Settings offered no control for it, and every later write of the
         // phone waited behind it, also after a start of the app. Its words go back to no field: an agent of that name
@@ -986,8 +1133,8 @@ final class MobileStore {
         // read of another one they go, from memory and from the disk, or the files of an old item 7 stood in the new
         // item 7's box and went with a Send, with the attachment numbers of the old generation. Not by
         // `forgetGeneration`, which also runs when he leaves the sample fleet, whose end gives him back what he had
-        // before; not in the sample, whose reading is no hub's. A first read with no record keeps them.
-        let place = answer.snapshot.db
+        // before; not in the sample, whose reading is no hub's. A first read with no record keeps them. (`place`: the
+        // generation that the answers' drafts follow too, above.)
         if !sample, composersPlace != place {
             if composersPlace != nil { forgetComposers() }
             composersPlace = place
@@ -1489,14 +1636,14 @@ final class MobileStore {
     private func takeRecoveryCopy() async {
         guard features.contains("recovery_copy"), !recoveryTaken, let key, let database = snapshot?.db,
               ProcessInfo.processInfo.systemUptime - recoveryLooked >= 60,
-              DeviceRecoveryKey().exists, !RecoveryCodeCopy().held else { return }
+              recoveryKey.exists, !recoveryCopy.held else { return }
         recoveryLooked = ProcessInfo.processInfo.systemUptime
         if device == nil { await readDevice() }
         guard let name = device?.device else { return }
         do {
             guard let box = try await client.recoveryBox(device: name, hub: hub, key: key, database: database),
-                  let code = try DeviceRecoveryKey().open(box, device: name) else { return }
-            try RecoveryCodeCopy().keep(code)
+                  let code = try recoveryKey.open(box, device: name) else { return }
+            try recoveryCopy.keep(code)
             try await client.recoveryHeld(device: name, hub: hub, key: key, database: database, label: installation)
             recoveryTaken = true
         } catch {
@@ -1964,11 +2111,12 @@ final class MobileStore {
         answersWrites && !sending && (pending == nil || pending?.refusal != nil) && storageError == nil && !keyIsHeldBack
     }
 
-    /// This item's own request, of this hub and generation, waits in the Outbox and no send carries it: an error
-    /// stopped its send, or the app started with it. Its item says "Not sent", and only his Try again moves it. **Not a
+    /// This item's own request, of this hub and generation, waits in the Outbox and no send carries it, and none will
+    /// by itself (`onItsWay`): an error stopped its send, or the app started with it. Its item says "Not sent", and only
+    /// his Try again moves it. **Not a
     /// refused one**: it holds nothing (`canWrite`), and a new press on its item is a new answer, which takes its place.
     func waitsUnsent(for need: Int) -> Bool {
-        guard let pending, pending.refusal == nil, !sending else { return false }
+        guard let pending, pending.refusal == nil, !onItsWay(pending) else { return false }
         // his message under the card is its own request too (Needs clarification): a press behind it waited with no
         // end, and the card said "Sending…" in place of its "Not sent"
         return (pending.needID == need || pending.talkNeed == need) && pending.hub == hub
@@ -1984,6 +2132,54 @@ final class MobileStore {
         guard let pending, (pending.clarifies && pending.needID == need) || pending.talkNeed == need,
               pending.refusal == nil, pending.hub == hub, pending.database == snapshot?.db else { return nil }
         return pending.text
+    }
+
+    // MARK: A send that got no answer goes again by itself (F10, C1)
+
+    /// **An answer whose send got no answer of the hub goes again by itself, at most two more times** (F10, C1: the
+    /// owner's "Yes" of 22 November 2026 to "May the phone send an answer again by itself after a send that got no
+    /// answer, at most two more times and only while the app stays open?"): after the next read that worked, with its
+    /// own number, which the hub answers with its first result, so nothing counts twice. Only while the app stayed in
+    /// front since that send: a leave of the front ends it, and so does a start of the app (it lives in memory only).
+    /// **Only an answer to a request** (`goesAgain`): a chat message, his words about a key, a Pause and his message
+    /// under a card wait for his Try again, as before. Never without this phone's key, never an answer whose item the
+    /// reading no longer lists as open (the next read confirms or clears it, `confirmAnswer`). Meanwhile its card has
+    /// the ring (`onItsWay`). After that, as before: "Not sent" with Try again, which only his press moves.
+    struct Resend: Equatable {
+        let request: UUID
+        /// The sends that may still go by itself.
+        let left: Int
+    }
+    private(set) var resend: Resend?
+    /// How many more times a send that got no answer goes by itself: two (his yes). A check sets it.
+    @ObservationIgnored var resends = 2
+    /// The app is in front (`setForeground`): also in the app that hosts the unit tests, which reads no hub for it.
+    @ObservationIgnored private var inFront = true
+    @ObservationIgnored private var resendWaits: Task<Void, Never>?
+
+    /// **The request in the Outbox is on its way**: a send carries it, or it goes again by itself after the next read
+    /// that worked (`resend`). Its card says so, and not "Not sent".
+    func onItsWay(_ request: PendingRequest) -> Bool { sending || resend?.request == request.requestID }
+
+    /// The request is an answer to a request of Needs you, the one kind that goes again by itself.
+    nonisolated static func goesAgain(_ request: PendingRequest) -> Bool {
+        request.needID != nil && request.command == nil && !request.clarifies
+    }
+
+    /// The send that got no answer goes again, after the read that worked and after the send that is on its way. A
+    /// read that does not run (this phone's key is not in hand) or that fails leaves it for the next one.
+    private func resendUnanswered() {
+        guard let due = resend, resendWaits == nil, pending?.requestID == due.request else { return }
+        resendWaits = Task { [weak self] in
+            while self?.sending == true { try? await Task.sleep(for: .milliseconds(50)) }
+            guard let self else { return }
+            self.resendWaits = nil
+            guard self.inFront, self.resend == due, let request = self.pending, request.requestID == due.request,
+                  request.refusal == nil, Self.goesAgain(request), self.canRetry,
+                  request.needID.map({ item in self.openNeeds.contains { $0.id == item } }) ?? true
+            else { return }
+            await self.transmit(request, again: true)
+        }
     }
 
     /// The waiting request may be sent again, with its own number. A refused one may not: its refusal is definitive.
@@ -2032,14 +2228,18 @@ final class MobileStore {
     }
 
     /// **Needs clarification**: his words about a request for a key or a login go to the agent that asked, saved and
-    /// sent as an answer is (`write`). The hub closes the request with them. Words that look like a key never go, and
-    /// never reach the saved request: the card holds them back first and says why, and this refuses them too, as it
-    /// refuses words over the hub's most.
-    func clarify(needID: Int, words: String) async {
+    /// sent as an answer is. The hub closes the request with them. **Words that look like a key never go from here**,
+    /// as on the Mac, whose form refuses them there (the area's call of 22 November 2026, "as on the Mac"): it gives
+    /// back the hold that the field's line shows, and that line has no Keep it; the secure form on the Mac takes a key.
+    /// It refuses words over the hub's most.
+    @discardableResult func clarify(needID: Int, words: String) async -> NeedKeyHold? {
+        if KeyInText.contains(words) { return keyHold(needID, .message, words) }
         guard let need = snapshot?.needs.first(where: { $0.id == needID }), need.asksForSecret, supportsClarify,
-              !KeyInText.contains(words), NeedSecret.length(words.trimmingCharacters(in: .whitespacesAndNewlines)) <= NeedSecret.clarifyMost
-        else { return }
-        await write(words, needID: needID, recipient: need.by, clarifies: true)
+              NeedSecret.length(words.trimmingCharacters(in: .whitespacesAndNewlines)) <= NeedSecret.clarifyMost,
+              let request = save(words, needID: needID, recipient: need.by, clarifies: true)
+        else { return nil }
+        await transmit(request)
+        return nil
     }
 
     // MARK: His message under a card (Needs clarification on every card)
@@ -2108,15 +2308,16 @@ final class MobileStore {
     /// button link, that then shows the extra text input", and "Keep Your answer too"): it goes to the agent of the
     /// card, and the item stays open for his answer. It is saved and sent as every write is, through the Outbox and
     /// once, on its own route (`OwnerCommand.needTalk`), so a failure sends the same request again and never a second
-    /// one. Its words are the field's (`clarifyDrafts`, in memory only). Words that look like a key never go, and never
-    /// reach the saved request: the card holds them back first and says why, and this refuses them too, as it refuses
-    /// words over the hub's most and a card that takes no message (`OwnerNeed.clarifies`).
-    func talk(needID: Int, words: String) async {
+    /// one. Its words are the field's (`clarifyDrafts`, in memory only). **Words that look like a key wait for his
+    /// choice** (`NeedKeyHold`, as the chat's): only his Keep it of those exact words sends them. It refuses words over
+    /// the hub's most and a card that takes no message (`OwnerNeed.clarifies`).
+    @discardableResult func talk(needID: Int, words: String, keeping kept: NeedKeyHold? = nil) async -> NeedKeyHold? {
         let text = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let waits = Self.waits(keyHold(needID, .message, words), kept: kept) { return waits }
         guard canWrite, let snapshot, answersTaken[needID] == nil,
               let need = snapshot.needs.first(where: { $0.id == needID }), need.clarifies(features: Array(features)),
-              !text.isEmpty, !KeyInText.contains(text), NeedSecret.length(text) <= NeedTalk.most, clearRefused()
-        else { return }
+              !text.isEmpty, NeedSecret.length(text) <= NeedTalk.most, clearRefused()
+        else { return kept }
         let request = PendingRequest(hub: hub, database: snapshot.db, client: installation,
                                      command: .needTalk(need: needID), text: text)
         // (of the talk that the card shows: a reading behind the last receipt has fewer of them; review A, round 3)
@@ -2127,9 +2328,10 @@ final class MobileStore {
         } catch {
             storageError = String(l10n: "Cannot save this request. Nothing was sent.")
             storageErrorDetail = error.localizedDescription
-            return
+            return nil
         }
         await transmit(request)
+        return nil
     }
 
     func answerDraft(for need: Int) -> String { answers[String(need)] ?? "" }
@@ -2137,7 +2339,19 @@ final class MobileStore {
         let key = String(need)
         guard answers[key] ?? "" != text else { return }
         if text.isEmpty { answers[key] = nil } else { answers[key] = text }
-        if !sample { UserDefaults.standard.set(answers, forKey: "answerDrafts") }
+        keepAnswerDrafts()
+    }
+
+    /// **The answers' drafts are kept across a start of the app, but words that look like a key are not** (`KeyInText`):
+    /// they stay in memory only, as the words of Needs clarification do (`clarifyDrafts`), because a key pasted into
+    /// an answer by mistake must not stay on the phone's disk. The sample's drafts are never kept.
+    private func keepAnswerDrafts() {
+        guard !sample else { return }
+        Self.writeAnswerDrafts(answers)
+    }
+
+    private static func writeAnswerDrafts(_ answers: [String: String]) {
+        UserDefaults.standard.set(answers.filter { !KeyInText.contains($0.value) }, forKey: "answerDrafts")
     }
 
     // MARK: The files that the owner picked
@@ -2498,9 +2712,10 @@ final class MobileStore {
     /// Undo gives back.
     @ObservationIgnored private var waitingDrafts: [Int: String] = [:]
 
-    /// **A press on one of an item's options is never refused for a moment**, and its rows are never drawn grey (fix
-    /// round 2, item 51): it goes at once when the hub can take a write; otherwise it waits — for this launch's first
-    /// answer, for the hub to answer again, for the write before it — and goes then, while its item says "Sending…".
+    /// **A press on one of an item's options is never refused for a moment**, and its rows are never drawn grey for a wait
+    /// (fix round 2, item 51; the one grey row, the first option of a GitHub App's or an Add device card, takes no press on
+    /// any route, `startsOnTheMac`): it goes at once when the hub can take a write; otherwise it waits — for this launch's
+    /// first answer, for the hub to answer again, for the write before it — and goes then, while its item says "Sending…".
     /// Nothing goes on a reading the hub has not confirmed: the press goes only through `send`, which asks `canWrite`,
     /// and only while the item is still open on the same hub and generation; else it is dropped, and nothing went.
     /// **One exception: a press on an item whose own request waits unsent is dropped** (`waitsUnsent`), at the press
@@ -2510,7 +2725,14 @@ final class MobileStore {
     /// when he sends that one again, or when a read finds that the hub has it. **A refused request holds no press**
     /// (`canWrite`): the press goes, and that request leaves the Outbox first.
     func press(needID: Int, choice: Int) {
+        guard let need = openNeeds.first(where: { $0.id == needID }), !Self.startsOnTheMac(need, choice) else { return }
         press(needID: needID, .option(choice))
+    }
+
+    /// **The first option of a GitHub App's or an Add device card starts its step only on the Mac**
+    /// (`OwnerNeed.firstOptionStartsOnTheMac`): no route of the phone sends it, a press, a wait with Undo or a send.
+    nonisolated static func startsOnTheMac(_ need: OwnerNeed, _ choice: Int) -> Bool {
+        choice == 0 && need.firstOptionStartsOnTheMac
     }
 
     /// **Send on the options that he ticked**, on a card of pictures whose options combine (`NeedPictures`; owner
@@ -2619,7 +2841,8 @@ final class MobileStore {
 
     /// **A press on one of the card's options waits 5 seconds, with Undo**, and then goes as a press went before.
     func hold(needID: Int, choice: Int) {
-        guard openNeeds.first(where: { $0.id == needID })?.choices.indices.contains(choice) == true else { return }
+        guard let need = openNeeds.first(where: { $0.id == needID }), need.choices.indices.contains(choice),
+              !Self.startsOnTheMac(need, choice) else { return }
         hold(needID, .option(choice))
     }
 
@@ -2643,17 +2866,53 @@ final class MobileStore {
         hold(needID, .words(words, files: readyFiles(for: composer)), draft: before)
     }
 
+    /// **Words of a card's box that look like a key, which wait for his choice** (`KeyInText`; the owner, 22 November
+    /// 2026: "Yes, the same in both", the answer's box and the field of Needs clarification, as the chat's
+    /// `ChatKeyHold`): the item, the box, and the words, exactly as the box held them. His Keep it gives it back to that
+    /// box's send, and then those words go, once.
+    struct NeedKeyHold: Equatable, Sendable {
+        /// The answer's box (`holdSend`), or the field of his message under the card (`talk`, `clarify`).
+        enum Box: Sendable { case answer, message }
+        /// The hub and generation that the item's number belongs to: the item of that number elsewhere is another.
+        let hub: URL
+        let database: String
+        let need: Int
+        let box: Box
+        /// The words as the box held them, spaces at their ends too: an edit of only those is an edit.
+        let words: String
+    }
+
+    /// The hold of these words of a card's box, on the hub and generation that the store reads now.
+    private func keyHold(_ need: Int, _ box: NeedKeyHold.Box, _ words: String) -> NeedKeyHold {
+        NeedKeyHold(hub: hub, database: snapshot?.db ?? "", need: need, box: box, words: words)
+    }
+
+    /// The hold belongs to the hub and generation that the store reads now: a box shows its line only then.
+    func isCurrent(_ hold: NeedKeyHold) -> Bool { hold.hub == hub && hold.database == snapshot?.db }
+
+    /// **The one decision of a card's box** on the words that it would send (`hold`): nil, they go; or the hold that the
+    /// box's line shows, and nothing is saved. Words that look like a key wait, unless his Keep it names this hold; a
+    /// Keep it of other words (he changed them since) sends nothing, and a key in these words waits again.
+    private static func waits(_ hold: NeedKeyHold, kept: NeedKeyHold?) -> NeedKeyHold?? {
+        let looksLikeKey = KeyInText.contains(hold.words)
+        if let kept, kept != hold { return .some(looksLikeKey ? hold : nil) }
+        if kept == nil, looksLikeKey { return .some(hold) }
+        return .none
+    }
+
     /// **Send under his words waits 5 seconds, with Undo**: his words and his files stay in the field, and go then as
-    /// his Send sent them (`send(needID:)`), unless he changed them. **Words that look like a key are no answer**
-    /// (`KeyInText`): no wait starts and nothing is saved, decided here, at his press, as the answer's box decides.
-    func holdSend(needID: Int) {
+    /// his Send sent them (`send(needID:)`), unless he changed them. **Words that look like a key wait for his choice**
+    /// (`NeedKeyHold`): no wait starts and nothing is saved, decided here, at his press, and it gives back the hold that
+    /// the box's line shows, or nil; `kept` is his Keep it, and then those exact words wait their 5 seconds and go.
+    @discardableResult func holdSend(needID: Int, keeping kept: NeedKeyHold? = nil) -> NeedKeyHold? {
         let composer = Self.stageKey(need: needID)
         let words = answerDraft(for: needID), files = readyFiles(for: composer)
         let trimmed = words.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !filesAreWaiting(for: composer), trimmed.count <= Self.textLimit, !trimmed.isEmpty || !files.isEmpty,
-              !KeyInText.contains(trimmed)
-        else { return }
+        if let waits = Self.waits(keyHold(needID, .answer, words), kept: kept) { return waits }
+        guard !filesAreWaiting(for: composer), trimmed.count <= Self.textLimit, !trimmed.isEmpty || !files.isEmpty
+        else { return kept }
         hold(needID, .words(words, files: files))
+        return nil
     }
 
     /// His press waits `answerWait`, and then goes (`releaseHeld`). Behind this item's own answer that waits unsent it
@@ -2745,17 +3004,18 @@ final class MobileStore {
         guard let need = snapshot?.needs.first(where: { $0.id == needID }) else { return nil }
         switch press {
         case .option(let choice):
-            guard need.choices.indices.contains(choice) else { return nil }
+            // (the one gate of every option's route: a press, a wait with Undo, a send)
+            guard need.choices.indices.contains(choice), !Self.startsOnTheMac(need, choice) else { return nil }
             return save(need.choices[choice], needID: needID, recipient: need.by, choice: choice,
-                        approval: DeviceSigningKey().approval(for: need, choice: choice))
-        case .words(let words, _):
-            // (words that look like a key never go: the press of them was no answer, `holdSend`)
-            guard !KeyInText.contains(words) else { return nil }
+                        approval: signingKey.approval(for: need, choice: choice))
+        case .words:
+            // (words that look like a key were decided at his press, `holdSend`: they go only by his Keep it)
             return save(answerDraft(for: needID), needID: needID, recipient: need.by,
                         files: readyFiles(for: Self.stageKey(need: needID)))
         case .ticked(let choices):
             let ticked = Array(Set(choices)).sorted()
-            guard need.combines, !ticked.isEmpty, ticked.allSatisfy(need.choices.indices.contains) else { return nil }
+            guard need.combines, !ticked.isEmpty, ticked.allSatisfy(need.choices.indices.contains),
+                  !ticked.contains(where: { Self.startsOnTheMac(need, $0) }) else { return nil }
             return save(ticked.map { need.choices[$0] }.joined(separator: "; "), needID: needID, recipient: need.by,
                         choices: ticked)
         }
@@ -2909,10 +3169,14 @@ final class MobileStore {
         }
     }
 
-    private func transmit(_ request: PendingRequest) async {
+    /// `again`: the send goes again by itself (`resendUnanswered`), and keeps the count of what is left.
+    private func transmit(_ request: PendingRequest, again: Bool = false) async {
         sending = true
         sendError = nil
         defer { sending = false }
+        // the sends that may still go by itself after this one, if it gets no answer: a send of his starts at two
+        let left = again ? max(0, (resend?.left ?? 1) - 1) : resends
+        resend = nil
         do {
             if request.command != nil {
                 // his message under a card: a command, whose receipt carries the card's talk
@@ -2971,6 +3235,9 @@ final class MobileStore {
                 // One failure, one way on (T-35): the row's Try again. The number it keeps is why a second press
                 // is safe, so that is what the words say, and the number itself stays off the screen.
                 sendError = String(l10n: "Your hub did not confirm it. Sending it again does not send it twice.")
+                // ... and, while the app stays in front, an answer goes again by itself after the next read that
+                // worked, at most two more times (F10, C1)
+                if Self.goesAgain(request), inFront, left > 0 { resend = Resend(request: request.requestID, left: left) }
             }
         }
         // (the read after a receipt decides whether the item folds: `decideTaken`)

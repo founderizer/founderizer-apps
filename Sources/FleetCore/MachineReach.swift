@@ -58,7 +58,9 @@ public struct MachineReach: Equatable, Sendable {
     /// over the private network only (`hubsetup.py firewall`, 2 November 2026), so a connection this Mac kept with the
     /// public address the owner typed at an install no longer arrives. It goes to the private address the fleet
     /// reports for the machine instead, with its own user, port and key. A name, a LAN address and a private address
-    /// stay as they are: only a public address is known not to answer.
+    /// stay as they are: only a public address is known not to answer. The address is the hub's word, so a port that
+    /// the owner gave for the typed address is not his for this one (`InstallTarget.portGivenFor` still names the
+    /// typed address): a port other than 22 is checked there with the host key of that address's port 22.
     public func reaching(_ kept: InstallTarget) -> InstallTarget {
         guard let address, ClaimCode.isPrivateAddress(address), InstallTarget.isPublicAddress(kept.host) else { return kept }
         var target = kept

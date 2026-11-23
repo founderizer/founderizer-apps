@@ -90,10 +90,14 @@ struct ServerRecordsTests {
         let asRoot = Self.records(try Self.workerOnly(), own: .success(try Self.own()))
         #expect(await Self.connection(asRoot.records, to: hub) == .success(InstallTarget(host: "100.64.0.2")))
         #expect(asRoot.listReads.value == 1 && asRoot.ownReads.value == 1)
-        // A user that is not root becomes root there, at the record's own port.
+        // The record's own port. A record's user that is not root is no connection of a root step (M1 of the validation
+        // of 23 November 2026), and a connection that this Mac keeps with such a user is as it was.
         let asFleet = Self.records(try Self.workerOnly(), own: .success(try Self.own(#"{"user": "fleet", "port": 2222}"#)))
-        #expect(await Self.connection(asFleet.records, to: hub)
-                == .success(InstallTarget(host: "100.64.0.2", user: "fleet", port: 2222, becomeRoot: true)))
+        #expect(await Self.connection(asFleet.records, to: hub) == .failure(.noConnection))
+        let atPort = Self.records(try Self.workerOnly(), own: .success(try Self.own(#"{"user": "root", "port": 2222}"#)))
+        #expect(await Self.connection(atPort.records, to: hub) == .success(InstallTarget(host: "100.64.0.2", port: 2222)))
+        #expect(await Self.connection(asFleet.records, to: hub, kept: InstallTarget(host: "100.64.0.2", user: "fleet"))
+                == .success(InstallTarget(host: "100.64.0.2", user: "fleet", becomeRoot: true)))
         // A fleet with no agent at all has an empty list, and a list that did not answer says nothing: the hub's own
         // page still gives the record.
         for list in [[], nil] as [[MachineStatus]?] {
@@ -106,11 +110,10 @@ struct ServerRecordsTests {
     /// is not read (`OwnerKeyPlan.record`).
     @Test func aHubsServerThatTheListNamesHasItsRecordThere() async throws {
         let hub = try Self.server("hub-1", hub: true, address: "100.64.0.2")
-        let list = try Self.machines([("hub-1", "100.64.0.2", #"{"user":"fleet","port":22,"available":true}"#),
+        let list = try Self.machines([("hub-1", "100.64.0.2", #"{"user":"root","port":2200,"available":true}"#),
                                       ("worker-1", "100.64.0.9", Self.rootSSH)])
         let round = Self.records(list, own: .success(try Self.own()))
-        #expect(await Self.connection(round.records, to: hub)
-                == .success(InstallTarget(host: "100.64.0.2", user: "fleet", becomeRoot: true)))
+        #expect(await Self.connection(round.records, to: hub) == .success(InstallTarget(host: "100.64.0.2", port: 2200)))
         #expect(round.ownReads.value == 0)
         // An entry of the list that is no whole connection is the fleet's record too: none.
         let notWhole = Self.records(try Self.machines([("hub-1", "100.64.0.2", "null")]), own: .success(try Self.own()))
@@ -179,10 +182,9 @@ struct ServerRecordsTests {
         let round = Self.records(try Self.workerOnly(), own: .success(try Self.own()))
         #expect(await Self.connection(round.records, to: joined) == .success(InstallTarget(host: "100.64.0.7")))
         #expect(round.listReads.value == 1 && round.ownReads.value == 0)
-        // A user that is not root becomes root there, at the record's own port.
-        let asFleet = try Self.server("worker-7", address: "100.64.0.7", access: #"{"ssh": {"user": "fleet", "port": 2222}}"#)
-        #expect(await Self.connection(round.records, to: asFleet)
-                == .success(InstallTarget(host: "100.64.0.7", user: "fleet", port: 2222, becomeRoot: true)))
+        // The record's own port.
+        let atPort = try Self.server("worker-7", address: "100.64.0.7", access: #"{"ssh": {"user": "root", "port": 2222}}"#)
+        #expect(await Self.connection(round.records, to: atPort) == .success(InstallTarget(host: "100.64.0.7", port: 2222)))
         // The row came with the list of servers, so it is a page that answered: a list of machines that did not
         // answer, and one that is empty, change nothing.
         for list in [[], nil] as [[MachineStatus]?] {
@@ -227,9 +229,9 @@ struct ServerRecordsTests {
             #expect(await Self.connection(silent.records, to: joined) == .failure(.recordNotRead), "\(access)")
             // The hub's own server: its own page, which is not masked, gives the record.
             let hub = try Self.server("hub-1", hub: true, address: "100.64.0.2", access: access)
-            let round = Self.records(try Self.workerOnly(), own: .success(try Self.own(#"{"user": "administrator", "port": 22}"#)))
+            let round = Self.records(try Self.workerOnly(), own: .success(try Self.own(#"{"user": "root", "port": 2201}"#)))
             #expect(await Self.connection(round.records, to: hub)
-                    == .success(InstallTarget(host: "100.64.0.2", user: "administrator", becomeRoot: true)), "\(access)")
+                    == .success(InstallTarget(host: "100.64.0.2", port: 2201)), "\(access)")
             #expect(round.ownReads.value == 1)
         }
         // A row with a whole record and no address, or with an address that `ssh` cannot take as a host, says nothing
@@ -277,11 +279,10 @@ struct ServerRecordsTests {
     /// The list of machines comes first, as before: a server that it names has its record there, whole or not, and
     /// its row can say nothing else.
     @Test func theListOfMachinesDecidesBeforeTheRow() async throws {
-        let list = try Self.machines([("worker-7", "100.64.0.7", #"{"user":"fleet","port":2200,"available":true}"#)])
+        let list = try Self.machines([("worker-7", "100.64.0.7", #"{"user":"root","port":2200,"available":true}"#)])
         let joined = try Self.server("worker-7", address: "100.64.0.7", access: Self.rootRow)
         let round = Self.records(list, own: .success(try Self.own()))
-        #expect(await Self.connection(round.records, to: joined)
-                == .success(InstallTarget(host: "100.64.0.7", user: "fleet", port: 2200, becomeRoot: true)))
+        #expect(await Self.connection(round.records, to: joined) == .success(InstallTarget(host: "100.64.0.7", port: 2200)))
         let notWhole = Self.records(try Self.machines([("worker-7", "100.64.0.7", "null")]), own: .success(try Self.own()))
         #expect(await Self.connection(notWhole.records, to: joined) == .failure(.noConnection))
     }
@@ -289,10 +290,9 @@ struct ServerRecordsTests {
     /// The hub's own server with its record on its row: the hub's own page is not read, for a whole record and for a
     /// record that is none. With a row that says nothing (a hub from before), that page decides as before.
     @Test func theHubsOwnPageIsNotReadForAServerThatItsRowNames() async throws {
-        let onRow = try Self.server("hub-1", hub: true, address: "100.64.0.2", access: #"{"ssh": {"user": "fleet", "port": 22}}"#)
+        let onRow = try Self.server("hub-1", hub: true, address: "100.64.0.2", access: #"{"ssh": {"user": "root", "port": 2201}}"#)
         let round = Self.records(try Self.workerOnly(), own: .success(try Self.own()))
-        #expect(await Self.connection(round.records, to: onRow)
-                == .success(InstallTarget(host: "100.64.0.2", user: "fleet", becomeRoot: true)))
+        #expect(await Self.connection(round.records, to: onRow) == .success(InstallTarget(host: "100.64.0.2", port: 2201)))
         let none = try Self.server("hub-1", hub: true, address: "100.64.0.2", access: Self.noRecordRow)
         #expect(await Self.connection(round.records, to: none) == .failure(.noConnection))
         #expect(round.ownReads.value == 0)
@@ -404,7 +404,11 @@ struct ServerRecordsTests {
 
     // MARK: the connection itself
 
-    /// How this Mac reaches a server as root, from a kept connection or from the fleet's record.
+    /// How this Mac reaches a server as root, from a kept connection or from the fleet's record. **A record's user that
+    /// is not root is no connection of a root step** (M1 of the validation of 23 November 2026). Bug: a root step takes
+    /// the record's `fleet` through `sudo -n`, in a session that that user's own `authorized_keys` controls with a
+    /// forced command, so the hub's own user decides what the vault's root read prints, and the Mac pins it. The key
+    /// registration, which reads as the proof file's owner, takes that user (`rootOnly` false).
     @Test func theConnectionBecomesRootWhereItsUserIsNotRoot() throws {
         let server = try Self.server("worker-1", address: "100.64.0.9")
         // A kept connection wins over the record, keeps its own user, port and key, and goes to the private address
@@ -415,10 +419,11 @@ struct ServerRecordsTests {
                 == InstallTarget(host: "100.64.0.9", identityFile: "/Users/me/.ssh/id_ed25519"))
         #expect(ServerRecords.target(server, kept: InstallTarget(host: "100.64.0.9", user: "admin"), record: nil)
                 == InstallTarget(host: "100.64.0.9", user: "admin", becomeRoot: true))
-        // With none kept, the record: root as root, another user through sudo.
+        // With none kept, the record: root as root, and another user for no root step.
         #expect(ServerRecords.target(server, kept: nil, record: MachineReach(address: "100.64.0.9", user: "root", port: 22))
                 == InstallTarget(host: "100.64.0.9"))
-        #expect(ServerRecords.target(server, kept: nil, record: record)
+        #expect(ServerRecords.target(server, kept: nil, record: record) == nil)
+        #expect(ServerRecords.target(server, kept: nil, record: record, rootOnly: false)
                 == InstallTarget(host: "100.64.0.9", user: "fleet", becomeRoot: true))
         // No record, or one that is no whole connection: none.
         #expect(ServerRecords.target(server, kept: nil, record: nil) == nil)

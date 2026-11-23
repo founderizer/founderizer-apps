@@ -1,3 +1,4 @@
+import AppKit
 import FleetCore
 import SwiftUI
 
@@ -23,7 +24,7 @@ struct ReportingGraph: View {
     }
 
     var body: some View {
-        let tree = ReportingTree(lines: input.lines) { ShapeMetrics.nameWidth($0.agentLabel) }
+        let tree = ReportingTree(lines: input.lines) { Self.wordsWidth($0, lines: input.lines) }
         // An agent whose line is not the saved one.
         let moved = Set(input.lines.filter { line in original.lines.first { $0.agent == line.agent }?.reports_to != line.reports_to }
             .map(\.agent))
@@ -77,24 +78,56 @@ struct ReportingGraph: View {
             .offset(x: point.x - 45, y: point.y + 24)
     }
 
-    /// One agent: its mark and its role, "Lead" under a lead, and its menu behind them.
+    /// **The width of a lead's words**: the longer of its name in the title font and its second line in the detail
+    /// font, so that the line to its agents leaves after both (`ReportingTree`, which takes at most
+    /// `ReportingTree.wordsMost` of it).
+    @MainActor static func wordsWidth(_ agent: String, lines: [ReportingLine], names: AgentNames = .shared) -> CGFloat {
+        let lead = lines.first { $0.agent == agent }?.role == "lead"
+        return max(ShapeMetrics.nameWidth(names.label(agent)),
+                   detailWidth(names.graphLine(agent, lead: lead)?.words ?? ""))
+    }
+
+    /// The width of a second line's words in the detail font, as `ShapeMetrics.nameWidth` measures a name.
+    @MainActor static func detailWidth(_ words: String) -> CGFloat {
+        (words as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: FormMetrics.detailSize)]).width
+            .rounded(.up)
+    }
+
+    /// **One agent: its mark, its name, and under the name its role, muted, with " · Lead" after it for a lead** (the
+    /// owner's answer of 22 November 2026: "the role under the name in Reporting lines"; `AgentNames.graphLine`): "Lead"
+    /// alone for a lead with no role beside its name, and one line for any other agent with none. The role is cut at
+    /// its end where the words pass `ReportingTree.wordsMost`, and " · Lead" stays whole. Its menu is behind them.
     @ViewBuilder private func agent(_ node: ReportingTree.Node) -> some View {
         if let index = input.lines.firstIndex(where: { $0.agent == node.agent }) {
             let line = input.lines[index]
             let tasks = original.open_tasks[line.agent] ?? 0
+            let second = AgentNames.shared.graphLine(line.agent, lead: line.role == "lead")
+            // VoiceOver reads the node's words in its name, each once ("Nova, Customer Support, Lead reports to", or
+            // "Nova reports to"), and the agent that it reports to as its value.
+            let words = [line.agent.agentLabel, second?.role, second?.position].compactMap { $0 }.joined(separator: ", ")
             FleetSelect(String(l10n: "\(line.agent.agentLabel) reports to"), options: options(line, role: allowsLeads && tasks == 0),
                         checked: Set([Choice.role(line.role)] + (line.reports_to.map { [Choice.boss($0)] } ?? [])),
+                        voiceLabel: String(l10n: "\(words) reports to"), voiceValue: line.reports_to?.agentLabel,
                         onSelect: { choose($0, for: line.agent) }) {
                 HStack(spacing: ReportingTree.wordsGap) {
                     AgentGlyph(name: line.agent, size: ReportingTree.mark)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(line.agent.agentLabel).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
                             .frame(height: ShapeMetrics.nameLine)
-                        if line.role == "lead" {
-                            Text("Lead").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).frame(height: ShapeMetrics.underLine)
+                        if let second {
+                            HStack(spacing: 0) {
+                                if let role = second.role { Text(verbatim: role).truncationMode(.tail) }
+                                if let end = second.end { Text(verbatim: end).fixedSize() }
+                            }
+                            .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).frame(height: ShapeMetrics.underLine)
                         }
                     }
-                    .lineLimit(1).frame(maxWidth: ReportingTree.wordsMost, alignment: .leading).fixedSize()
+                    // **The words' own width, at most `wordsMost`**: a frame of a set width proposes it to the role, so
+                    // a longer role is cut at its end, and " · Lead" stays whole. One point more than the measure, so
+                    // that a name that fits is never cut.
+                    .lineLimit(1)
+                    .frame(width: min(Self.wordsWidth(line.agent, lines: input.lines) + 1, ReportingTree.wordsMost),
+                           alignment: .leading)
                 }
                 .padding(.leading, 6).padding(.trailing, 10).frame(height: 40)
             }

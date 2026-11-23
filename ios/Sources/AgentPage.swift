@@ -82,8 +82,8 @@ struct AgentPage: View {
         .hubBanner(store)
     }
 
-    /// The mark, the role (or the name of an agent with no role), the name under the role, and the state, in the middle
-    /// of the page: the agent's panel of the Mac (the owner, 10 November 2026: the role is an agent's main label).
+    /// The mark, the name, the role under the name, and the state, in the middle of the page: the agent's panel of the Mac
+    /// (the owner, 22 November 2026: an agent is named by its name, and "the Agents page shows the name over the role").
     private var head: some View {
         VStack(spacing: 4) {
             AgentMark(name: agent, state: state, size: markSize)
@@ -91,8 +91,8 @@ struct AgentPage: View {
             // Semibold, the headings' weight (fix round 2, item 80): the page had three weights, the name in bold.
             Text(agentName(agent)).font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
-            if let name = AgentNames.shared.under(agent) {
-                Text(name).font(.subheadline).foregroundStyle(Brand.muted)
+            if let role = AgentNames.shared.role(agent) {
+                Text(role).font(.subheadline).foregroundStyle(Brand.muted)
             }
             Text(state.words).font(.subheadline).foregroundStyle(state.wordColor)
         }

@@ -738,6 +738,15 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
         return give != nil ? .give : nil
     }
 
+    /// **The first option starts a step that only the Mac starts** (rows 19 and 21 of the owner's list of 22 November
+    /// 2026): it makes a GitHub App (`github_app`), whose two pages of GitHub the Mac opens, or it opens the Add device
+    /// picture (`add_device`). The hub takes it from a phone too, so a phone's press answered the item, closed it and
+    /// started nothing. Until the phone starts these steps itself (the owner, 22 November 2026: "we need to enable it
+    /// so everything can be done on the phone!"), the phone draws that row and takes no press of it.
+    public var firstOptionStartsOnTheMac: Bool {
+        choices.count >= 2 && onlyOnAComputer == nil && (!(github_app ?? "").isEmpty || add_device == 1)
+    }
+
     /// One row of the options that the iPhone draws (`NeedOptions`).
     public enum PhoneRow: Hashable, Sendable {
         /// An option to press, by its index in `choices`, which its press sends: the hub reads a press by it.
@@ -745,6 +754,8 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
         /// The one line to the Mac, in the place of options that only a Mac or a PC presses, by the index of the first
         /// of them, so that each row stays one of its own.
         case onTheComputer(Int)
+        /// An option that the phone draws and takes no press of (`firstOptionStartsOnTheMac`), by its index.
+        case unavailable(Int)
     }
 
     /// The iPhone's rows of the item's options, in their order: each option that a phone presses, and one line in the
@@ -753,7 +764,9 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
         let computer = Set(optionsOnlyOnAComputer)
         var rows: [PhoneRow] = []
         for index in choices.indices {
-            if !computer.contains(index) {
+            if index == 0, firstOptionStartsOnTheMac {
+                rows.append(.unavailable(index))
+            } else if !computer.contains(index) {
                 rows.append(.option(index))
             } else if !computer.contains(index - 1) {
                 rows.append(.onTheComputer(index))

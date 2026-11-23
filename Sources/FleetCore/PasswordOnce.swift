@@ -137,7 +137,7 @@ public enum PasswordOnce {
 
     /// The arguments of the one login with a password: no key, one prompt, and the same host key rule as the install.
     static func passwordLogin(_ target: InstallTarget) -> [String] {
-        ["-o", "BatchMode=no", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=20",
+        ["-o", "BatchMode=no"] + target.hostKeyOptions(strict: false) + ["-o", "ConnectTimeout=20",
          "-o", "ServerAliveInterval=30", "-o", "ControlPath=none", "-o", "PubkeyAuthentication=no",
          "-o", "PreferredAuthentications=keyboard-interactive,password", "-o", "NumberOfPasswordPrompts=1",
          "-p", String(target.port), target.destination]

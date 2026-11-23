@@ -115,7 +115,8 @@ extension ScreenSharingConnection {
     public static func linux(target: InstallTarget, port: Int, agent: String) -> ScreenSharingConnection? {
         guard target.user == "root", !target.becomeRoot else { return nil }
         let way = ScreenSharingConnection(address: target.host, user: target.user, port: target.port, remotePort: port,
-                                          identityFile: target.identityFile, agent: agent)
+                                          identityFile: target.identityFile, agent: agent,
+                                          portGivenFor: target.portGivenFor)
         return way.isValid ? way : nil
     }
 

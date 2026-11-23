@@ -4,6 +4,7 @@ using Founderizer.Core;
 using Founderizer.Windows.Marks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -174,11 +175,15 @@ internal sealed class SearchCard : Grid
     private UIElement AgentRow(SearchAgentRow agent, int index)
     {
         var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        names.Children.Add(Look.Words(agent.Label, semibold: true, wrap: false));
+        // The name, then " · " and the role muted, as the Mac's search palette row (AgentNameLine).
+        var name = Look.Words("", semibold: true, wrap: false);
+        name.Inlines.Add(new Run { Text = agent.Label });
+        if (agent.Trail.Length > 0) name.Inlines.Add(new Run { Text = agent.Trail, Foreground = Look.Muted });
+        names.Children.Add(name);
         // A line that is a request waiting for him is orange, as in the pane (SearchAgentRow.NeedsYou).
         if (agent.Line is { } line) names.Children.Add(Look.Words(line, 12, 16, agent.NeedsYou ? Look.Orange : Look.Muted, wrap: false));
         var mark = new AgentGlyph { Side = 22, Mark = agent.Mark, VerticalAlignment = VerticalAlignment.Center };
-        return Row(48, mark, names, index, agent.Label);
+        return Row(48, mark, names, index, agent.Spoken);
     }
 
     /// <summary>The icon of a task's mark, as this card draws it: an answered card's orange mark and its gray mark of his

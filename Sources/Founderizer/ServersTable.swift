@@ -7,8 +7,8 @@ import SwiftUI
 /// pictures the same day: each server's agents under it). One table, with the windows' short names over their columns
 /// once at its top; for each server its row — its mark, its name ("Hub" beside the hub's own machine), its CPU, Memory
 /// and Disk in whole percent, "No agent" where none runs on it, and the mark of its state only where it needs something
-/// (`ServerStateMark`) — and under it a row for each agent on it, as the Agents page draws one: its glyph, its role with
-/// its name under it, the provider's logo and its account, and a bar and the used share of each window with when it
+/// (`ServerStateMark`) — and under it a row for each agent on it, as the Agents page draws one: its glyph, its name with
+/// its role under it, the provider's logo and its account, and a bar and the used share of each window with when it
 /// resets under them. A click on a server's row opens the server's page; on an agent's row, its chat, as on Agents.
 /// The cells stand in columns found by sums (`ServersRowLayout`, as `AgentsRowLayout`), never by measured shapes: the
 /// Agents page took 2.3 s of the main thread to open while its rows chose a shape in a `ViewThatFits`.
@@ -24,15 +24,15 @@ struct ServersTable: View {
         let bars = UsageBar.bars(for: agents, time: time, isFresh: store.isFresh)
         let names = list.servers.flatMap(\.agents)
         let listed = names.compactMap { name in agents.first { $0.name == name } }
-        // The name column holds each agent's role and name, and each server's name with "Hub", which stands one mark
+        // The name column holds each agent's name and role, and each server's name with "Hub", which stands one mark
         // further out: a fleet with no agent, or with short names only, must not cut a server's name.
         // (a server's words have the room of an agent's glyph as well, so they need one mark's room less).
         let servers = list.servers.map { Self.serverWidth($0) - 2 * (FormMetrics.markColumn + FormMetrics.markGap) }.max() ?? 0
         let table = Table(
             columns: UsageBar.columns(names.compactMap { bars[$0] }, at: time),
-            names: max(Self.width(names.map(\.agentLabel) + names.compactMap { AgentNames.shared.under($0) }), servers),
+            names: max(Self.width(names.map(\.agentLabel) + names.compactMap { AgentNames.shared.role($0) }), servers),
             accounts: min(Self.accountMost, Self.width(listed.map { AgentAccount($0, store: store).name }) + 14 + 6),
-            roles: names.contains { AgentNames.shared.under($0) != nil },
+            roles: names.contains { AgentNames.shared.role($0) != nil },
             figures: list.servers.map(Self.figuresWidth).max() ?? 0)
         FormSection {
             if !table.columns.isEmpty { heads(table) }
@@ -51,11 +51,11 @@ struct ServersTable: View {
     /// one place in every row and under its head.
     private struct Table {
         let columns: [String]
-        /// The widest role or name under it, at most 180, or a server's name with "Hub" where that is wider.
+        /// The widest name or role under it, at most 180, or a server's name with "Hub" where that is wider.
         let names: CGFloat
         /// The widest account and its mark, at most `accountMost`.
         let accounts: CGFloat
-        /// Some agent has a line under its role: every agent's row has two lines.
+        /// Some agent has its role under its name: every agent's row has two lines.
         let roles: Bool
         /// The widest figures of a server (`figuresWidth`): every server's row has one shape at a width.
         let figures: CGFloat
@@ -162,7 +162,7 @@ struct ServersTable: View {
 
     // MARK: An agent's row
 
-    /// One agent on the server, as the Agents page draws it: its glyph, its role with its name under it, its provider's
+    /// One agent on the server, as the Agents page draws it: its glyph, its name with its role under it, its provider's
     /// mark and its account, then its windows. A click opens its chat, as on Agents. An agent that the fleet's state
     /// does not hold (a new one, or one removed a moment ago) has its glyph and name only, and a click opens its
     /// server.
@@ -173,8 +173,8 @@ struct ServersTable: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name.agentLabel).foregroundStyle(FleetStyle.text)
                     .lineLimit(1).truncationMode(.middle)
-                if let under = AgentNames.shared.under(name) {
-                    Text(under).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.tail)
+                if let role = AgentNames.shared.role(name) {
+                    Text(role).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.tail)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -199,7 +199,7 @@ struct ServersTable: View {
             .padding(.horizontal, FormMetrics.rowInset)
         }
         .buttonStyle(FleetRowButtonStyle())
-        .accessibilityLabel([name.agentLabel, AgentNames.shared.under(name) ?? "", account?.name ?? "", account?.usage ?? ""]
+        .accessibilityLabel([name.agentLabel, AgentNames.shared.role(name) ?? "", account?.name ?? "", account?.usage ?? ""]
             .filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHint(agent == nil ? Text("Opens the server") : Text("Opens its chat"))
         .accessibilityIdentifier("servers-agent-\(name)")

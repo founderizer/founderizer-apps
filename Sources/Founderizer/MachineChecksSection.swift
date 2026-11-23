@@ -64,6 +64,9 @@ final class MachineChecksModel {
     /// it from the hub's own report — the hub's own machine, a Mac, or a Linux machine that joined — so nothing
     /// asks the owner a question about directory names.
     var kind: MachineCheckout
+    /// The hub's report says that this server is a Linux machine (`ServerEntry.reportsLinux`), so a first host key at
+    /// its port 22 may be kept. False for a Mac and while the report says nothing: then no first key at all.
+    var linux: Bool
     private(set) var checklist: VerifyChecklist?
     private(set) var reading = false
     private(set) var failure: String?
@@ -76,8 +79,8 @@ final class MachineChecksModel {
     /// When an update this Mac drove last finished, so that a reading from before it offers no second update.
     private(set) var updatedAt: Double?
     /// What stopped the last update, in one line. It stays in the update's own row and out of the state row: the
-    /// checks are still the last thing this Mac read of the machine, and the state row says those.
-    private(set) var updateFailure: String?
+    /// checks are still the last thing this Mac read of the machine, and the state row says those. A test sets it.
+    var updateFailure: String?
     /// The owner is giving the connection himself, so the fields show in place of the line.
     var asksForTheMachine = false
     /// What the fleet last reported about reaching this machine, or nil while it has reported nothing.
@@ -91,15 +94,58 @@ final class MachineChecksModel {
     /// A connection is settled: the owner gave it, a check already used it, or the fleet's own record was taken.
     /// A later reading never overwrites one of those.
     private var settled = false
+    /// **The host for which the owner gave the port himself** (`InstallTarget.portGivenFor`): the kept connection's,
+    /// nil for a port of the fleet's own record. A port of the record other than 22 never gets a host key at its first
+    /// use (the hole of 22 November 2026: a hub that is broken into names a high port where a program of its own
+    /// answers, and a closer look kept that program's host key).
+    private var portGivenFor: String?
+    /// The owner typed in the port's field since the fields opened, so that port is his for the address in them.
+    private var typedPort = false
+    /// **The value of the port's field that is not his**: the port of the fleet's record that `fleetSays` or
+    /// `useTheFleetsConnection` put there, or a kept port that has no word of his for its host. The same value entered
+    /// again is still not his (the Setup area's read of 22 November 2026: the refusal's words led him to open the
+    /// fields, see the hub's 2222, enter it again, and give the hub's own port the first key that answers there). nil
+    /// for an empty field (`askForTheConnection`) and for his own kept port.
+    private var recordPort: String?
+    /// **The user that the fleet's record put in the fields**, nil for a kept connection's. A closer look keeps no
+    /// connection with that user when it is not root (`keeps`).
+    private var recordUser: String?
 
-    init(machine: String, hub: URL, kind: MachineCheckout) {
+    /// **Whether a closer look keeps the connection that it used** (`InstallTargets`): not with a user of the fleet's
+    /// record other than root, also when he enters it again unchanged (the validation of 23 November 2026, M1). That
+    /// user owns its `~/.ssh/authorized_keys`, so a forced command there prints what it likes for the whole session, and
+    /// every root step of this Mac takes a kept connection as it is: the vault's, the owner's access line, the door's.
+    /// `hub.sh` records the hub's own user, `fleet`, for its server. Root, and a user that he gave, are kept.
+    func keeps(_ target: InstallTarget) -> Bool { target.user == "root" || target.user != recordUser }
+
+    init(machine: String, hub: URL, kind: MachineCheckout, linux: Bool = false) {
         self.machine = machine
         self.kind = kind
+        self.linux = linux
         checklist = MachineChecks.checklist(machine: machine, hub: hub)
         if let kept = InstallTargets.target(machine: machine, hub: hub) {
             host = kept.host; user = kept.user; port = String(kept.port); identityFile = kept.identityFile
+            portGivenFor = kept.portGivenFor
+            if !kept.portIsOwners { recordPort = port }
             settled = true
         }
+    }
+
+    /// **The port as the owner types it in the fields** (`MachineConnectionFields`): a value that he typed is his word
+    /// for the address in the fields, except the value that is not his (`recordPort`) entered again unchanged.
+    func typed(port value: String) {
+        typedPort = true
+        port = value
+    }
+
+    /// **Use a different connection**: the fields open. At a port that he did not give, other than 22, whose refused
+    /// key asks him for the port ("Type the port that the SSH of … listens on", `InstallTarget.refusedHostKey`), the
+    /// port's field opens empty, with 22 as its placeholder, so that any port in it is one that he typed, and never the
+    /// hub's port entered again. That refusal can be an update's, or a vault step's that this page does not see, so the
+    /// port decides and not this page's own stop (the Setup area's read of round 3).
+    func askForTheConnection() {
+        if target.asksForItsPort { port = ""; recordPort = nil; typedPort = false }
+        asksForTheMachine = true
     }
 
     /// What the hub itself says about reaching this machine. It fills the connection this Mac will use, so the
@@ -117,6 +163,7 @@ final class MachineChecksModel {
         guard !settled, !asksForTheMachine, let known = reach.onRecord else { return }
         settled = true
         host = known.address; user = known.user; port = String(known.port)
+        recordPort = port; recordUser = user
     }
 
     /// Back to the fleet's own record, after the owner opened the fields and would rather not.
@@ -124,11 +171,16 @@ final class MachineChecksModel {
         guard let known = fleetReach?.onRecord else { return }
         host = known.address; user = known.user; port = String(known.port)
         identityFile = nil
+        portGivenFor = nil; typedPort = false; recordPort = port; recordUser = user
         asksForTheMachine = false
     }
 
-    /// The one line that says how this Mac will reach the machine, or, where it cannot, what is missing.
+    /// The one line that says how this Mac will reach the machine, or, where it cannot, what is missing. None at a port
+    /// that he did not give, other than 22 (`InstallTarget.asksForItsPort`): a line with that port would be the hub's
+    /// value to copy beside the words that ask for the port that the server's SSH listens on, and a line with no port
+    /// says port 22, where this Mac does not reach it (the Setup area's read of round 4).
     var connectionWords: String? {
+        if target.asksForItsPort { return nil }
         if target.isValid {
             return MachineReach.sentence(machine: machine, user: target.user, address: target.host,
                                          port: target.port, identityFile: identityFile)
@@ -139,9 +191,34 @@ final class MachineChecksModel {
     /// The owner needs a way to give another connection: the one he has does not work, or there is none to use.
     var offersAnotherConnection: Bool { !asksForTheMachine && (failure != nil || !target.isValid) }
 
+    /// **A refused key whose way out is the port is on record for this server**, at a port that he did not give, other
+    /// than 22 (`InstallTarget.asksForItsPort`): this page's own stop, its update's, or one that the vault holds for it
+    /// (`vault`: `CentralVaultModel.stops(of:isHub:)`). This page names the server by its address in those words, and
+    /// the vault's steps by its name, so both count. A stop holds the words, also inside a sentence of its own (the key
+    /// swap's "The key swap is not switched on: …"); the words end in "on its page in Servers", so the name of another
+    /// server that begins with this one's does not match. Only then does the page offer the fields of another
+    /// connection on a connected server, and its card in place of the tick (`MachineStandingSection.offers`,
+    /// `isWell`): a port of the hub's record that works, an sshd on 2222 with the keys of port 22, keeps the tick (the
+    /// Setup area's read of round 4: his rule, a well machine gets a tick and no card).
+    func portStepIsDue(vault: [String]) -> Bool {
+        guard target.asksForItsPort else { return false }
+        let words = [InstallTarget.typeItsPort(target.host), InstallTarget.typeItsPort(machine)]
+        return ([failure, updateFailure].compactMap { $0 } + vault).contains { stop in words.contains(where: stop.contains) }
+    }
+
+    /// The connection that a check, a restart or an update uses. Its port is the owner's for its host only where he
+    /// gave it (`portGivenFor`, or a port that he typed in the open fields and that is not `recordPort`): a kept port
+    /// moves with no word of his to the address that the fleet reports (`fleetSays`), and then it is a port of that
+    /// address's record. An empty port's field is its placeholder, 22. A page of a server that the hub does not report
+    /// as Linux keeps no new host key at all (`InstallTarget.macServer`): its first key is the owner's own step in
+    /// Terminal.
     var target: InstallTarget {
-        InstallTarget(host: host.trimmingCharacters(in: .whitespaces), user: user.trimmingCharacters(in: .whitespaces),
-                      port: Int(port) ?? 0, identityFile: identityFile, becomeRoot: user != "root")
+        let host = host.trimmingCharacters(in: .whitespaces)
+        let field = port.trimmingCharacters(in: .whitespaces)
+        return InstallTarget(host: host, user: user.trimmingCharacters(in: .whitespaces),
+                             port: field.isEmpty ? 22 : Int(field) ?? 0, identityFile: identityFile, becomeRoot: user != "root",
+                             portGivenFor: asksForTheMachine && typedPort && field != recordPort ? host : portGivenFor,
+                             macServer: !linux)
     }
 
     /// Runs `python3 fleet.py verify --json` on that machine and keeps what it answered.
@@ -196,8 +273,9 @@ final class MachineChecksModel {
     }
 
     /// Where a plan's failure goes. An update's belongs in the update's own row, next to the button that tries it
-    /// again: the state row must keep saying the checks, which are still the last thing this Mac read.
-    private func problem(_ says: String) {
+    /// again: the state row must keep saying the checks, which are still the last thing this Mac read. Not private: a
+    /// test gives the page a stop with it.
+    func problem(_ says: String) {
         if updating != nil { updateFailure = says } else { failure = says }
     }
 
@@ -219,8 +297,11 @@ final class MachineChecksModel {
                 asksForTheMachine = false
                 settled = true
                 lookedNow = true
+                // the port that he typed stays his for that address, in the kept connection too
+                portGivenFor = target.portGivenFor; typedPort = false
+                if target.portGivenFor != nil { recordPort = nil }
                 MachineChecks.remember(answer, machine: machine, hub: hub)
-                InstallTargets.remember(target, machine: machine, hub: hub)
+                if keeps(target) { InstallTargets.remember(target, machine: machine, hub: hub) }
             } catch {
                 guard let self else { return }
                 problem((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
@@ -283,9 +364,17 @@ struct MachineStandingSection: View {
     /// **A machine that is well needs no card**: its page puts a tick beside its name instead (the owner, 27 October
     /// 2026: "instead of "Connected" a check icon would be enough"). Well is connected, with nothing going on and
     /// nothing to do: no restart, no helper to update, nothing a closer look found, no connection being asked for.
-    static func isWell(_ standing: ServerStanding, model: MachineChecksModel) -> Bool {
+    /// A connected server whose refused key asks for the port (`portStep`, `MachineChecksModel.portStepIsDue`) is not
+    /// well in this sense: its card offers the fields of another connection (`offers`).
+    static func isWell(_ standing: ServerStanding, model: MachineChecksModel, portStep: Bool) -> Bool {
         standing.settled && !standing.attention && !standing.working && !standing.needsRestart
-            && !standing.needsUpdate && standing.failing.isEmpty && !model.asksForTheMachine
+            && !standing.needsUpdate && standing.failing.isEmpty && !model.asksForTheMachine && !portStep
+    }
+
+    /// Whether a refused key whose way out is the port is on record for this server, on this page or in the vault's
+    /// steps (`MachineChecksModel.portStepIsDue`).
+    static func portStep(store: FleetStore, model: MachineChecksModel, server: ServerEntry) -> Bool {
+        model.portStepIsDue(vault: store.vaultModel().stops(of: server.name, isHub: server.hub))
     }
 
     var body: some View {
@@ -332,21 +421,37 @@ struct MachineStandingSection: View {
     /// not gets the one thing that answers "why not": a closer look over his own connection, which reaches the
     /// machine by a different road than its helper and so can tell a stopped helper from a machine that is down.
     @ViewBuilder private func buttons(_ standing: ServerStanding) -> some View {
+        let offers = Self.offers(standing, model: model, connected: connected,
+                                 portStep: Self.portStep(store: store, model: model, server: server))
         if standing.working {
             ProgressView().controlSize(.small)
-        } else if !standing.settled {
+        } else if offers.fields || offers.look {
             HStack(spacing: 8) {
-                if model.offersAnotherConnection {
-                    Button("Use a different connection") { model.asksForTheMachine = true }
+                if offers.fields {
+                    Button("Use a different connection") { model.askForTheConnection() }
                         .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("machine-check-connection")
                 }
-                if !connected.isConnected {
+                if offers.look {
                     Button("Find out why") { model.check(hub: store.hub) }
                         .buttonStyle(FleetPrimaryButtonStyle()).disabled(!model.target.isValid)
                         .accessibilityIdentifier("machine-check-now")
                 }
             }
         }
+    }
+
+    /// **The buttons of the state row**: the fields of another connection, and a closer look. A server that is not
+    /// connected offers both, as before. Any server offers the fields while a refused key whose way out is the port is
+    /// on record for it (`portStep`), and the closer look while he gives a connection in the open fields, which is how
+    /// a port that he types is checked and kept (the Setup area's read of round 3: the hub's own server is always
+    /// connected, and a refused key there said "on its page" of a page with no field), and while that stop is on
+    /// record, because a stop of this page's own stays until a new look, also after the refusal went another way (the
+    /// Setup area's read of round 5).
+    static func offers(_ standing: ServerStanding, model: MachineChecksModel, connected: MachineConnection,
+                       portStep: Bool) -> (fields: Bool, look: Bool) {
+        let fields = (model.offersAnotherConnection && !standing.settled) || (portStep && !model.asksForTheMachine)
+        let look = (!standing.settled && !connected.isConnected) || model.asksForTheMachine || portStep
+        return (fields, look)
     }
 
     /// The restart, which the owner asked for and which no other screen offers: this Mac restarts the machine over
@@ -488,7 +593,9 @@ struct MachineConnectionFields: View {
                 HStack(spacing: 8) {
                     TextField("", text: $model.user).fleetField().frame(width: 110)
                         .accessibilityIdentifier("machine-check-user")
-                    TextField(text: $model.port, prompt: Text(verbatim: "")) { Text("22") }
+                    // what he types here is his port for that address (`MachineChecksModel.typed`)
+                    TextField(text: Binding(get: { model.port }, set: { model.typed(port: $0) }),
+                              prompt: Text(verbatim: "")) { Text("22") }
                         .fieldPlaceholder("22", shows: model.port.isEmpty).fleetField().frame(width: 60)
                         .accessibilityIdentifier("machine-check-port")
                 }

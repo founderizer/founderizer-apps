@@ -93,6 +93,30 @@ enum MobileError: LocalizedError, Sendable, Equatable {
         }
     }
 
+    /// **A join that got no answer, as this phone can tell it** (F7, piece A5): the hub answers only on the owner's
+    /// private network, and a phone with Tailscale off reached nothing and said to check a server that was on. With no
+    /// address of this phone in Tailscale's ranges (`onPrivateNetwork`), the words say to turn Tailscale on; with one,
+    /// the hub itself did not answer, and the words of today stay. `addresses` are this phone's own, as text
+    /// (`MobileStore.ownAddresses`).
+    static func noAnswerWords(addresses: [String]) -> String {
+        addresses.contains(where: onPrivateNetwork) ? MobileError.noAnswer.localizedDescription
+            : String(l10n: "This phone is not on your private network. Turn on Tailscale on this phone, with your Mac's account.")
+    }
+
+    /// An address that Tailscale gives a device: `100.64.0.0/10` or `fd7a:115c:a1e0::/48`. An IPv6 address may carry
+    /// its interface after a `%`; text that is no address is none of them.
+    static func onPrivateNetwork(_ address: String) -> Bool {
+        let bare = String(address.prefix { $0 != "%" })
+        var four = in_addr()
+        if inet_pton(AF_INET, bare, &four) == 1 {
+            let bytes = withUnsafeBytes(of: four) { Array($0) }        // in network order: 100.64 is 0x64 0x40
+            return bytes[0] == 100 && bytes[1] & 0xC0 == 0x40
+        }
+        var six = in6_addr()
+        guard inet_pton(AF_INET6, bare, &six) == 1 else { return false }
+        return withUnsafeBytes(of: six) { Array($0) }.starts(with: [0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0])
+    }
+
     /// The words of a code that did not work and of too many wrong codes, once in the device's language: `enrollWords`
     /// gives them and `refusedCode` knows a refused code by them, so the two agree in every language.
     static let codeDidNotWork = String(l10n: "This code did not work. Make a new one on your Mac.")

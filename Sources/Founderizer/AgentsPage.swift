@@ -7,7 +7,7 @@ import SwiftUI
 /// account etc ... very minimalistic!", and his yes to its mockup the same day; then, the same evening, "the usage
 /// section could be moved below tasks.. and be renamed to Agents. I would like each agent to have its own real name...
 /// and also a subtitle like their role in the team"). One table of the agents, in the sidebar's order: each one's glyph,
-/// its role (team.json `title`) with its name under it, the server it runs on, its provider's mark and its account, and a bar
+/// its name with its role (team.json `title`) under it, the server it runs on, its provider's mark and its account, and a bar
 /// and the used share of each window of that account, under the window's short name, which stands once over its
 /// column, with when the window resets under its bar (`ResetLine`; the owner's yes of 10 November 2026). Agents on one
 /// account show its newest reading (`UsageBar`). A click opens the agent's chat, as its sidebar row does. What a row
@@ -44,17 +44,17 @@ struct AgentsPage: View {
         let agents = ChatList.order(listed.map(\.name), pinned: store.pinned).compactMap { name in listed.first { $0.name == name } }
         let bars = UsageBar.bars(for: listed, time: time, isFresh: store.isFresh)
         let work = store.state?.work()
-        // **Its role over its name** (the owner, 10 November 2026: the role is an agent's main label): the role is the
-        // row's name, and the agent's own name stands under it (`AgentNames`).
+        // **Its name over its role** (the owner, 22 November 2026: "the Agents page shows the name over the role"): the
+        // name is the row's first line, and the role stands under it (`AgentNames`).
         let table = Table(
             columns: UsageBar.columns(agents.compactMap { bars[$0.name] }, at: time),
-            names: Self.width(agents.map(\.name.agentLabel) + agents.compactMap { AgentNames.shared.under($0.name) }),
+            names: Self.width(agents.map(\.name.agentLabel) + agents.compactMap { AgentNames.shared.role($0.name) }),
             servers: Self.width(agents.compactMap { server($0.name)?.name }),
             accounts: min(Self.accountMost, Self.width(agents.map { AgentAccount($0, store: store).name }) + 14 + 6),
             // The CPU and Memory columns where the helpers read them (the load readings, 4 November 2026).
             uses: machines?.machines.contains { $0.use != nil } == true,
-            // One row height for the table: two lines for every row once any agent has a line under its role.
-            roles: agents.contains { AgentNames.shared.under($0.name) != nil },
+            // One row height for the table: two lines for every row once any agent has its role under its name.
+            roles: agents.contains { AgentNames.shared.role($0.name) != nil },
             most: work?.dayMost ?? 0)
         FleetPage("Agents", board: true) {
             if let work, !agents.isEmpty { AgentsStrip(work: work, order: agents.map(\.name), fresh: store.isFresh) }
@@ -145,9 +145,9 @@ struct AgentsPage: View {
             .accessibilityHidden(true)
     }
 
-    /// One agent: its glyph, its role with its name under it, its server, its CPU and Memory, its tasks now and on each
-    /// of the last 14 days, its provider's mark and its account, then its windows. An agent with no role has its name
-    /// alone, in the middle of the row.
+    /// One agent: its glyph, its name with its role under it, its server, its CPU and Memory, its tasks now and on each
+    /// of the last 14 days, its provider's mark and its account, then its windows. An agent with no role, or whose role
+    /// is its label, has that one line, in the middle of the row.
     private func row(_ agent: FleetAgent, bar: UsageBar?, work: AgentWork?, table: Table) -> some View {
         let account = AgentAccount(agent, store: store)
         let server = server(agent.name)
@@ -156,8 +156,8 @@ struct AgentsPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(agent.name.agentLabel).foregroundStyle(FleetStyle.text)
                     .lineLimit(1).truncationMode(.middle)
-                if let name = AgentNames.shared.under(agent.name) {
-                    Text(name).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.tail)
+                if let role = AgentNames.shared.role(agent.name) {
+                    Text(role).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).lineLimit(1).truncationMode(.tail)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -175,7 +175,7 @@ struct AgentsPage: View {
                 .padding(.horizontal, FormMetrics.rowInset)
         }
         .buttonStyle(FleetRowButtonStyle())
-        .accessibilityLabel([agent.name.agentLabel, AgentNames.shared.under(agent.name) ?? "", server?.name ?? "",
+        .accessibilityLabel([agent.name.agentLabel, AgentNames.shared.role(agent.name) ?? "", server?.name ?? "",
                              work.map(nowWords) ?? "", work.map(daysWords) ?? "", account.name, account.usage]
             .filter { !$0.isEmpty }.joined(separator: ", "))
         .accessibilityHint("Opens its chat")

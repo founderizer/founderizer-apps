@@ -52,7 +52,7 @@ enum ShapeMetrics {
     /// The manager's mark on the page "Name your manager": larger than a step's mark, because the page is about it.
     static let managerMark: CGFloat = 72
 
-    /// The width of a role's words in the graph's type, for the start of a dotted line.
+    /// The width of a name's or a role's words in the graph's type, for the start of a line.
     @MainActor static func nameWidth(_ words: String) -> CGFloat {
         (words as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium)]).width.rounded(.up)
     }
@@ -385,7 +385,7 @@ struct ServerBoxes: View {
         switch tile {
         case .hub: String(l10n: "Hub")
         case .manager: ManagerName.shown(plan.manager)
-        case .agent(let index): plan.agents[index].role
+        case .agent(let index): plan.agents[index].label
         case .next: String(l10n: "Agent")
         }
     }
@@ -640,7 +640,7 @@ struct FleetGraph: View {
     let step: ServersStep
 
     var body: some View {
-        let layout = FleetGraphLayout(plan: plan, step: step, roleWidth: ShapeMetrics.nameWidth)
+        let layout = FleetGraphLayout(plan: plan, step: step, nameWidth: ShapeMetrics.nameWidth)
         ZStack(alignment: .topLeading) {
             ForEach(Array(layout.islands.enumerated()), id: \.offset) { _, island in
                 RoundedRectangle(cornerRadius: FormMetrics.inner).fill(ShapeMetrics.islandFill)
@@ -694,14 +694,18 @@ struct FleetGraph: View {
         .offset(x: point.x - 44, y: point.y + 22)
     }
 
-    /// One agent on its axis: its mark, its role with what it asks first, and what it uses after the dotted line.
+    /// One agent on its axis: its mark, its name with its role under it, muted (one line where the role is its label,
+    /// as Settings › Reporting lines draws an agent), what it asks first, and what it uses after the dotted line.
     @ViewBuilder private func agent(_ row: FleetGraphLayout.Row) -> some View {
         let agent = plan.agents[row.agent]
         AgentGlyph(name: agent.name, size: FleetGraphLayout.agentMark, dot: false)
             .position(x: FleetGraphLayout.markX + FleetGraphLayout.agentMark / 2, y: row.y)
             .help(agent.does ?? "")
         VStack(alignment: .leading, spacing: 0) {
-            Text(agent.role).font(ShapeMetrics.nameFont).foregroundStyle(FleetStyle.text).frame(height: ShapeMetrics.nameLine)
+            Text(agent.label).font(ShapeMetrics.nameFont).foregroundStyle(FleetStyle.text).frame(height: ShapeMetrics.nameLine)
+            if let role = agent.roleBeside {
+                Text(role).font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted).frame(height: ShapeMetrics.underLine)
+            }
             if let asks = agent.asksFirst {
                 Text("Asks first: \(asks)").font(ShapeMetrics.underFont).foregroundStyle(FleetStyle.muted)
                     .frame(height: ShapeMetrics.underLine)

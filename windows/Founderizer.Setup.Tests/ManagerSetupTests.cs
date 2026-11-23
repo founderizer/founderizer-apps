@@ -110,7 +110,7 @@ public sealed class ManagerSetupTests
         await setup.StepAsync();
         await setup.StepAsync();
         var screen = ManagerSetupScreens.Of(setup.View);
-        Assert.AreEqual(("provider", "Fleet Manager's AI provider", "worker-2 takes no agent now."), (screen.Name, screen.Title, screen.Warning));
+        Assert.AreEqual(("provider", "Juno's AI provider", "worker-2 takes no agent now."), (screen.Name, screen.Title, screen.Warning));
         CollectionAssert.AreEqual(new[] { "agent-setup-provider-codex", "agent-setup-provider-claude" }, screen.Controls.Select(c => c.Id).ToArray());
         Assert.IsTrue(screen.Controls.Single(c => c.Id == "agent-setup-provider-claude").Marked);
         Assert.AreEqual(1, hub.PostsTo("/move").Count, "no command again by itself");
@@ -216,7 +216,7 @@ public sealed class ManagerSetupTests
         hub.Machines = SetupHub.MachineList("claude", null, signedIn: true);
         await setup.StepAsync();
         var screen = ManagerSetupScreens.Of(setup.View);
-        Assert.AreEqual(("settingUp", "Setting up Fleet Manager", true, true), (screen.Name, screen.Title, screen.Waits, screen.Making));
+        Assert.AreEqual(("settingUp", "Setting up Juno", true, true), (screen.Name, screen.Title, screen.Waits, screen.Making));
         Assert.AreEqual(1, refreshes, "the owner's store reads again while the session starts");
         Assert.IsTrue(setup.View.Shows && !setup.View.Ended);
 
@@ -248,7 +248,7 @@ public sealed class ManagerSetupTests
         var screen = ManagerSetupScreens.Of(setup.View);
         Assert.AreEqual(("settingUp", null as string), (screen.Name, screen.Warning));
         await setup.StepAsync();
-        Assert.AreEqual(AgentSetupModel.CannotReadServer("Fleet Manager"), ManagerSetupScreens.Of(setup.View).Warning);
+        Assert.AreEqual(AgentSetupModel.CannotReadServer("Juno"), ManagerSetupScreens.Of(setup.View).Warning);
         Assert.AreEqual(0, hub.PostsTo("/move").Count);
 
         hub.ServersFail = false;

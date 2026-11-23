@@ -90,7 +90,7 @@ public sealed class SwiftWordsTests
         var reading = Literal(Path.Combine("ios", "ChatPage.swift"), "Reading…");
         var s = State(Decode(Snapshot()), Clock);
         var chat = Screens.Chat(s, "pax", Clock, Utc);
-        Assert.AreEqual(With(empty, "\\(agent.agentLabel)", "DevOps"), chat.EmptyWords);
+        Assert.AreEqual(With(empty, "\\(agent.agentLabel)", "Pax"), chat.EmptyWords);
         Assert.AreEqual(reading, chat.LoadingWords);
     }
 

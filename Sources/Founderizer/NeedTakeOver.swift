@@ -161,30 +161,25 @@ extension FleetStore {
     }
 
     /// ✓ Done of the take-over card: the request's quick reply "Done", by the path of every answer (the outbox, its
-    /// receipt and its retry), as the card's own quick reply sends it (`NeedAnswerBox.sendQuickReply`): words that he
-    /// wrote in the request's box give way to it, and a press that comes while the hub cannot take it waits until it
-    /// can, or until the request leaves (`waiting` tells the card at once that it waits). Nil once the hub has the
-    /// answer, or once the request left meanwhile (its card then closes by the reading); otherwise the words of the
-    /// card's line.
+    /// receipt and its retry), as the card's own quick reply sends it (`NeedAnswerBox.sendQuickReply`). **His own words
+    /// in the request's box stay as they are** (the owner's report of 22 November 2026: a reply stood in his box, and
+    /// took his words' place): "Done" goes as its own words (`send(needID:words:)`). A press that comes while the hub
+    /// cannot take it waits until it can, or until the request leaves (`waiting` tells the card at once that it waits).
+    /// Nil once the hub has the answer, or once the request left meanwhile (its card then closes by the reading);
+    /// otherwise the words of the card's line.
     func answerTakeOver(_ id: Int, waiting: () -> Void) async -> String? {
         if filesAreWaiting(for: Self.stageKey(need: id)) {
             return String(l10n: "A file waits in the request's answer box: answer it there.")
         }
-        let before = answers[String(id)]
-        answers[String(id)] = "Done"
         let hub = hub, database = state?.db
         if !canWrite { waiting() }
         while !canWrite {
-            if let storageError { answers[String(id)] = before; return storageError }
+            if let storageError { return storageError }
             guard self.hub == hub, state?.db == database, openNeeds.contains(where: { $0.id == id }) else { return nil }
-            do { try await Task.sleep(for: .milliseconds(300)) } catch {
-                if answers[String(id)] == "Done" { answers[String(id)] = before }          // his words come back
-                return nil
-            }
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return nil }
         }
         guard self.hub == hub, state?.db == database else { return nil }
-        guard answers[String(id)] == "Done" else { return String(l10n: "The answer did not reach the hub.") }
-        await send(needID: id)
+        await send(needID: id, words: "Done")
         if pending == nil, sendError == nil, storageError == nil { return nil }
         return sendError ?? storageError ?? String(l10n: "The answer did not reach the hub.")
     }

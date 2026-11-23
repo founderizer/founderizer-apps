@@ -89,14 +89,21 @@ public actor ServerRecords {
 
     /// **How this Mac reaches one server as root**: the connection that it keeps for it from its install, at the
     /// private address that the fleet reports (a public address lets no SSH in once the installer has run), else the
-    /// fleet's own record of the server. A user who is not root becomes root with `sudo -n`, so nothing waits for a
+    /// fleet's own record of the server. A kept user who is not root becomes root with `sudo -n`, so nothing waits for a
     /// password. A record that is not a whole connection, or not one that `ssh` can take, is none.
-    public static func target(_ server: ServerEntry, kept: InstallTarget?, record: MachineReach?) -> InstallTarget? {
+    ///
+    /// **A record's user other than root is none for a root step** (`rootOnly`; the validation of 23 November 2026,
+    /// M1): that user owns its `~/.ssh/authorized_keys`, so a line there with a forced command prints what it likes
+    /// for the whole session, the `sudo` and root's read included, and the hub writes that record (`hub.sh` records the
+    /// hub's own user, `fleet`, for its server). `rootOnly` false only for a step that reads as that user anyway (this
+    /// Mac's key registration reads the proof file as its owner, `OwnerMacKeyRegistration`).
+    public static func target(_ server: ServerEntry, kept: InstallTarget?, record: MachineReach?,
+                              rootOnly: Bool = true) -> InstallTarget? {
         if var kept {
             kept.becomeRoot = kept.user != "root"
             return MachineReach(address: server.address).reaching(kept)
         }
-        guard let known = record?.onRecord else { return nil }
+        guard let known = record?.onRecord, known.user == "root" || !rootOnly else { return nil }
         let target = InstallTarget(host: known.address, user: known.user, port: known.port, becomeRoot: known.user != "root")
         return target.isValid ? target : nil
     }

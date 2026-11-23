@@ -127,7 +127,7 @@ public struct AskedCard: Sendable, Equatable {
         /// does ("Resumes at 15:00") in place of its line; nil when a hold or a usage limit stops it, or no time does.
         public let until: Double?
 
-        /// **The row's one muted line**: that it waits for him; the agent that works on it now, by its role, and what
+        /// **The row's one muted line**: that it waits for him; the agent that works on it now, by its name, and what
         /// its running turn does; that it is done; the word of a result that did not succeed; or for one that only
         /// waits, why, in the board's words ("Waiting for Shop Developer", "Queued").
         public var line: String {

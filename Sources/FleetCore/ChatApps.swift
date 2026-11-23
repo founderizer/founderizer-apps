@@ -717,8 +717,8 @@ public enum ChatApps {
     }
 
     /// One agent's own number or bot: the account `whatsapp-<agent>`, `discord-<agent>` or `telegram-<agent>` (then
-    /// `-2`, `-3` and so on) with that agent only, labelled as the apps name the agent (its role, else its name:
-    /// `agentLabel`), and the number of a second account ("Studio 2").
+    /// `-2`, `-3` and so on) with that agent only, labelled as the apps name the agent (its name with capitals, or
+    /// its role when one word of the role is the name: `agentLabel`), and the number of a second account ("Studio 2").
     public static func agentAccount(app: String, agent: String, taken: Set<String>) -> (id: String, account: ChatAccountInput) {
         let id = accountID(app: app, agent: agent, taken: taken), stem = accountID(app: app, agent: agent, taken: [])
         let suffix = id == stem ? "" : " " + id.dropFirst(stem.count + 1)

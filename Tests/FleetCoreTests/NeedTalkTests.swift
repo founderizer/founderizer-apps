@@ -75,7 +75,10 @@ struct NeedTalkTests {
 
     /// The lane "Give on the iPhone" (the owner's "Line to the Mac" and "Yes, add it", 19 November 2026): the hub takes
     /// Give, a team card's yes and the door card's Full access only from a Mac (or a PC), so the phone draws one line to
-    /// the Mac in their place, and every other option stays by its own index, which its press sends.
+    /// the Mac in their place, and every other option stays by its own index, which its press sends. **The first option
+    /// of a card that makes a GitHub App or opens the Add device picture stays, as a row that takes no press**: only
+    /// the Mac's press starts that step. The bug that this stops: a press of it on the phone answered the card, closed
+    /// it and started nothing.
     @Test func thePhoneDrawsOneLineInThePlaceOfWhatOnlyAMacOrAPCPresses() throws {
         let give: [String: Any] = ["agent": "dev", "level": "write", "repos": ["acme/web"]]
         let hash = String(repeating: "a", count: 64)
@@ -93,6 +96,11 @@ struct NeedTalkTests {
         let doorCard = try need(["door_call": hash, "door_host": "web-1",
                                  "options": ["Run it once", "Full access on web-1", "No"]])
         #expect(doorCard.phoneRows == [.option(0), .onTheComputer(1), .option(2)] && doorCard.onlyOnAComputer == .fullAccess)
+        let appCard = try need(["github_app": "acme", "options": ["Make the App", "Not now"]])
+        #expect(appCard.phoneRows == [.unavailable(0), .option(1)] && appCard.firstOptionStartsOnTheMac)
+        let scanCard = try need(["add_device": 1, "options": ["Scan it again", "Not now"]])
+        #expect(scanCard.phoneRows == [.unavailable(0), .option(1)] && scanCard.firstOptionStartsOnTheMac)
+        #expect(try need(["github_app": "", "add_device": 0]).phoneRows == all)   // no account, no picture
         let oneOption = try need(["team": true, "options": ["Yes: remove scout"]])       // one option is no choice
         #expect(oneOption.phoneRows.isEmpty && oneOption.onlyOnAComputer == nil)
     }

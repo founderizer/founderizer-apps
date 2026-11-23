@@ -403,7 +403,8 @@ struct ServerPage: View {
                     // beside its name. An install that goes on is the page's own subject while it runs, and it
                     // already says where the machine stands, so the standing waits for it to end.
                     if server.job?.isOpen != true {
-                        if !MachineStandingSection.isWell(standing(server), model: model(server)) {
+                        if !MachineStandingSection.isWell(standing(server), model: model(server), portStep: MachineStandingSection
+                            .portStep(store: store, model: model(server), server: server)) {
                             MachineStandingSection(store: store, model: model(server), server: server, readings: readings,
                                                    connected: connection(server))
                         }
@@ -498,7 +499,8 @@ struct ServerPage: View {
 
     /// The checks of this machine, which the standing card reads.
     private func model(_ server: ServerEntry) -> MachineChecksModel {
-        store.checksModel(machine: server.name, kind: Self.checkout(server, readings: readings))
+        store.checksModel(machine: server.name, kind: Self.checkout(server, readings: readings),
+                          linux: server.reportsLinux(readings: readings))
     }
 
     private func standing(_ server: ServerEntry) -> ServerStanding {

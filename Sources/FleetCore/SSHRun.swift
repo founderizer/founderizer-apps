@@ -100,13 +100,16 @@ public enum SSHRun {
         func end(_ key: Key) { _ = lock.withLock { open.remove(key) } }
     }
 
-    /// The options of the gate's run: the host key that this Mac knows already, never a new one, and the install's
-    /// timeout.
-    static let proofOptions = ["-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20"]
+    /// The options of the gate's run: the host key that this Mac knows already, never a new one, by the rule of the
+    /// target (`InstallTarget.hostKeyOptions`: at a port that the owner did not give, the line of the host's port 22,
+    /// never a `[host]:port` line that an earlier run kept), and the install's timeout.
+    static func proofOptions(_ target: InstallTarget) -> [String] {
+        target.hostKeyOptions(strict: true) + ["-o", "ConnectTimeout=20"]
+    }
 
     /// The arguments of the gate's run: app mode with `key`, as the user that this Mac logs in as.
     static func proof(_ target: InstallTarget, key: SSHCall.Key) -> [String] {
-        SSHCall(host: target.host, user: target.user, port: target.port, options: proofOptions,
+        SSHCall(host: target.host, user: target.user, port: target.port, options: proofOptions(target),
                 shape: .command("echo " + PasswordOnce.keyWorks)).arguments(key)
     }
 }

@@ -431,6 +431,17 @@ public enum CentralVaultPins {
     }
 
     private static func name(_ hub: URL, _ fleet: String) -> String { "\(hub.absoluteString)|\(fleet)" }
+
+    /// **Why a key that the central vault's install printed may not become the pin**, or nil when it may (the
+    /// validation of 23 November 2026, M2). The vault's keys never change in an install or an update: its install makes
+    /// a key only where there is none, and keeps what it finds. So at an update, or at the app's own install, a key that
+    /// is not the pin that this Mac holds comes only from a fault, and the pin stays, with the words of a hub that
+    /// names another key (`VaultPlan.otherKey`), whose way out is Set up. Only the owner's Set up (`setUp`) and a first
+    /// install, with no pin held, write a pin.
+    public static func refusal(of printed: String, held: String?, setUp: Bool) -> String? {
+        guard !setUp, let held, held != printed else { return nil }
+        return VaultPlan.otherKey
+    }
 }
 
 /// What the install of the central vault printed last: the vault's key and its fleet, its own reason for stopping, or
@@ -459,10 +470,12 @@ public enum CentralVaultRemote {
     /// SSH agent, an X display or a port of this Mac is nothing that a vault step needs there.
     static let noForwarding = ["-a", "-x", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"]
 
-    /// The parts of one call (`SSHCall`): the installer's, with the host key checked strictly and no forwarding.
+    /// The parts of one call (`SSHCall`): the installer's, with the host key checked strictly and no forwarding. At a
+    /// port that the owner did not give for that host, the key is the one of the host's port 22
+    /// (`InstallTarget.hostKeyOptions`).
     static func call(target: InstallTarget, program: String, runs: InstallPlan.Runs) -> SSHCall {
         InstallPlan(job: .join, target: target, steps: [], redactions: [])
-            .call(for: program, runs: runs, strict: "yes", before: noForwarding)
+            .call(for: program, runs: runs, strict: true, before: noForwarding)
     }
 
     /// **Root's own clone of the published repository on the hub's machine** (DevOps plan V2), at the revision of a
@@ -536,6 +549,55 @@ public enum CentralVaultRemote {
         })
         return keys.count == 1 ? keys.first : nil
     }
+
+    /// How the trust step reads one server's vault key (`trustRead`).
+    public enum TrustRead: Equatable, Sendable {
+        /// As root, through `sudo -n` for a kept user that is not root: a Linux server's broker key file.
+        case root
+        /// As the connection's own user, with no `sudo`: a Mac's Founderizer Vault, which serves the agents' user.
+        case agents
+    }
+
+    /// **How the trust step reads a server's vault key, or nil when it reads nothing there** (R2-M1 of the validation of
+    /// 23 November 2026). A server is a Mac for this step only when the hub's list says so (`kind`) and this Mac's own
+    /// Tailscale says so too (`os`: the `OS` of the node, which on a Linux server comes from root's `tailscaled`, so that
+    /// neither an agent nor the hub sets it); then the read is the agents' user's (limit 10 of VAULT.md). Each other
+    /// server is read as root, and a user of the fleet's record that is not root (`kept` false) is no connection: a
+    /// hub that is broken into calls a Linux server a Mac and names an agent's OS user, whose forced command prints the
+    /// agent's key, which the hub binds too, so the Mac would pin it. A Mac that the hub calls Linux reads as root, and
+    /// stops (fails closed). A kept connection is as it was.
+    public static func trustRead(kind: String?, os: Set<String>, user: String, kept: Bool) -> TrustRead? {
+        if kind == "mac" && os == ["macOS"] { return .agents }
+        return kept || user == "root" ? .root : nil
+    }
+
+    #if os(macOS)
+    /// **Whether this Mac's own Tailscale names the connection's host and the host of this Mac's hub address as one
+    /// device**, before any step reads the central vault as root there: its install and its update, which pin the key
+    /// that they print (`CentralVaultPins`), and the read of its owner keys for the key swap. `status` is this Mac's
+    /// `tailscale status --json` (`MacNetwork.status`), nil when Tailscale did not answer. nil when they are one device;
+    /// else the words of the stop, which name the hub's machine as the hub names it (`machine`), and the step runs
+    /// nothing.
+    ///
+    /// The connection's address is the hub's word (`GET /ui/vault`, its record of its own server), so the address alone
+    /// is not enough: a hub that is broken into names a device of its own choosing and that device's address, and the
+    /// root of that device prints the vault key that it likes. The device that serves this Mac its hub is the one that
+    /// this Mac's own knowledge gives (the manager's read of 16 November 2026). The hub's name of its machine adds
+    /// nothing, the hub chooses it, and it is not the device's Tailscale name for good on some fleets: the hub renames its
+    /// machine only while the central vault does not answer, and never to a name that Fleet refuses (the validation of
+    /// 23 November 2026, M3). Until 22 November 2026 the install and the update checked neither.
+    public static func hubMachineStop(target: InstallTarget, hub: URL, machine: String, status: String?) -> String? {
+        // one node, by its node ID or its whole name, never by a first label that two nodes can share (R2-S2)
+        let json = status ?? "", address = hub.host ?? ""
+        guard let hubs = MacNetwork.node(of: address, in: json) else {
+            return String(l10n: "This Mac's Tailscale does not say that \(address) is \(machine). Founderizer pinned nothing.")
+        }
+        guard MacNetwork.node(of: target.host, in: json) == hubs else {
+            return String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(machine). Founderizer pinned nothing.")
+        }
+        return nil
+    }
+    #endif
 
     /// The install's answer: its last line that is a JSON object with `ok`. Its other lines and anything the machine
     /// printed on standard error come before it.

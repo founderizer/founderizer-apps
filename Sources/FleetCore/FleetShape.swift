@@ -188,7 +188,8 @@ public enum FirstRunHandover: Equatable, Sendable {
     }
 }
 
-/// The team that the card "Your fleet" shows: the manager by its name, and each agent by its role.
+/// The team that the card "Your fleet" shows: the manager by its name, and each agent by its name with its role under
+/// it, as Settings › Reporting lines shows an agent (`AgentNames`).
 public struct FleetPlan: Equatable, Codable, Sendable {
     /// The one thing that an agent uses, at the end of its dotted line.
     public struct Use: Equatable, Codable, Sendable {
@@ -202,7 +203,7 @@ public struct FleetPlan: Equatable, Codable, Sendable {
     public struct Agent: Equatable, Codable, Sendable, Identifiable {
         /// The name that the agent gets in the hub. Its mark comes from it.
         public var name: String
-        /// Its role, which is how every page names an agent.
+        /// Its role, which every page shows beside the agent's name.
         public var role: String
         /// What it does, in one sentence: the card shows it under the pointer.
         public var does: String?
@@ -212,6 +213,12 @@ public struct FleetPlan: Equatable, Codable, Sendable {
         /// An agent that needs a browser runs on a Mac.
         public var needsBrowser: Bool
         public var id: String { name }
+        /// The agent as the apps name it (`AgentNames.label`): its name with capitals, or its role where one word of
+        /// the role is the name.
+        public var label: String { AgentNames.label(name, roles: roles) }
+        /// Its role beside the label (`AgentNames.role`): nil where the role is the label, or where it has none.
+        public var roleBeside: String? { AgentNames.role(name, roles: roles) }
+        private var roles: [String: String] { AgentNames.roles([(name: name, title: Optional(role))]) }
         public init(name: String, role: String, does: String? = nil, asksFirst: String? = nil, uses: Use? = nil,
                     needsBrowser: Bool = false) {
             self.name = name; self.role = role; self.does = does; self.asksFirst = asksFirst; self.uses = uses

@@ -649,6 +649,8 @@ private struct NeedStep: View {
     /// Where the answer that he gave stood under the top of the answers: his answer moves from there to the top, as
     /// the other answers go.
     @State private var answerTop: CGFloat = 0
+    /// The width that a key's form draws (`SecretFormWidth`), which his talk over it takes; nil until it said so.
+    @State private var formWidth: CGFloat?
 
     private var expanded: Bool { memory.expanded }
 
@@ -841,9 +843,17 @@ private struct NeedStep: View {
             // holds after his answer too): it is outside the answers' switch, so it keeps its place when he answers,
             // and his answer moves up from where he gave it to just under the talk (`answerTop` is the box's own)
             let talk = need.shownTalk(features: store.state?.ui_features)
-            if !talk.isEmpty { NeedTalkLines(talk: talk, font: SetupMetrics.textFont) }
+            if !talk.isEmpty {
+                // **Over a key's form, his talk is as wide as the form**, in the middle as the form is, so his bubble
+                // ends where the form ends (`SecretFormWidth`); it keeps that width once the request ended, so it does
+                // not jump when the form goes
+                NeedTalkLines(talk: talk, font: SetupMetrics.textFont)
+                    .frame(maxWidth: need.asksForSecret
+                           ? formWidth ?? SecretEntryView.width(of: need, onStep: true) : .infinity)
+            }
             choices
         }
+        .onPreferenceChange(SecretFormWidth.self) { width in if let width { formWidth = width } }
     }
 
     /// The answers, or what he answered once the request ended.

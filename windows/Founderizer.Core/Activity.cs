@@ -112,7 +112,7 @@ public static class Activity
                 .Select(t => t.Owner).Distinct().ToList());
     }
 
-    /// <summary>The words of a task that waits for its subtasks (HubState.subtaskWords): "Waiting for Developer, DevOps".</summary>
+    /// <summary>The words of a task that waits for its subtasks (HubState.subtaskWords): "Waiting for Theo, Pax".</summary>
     public static string SubtaskWords(IReadOnlyList<string> agents, AgentBook names) =>
         $"Waiting for {string.Join(", ", agents.Select(names.Label))}";
 
@@ -397,7 +397,7 @@ public sealed record NeedsLane
         return Successor(c, order, open.ToHashSet()) ?? (open.Count > 0 ? open[0] : null);
     }
 
-    /// <summary>The words of the mark on a request that agents wait for: "Marketing waits for this", "A and B wait for
+    /// <summary>The words of the mark on a request that agents wait for: "Orla waits for this", "A and B wait for
     /// this".</summary>
     public static string WaitWords(IReadOnlyList<string> agents, AgentBook names)
     {

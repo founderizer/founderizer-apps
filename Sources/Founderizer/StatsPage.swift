@@ -203,8 +203,8 @@ struct StatsPage: View {
     }
 
     /// **Each agent's or model's own totals, the most list dollars first, as the Agents page draws its rows** (the owner,
-    /// 20 November 2026: "the same effects you did on the Agents tab", "more logos"): the agent's glyph with its role over
-    /// its name, or the logo of the model's provider; the row's list dollars of each day of the period as small columns
+    /// 20 November 2026: "the same effects you did on the Agents tab", "more logos"): the agent's glyph with its name over
+    /// its role, or the logo of the model's provider; the row's list dollars of each day of the period as small columns
     /// in its own colour, on the one scale of every row, so two rows compare by their height; then each count under a
     /// million whole, with the language's thousands separator, and from a million on short with two decimals ("for
     /// millions show 1.45M", `TokenFormat.column`), and the dollars with their cents, right-aligned in tabular digits, so
@@ -215,8 +215,8 @@ struct StatsPage: View {
         let days = stats.dayCosts(split)
         let most = days.values.lazy.flatMap { $0 }.max() ?? 0
         let looks = modelLooks(stats.models)
-        // one row height for the table: two lines for every row once an agent has its name under its role
-        let height = split == .agents && groups.contains { $0.key.flatMap { AgentNames.shared.under($0) } != nil }
+        // one row height for the table: two lines for every row once an agent has its role under its name
+        let height = split == .agents && groups.contains { $0.key.flatMap { AgentNames.shared.role($0) } != nil }
             ? FormMetrics.twoLineRow : FormMetrics.row
         return FormSection(split == .agents ? String(l10n: "Agents") : String(l10n: "Models")) {
             Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 0) {
@@ -247,7 +247,7 @@ struct StatsPage: View {
         }
     }
 
-    /// A row's name: an agent's glyph and its role over its own name, as the Agents page has them, or the logo of the
+    /// A row's name: an agent's glyph and its name over its role, as the Agents page has them, or the logo of the
     /// model's provider and the model's name; the agents no longer in the team with no mark, under their gray name.
     private func rowName(_ key: String?) -> some View {
         HStack(spacing: 0) {
@@ -261,8 +261,8 @@ struct StatsPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: name(.group(key))).lineLimit(1).truncationMode(.middle)
                     .foregroundStyle(key == nil ? FleetStyle.muted : FleetStyle.text)
-                if split == .agents, let key, let under = AgentNames.shared.under(key) {
-                    Text(verbatim: under).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                if split == .agents, let key, let role = AgentNames.shared.role(key) {
+                    Text(verbatim: role).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                         .lineLimit(1).truncationMode(.tail)
                 }
             }

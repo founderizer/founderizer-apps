@@ -182,15 +182,17 @@ final class FleetStore {
     /// The checks of one machine (PRODUCT.md 4.1), one model for each machine of this hub. A check that runs stays
     /// while another page shows.
     @ObservationIgnored private var checksModels: [String: MachineChecksModel] = [:]
-    func checksModel(machine: String, kind: MachineCheckout) -> MachineChecksModel {
+    func checksModel(machine: String, kind: MachineCheckout, linux: Bool = false) -> MachineChecksModel {
         let key = checksKey(machine)
         // The kind is the hub's own answer about that machine, and a later reading can settle it (a server whose
-        // system no reading had yet). A kept model takes the newer answer; nothing else about it changes.
+        // system no reading had yet). A kept model takes the newer answer; nothing else about it changes. So does
+        // `linux` (`ServerEntry.reportsLinux`), which says whether a first host key at port 22 may be kept.
         if let model = checksModels[key] {
             if model.kind != kind { model.kind = kind }
+            if model.linux != linux { model.linux = linux }
             return model
         }
-        let model = MachineChecksModel(machine: machine, hub: hub, kind: kind)
+        let model = MachineChecksModel(machine: machine, hub: hub, kind: kind, linux: linux)
         checksModels[key] = model
         return model
     }
@@ -334,8 +336,8 @@ final class FleetStore {
         settingsModels = [:]
     }
     var state: HubState? {
-        // Each agent's role, for every line of the app that names an agent (`AgentNames`): the owner, 10 November
-        // 2026, chose the role as an agent's main label.
+        // Each agent's role, for every line of the app that names an agent (`AgentNames`): its name, and its role
+        // beside it where the agent is an entry of its own (the owner's answers of 22 November 2026).
         didSet {
             AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) })
             askCache = nil
@@ -2611,8 +2613,11 @@ final class FleetStore {
         await sendText(feedbackDrafts[composer] ?? "", recipient: feedback.recipient, files: files, about: feedback.about)
     }
 
-    func send(needID: Int? = nil) async {
-        let text = needID.map { answers[String($0)] ?? "" } ?? draft(for: chatAgent)
+    /// His words to the chat's agent, or his answer to a request in words: the box's words, or `words` where the app
+    /// gives them (a reply that he pressed, `NeedAnswerBox.sendQuickReply`), with the box's files either way. Words
+    /// given here leave his box's own words as they are.
+    func send(needID: Int? = nil, words: String? = nil) async {
+        let text = words ?? needID.map { answers[String($0)] ?? "" } ?? draft(for: chatAgent)
         let recipient = needID.flatMap { id in state?.needs.first { $0.id == id }?.by } ?? chatAgent
         let composer = needID.map { Self.stageKey(need: $0) } ?? Self.stageKey(agent: chatAgent)
         // A file that went up an hour ago may be another file under its number by now: it goes up again first.

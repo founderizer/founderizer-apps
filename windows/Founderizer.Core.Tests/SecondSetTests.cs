@@ -75,7 +75,11 @@ public sealed class SecondSetTests
         var found = Screens.Search(s, " support ", 0, Clock, CultureInfo.InvariantCulture);
         Assert.AreEqual("support", found.Words);
         CollectionAssert.AreEqual(new[] { "wren" }, found.Agents.Select(a => a.Name).ToArray());
-        Assert.AreEqual("Customer Support", found.Agents[0].Label);
+        Assert.AreEqual("Wren", found.Agents[0].Label);
+        // The row shows the role that the search found, muted after the name, and an assistive app reads the name, the
+        // role and the row's line, as VoiceOver reads the Mac's.
+        Assert.AreEqual((" · Customer Support", "Wren, Customer Support, " + found.Agents[0].Line),
+                        (found.Agents[0].Trail, found.Agents[0].Spoken));
         Assert.IsNotNull(found.Agents[0].Line, "its line, as the pane's preview says it");
         CollectionAssert.AreEqual(new[] { 11L }, found.Tasks.Select(t => t.Id).ToArray());
         Assert.AreEqual(Page.Chat("wren"), found.Open(0));

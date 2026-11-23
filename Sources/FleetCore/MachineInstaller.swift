@@ -178,6 +178,17 @@ public actor MachineInstaller {
         }
     }
 
+    /// **The connection of an install at the machine's own private address**, which the machine printed in the
+    /// network step over this very connection (`InstallPlan.privateAddress`), not the hub. A port that the owner gave
+    /// for the address that he typed is his for that machine's private address too, so it goes with it
+    /// (`InstallTarget.portGivenFor`); a port that he did not give stays one that he did not give.
+    static func moved(_ target: InstallTarget, to address: String) -> InstallTarget {
+        var moved = target
+        if target.portGivenFor == target.host { moved.portGivenFor = address }
+        moved.host = address
+        return moved
+    }
+
     /// The stop of an install whose hub has its owner and does not serve this Mac: the app's own sentence for a hub
     /// that refuses this Mac's read.
     static let notThisMacs = String(l10n: "Your hub answered, and it does not serve its pages to this Mac.")
@@ -190,7 +201,7 @@ public actor MachineInstaller {
             report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .running))
             do {
                 let lines = try await perform(step, report: report)
-                if step.id == "network", let address = InstallPlan.privateAddress(in: lines) { reached.host = address }
+                if step.id == "network", let address = InstallPlan.privateAddress(in: lines) { reached = Self.moved(reached, to: address) }
                 if case .verify = step.action {
                     let output = lines.joined(separator: "\n")
                     guard let checklist = VerifyChecklist.read(output: output, readAt: Date().timeIntervalSince1970) else {
@@ -210,6 +221,7 @@ public actor MachineInstaller {
                 report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .done,
                                        lines: lines.suffix(12)))
             } catch {
+                let error = refused(error)
                 let says = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .failed,
                                        lines: lastLines(), detail: says))
@@ -220,6 +232,17 @@ public actor MachineInstaller {
     }
 
     private func lastLines() -> [String] { Array(lines(of: lastOutput).suffix(12)) }
+
+    /// **A step of a server page's plan (a check, a restart, an update) whose `ssh` refused the host key** stops with
+    /// the owner's step (`InstallTarget.refusedHostKey`, from `ssh`'s own last lines), and not with "the server did not
+    /// answer its checks" or a step's title before ssh's line: since 22 November 2026 such a plan keeps no new key of a
+    /// Mac, nor of a port that he did not give, so that step is his. An install keeps its own words.
+    private func refused(_ error: Error) -> Error {
+        guard !plan.installs, let step = reached.refusedHostKey(in: lines(of: lastOutput), server: reached.host) else {
+            return error
+        }
+        return InstallError.checkStopped(step)
+    }
 
     /// **Whether this Mac owns the hub already**, read from the hub itself at the address that the network step gave
     /// it on the private network, at the hub's own port. True: the claim step sends nothing. Before the network step

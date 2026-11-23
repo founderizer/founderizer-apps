@@ -251,7 +251,8 @@ struct HealthView: View {
     /// update failed.
     @ViewBuilder private func updates(_ block: FleetHealth.Block, reading: FleetHealth) -> some View {
         let list = store.reading("servers.list") as ServerList?
-        let role = { (agent: String) in store.state?.agents.first { $0.name == agent }?.title ?? "" }
+        // The role beside the label, none where the role is the label ("Fleet Manager" stands once).
+        let role = { (agent: String) in AgentNames.shared.role(agent) ?? "" }
         let server = { (agent: String) in list?.server(of: agent)?.name ?? "" }
         let failures = Set(block.warnings.filter { $0.kind == "machine_failed" }.compactMap(\.agent))
         // Every column as wide as its widest entry, so the rows' columns stand at one place, and every row takes one

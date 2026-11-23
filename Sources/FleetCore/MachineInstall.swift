@@ -47,11 +47,92 @@ public struct InstallTarget: Equatable, Sendable {
     public var identityFile: String?
     /// The user is not root and becomes root with `sudo`. Every remote command then runs through it.
     public var becomeRoot: Bool
+    /// **The host for which the owner gave this port himself, on this Mac**: he typed it (Add server, the fields of a
+    /// server's page), or his own `~/.ssh/config` named it for that host (`named`). nil for a port from the hub's
+    /// record of the server (`MachineReach`, `VaultHub`) and for a connection that this Mac kept before 22 November
+    /// 2026, which says nowhere where its port came from. It names a host and not only a yes, so that a target that
+    /// goes to another address (the hub's private address for a kept public one, `MachineReach.reaching`; a device's
+    /// address in the door's round) keeps no word of the owner's for a port of that other address. The host key rule
+    /// of each `ssh` of the app reads it (`hostKeyOptions`).
+    public var portGivenFor: String?
+    /// **The server is a Mac, or a server that the hub has not reported as Linux yet**, whose port 22 is no proof of its
+    /// `sshd`: macOS lets every user bind a port below 1024 (since 10.14), a program can bind the Tailscale address
+    /// beside `sshd`'s listen on every address, and `tailscale serve --tcp 22` can answer there too (the Door area's
+    /// read of 22 November 2026). So no `ssh` of the app keeps a new host key of such a server at any port: the first
+    /// key is the owner's own step ("Connect to it once with ssh from Terminal"). A server's page sets it unless the
+    /// hub's report says Linux (`ServerEntry.reportsLinux`); the vault's trust step, Run on a Mac and a Mac's Screen
+    /// Sharing set it too. The hub's word can only make the rule stricter. **A known limit:** a hub that is broken into
+    /// can report a Mac as a Linux server, and then the Linux rule keeps a key at port 22 at the first check; the root
+    /// install's own fingerprint (`mac-server-pin-design.md`, P4) closes it.
+    public var macServer: Bool
 
     public init(host: String, user: String = "root", port: Int = 22, identityFile: String? = nil,
-                becomeRoot: Bool = false) {
+                becomeRoot: Bool = false, portGivenFor: String? = nil, macServer: Bool = false) {
         self.host = host; self.user = user; self.port = port
-        self.identityFile = identityFile; self.becomeRoot = becomeRoot
+        self.identityFile = identityFile; self.becomeRoot = becomeRoot; self.portGivenFor = portGivenFor
+        self.macServer = macServer
+    }
+
+    /// **The port is no word of the hub's**: port 22, which on Linux only root's own `sshd` can hold (a port below
+    /// 1024), or the port that the owner gave on this Mac for this very host (`portGivenFor`). It does not read
+    /// `macServer`: a Mac's port 22 proves nothing, and `hostKeyOptions` keeps no new host key of a Mac at any port. A
+    /// kept connection (`InstallTargets.target`) never carries `macServer`, so the page that reads this for a kept
+    /// connection (`MachineChecksModel`) never sees a Mac.
+    public var portIsOwners: Bool { port == 22 || portGivenFor == host }
+
+    /// **The host key rule of one `ssh` to this target** (the hole of 22 November 2026, `mac-server-pin-validation.md`
+    /// (B)(b)): a hub that is broken into names a high port of a server in its record, where an agent's own small SSH
+    /// server, or the hub's own user on the hub's own server, answers with a host key of its own. An `accept-new` run
+    /// there kept that key, and every strict run after it (the vault's steps, the owner's access line, the door) took
+    /// that program's answer for root's: the central vault's key of the hub's own server among them.
+    ///
+    /// - Port 22, or a port that the owner gave for this host (`portIsOwners`): `accept-new` where the caller keeps a
+    ///   new host key once (`strict` false: an install, a check), else `yes`, as before. On a Mac (`macServer`) always
+    ///   `yes`, at port 22 too.
+    /// - **Any other port**, from the hub's record or kept with no word of where it came from: `yes`, never
+    ///   `accept-new`, and the key must be the one that this Mac knows for the plain host, the line of its port 22
+    ///   (`HostKeyAlias`). A line for `[host]:port` is not read at all, so a key that an `accept-new` run kept there
+    ///   before this rule (a fake one too) opens nothing: `ssh` reads such a line first, and the plain line only when
+    ///   there is none (OpenSSH 10.3 here, "checking without port identifier", measured on 22 November 2026). An
+    ///   unknown key is a plain refusal ("Host key verification failed").
+    public func hostKeyOptions(strict: Bool) -> [String] {
+        guard portIsOwners else { return ["-o", "StrictHostKeyChecking=yes", "-o", "HostKeyAlias=\(host)"] }
+        return ["-o", "StrictHostKeyChecking=\(strict || macServer ? "yes" : "accept-new")"]
+    }
+
+    /// **The owner's step for a host key that `ssh` refused at this target**, read from `ssh`'s own lines, or nil when
+    /// they hold no refusal ("Host key verification failed"). It reads the words and not the status, because a server
+    /// that does not answer ends with 255 too. `server` is the name that the words give the server.
+    ///
+    /// - **A port that he did not give, other than 22** (`asksForItsPort`): he types the port that the server's SSH
+    ///   listens on, on the server's page, which makes it his (`portGivenFor`); the page then shows an empty port
+    ///   field, so that the hub's port is never one that he only entered again (`MachineChecksModel`). The check reads
+    ///   only the line of the host's port 22 there (`hostKeyOptions`), so a connection from Terminal at that port
+    ///   writes a `[host]:port` line that it never reads, and port 22 may not answer; and a removal of the plain line
+    ///   (`ssh-keygen -R`) would take away the good key of port 22, where the cause can be another program at the hub's
+    ///   port.
+    /// - A changed key: the words of the install's own check (`ServerCheck.hostKeyChanged`), with the name of the line
+    ///   that `ssh-keygen -R` takes: the address at port 22, else `"[address]:port"`, in quotes for the shell.
+    /// - A key that this Mac does not know: his own first connection from Terminal.
+    public func refusedHostKey(in lines: [String], server: String) -> String? {
+        let said = lines.map { $0.lowercased() }
+        guard said.contains(where: { $0.contains("host key verification failed") }) else { return nil }
+        if asksForItsPort { return Self.typeItsPort(server) }
+        if said.contains(where: { $0.contains("remote host identification has changed") }) {
+            guard port != 22 else { return ServerCheck.hostKeyChanged(host) }
+            let line = "\"[\(host)]:\(port)\""
+            return String(l10n: "\(host) answers with another host key than this Mac knows. If the server was rebuilt, run ssh-keygen -R \(line) on this Mac, then check again.")
+        }
+        return String(l10n: "This Mac does not know the host key of \(server) yet. Connect to it once with ssh from Terminal.")
+    }
+
+    /// A refused key here is one whose way out is the port that he types (`refusedHostKey`): a port other than 22 that
+    /// he did not give.
+    public var asksForItsPort: Bool { !portIsOwners && port != 22 }
+
+    /// The words of that way out, for the server that `server` names.
+    public static func typeItsPort(_ server: String) -> String {
+        String(l10n: "Type the port that the SSH of \(server) listens on, on its page in Servers, then check again.")
     }
 
     /// Why this machine cannot be installed as given, in the owner's own words, or nil.
@@ -112,8 +193,9 @@ public struct InstallTarget: Equatable, Sendable {
         let key = options.identityFiles.filter { !(general?.identityFiles ?? []).contains($0) }.lazy
             .compactMap { SSHOptions.path($0, home: home, localUser: localUser, host: options.hostname, user: user) }
             .first(where: exists)
+        // The owner typed the address, and his own configuration gives its port: his word for that host.
         return InstallTarget(host: options.hostname, user: user, port: options.port, identityFile: key,
-                             becomeRoot: user != "root")
+                             becomeRoot: user != "root", portGivenFor: options.hostname)
     }
 }
 
@@ -674,7 +756,8 @@ public struct InstallPlan: Equatable, Sendable {
     }
 
     /// The arguments of `ssh` for one remote program: the owner's own connection, nothing interactive, and no
-    /// password anywhere. A host this Mac has never met is accepted once and kept, as a person typing `yes` does.
+    /// password anywhere. A host this Mac has never met is accepted once and kept, as a person typing `yes` does, but
+    /// only at port 22 or at a port that the owner gave for that host (`InstallTarget.hostKeyOptions`).
     /// `reaching` is where an install reaches the machine now (`MachineInstaller.reached`); else the plan's target.
     /// The one builder lays them out (`SSHCall`): today's arguments, or app mode for the app's own key once a run with
     /// it alone got in to that account.
@@ -702,13 +785,14 @@ public struct InstallPlan: Equatable, Sendable {
         return call(for: program, reaching: target, runs: runs).arguments(SSHCall.key(for: target, ledger: ledger))
     }
 
-    /// **The parts of one call** (`SSHCall`): the install's own options of today, the host key rule (`strict`) and any
+    /// **The parts of one call** (`SSHCall`): the install's own options of today, the host key rule of the target that
+    /// the call reaches (`InstallTarget.hostKeyOptions`: `strict` for a step that keeps no new host key) and any
     /// options of the caller's before them (`before`), and the program as whom `runs` says.
-    func call(for program: String, reaching: InstallTarget? = nil, runs: Runs, strict: String = "accept-new",
+    func call(for program: String, reaching: InstallTarget? = nil, runs: Runs, strict: Bool = false,
               before: [String] = []) -> SSHCall {
         let target = reaching ?? target
-        let options = before + ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=\(strict)", "-o", "ConnectTimeout=20",
-                                "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0"]
+        let options = before + ["-o", "BatchMode=yes"] + target.hostKeyOptions(strict: strict)
+            + ["-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30", "-o", "NumberOfPasswordPrompts=0"]
         let remote: String
         switch runs {
         case .root where target.becomeRoot:

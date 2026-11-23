@@ -556,15 +556,18 @@ struct ServerCheckTests {
             $0 != "/Users/me/.ssh/missing"
         }
         #expect(target == InstallTarget(host: "203.0.113.9", user: "deploy", port: 2222,
-                                        identityFile: "/Users/me/.ssh/vps_key", becomeRoot: true))
+                                        identityFile: "/Users/me/.ssh/vps_key", becomeRoot: true,
+                                        portGivenFor: "203.0.113.9"))
         // The keys his configuration gives every server stay ssh's own to offer: none goes with IdentitiesOnly.
         let everywhere = SSHOptions(hostname: "198.51.100.7", user: "me", port: 22, identityFiles: ["~/.ssh/general"])
         #expect(InstallTarget.named("198.51.100.7", options: everywhere, general: general, localUser: "me",
                                     home: Self.home) { _ in true }
-                == InstallTarget(host: "198.51.100.7", user: "root", port: 22, identityFile: nil, becomeRoot: false))
+                == InstallTarget(host: "198.51.100.7", user: "root", port: 22, identityFile: nil, becomeRoot: false,
+                                 portGivenFor: "198.51.100.7"))
         // A user he typed wins over the configuration's.
         #expect(InstallTarget.named("admin@myvps", options: alias, general: general, localUser: "me", home: Self.home) { _ in false }
-                == InstallTarget(host: "203.0.113.9", user: "admin", port: 2222, becomeRoot: true))
+                == InstallTarget(host: "203.0.113.9", user: "admin", port: 2222, becomeRoot: true,
+                                 portGivenFor: "203.0.113.9"))
         // No answer from ssh -G leaves the address as he typed it.
         #expect(InstallTarget.named("ubuntu@198.51.100.7", options: nil, localUser: "me", home: Self.home) { _ in true }
                 == InstallTarget(host: "198.51.100.7", user: "ubuntu", becomeRoot: true))
@@ -578,7 +581,8 @@ struct ServerCheckTests {
             return LocalShell.Answer(status: 0, output: probe ? "hostname x\nuser \(NSUserName())\nport 22\n"
                                      : "host myvps\nhostname 203.0.113.9\nuser deploy\nport 2222\nidentityfile /nonexistent/key\n")
         }
-        #expect(target == InstallTarget(host: "203.0.113.9", user: "deploy", port: 2222, becomeRoot: true))
+        #expect(target == InstallTarget(host: "203.0.113.9", user: "deploy", port: 2222, becomeRoot: true,
+                                        portGivenFor: "203.0.113.9"))
         #expect(calls.all.map(\.arguments.first) == ["-G", "-G"])
         #expect(calls.all.first?.arguments == ["-G", "myvps"])
         #expect(calls.all.last?.arguments.last?.hasPrefix("founderizer-") == true)
@@ -660,22 +664,25 @@ struct ServerCheckTests {
         }
         let calls = Calls()
         #expect(await named("198.51.100.7", answers(me), calls: calls)
-                == InstallTarget(host: "198.51.100.7", user: "deploy", port: 2222, becomeRoot: true))
+                == InstallTarget(host: "198.51.100.7", user: "deploy", port: 2222, becomeRoot: true,
+                                 portGivenFor: "198.51.100.7"))
         #expect(calls.all.compactMap(\.arguments.last).filter { !$0.hasSuffix(".invalid") }
                 == ["198.51.100.7", "jumped", "app-prod", "admin"])
         // An alias with user root comes first.
         #expect(await named("198.51.100.7", answers("root"), calls: Calls())
-                == InstallTarget(host: "198.51.100.7", user: "root", port: 22, becomeRoot: false))
+                == InstallTarget(host: "198.51.100.7", user: "root", port: 22, becomeRoot: false,
+                                 portGivenFor: "198.51.100.7"))
         // A user he typed reads no alias, and neither does an address that a block of his names.
         let typed = Calls()
         #expect(await named("ubuntu@198.51.100.7", answers(me), calls: typed)
-                == InstallTarget(host: "198.51.100.7", user: "ubuntu", becomeRoot: true))
+                == InstallTarget(host: "198.51.100.7", user: "ubuntu", becomeRoot: true, portGivenFor: "198.51.100.7"))
         #expect(typed.all.count == 2)
         var own = answers(me)
         own["198.51.100.7"] = "hostname 198.51.100.7\nuser ops\nport 22\nidentityfile ~/.ssh/id_ed25519\n"
         let kept = Calls()
         #expect(await named("198.51.100.7", own, calls: kept)
-                == InstallTarget(host: "198.51.100.7", user: "ops", port: 22, becomeRoot: true))
+                == InstallTarget(host: "198.51.100.7", user: "ops", port: 22, becomeRoot: true,
+                                 portGivenFor: "198.51.100.7"))
         #expect(kept.all.count == 2)
     }
 }

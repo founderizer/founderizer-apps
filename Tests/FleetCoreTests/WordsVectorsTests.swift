@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import FleetCore
 
-/// **The vectors of the words that FleetCore makes** (`app/vectors/swift-words.json`): an agent's label and the line
-/// under it (`AgentNames`), the blocks of a message (`MessageBlock.parse`) and its plain line (`MessageBlock.plain`,
+/// **The vectors of the words that FleetCore makes** (`app/vectors/swift-words.json`): an agent's label and the role
+/// beside it (`AgentNames`), the blocks of a message (`MessageBlock.parse`) and its plain line (`MessageBlock.plain`,
 /// `ChatList.plain`), the time at the end of an agent's row (`ChatList.time`) and the age of a request
 /// (`activityAge`). The Windows app's library (`windows/Founderizer.Core`) makes the same words: its tests hold them
 /// equal to this file, and each case where they differ is named there.
@@ -21,6 +21,8 @@ struct WordsVectorsTests {
         ("orla", "Marketing"), ("nova", nil), ("dev-lead", nil), ("web_dev", nil), ("worker-1", nil), ("a1b2", nil),
         ("qa", "  Quality   assurance "), ("ops", ""), ("scout", "Scout"), ("iris", "Iris's helper"),
         ("sales-bot", "Sales bot"), ("x", nil), ("bistro", "Café helper"),
+        // A name inside a word of its role is no word of it: "Dev" with "DevOps" beside it.
+        ("dev", "DevOps"),
     ]
 
     /// What the owner types into Search (the Mac's SearchPalette): each against each agent, by `AgentNames.matches`.
@@ -82,7 +84,7 @@ struct WordsVectorsTests {
     static let ages: [Double] = [0, 59, 60, 61, 3599, 3600, 7200, 86_399, 86_400, 2 * 86_400, 6 * 86_400 + 86_399,
                                  7 * 86_400, 40 * 86_400, 400 * 86_400, -30]
 
-    struct Name: Codable { let name: String; let title: String?; let label: String; let under: String?; let capitalized: String }
+    struct Name: Codable { let name: String; let title: String?; let label: String; let role: String?; let capitalized: String }
     struct Block: Codable { let kind: String; let text: String; let marker: String; let level: Int; let cells: [[String]] }
     struct Text: Codable { let text: String; let blocks: [Block]; let plain: String; let preview: String? }
     struct Time: Codable { let time: Double; let now: Double; let locale: String; let words: String }
@@ -186,7 +188,7 @@ struct WordsVectorsTests {
         let roles = AgentNames.roles(agents.map { (name: $0.0, title: $0.1) })
         let names = agents.map { name, title in
             Name(name: name, title: title, label: AgentNames.label(name, roles: roles),
-                 under: AgentNames.under(name, roles: roles), capitalized: name.capitalized)
+                 role: AgentNames.role(name, roles: roles), capitalized: name.capitalized)
         }
         let texts = texts.map { text in
             Text(text: text,
@@ -246,7 +248,7 @@ struct WordsVectorsTests {
             waits.append(Wait(requester: requester, waiting_on: on, words: TaskWords.waiting(on: on, requester: requester)))
         }
         let document = Document(
-            about: "Words that FleetCore makes: AgentNames.label and under with the roles of team.json, String.capitalized, "
+            about: "Words that FleetCore makes: AgentNames.label and role with the roles of team.json, String.capitalized, "
                 + "MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and "
                 + "activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of "
                 + "MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and "

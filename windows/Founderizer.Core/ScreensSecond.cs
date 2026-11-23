@@ -71,9 +71,11 @@ public static partial class Screens
         var agents = (fleet?.Agents ?? []).Where(a => words.Length == 0 || s.Names.Matches(a.Name, words, culture))
             .Select(a => Screens.WaitingRequest(s, a).Need is { } request
                 ? new SearchAgentRow(a.Name, s.Names.Label(a.Name), request.Title,
-                                     MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false)) { NeedsYou = true }
+                                     MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false))
+                  { NeedsYou = true, Role = s.Names.Role(a.Name) }
                 : new SearchAgentRow(a.Name, s.Names.Label(a.Name), ChatLine.Preview(a.Name, a.Last, fleet!.Tasks),
-                                     MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false)))
+                                     MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false))
+                  { Role = s.Names.Role(a.Name) })
             .ToList();
         var all = fleet is null ? [] : s.AllTasks().OrderByDescending(t => t.ActivityTime()).ThenByDescending(t => t.Id).ToList();
         IEnumerable<MobileTaskHead> found;
@@ -311,6 +313,14 @@ public sealed record SearchAgentRow(string Name, string Label, string? Line, Mar
 {
     /// <summary>The line is a request that waits for him, in orange, as on the agent's row in the pane.</summary>
     public bool NeedsYou { get; init; }
+    /// <summary>The role after the name (<see cref="AgentBook.Role"/>), or null: the row shows <see cref="Label"/> alone.
+    /// The Mac's search palette row draws "Nova · Customer Support" (F16).</summary>
+    public string? Role { get; init; }
+    /// <summary>The name line's second part, muted: " · " and the role, or nothing.</summary>
+    public string Trail => Role is null ? "" : " · " + Role;
+    /// <summary>What an assistive app reads for the row: the name, the role and the row's line ("Wren, Customer Support,
+    /// Answer today's support tickets"), as VoiceOver reads the Mac's search palette row.</summary>
+    public string Spoken => string.Join(", ", new[] { Label, Role, Line }.Where(w => w is not null));
 }
 
 public sealed record SearchTaskRow(long Id, string Title, TaskMark Mark);

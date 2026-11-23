@@ -395,8 +395,8 @@ public sealed record InstallPlan(InstallJob Job, InstallTarget Target, IReadOnly
     }
 
     /// <summary>The update of one agent's helper over SSH: fetch, fast-forward onto the configuration ref, restart that
-    /// agent's service, and the checks again. <paramref name="label"/> is the agent as the apps name it (its role, else
-    /// its name with capitals).</summary>
+    /// agent's service, and the checks again. <paramref name="label"/> is the agent as the apps name it (its name with
+    /// capitals, or its role when one word of the role is the name).</summary>
     public static InstallPlan Update(InstallTarget target, MachineCheckout machine, string agent, string? label = null)
     {
         var kit = $"/home/{AgentUser(agent)}/fleet-{agent}";

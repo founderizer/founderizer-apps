@@ -18,21 +18,42 @@ struct AgentTagsTests {
 
     // MARK: the label and the rows
 
-    /// **Each label names one agent, as the hub's `tag_label` does, and a pick reads back as the agent he picked.** The
-    /// bug that this catches: two rows that read the same, or "@Atlas" written for atlas and sent for the agent whose
-    /// role is "Atlas", so the bubble and the hub's line name an agent that he did not pick.
-    @Test func eachLabelNamesOneAgentAsTheHubsAndAPickReadsBackAsItsAgent() {
-        #expect(tags.rows.map(\.label) == ["Customer Support", "Marketing", "DevOps", "Juno"])
+    /// **A row is the agent's name with its role beside it, a pick writes the name, and it reads back as the agent he
+    /// picked** (the owner's answer of 22 November 2026: a row shows the name and the role). The label is the
+    /// apps' own (`AgentNames.label`): the name, or the role where a word of the role is the name ("Fleet Manager"),
+    /// and such a role only where it names one agent. The bug that this catches: a pick writes the role, as before; a
+    /// row loses its role, or shows it twice ("Fleet Manager · Fleet Manager"); "@Atlas" written for atlas and sent
+    /// for the agent whose role is "Atlas"; a role that two agents hold written as a label, so the bubble and the
+    /// hub's line name an agent that he did not pick, or none.
+    @Test func aRowIsTheNameWithItsRoleBesideAndAPickWritesTheNameThatReadsBackAsItsAgent() {
+        #expect(tags.rows.map(\.label) == ["Nova", "Atlas", "Iris", "Juno"])
+        #expect(tags.rows.map(\.role) == ["Customer Support", "Marketing", "DevOps", nil])
         #expect(tags.rows.map(\.agent) == ["nova", "atlas", "iris", "juno"])
         #expect(tags.label(of: "manager") == "Fleet Manager")
-        // the hub's own labels of test_direct_chat's tag team: "Marketing (other)", "Manager (manager)", ...
+        // in another chat, the agent whose role says its name is one word, the role
+        let other = AgentTags(agents: Self.team, except: "nova")
+        #expect(other.rows.first == AgentTags.Row(agent: "manager", label: "Fleet Manager", role: nil))
+        // a team with no roles, and one with a role on each agent
         let hub = AgentTags(agents: [("manager", nil), ("worker", nil), ("other", "Marketing"), ("desk", "DevOps"),
                                      ("boss", "Design Lead"), ("crew", "Designer"), ("fresh", "Research")], except: "worker")
-        #expect(hub.rows.map(\.label) == ["Manager", "Marketing", "DevOps", "Design Lead", "Designer", "Research"])
-        // a role that two agents hold, in any case and with any spaces, names neither: their names
+        #expect(hub.rows.map(\.label) == ["Manager", "Other", "Desk", "Boss", "Crew", "Fresh"])
+        #expect(hub.rows.map(\.role) == [nil, "Marketing", "DevOps", "Design Lead", "Designer", "Research"])
+        // a role that two agents hold, in any case and with any spaces: their names, with the role on single spaces
         let shared = AgentTags(agents: [("nova", "Customer  Support"), ("kai", "customer support"), ("atlas", "Marketing")],
                                except: "atlas")
         #expect(shared.rows.map(\.label) == ["Nova", "Kai"])
+        #expect(shared.rows.map(\.role) == ["Customer Support", "customer support"])
+        // a role that says the name, which another agent holds too (a team.json written by hand), or which is another
+        // agent's name: the name, and the role beside it
+        let twice = AgentTags(agents: [("manager", "Fleet Manager"), ("ops", "fleet  manager"), ("nova", nil)],
+                              except: "nova")
+        #expect(twice.rows == [AgentTags.Row(agent: "manager", label: "Manager", role: "Fleet Manager"),
+                               AgentTags.Row(agent: "ops", label: "Ops", role: "fleet manager")])
+        let scouts = AgentTags(agents: [("scout", "Ops-Scout"), ("ops-scout", nil), ("juno", nil)], except: "juno")
+        #expect(scouts.rows.map(\.label) == ["Scout", "Ops-Scout"] && scouts.rows.map(\.role) == ["Ops-Scout", nil])
+        // a role that is the name itself stays one word, also where another agent holds it
+        let one = AgentTags(agents: [("scout", "Scout"), ("kai", "scout"), ("juno", nil)], except: "juno")
+        #expect(one.rows.map(\.label) == ["Scout", "Kai"] && one.rows.map(\.role) == [nil, "scout"])
         // a role that is another agent's name: the names
         let named = AgentTags(agents: [("nova", "Atlas"), ("atlas", nil), ("iris", "DevOps")], except: "iris")
         #expect(named.rows.map(\.label) == ["Nova", "Atlas"])
@@ -41,7 +62,7 @@ struct AgentTagsTests {
         #expect(own.rows.map(\.label) == ["Juno"])
         // a name as the apps show it, which is the hub's shown_name
         #expect(AgentTags(agents: [("web-dev", nil), ("mini-2b", nil)], except: "").rows.map(\.label) == ["Web-Dev", "Mini-2B"])
-        for book in [tags, hub, shared, named, own] {
+        for book in [tags, other, hub, shared, twice, scouts, one, named, own] {
             for row in book.rows {
                 let edit = book.pick(row, in: "@", at: 0, caret: 1)
                 #expect(book.mentions(in: edit.text) ==
@@ -55,28 +76,35 @@ struct AgentTagsTests {
     /// the best match jumps first while he types, or the chat's own agent is a row.
     @Test func theRowsAreTheOtherAgentsByAWordStartOfTheRoleOrTheNameInTheTeamsOrder() {
         func labels(_ letters: String, in book: AgentTags = tags) -> [String] { book.rows(for: letters).map(\.label) }
-        #expect(labels("") == ["Customer Support", "Marketing", "DevOps", "Juno"])
-        #expect(labels("su") == ["Customer Support"])
-        #expect(labels("customer su") == ["Customer Support"])
-        #expect(labels("CUS") == ["Customer Support"])
-        #expect(labels("dev") == ["DevOps"])
+        #expect(labels("") == ["Nova", "Atlas", "Iris", "Juno"])
+        #expect(labels("su") == ["Nova"], "nova, by a word of its role")
+        #expect(labels("customer su") == ["Nova"])
+        #expect(labels("CUS") == ["Nova"])
+        #expect(labels("no") == ["Nova"], "nova, by its name")
+        #expect(labels("dev") == ["Iris"])
         #expect(labels("ops").isEmpty)
         #expect(labels("ju") == ["Juno"])
-        #expect(labels("at") == ["Marketing"], "atlas, by its name")
+        #expect(labels("at") == ["Atlas"], "atlas, by its name")
+        #expect(labels("ma") == ["Atlas"], "atlas, by its role")
         #expect(labels("fl").isEmpty, "the manager's own chat has no row for it")
         #expect(labels("x").isEmpty)
         let more = AgentTags(agents: [("leo", "Diseño Web"), ("iris", "SEO & AI Search"), ("bo", "Sales")], except: "")
-        #expect(labels("diseno", in: more) == ["Diseño Web"] && labels("DISEÑ", in: more) == ["Diseño Web"])
-        #expect(labels("ai s", in: more) == ["SEO & AI Search"])
-        #expect(labels("s", in: more) == ["SEO & AI Search", "Sales"], "the team's order")
-        #expect(labels("sa", in: more) == ["Sales"])
-        // letters that are a row's whole label light that row, any case and spaces; else the first row
+        #expect(labels("diseno", in: more) == ["Leo"] && labels("DISEÑ", in: more) == ["Leo"])
+        #expect(labels("ai s", in: more) == ["Iris"])
+        #expect(labels("s", in: more) == ["Iris", "Bo"], "the team's order")
+        #expect(labels("sa", in: more) == ["Bo"])
+        // letters that are a row's whole label, else its whole role, light that row, any case and spaces; else the
+        // first row
         let lead = AgentTags(agents: [("kai", "Customer Support Lead"), ("nova", "Customer Support"), ("juno", nil)],
                              except: "")
         #expect(lead.start(for: "customer SUPPORT", in: lead.rows(for: "customer SUPPORT")) == 1)
         #expect(lead.start(for: "customer  support", in: lead.rows) == 1)
+        #expect(lead.start(for: "NOVA", in: lead.rows) == 1)
         #expect(lead.start(for: "Customer Sup", in: lead.rows(for: "Customer Sup")) == 0)
         #expect(lead.start(for: "juno", in: lead.rows(for: "juno")) == 0 && lead.start(for: "", in: lead.rows) == 0)
+        // a name wins over another row's whole role
+        let both = AgentTags(agents: [("kai", "Nova"), ("nova", "Support")], except: "")
+        #expect(both.start(for: "nova", in: both.rows) == 1)
     }
 
     // MARK: the box
@@ -101,15 +129,15 @@ struct AgentTagsTests {
         #expect(query("") == nil && query("@", 0) == nil)
     }
 
-    /// **A pick writes "@<label> " and the caret stands after the space** (his "a pick writes "@<role> ""). The bug that
+    /// **A pick writes "@<label> " and the caret stands after the space** (his answer: a pick writes "@" and the name). The bug that
     /// this catches: the caret before the space, two spaces before the words after it, or the words after it lost.
     @Test func aPickWritesTheLabelAndASpaceAndKeepsTheWordsAfterIt() {
         let atlas = tags.rows[1], juno = tags.rows[3]
-        #expect(tags.pick(atlas, in: "Ask @ma", at: 4, caret: 7) == AgentTags.Edit(text: "Ask @Marketing ", caret: 15))
+        #expect(tags.pick(atlas, in: "Ask @ma", at: 4, caret: 7) == AgentTags.Edit(text: "Ask @Atlas ", caret: 11))
         #expect(tags.pick(atlas, in: "Ask @ma about it", at: 4, caret: 7)
-                == AgentTags.Edit(text: "Ask @Marketing about it", caret: 15))
+                == AgentTags.Edit(text: "Ask @Atlas about it", caret: 11))
         #expect(tags.pick(juno, in: "@\nnext", at: 0, caret: 1) == AgentTags.Edit(text: "@Juno \nnext", caret: 6))
-        #expect(tags.pick(atlas, in: "👩‍💻 @", at: 4, caret: 5) == AgentTags.Edit(text: "👩‍💻 @Marketing ", caret: 15))
+        #expect(tags.pick(atlas, in: "👩‍💻 @", at: 4, caret: 5) == AgentTags.Edit(text: "👩‍💻 @Atlas ", caret: 11))
     }
 
     /// **One Backspace at a tag's last character, or at the one space after it, takes the whole tag** (his "one
@@ -181,7 +209,9 @@ struct AgentTagsTests {
             ("pat@marketing.example", []), ("https://example.com/@marketing", []),
             ("see @marketing.example", []), ("run `@marketing` now", []),
             ("```\n@marketing\n```\nok", []), ("@studio, you", []), ("@nobody here", []),
-            ("@Grok, then", [("grok", 0, 5)]), ("@Studio Ops now", []), ("@support, then", [])]
+            ("@Grok, then", [("grok", 0, 5)]), ("@Studio Ops now", []),
+            ("@Nova and @kai.", [("nova", 0, 5), ("kai", 10, 4)]),     // a name that has a role, as a pick writes it
+            ("@support, then", [])]
         for (text, expected) in table {
             #expect(book.mentions(in: text) == expected.map { Mention(agent: $0.0, start: $0.1, length: $0.2) }, "\(text)")
         }
@@ -192,7 +222,7 @@ struct AgentTagsTests {
     @Test func theTagsKeepToTheHubsLimits() {
         let long = String(repeating: "Very ", count: 16) + "Long Role"
         let book = AgentTags(agents: [("nova", long), ("atlas", "Marketing")], except: "")
-        #expect(book.rows.map(\.label) == [long, "Marketing"])
+        #expect(book.rows.map(\.label) == ["Nova", "Atlas"] && book.rows.map(\.role) == [long, "Marketing"])
         #expect(book.mentions(in: "@\(long) and @Marketing") == [Mention(agent: "atlas", start: 95, length: 10)])
         let many = Array(repeating: "@Marketing", count: 12).joined(separator: " ")
         #expect(book.mentions(in: many).count == 10)

@@ -3,6 +3,7 @@ import FleetCore
 import Foundation
 import LocalAuthentication
 import Security
+import Synchronization
 
 /// This phone's own key for the hub (MOBILE-APP.md 7). The hub keeps only the key's SHA-256 and gives the key out
 /// once, at enrollment; this holder keeps it in the keychain of this one device, locked to an unlocked phone and to
@@ -21,6 +22,26 @@ struct DeviceKey: Sendable {
     private let service = "com.pieras.fleet.mobile"
     private let account: String
     private let pressAccount: String
+    #if DEBUG
+    /// A check's keychain that fails, and its stand-in for the read behind Face ID (`KeyFault`, `PresenceStandIn`):
+    /// only a debug build has them, and the app's holder has neither.
+    private var fault: KeyFault?
+    private var presence: PresenceStandIn?
+
+    /// This holder, with a check's keychain that fails.
+    func failing(_ fault: KeyFault?) -> DeviceKey {
+        var holder = self
+        holder.fault = fault
+        return holder
+    }
+
+    /// This holder, whose read behind Face ID the check answers.
+    func answering(_ presence: PresenceStandIn) -> DeviceKey {
+        var holder = self
+        holder.presence = presence
+        return holder
+    }
+    #endif
 
     /// This phone's own key. A check names an item of its own (review B9i), so that a test run never removes the key
     /// of a phone that is enrolled.
@@ -42,11 +63,14 @@ struct DeviceKey: Sendable {
     /// The key, after the owner proves presence; nil when this phone has none. It is not isolated to an actor, so the
     /// keychain's prompt never blocks the screen.
     func key(reason: String) async throws -> String? {
+        #if DEBUG
+        if let presence { return await presence.read() }
+        #endif
         // `SecItemCopyMatching` blocks its thread for as long as the Face ID sheet is up, which can be as long as
         // the owner takes. Swift's cooperative pool holds about one thread per core, so doing this inside an async
         // function parks one of them; a few at once starve the pool and nothing else of the app runs — not the read
         // loop, not even the Unlock that would end it. So the blocking call goes on a thread of its own.
-        try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let context = LAContext()
                 context.localizedReason = reason
@@ -91,8 +115,22 @@ struct DeviceKey: Sendable {
         item[kSecAttrAccessControl as String] = access
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else { throw DeviceKeyError.keychain(status) }
-        try keepForPress(key)
+        // **Both copies are kept, or neither is** (the validator's round 2 of the enroll key fix): a key whose copy for
+        // a press failed stayed, so the enrolment said that it failed and undid the signing and recovery keys, and the
+        // next return to the app opened the new key and linked the phone with its old signing key, with no word. When
+        // the key cannot be taken away again either, it stays, and the save says so (`KeyStays`): the keys that go
+        // with it stay too, and the next unlock writes its copy for a press.
+        // The key stays only when its own item could not be deleted (the second reader's rounds 5 and 6): a removal
+        // that took the key and then failed at its copy left no key, and `has` answers "there" for each error.
+        do { try keepForPress(key) } catch let pressFailure {
+            do { try deleteKey() } catch { throw KeyStays() }
+            try? deletePressCopy()
+            throw pressFailure
+        }
     }
+
+    /// The key that a save wrote stays, without its copy for a press, which the next unlock writes.
+    struct KeyStays: Error {}
 
     /// The copy for a press on a notification, or nil when this phone has none. It asks for nothing: it is readable
     /// whenever the phone is unlocked, which is the only time iOS runs an answer button.
@@ -118,6 +156,9 @@ struct DeviceKey: Sendable {
         guard (try? pressKey()) != key else { return }
         guard let data = key.data(using: .utf8) else { throw DeviceKeyError.unreadable }
         SecItemDelete(press as CFDictionary)
+        #if DEBUG
+        if fault?.refusesAdd() == true { throw DeviceKeyError.keychain(errSecNotAvailable) }
+        #endif
         var item = press
         item[kSecValueData as String] = data
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -128,10 +169,22 @@ struct DeviceKey: Sendable {
     /// Forgets the key, both copies. The owner's phone then reads nothing until it enrolls again, and the hub keeps
     /// its own record until the owner removes the device there.
     func remove() throws {
-        for query in [base, press] {
-            let status = SecItemDelete(query as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else { throw DeviceKeyError.keychain(status) }
-        }
+        try deleteKey()
+        try deletePressCopy()
+    }
+
+    private func deleteKey() throws {
+        #if DEBUG
+        if fault?.refusesRemovalAfterAdd() == true { throw DeviceKeyError.keychain(errSecNotAvailable) }
+        #endif
+        try DeviceKeyItem.delete(base)
+    }
+
+    private func deletePressCopy() throws {
+        #if DEBUG
+        if fault?.refusesPressDeleteAfterAdd() == true { throw DeviceKeyError.keychain(errSecNotAvailable) }
+        #endif
+        try DeviceKeyItem.delete(press)
     }
 
     private var base: [String: Any] {
@@ -170,38 +223,43 @@ enum DeviceKeyError: LocalizedError {
 struct DeviceSigningKey: Sendable {
     private let service = "com.pieras.fleet.mobile.signing"
     private let account: String
+    #if DEBUG
+    /// A check's keychain that fails (`KeyFault`): only a debug build has it, and the app's holder has none.
+    private var fault: KeyFault?
+
+    /// This holder, with a check's keychain that fails.
+    func failing(_ fault: KeyFault?) -> DeviceSigningKey {
+        var holder = self
+        holder.fault = fault
+        return holder
+    }
+    #endif
 
     init(account: String = "signing-key") { self.account = account }
 
-    /// A new key in place of any earlier one, and its public half (standard base64 of `04 || X || Y`).
-    func make() throws -> String {
-        let made: (data: Data, publicKey: String)
+    /// **A new key in memory only, and its public half** (an enrolment by the Mac's picture): nothing is written until
+    /// the hub has taken the code (`EnrolmentKeys.moveIn`), so a refused code leaves this phone's key as it was, and
+    /// each of two enrolments at once keeps the key that it sent. Before, the new key went into a keychain item before
+    /// the hub answered: first this phone's own, so any link with a wrong code took away the key that signs the
+    /// owner's yes to a door call; then one pending item, which two enrolments at once shared.
+    func new() throws -> NewDeviceKey {
+        #if DEBUG
+        if fault?.refusesNew == true { throw DeviceKeyError.unreadable }
+        #endif
         if SecureEnclave.isAvailable {
             let key = try SecureEnclave.P256.Signing.PrivateKey()
-            made = (Data([1]) + key.dataRepresentation, key.publicKey.x963Representation.base64EncodedString())
-        } else {
-            let key = P256.Signing.PrivateKey()
-            made = (Data([0]) + key.rawRepresentation, key.publicKey.x963Representation.base64EncodedString())
+            return NewDeviceKey(bytes: Data([1]) + key.dataRepresentation,
+                                publicKey: key.publicKey.x963Representation.base64EncodedString())
         }
-        try remove()
-        var item = base
-        item[kSecValueData as String] = made.data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        let status = SecItemAdd(item as CFDictionary, nil)
-        guard status == errSecSuccess else { throw DeviceKeyError.keychain(status) }
-        return made.publicKey
+        let key = P256.Signing.PrivateKey()
+        return NewDeviceKey(bytes: Data([0]) + key.rawRepresentation,
+                            publicKey: key.publicKey.x963Representation.base64EncodedString())
     }
 
     /// The DER signature (standard base64) of the statement's UTF-8 bytes, or nil when this phone has no signing key.
     func sign(_ statement: String) throws -> String? {
-        var query = base
-        query[kSecReturnData as String] = true
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = item as? Data, let kind = data.first else {
-            throw DeviceKeyError.keychain(status)
-        }
+        guard let data = try data() else { return nil }
+        guard let kind = data.first else { throw DeviceKeyError.unreadable }
         let body = Data(data.dropFirst()), message = Data(statement.utf8)
         if kind == 1 {
             return try SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: body).signature(for: message)
@@ -234,10 +292,188 @@ struct DeviceSigningKey: Sendable {
         guard status == errSecSuccess || status == errSecItemNotFound else { throw DeviceKeyError.keychain(status) }
     }
 
+    /// The item's bytes (a kind byte, then the key), or nil when it holds none.
+    fileprivate func data() throws -> Data? {
+        #if DEBUG
+        if fault?.refusesRead() == true { throw DeviceKeyError.keychain(errSecInteractionNotAllowed) }
+        #endif
+        return try DeviceKeyItem.data(base)
+    }
+
+    /// The item holds `data` in the place of what it held, or nothing when `data` is nil.
+    fileprivate func put(_ data: Data?) throws {
+        try DeviceKeyItem.delete(base)
+        guard let data else { return }
+        #if DEBUG
+        if fault?.refusesAdd() == true { throw DeviceKeyError.keychain(errSecNotAvailable) }
+        #endif
+        try DeviceKeyItem.add(base, data)
+    }
+
     private var base: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
+    }
+}
+
+/// A new key of an enrolment, in memory: its bytes for the keychain item (a kind byte, then the key) and its public
+/// half for the hub (standard base64 of `04 || X || Y`).
+struct NewDeviceKey: Sendable {
+    let bytes: Data
+    let publicKey: String
+}
+
+/// **The keys of an enrolment that the hub took move into this phone's own items: all of them, or none.** Each item
+/// gets what the hub keeps now: the new key that went with the code, or no key where none went, because the hub drops
+/// the signing key and the recovery key of an enrolment that carries none (the second reader's round 4, items 1 and
+/// 2). When a write fails, each move that ran, the failed one too, gets its item's old bytes back, and the move
+/// throws; a move that never ran is not touched (item 4). The undo that a move gives puts all of them back after a
+/// later step of the enrolment fails (the save of the hub's key). A key that stayed old beside one that moved in left
+/// the phone signing its yes to a door call with a key that the hub no longer named, or holding a recovery key that
+/// opens no box of the hub's, and nothing said so.
+enum EnrolmentKeys {
+    /// What puts each item's old bytes back.
+    struct Undo {
+        fileprivate let steps: [() -> Void]
+        func callAsFunction() { steps.forEach { $0() } }
+    }
+
+    /// Each holder's item gets `bytes`, or nothing when they are nil. A holder that is nil is not touched.
+    ///
+    /// **An old item that cannot be read does not stop the move** (the second reader's round 6): it is replaced or
+    /// deleted as the others are, and only it has no undo, because there is nothing to put back. Else an unreadable
+    /// old recovery key stopped every enrolment, and only Forget the key, which must keep the recovery copy, could
+    /// have cleared it.
+    static func moveIn(signing: (holder: DeviceSigningKey, bytes: Data?)?,
+                       recovery: (holder: DeviceRecoveryKey, bytes: Data?)?) throws -> Undo {
+        // `old` is nil for an item that could not be read, and `.some(nil)` for one that holds no key. Written out:
+        // `try?` of an optional flattens the two into one nil, and the undo then deleted the new key of an item that
+        // could not be read (the second reader's round 7).
+        func old(_ read: () throws -> Data?) -> Data?? {
+            do { return .some(try read()) } catch { return .none }
+        }
+        var moves: [(old: Data??, new: Data?, put: (Data?) throws -> Void)] = []
+        if let signing { moves.append((old(signing.holder.data), signing.bytes, signing.holder.put)) }
+        if let recovery { moves.append((old(recovery.holder.data), recovery.bytes, recovery.holder.put)) }
+        func back(_ move: (old: Data??, new: Data?, put: (Data?) throws -> Void)) {
+            if let old = move.old { try? move.put(old) }
+        }
+        var ran = 0
+        do {
+            for move in moves {
+                ran += 1
+                try move.put(move.new)
+            }
+        } catch {
+            moves.prefix(ran).reversed().forEach(back)
+            throw error
+        }
+        return Undo(steps: moves.reversed().map { move in { back(move) } })
+    }
+}
+
+#if DEBUG
+/// **A check's keychain that fails** (the enrolment's checks; a debug build only): it makes no new key
+/// (`refusesNew`), or it refuses the write of an item after its delete, `adds` times, as a keychain that fails does;
+/// once it has refused a write, it goes on as a keychain that has begun to fail: it refuses the removal of the phone's
+/// key before it starts (`removalsAfterAdd`), or after the key went and before its copy for a press goes
+/// (`pressDeletesAfterAdd`). It can refuse the read of a signing key's or a recovery key's item too, `reads` times. The
+/// app's holders have none.
+final class KeyFault: Sendable {
+    let refusesNew: Bool
+    private let left: Mutex<(adds: Int, removals: Int, pressDeletes: Int, reads: Int, refused: Bool)>
+
+    init(refusesNew: Bool = false, adds: Int = 0, removalsAfterAdd: Int = 0, pressDeletesAfterAdd: Int = 0,
+         reads: Int = 0) {
+        self.refusesNew = refusesNew
+        left = Mutex((adds, removalsAfterAdd, pressDeletesAfterAdd, reads, false))
+    }
+
+    /// This read of a signing key's or a recovery key's item is refused; each refusal counts one.
+    func refusesRead() -> Bool {
+        left.withLock { left in
+            guard left.reads > 0 else { return false }
+            left.reads -= 1
+            return true
+        }
+    }
+
+    /// This write is refused; each refusal counts one.
+    func refusesAdd() -> Bool {
+        left.withLock { left in
+            guard left.adds > 0 else { return false }
+            left.adds -= 1
+            left.refused = true
+            return true
+        }
+    }
+
+    /// This removal of the phone's key is refused before it starts, after a refused write; each refusal counts one.
+    func refusesRemovalAfterAdd() -> Bool {
+        left.withLock { left in
+            guard left.refused, left.removals > 0 else { return false }
+            left.removals -= 1
+            return true
+        }
+    }
+
+    /// This delete of the copy for a press is refused, after a refused write; each refusal counts one.
+    func refusesPressDeleteAfterAdd() -> Bool {
+        left.withLock { left in
+            guard left.refused, left.pressDeletes > 0 else { return false }
+            left.pressDeletes -= 1
+            return true
+        }
+    }
+}
+
+/// **A check's stand-in for the read behind Face ID** (a debug build only): the read waits until the check answers it,
+/// with the key that the check gives, as a sheet that the owner answers late does. The app's holder has none.
+final class PresenceStandIn: Sendable {
+    private let waiting = Mutex<CheckedContinuation<String?, Never>?>(nil)
+
+    /// A read waits for its answer.
+    var asked: Bool { waiting.withLock { $0 != nil } }
+
+    func read() async -> String? {
+        await withCheckedContinuation { continuation in waiting.withLock { $0 = continuation } }
+    }
+
+    func answer(_ key: String?) {
+        waiting.withLock { waiter -> CheckedContinuation<String?, Never>? in
+            defer { waiter = nil }
+            return waiter
+        }?.resume(returning: key)
+    }
+}
+#endif
+
+/// The keychain steps that the signing key and the recovery key share: one item of this device alone, while it is
+/// unlocked.
+private enum DeviceKeyItem {
+    static func data(_ base: [String: Any]) throws -> Data? {
+        var query = base
+        query[kSecReturnData as String] = true
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = item as? Data else { throw DeviceKeyError.keychain(status) }
+        return data
+    }
+
+    /// The item holds nothing, whether it held something or not.
+    static func delete(_ base: [String: Any]) throws {
+        let status = SecItemDelete(base as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw DeviceKeyError.keychain(status) }
+    }
+
+    static func add(_ base: [String: Any], _ data: Data) throws {
+        var item = base
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        let status = SecItemAdd(item as CFDictionary, nil)
+        guard status == errSecSuccess else { throw DeviceKeyError.keychain(status) }
     }
 }
 
@@ -248,38 +484,39 @@ struct DeviceSigningKey: Sendable {
 struct DeviceRecoveryKey: Sendable {
     private let service = "com.pieras.fleet.mobile.recovery-key"
     private let account: String
+    #if DEBUG
+    /// A check's keychain that fails (`KeyFault`): only a debug build has it, and the app's holder has none.
+    private var fault: KeyFault?
+
+    /// This holder, with a check's keychain that fails.
+    func failing(_ fault: KeyFault?) -> DeviceRecoveryKey {
+        var holder = self
+        holder.fault = fault
+        return holder
+    }
+    #endif
 
     init(account: String = "recovery-key") { self.account = account }
 
-    /// A new key in place of any earlier one, and its public half (standard base64 of `04 || X || Y`).
-    func make() throws -> String {
-        let made: (data: Data, publicKey: String)
+    /// A new key in memory only, and its public half, as for the signing key (`DeviceSigningKey.new`).
+    func new() throws -> NewDeviceKey {
+        #if DEBUG
+        if fault?.refusesNew == true { throw DeviceKeyError.unreadable }
+        #endif
         if SecureEnclave.isAvailable {
             let key = try SecureEnclave.P256.KeyAgreement.PrivateKey()
-            made = (Data([1]) + key.dataRepresentation, key.publicKey.x963Representation.base64EncodedString())
-        } else {
-            let key = P256.KeyAgreement.PrivateKey()
-            made = (Data([0]) + key.rawRepresentation, key.publicKey.x963Representation.base64EncodedString())
+            return NewDeviceKey(bytes: Data([1]) + key.dataRepresentation,
+                                publicKey: key.publicKey.x963Representation.base64EncodedString())
         }
-        try remove()
-        var item = base
-        item[kSecValueData as String] = made.data
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        let status = SecItemAdd(item as CFDictionary, nil)
-        guard status == errSecSuccess else { throw DeviceKeyError.keychain(status) }
-        return made.publicKey
+        let key = P256.KeyAgreement.PrivateKey()
+        return NewDeviceKey(bytes: Data([0]) + key.rawRepresentation,
+                            publicKey: key.publicKey.x963Representation.base64EncodedString())
     }
 
     /// The code that a box of the Mac's holds, opened with this key, or nil when this phone has no recovery key.
     func open(_ box: String, device: String) throws -> Data? {
-        var query = base
-        query[kSecReturnData as String] = true
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = item as? Data, let kind = data.first else {
-            throw DeviceKeyError.keychain(status)
-        }
+        guard let data = try DeviceKeyItem.data(base) else { return nil }
+        guard let kind = data.first else { throw DeviceKeyError.unreadable }
         let body = Data(data.dropFirst())
         return try RecoverySeal.open(box, device: device) { ephemeral in
             kind == 1 ? try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: body)
@@ -293,6 +530,24 @@ struct DeviceRecoveryKey: Sendable {
     func remove() throws {
         let status = SecItemDelete(base as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw DeviceKeyError.keychain(status) }
+    }
+
+    /// The item's bytes (a kind byte, then the key), or nil when it holds none.
+    fileprivate func data() throws -> Data? {
+        #if DEBUG
+        if fault?.refusesRead() == true { throw DeviceKeyError.keychain(errSecInteractionNotAllowed) }
+        #endif
+        return try DeviceKeyItem.data(base)
+    }
+
+    /// The item holds `data` in the place of what it held, or nothing when `data` is nil.
+    fileprivate func put(_ data: Data?) throws {
+        try DeviceKeyItem.delete(base)
+        guard let data else { return }
+        #if DEBUG
+        if fault?.refusesAdd() == true { throw DeviceKeyError.keychain(errSecNotAvailable) }
+        #endif
+        try DeviceKeyItem.add(base, data)
     }
 
     private var base: [String: Any] {

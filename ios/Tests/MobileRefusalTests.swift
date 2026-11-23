@@ -472,6 +472,32 @@ struct MobileRefusalTests {
                     == "Tu hub no conoce este teléfono. Añádelo en tu Mac.")
         }
     }
+
+    /// **A join that gets no answer names Tailscale when no address of this phone is on it** (F7, piece A5): the hub
+    /// answers only on the private network, and a phone with Tailscale off said "Check that its server is on." about a
+    /// server that was on. With an address in Tailscale's ranges the hub itself did not answer, and that line stays.
+    @Test("A join with no answer says to turn on Tailscale when no address of this phone is on it, and the hub's line when one is")
+    func aJoinWithNoAnswerNamesTailscale() {
+        let off = "This phone is not on your private network. Turn on Tailscale on this phone, with your Mac's account."
+        let on = "Your hub did not answer. Check that its server is on."
+        // A phone on Wi-Fi and on its cell network, with no Tailscale.
+        let phone = ["127.0.0.1", "::1", "fe80::1%lo0", "192.168.1.20", "fe80::18a2:5bff:fe3c:9d11%en0", "10.20.30.40",
+                     "2001:db8:4f8:c0c::1"]
+        #expect(MobileError.noAnswerWords(addresses: phone) == off)
+        #expect(MobileError.noAnswerWords(addresses: []) == off)
+        // The edges of 100.64.0.0/10 and of fd7a:115c:a1e0::/48, on each side (the example addresses of the public
+        // copy's list), and an address whose bytes read backwards would be in the range.
+        for inside in ["100.64.0.0", "100.84.1.2", "100.127.255.255", "fd7a:115c:a1e0::1",
+                       "fd7a:115c:a1e0:ab12:4843:cd96:6258:b240", "fd7a:115c:a1e0::53%utun4"] {
+            #expect(MobileError.noAnswerWords(addresses: phone + [inside]) == on, "\(inside)")
+        }
+        for outside in ["100.1.2.3", "100.128.0.1", "10.0.64.100", "fd7a:115c:a1e1::1", "fd7a:115c:a1df::1",
+                        "100.64.0", "not an address"] {
+            #expect(MobileError.noAnswerWords(addresses: phone + [outside]) == off, "\(outside)")
+        }
+        // The phone's own read gives its addresses: the loopback's at least, which is always up.
+        #expect(MobileStore.ownAddresses().contains("127.0.0.1"))
+    }
 }
 
 /// **The words about a key request that stand in the phone's field** (`MobileStore.clarifyDrafts`, Needs

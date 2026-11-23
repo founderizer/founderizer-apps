@@ -273,6 +273,13 @@ public struct CardNames: Equatable, Sendable {
     }
 
     /// Every name of the book in `text`, in their order: the longest at each place, and none inside another word.
+    ///
+    /// **A known hole** (Fable's read of 22 November 2026): where two names of the book are the same words at a place,
+    /// the first of them in the book wins (`init`: agents, repositories, servers, pages, knowledge files, and secrets
+    /// last), and the other gets no badge there. So a key's name that a repository's short name or a server's name also
+    /// is, in any case of letters, shows in a card's words as that repository's or server's badge, and its press opens
+    /// that one. The title of a Replace card is free of it: its book holds the one key and nothing else
+    /// (`NeedRequestCard.titleNames`).
     public func find(in text: String) -> [Found] {
         var found: [Found] = [], index = text.startIndex
         while index < text.endIndex {

@@ -82,14 +82,32 @@ final class OwnerAccessModel {
     /// the one that this Mac keeps from an install, else the fleet's own record of the server. That record is in the
     /// list of machines for a server that an agent runs on, and in the hub's record of its own server for a hub's
     /// server with no agent (`ServerRecords`, with the rule of this Mac's key).
-    static func connection(to server: ServerEntry, hub: URL, records: ServerRecords) async throws -> InstallTarget {
-        try await records.connection(to: server, kept: InstallTargets.target(machine: server.name, hub: hub))
+    ///
+    /// **Only at an address that this Mac's own Tailscale names as that server** (`MacNetwork.device(of:)`), as the
+    /// vault's trust step: the address can come from the hub's record, and each step here runs as root and reads its
+    /// answer back (the owner's access line is "in place", a hardening step "holds"). Until 22 November 2026 a record
+    /// that named another machine's address put the owner's line, and the record of it, there. A Linux server lets SSH
+    /// in on its Tailscale address only (`hubsetup.py firewall`), so a server that answers anywhere else is not reached.
+    /// `device`: the device of this Mac's Tailscale that a host is, which only a test gives.
+    static func connection(to server: ServerEntry, hub: URL, records: ServerRecords,
+                           device: (String) async -> String? = { await MacNetwork.device(of: $0) }) async throws -> InstallTarget {
+        let target = try await records.connection(to: server, kept: InstallTargets.target(machine: server.name, hub: hub))
+        guard await device(target.host) == server.name else { throw NotThatServer() }
+        return target
     }
 
-    /// **How this Mac reaches one server as root** (`ServerRecords.target`): the connection that it keeps for it from
-    /// its install, else the fleet's own record of the server, which the caller gives.
+    /// This Mac's Tailscale does not name the connection's address as the server: no step ran there.
+    private struct NotThatServer: Error, CustomStringConvertible {
+        var description: String { "this Mac's Tailscale does not name the connection's address as this server" }
+    }
+
+    /// **How this Mac reaches the hub's own server for its key registration** (`ServerRecords.target`, `OwnerKeyModel`):
+    /// the connection that it keeps for it from its install, else the fleet's own record of the server, which the caller
+    /// gives. The registration reads the proof file as the file's own user (`OwnerMacKeyRegistration`), so a record's
+    /// user other than root is a connection here (`rootOnly` false), which no root step takes.
     static func target(_ server: ServerEntry, hub: URL, record: MachineReach?) -> InstallTarget? {
-        ServerRecords.target(server, kept: InstallTargets.target(machine: server.name, hub: hub), record: record)
+        ServerRecords.target(server, kept: InstallTargets.target(machine: server.name, hub: hub), record: record,
+                             rootOnly: false)
     }
 
     /// The fingerprint of the key whose line this Mac put on each server, by the hub's address, the server's name and

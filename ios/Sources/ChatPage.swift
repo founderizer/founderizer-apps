@@ -1241,7 +1241,7 @@ struct ChatWaitingLine: View {
 struct ReplyText: View {
     let text: String
     /// **Each value that the agent put in inline code is a chip with a copy icon** (`CardValueWords`; the owner's "Yes,
-    /// as drawn" of 21 November 2026): only in the words of a request's card (`NeedWords`), in a paragraph,
+    /// as drawn" of 21 November 2026): only in the words of a request's card (`NeedPlainWords`), in a paragraph,
     /// a heading, a list item and a quote. A chat's messages, a table's cells and code in a link keep inline code's flat
     /// fill.
     var values = false

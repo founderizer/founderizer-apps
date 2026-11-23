@@ -6,7 +6,7 @@ import UIKit
 /// names, codes and other values that need to be copied... it would be nice to identify those and add a small icon
 /// button next to them to copy them directly", and his "Yes, as drawn"; the Mac's `CardValueText`): each value that the
 /// agent put in inline code (`CardValues`, FleetCore), in the Why and the What it wants of a request's card
-/// (`NeedWords`), open and answered, stands in a chip of inline code's own fill (`Brand.bubble`), with the system's
+/// (`NeedPlainWords`), open and answered, stands in a chip of inline code's own fill (`Brand.bubble`), with the system's
 /// copy symbol after it inside the chip, muted, always shown. A press on the chip copies the value exactly to the
 /// system's pasteboard, and the symbol is a check for 1.5 seconds; while the finger is down the chip is a little darker.
 ///

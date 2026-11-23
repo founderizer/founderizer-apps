@@ -284,7 +284,8 @@ struct MachineInstallTests {
                                                                                          ledger: ledger)
         }
         let target = entry("~/.ssh/founderizer_ed25519")
-        #expect(target == InstallTarget(host: "100.84.1.2", user: "deploy", port: 2222, identityFile: app, becomeRoot: true))
+        #expect(target == InstallTarget(host: "100.84.1.2", user: "deploy", port: 2222, identityFile: app, becomeRoot: true,
+                                        portGivenFor: "100.84.1.2"))
         // no run with the app's key alone got in yet, or a ledger with no file: today's arguments
         #expect(arguments(target, ledger) == today(app) && arguments(target, SSHKeyLedger()) == today(app))
         #expect(ledger.recordPlain(SSHKeyLedger.Account(address: "100.84.1.2", user: "deploy", port: 2222), now: 1_794_000_000))
@@ -301,6 +302,173 @@ struct MachineInstallTests {
         var other = target
         other.port = 22
         #expect(!arguments(other, ledger).contains("-F"))
+    }
+
+    // MARK: the host key at a connection's first use
+
+    /// The host key options of the install's own calls (a check, a restart, an update of a server's page, an install)
+    /// and of the one login with a password, for `target`.
+    private static func hostKeyRule(_ target: InstallTarget) -> (install: [String], password: [String]) {
+        let install = InstallPlan(job: .join, target: target, steps: [], redactions: []).arguments(for: "true", runs: .login,
+                                                                                                    ledger: SSHKeyLedger())
+        func rule(_ all: [String]) -> [String] {
+            all.filter { $0.hasPrefix("StrictHostKeyChecking=") || $0.hasPrefix("HostKeyAlias=") }
+        }
+        return (rule(install), rule(PasswordOnce.passwordLogin(target)))
+    }
+
+    /// **A port of the hub's record never meets a new host key** (the hole of 22 November 2026,
+    /// `mac-server-pin-validation.md` (B)(b)): a hub that is broken into names a high port in its record, where an
+    /// agent's own small SSH server, or the hub's own user on the hub's own server, answers. Bug: a closer look of a
+    /// server's page takes `accept-new` at that port (as every call did until this day) and keeps that program's host
+    /// key, and each strict step after it trusts it. Bug: a strict check that reads the `[host]:port` line, which such
+    /// a run kept before the fix, so that the fake key still opens it: a port other than 22 that the owner did not
+    /// give is checked with the line of the host's port 22 alone (`HostKeyAlias`). A connection kept before 22
+    /// November 2026 says nowhere where its port came from, and is read so too.
+    @Test func aPortOfTheHubsRecordNeverMeetsANewHostKey() throws {
+        let record = InstallTarget(host: "100.80.1.2", user: "root", port: 2222)
+        let rule = Self.hostKeyRule(record)
+        #expect(rule.install == ["StrictHostKeyChecking=yes", "HostKeyAlias=100.80.1.2"])
+        #expect(rule.password == ["StrictHostKeyChecking=yes", "HostKeyAlias=100.80.1.2"])
+        // the fleet's record as the steps that run by themselves take it (`ServerRecords.target`)
+        let entry = try JSONDecoder().decode(ServerEntry.self, from: Data(#"""
+            {"name": "web-box", "hub": false, "joined": true, "agents": [], "available": true, "why": [],
+             "kind": "linux", "address": "100.80.1.2"}
+            """#.utf8))
+        let fromRecord = try #require(ServerRecords.target(entry, kept: nil,
+                                                           record: MachineReach(address: "100.80.1.2", user: "root",
+                                                                                port: 2222)))
+        #expect(Self.hostKeyRule(fromRecord).install == ["StrictHostKeyChecking=yes", "HostKeyAlias=100.80.1.2"])
+        // the door's round with a kept connection of no word, at the device's address
+        let door = try #require(DoorAccess.sshArguments(kept: record, address: "100.80.1.2", program: "true",
+                                                        ledger: SSHKeyLedger()))
+        #expect(door.contains("StrictHostKeyChecking=yes") && door.contains("HostKeyAlias=100.80.1.2"))
+        #expect(!door.contains(where: { $0.contains("accept-new") }))
+    }
+
+    /// **Port 22 and a port that the owner gave for that host meet a new host key once, as before.** On a Linux server
+    /// only root's `sshd` holds port 22, and a port that he typed on this Mac (Add server, a server's fields) or that
+    /// his own `~/.ssh/config` names is his word. Bugs: the fix makes every port other than 22 strict, so a server
+    /// whose SSH he put on 2222 can never be added or checked; the door's round loses the `[host]:2222` line of a
+    /// business's server that his configuration names (the case of 19 November 2026).
+    @Test func port22AndAPortThatTheOwnerGaveMeetANewHostKey() throws {
+        #expect(Self.hostKeyRule(InstallTarget(host: "100.80.1.2")).install == ["StrictHostKeyChecking=accept-new"])
+        let typed = InstallTarget(host: "203.0.113.5", user: "root", port: 2222, portGivenFor: "203.0.113.5")
+        #expect(Self.hostKeyRule(typed).install == ["StrictHostKeyChecking=accept-new"])
+        #expect(Self.hostKeyRule(typed).password == ["StrictHostKeyChecking=accept-new"])
+        let configured = InstallTarget.named("shop-app", options: SSHOptions(hostname: "100.84.1.2", user: "root", port: 2222),
+                                             localUser: "me", home: "/Users/me", exists: { _ in false })
+        #expect(Self.hostKeyRule(configured).install == ["StrictHostKeyChecking=accept-new"])
+        // a strict step keeps its own `[host]:2222` line for a port that the owner gave, and adds no new key
+        let strict = CentralVaultRemote.arguments(target: typed, program: "true", ledger: SSHKeyLedger())
+        #expect(strict.contains("StrictHostKeyChecking=yes") && !strict.contains(where: { $0.hasPrefix("HostKeyAlias") }))
+        let door = try #require(DoorAccess.sshArguments(kept: nil, address: "100.96.20.60", program: "true", port: 2222))
+        #expect(door.contains("StrictHostKeyChecking=yes") && !door.contains(where: { $0.hasPrefix("HostKeyAlias") }))
+    }
+
+    /// **The owner's port is his for the host that he gave it for, and for no other.** Bug: the word follows the
+    /// target when it goes to the private address that the hub reports for a kept public one (`MachineReach.reaching`),
+    /// so a hub that is broken into names the address of a machine where its own program listens on that very port,
+    /// and the owner's word lets that program's key in. The install's own move to the address that the machine itself
+    /// printed over his connection keeps it (bug: an install of a server whose SSH he put on 2222 stops at the step
+    /// after the network, which knows no key of that address's port 22), and gives no word to a port that had none.
+    @Test func theOwnersPortIsHisForTheHostHeGaveItFor() {
+        let typed = InstallTarget(host: "203.0.113.5", user: "root", port: 2222, portGivenFor: "203.0.113.5")
+        let moved = MachineReach(address: "100.80.9.9").reaching(typed)
+        #expect(moved.host == "100.80.9.9" && !moved.portIsOwners)
+        #expect(Self.hostKeyRule(moved).install == ["StrictHostKeyChecking=yes", "HostKeyAlias=100.80.9.9"])
+        // the door's round at the device's address, with a kept connection that names another address
+        let door = DoorAccess.sshTarget(kept: typed, address: "100.80.9.9")
+        #expect(door?.portIsOwners == false)
+        // the install's own move to the machine's private address
+        let reached = MachineInstaller.moved(typed, to: "100.90.1.2")
+        #expect(reached.host == "100.90.1.2" && reached.portIsOwners)
+        #expect(Self.hostKeyRule(reached).install == ["StrictHostKeyChecking=accept-new"])
+        let record = MachineInstaller.moved(InstallTarget(host: "203.0.113.5", port: 2222), to: "100.90.1.2")
+        #expect(!record.portIsOwners)
+    }
+
+    /// **A Mac's first host key is the owner's own step, at every port** (the Door area's read of 22 November 2026):
+    /// macOS lets every user bind a port below 1024, a program can bind the Tailscale address beside `sshd`, and
+    /// `tailscale serve --tcp 22` can answer there. Bug: a Mac's page takes the Linux rule, so its first check keeps
+    /// the key of an agent's own program at port 22 as the Mac's, and each strict step after it (the root-signed line
+    /// that `mac-server-pin-design.md` plans among them) trusts it. A port that he typed for the Mac is strict too, and
+    /// so is a server that the hub has not reported as Linux yet (bug: a new Mac with no agent takes the Linux rule).
+    /// Bug: Run on a card or a Mac's Screen Sharing, which reach only Macs at the hub's record, take the owner's own
+    /// `~/.ssh/config` rule or a `[mac]:port` line that an earlier run kept, so an agent's program there gets the
+    /// command, or his Mac password.
+    @Test func aMacServersFirstHostKeyIsTheOwnersOwnStep() throws {
+        for target in [InstallTarget(host: "100.90.1.20", user: "owner-example", macServer: true),
+                       InstallTarget(host: "100.90.1.20", user: "owner-example", port: 2222, portGivenFor: "100.90.1.20",
+                                     macServer: true)] {
+            let rule = Self.hostKeyRule(target)
+            #expect(rule.install.first == "StrictHostKeyChecking=yes" && rule.password.first == "StrictHostKeyChecking=yes",
+                    "\(target.port)")
+            #expect(!(rule.install + rule.password).contains(where: { $0.contains("accept-new") }), "\(target.port)")
+        }
+        // the Linux rule stays as it was
+        #expect(Self.hostKeyRule(InstallTarget(host: "100.90.1.21")).install == ["StrictHostKeyChecking=accept-new"])
+        // only a kind of linux, or a reading of a system that is not macOS, says Linux
+        func entry(_ kind: String?) throws -> ServerEntry {
+            var row: [String: Any] = ["name": "studio-1", "hub": false, "joined": true, "agents": [], "available": true,
+                                      "why": []]
+            if let kind { row["kind"] = kind }
+            return try JSONDecoder().decode(ServerEntry.self, from: JSONSerialization.data(withJSONObject: row))
+        }
+        #expect(try entry("linux").reportsLinux(readings: []))
+        #expect(try !entry("mac").reportsLinux(readings: []) && !entry(nil).reportsLinux(readings: []))
+        // Run on a card, and a Mac's Screen Sharing, at a port of the hub's record: the line of the Mac's port 22 alone
+        let place = NeedRun.Place.machine(name: "studio-1", address: "100.90.1.20", user: "owner-example", port: 2222)
+        let run = NeedRunJob(command: "true", place: place).program().arguments
+        #expect(run.contains("StrictHostKeyChecking=yes") && run.contains("HostKeyAlias=100.90.1.20"))
+        let screen = try #require(ScreenSharingConnection(address: "100.90.1.20", user: "owner-example", port: 2222)
+            .masterArguments(controlPath: "/tmp/fleet-vnc-x/c", ledger: SSHKeyLedger()))
+        #expect(screen.contains("StrictHostKeyChecking=yes") && screen.contains("HostKeyAlias=100.90.1.20"))
+        // an agent's screen on a Linux server keeps the rule of its connection: a port that he gave stays his
+        let linux = try #require(ScreenSharingConnection.linux(
+            target: InstallTarget(host: "100.80.1.2", port: 2222, portGivenFor: "100.80.1.2"), port: 5901, agent: "writer"))
+        let tunnel = try #require(linux.masterArguments(controlPath: "/tmp/fleet-vnc-x/c", ledger: SSHKeyLedger()))
+        #expect(tunnel.contains("StrictHostKeyChecking=yes") && !tunnel.contains(where: { $0.hasPrefix("HostKeyAlias") }))
+    }
+
+    /// **A key that `ssh` refused says the owner's step** (`InstallTarget.refusedHostKey`, from ssh's own lines), at a
+    /// server page's check, restart and update, and in the vault's rows. Bugs: the page says only that the server "did
+    /// not answer its checks" (`noChecklist`), or a restart's title before ssh's line, which name no step; at a port
+    /// that he did not give, it tells him to connect from Terminal, which writes a `[host]:port` line that the check
+    /// never reads, or to remove a key with `ssh-keygen -R`, which takes away the good key of port 22 when the cause
+    /// is another program at the hub's port. The way out there is to type the port on the server's page. At a port
+    /// other than 22 that he gave, a changed key names its own `"[host]:port"` line (bug: `-R host` there removes the
+    /// good key of port 22 and leaves the changed one).
+    @Test func aRefusedHostKeySaysTheOwnersStep() async throws {
+        let unknown = ["No ED25519 host key is known for 100.90.1.2 and you have requested strict checking.",
+                       "Host key verification failed."]
+        let changed = ["@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@",
+                       "@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @", "Host key verification failed."]
+        let host = "100.90.1.2"
+        let firstStep = String(l10n: "This Mac does not know the host key of \(host) yet. Connect to it once with ssh from Terminal.")
+        let typePort = InstallTarget.typeItsPort(host), line = "\"[\(host)]:2222\""
+        let changedThere = String(l10n: "\(host) answers with another host key than this Mac knows. If the server was rebuilt, run ssh-keygen -R \(line) on this Mac, then check again.")
+        let linux = InstallTarget(host: host), mac = InstallTarget(host: host, macServer: true)
+        let record = InstallTarget(host: host, port: 2222), given = InstallTarget(host: host, port: 2222, portGivenFor: host)
+        #expect(linux.refusedHostKey(in: unknown, server: host) == firstStep)
+        #expect(mac.refusedHostKey(in: unknown, server: host) == firstStep)
+        #expect(given.refusedHostKey(in: unknown, server: host) == firstStep)
+        #expect(record.refusedHostKey(in: unknown, server: host) == typePort)
+        #expect(record.refusedHostKey(in: changed, server: host) == typePort)
+        #expect(linux.refusedHostKey(in: changed, server: host) == ServerCheck.hostKeyChanged(host))
+        #expect(given.refusedHostKey(in: changed, server: host) == changedThere)
+        #expect(record.asksForItsPort && !given.asksForItsPort && !linux.asksForItsPort && !mac.asksForItsPort)
+        #expect(linux.refusedHostKey(in: ["ssh: connect to host 100.90.1.2 port 22: Connection refused"], server: host) == nil)
+        // the page's own check of a Mac, and a restart at a port of the hub's record, through `ssh` that refused the key
+        let standIn = try StandInSSH("""
+        printf '%s\\n' \(unknown.map { "'\($0)'" }.joined(separator: " ")) >&2; exit 255
+        """)
+        let check = MachineInstaller(plan: InstallPlan.check(target: mac, machine: .macWorker), authKey: "",
+                                     ssh: standIn.path, verifyPause: 0.05)
+        await #expect(throws: InstallError.checkStopped(firstStep)) { try await check.run { _ in } }
+        let restart = MachineInstaller(plan: InstallPlan.restart(target: record, machine: .linuxWorker), authKey: "",
+                                       ssh: standIn.path, verifyPause: 0.05)
+        await #expect(throws: InstallError.checkStopped(typePort)) { try await restart.run { _ in } }
     }
 
     @Test func aMachineThatIsNotRootStopsBeforeAnythingIsChanged() async throws {

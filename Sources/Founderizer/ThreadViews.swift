@@ -3,9 +3,11 @@ import FleetCore
 import FleetMark
 import SwiftUI
 
-/// The agent of a conversation, over the messages: its own mark and its name in a small pill, in the middle of the
-/// column and over whatever scrolls under it. It took the place of the mark that sat inside the message box (the
-/// owner, 19 October 2026): who the message goes to belongs over the conversation, not in the field he writes in.
+/// The agent of a conversation, over the messages: its own mark, its name and its role in muted in a small pill
+/// (`AgentNameLine`, "Nova · Customer Support"), in the middle of the column and over whatever scrolls under it. It
+/// took the place of the mark that sat inside the message box (the owner, 19 October 2026): who the message goes to
+/// belongs over the conversation, not in the field he writes in. The name and the role: the owner's answer of 22
+/// November 2026, the name with the role in grey in the chat header.
 struct ChatAgentPill: View {
     let agent: String
     /// Where it ends, from the top of the conversation: the room over the first thing of every pane, and its 30. The
@@ -17,7 +19,7 @@ struct ChatAgentPill: View {
         // Grok Bot's about 20), 4 points from the pill's round end all round, so the two curves stand one inside the other.
         HStack(spacing: 7) {
             AgentGlyph(name: agent, size: GlyphSize.row, moves: true, ground: FleetStyle.surface)
-            Text(agent.agentLabel).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
+            AgentNameLine(agent: agent).font(FormMetrics.title).foregroundStyle(FleetStyle.text)
         }
         .padding(.leading, (30 - GlyphSize.row) / 2).padding(.trailing, 13).frame(height: 30)
         .background(FleetStyle.surface, in: Capsule(style: .circular))
