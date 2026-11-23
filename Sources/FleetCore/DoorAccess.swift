@@ -33,6 +33,66 @@ public enum DoorAccess {
     public static let readProgram = "cat /etc/fleet-door/access.json"
     /// The root command that takes the whole file on its standard input and checks it before it writes it.
     public static let writeProgram = "/usr/local/sbin/door-access"
+    /// **The same write, only while the door's file is the one that this Mac read** (the design of two equal Macs, E2):
+    /// `door.py access --was`, with the SHA-256 of what `readProgram` printed (`digest`), refuses the file under the
+    /// door's lock when another writer changed it after that read, so a write of another Mac is never lost: the next
+    /// round reads the file again. The door's root command `door-access` passes no option, so this is its own line
+    /// (`/usr/local/sbin/door-access`, `door.sh`). nil for text that is no SHA-256.
+    public static func writeProgram(was sha256: String) -> String? {
+        guard sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { return nil }
+        return "/usr/bin/python3 -I /opt/fleet-door/current/door.py access --was \(sha256)"
+    }
+    /// The write of a file made from the read whose output was `read`, by each writer of this Mac (the round, the Save of
+    /// a GitHub App's key): with `--was` and that read's `digest` on a door whose `access` takes it (`wasProbe`), else
+    /// `writeProgram`, as before. nil when the door takes no `--was` (or did not say) and the file of that read names
+    /// two or more owner keys: two Macs write the file then, and a write with no compare could take the other Mac's
+    /// write back, its key with it, so nothing is written. The door refuses such a write too.
+    public static func writeProgram(read: String, was: Bool) -> String? {
+        if was { return writeProgram(was: digest(read)) }
+        return ((file(read)?["owner_keys"] as? [Any])?.count ?? 0) >= 2 ? nil : writeProgram
+    }
+
+    /// How one write of the door's file ended (`DoorSyncModel.write`).
+    public enum Written: Equatable, Sendable {
+        case written
+        /// The door refused it: another writer changed the file after the read that it was made from (`--was`).
+        case changed
+        /// The door refused it for another reason, or SSH did not answer.
+        case refused
+        /// Not sent: the file names two or more owner keys and the door takes no `--was` (`writeProgram(read:was:)`).
+        case uncompared
+    }
+
+    /// **A write of the door's file that the owner's press makes** (the Save of a GitHub App's key; E2): no round comes
+    /// after it to write it again, so a write that another Mac's write made stale (`changed`) reads the file again,
+    /// makes it again from that read and writes once more, up to `tries` writes in all. `first` is what the press's own
+    /// read printed, `make` the new file from a file read, `again` the next read (nil when it failed), `write` one write
+    /// made from a read's output. The answer of the last write, `refused` for a read that is no file. It runs on its
+    /// caller's actor, so the closures stay there.
+    public static func pressedWrite(first: String, tries: Int = 3, isolation: isolated (any Actor)? = #isolation,
+                                    make: ([String: Any]) -> [String: Any], again: () async -> String?,
+                                    write: (Data, String) async -> Written) async -> Written {
+        var output = first
+        for attempt in 1...max(1, tries) {
+            guard let current = file(output) else { return .refused }
+            let answer = await write(canonical(make(current)), output)
+            guard answer == .changed, attempt < tries, let next = await again() else { return answer }
+            output = next
+        }
+        return .changed
+    }
+    /// Whether the door's `access` takes `--was`: the parser's line in the door's own `door.py`, which `test_door`
+    /// checks is there. A door from before gets the write of `writeProgram`, as before.
+    public static let wasProbe = "grep -qs -- 'accessing.add_argument(\"--was\"' /opt/fleet-door/current/door.py && echo was=yes; true"
+    /// The words of the door's refusal of a write with `--was` whose file changed after the read.
+    public static let wasRefused = "changed after the read"
+    /// The SHA-256 of the door's file as `readProgram` printed it, in hex, with the white space around the file left
+    /// out: what `door.py access --was` compares with its own file, read the same way. A login shell or a banner can
+    /// print an empty line before or after the file, and `file` takes such a read. The door writes its file in ASCII
+    /// (`json.dump`).
+    public static func digest(_ output: String) -> String {
+        sha256Hex(output.trimmingCharacters(in: CharacterSet(charactersIn: " \t\r\n")))
+    }
     /// What a managed host says about its own parts: the second sshd's host key, ops-root's mode file, and whether the
     /// host has the mark of a machine of the fleet (`install.sh --fleet`, or the older `--fleet-kit`). A host without the
     /// parts prints no key, and so does a host whose second sshd does not run: an install that stopped after it made the

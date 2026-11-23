@@ -97,6 +97,8 @@
     "link_active": "A device already joined. Remove the row to share again.",
     "link_channel": "This fleet's release channel is not Founderizer's own, so it makes no invite.",
     "link_file": "The hub cannot open the key file of the Founderizer app's links.",
+    "link_key": "The hub cannot read the key of the Founderizer app's links now. Try again in a minute.",
+    "link_most": "This fleet has {most} Founderizer rows with an invite or a device, the most that it can have. Remove one first.",
     "link_from_tool": "An invite is made in Founderizer on the Mac, never by an AI session or a program."
   },
   "holes": {
@@ -236,6 +238,9 @@
     ],
     "role_no_set": [
       "role"
+    ],
+    "link_most": [
+      "most"
     ]
   }
 }

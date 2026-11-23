@@ -42,10 +42,10 @@
       "box": "box_down",
       "key": "k_down",
       "nonce": "214b43163fe98b475e105f9c",
-      "json": "{\"t\":\"offer\",\"from\":\"Sam Rivera\",\"label\":\"Atlas\",\"value\":\"Ow5cum0W03fW47N7KNs5uAdjZl5q72h5SxL5GcI-q14\"}",
+      "json": "{\"t\":\"offer\",\"from\":\"Sam Rivera\",\"label\":\"Atlas (Customer Support)\",\"name\":\"Atlas\",\"role\":\"Customer Support\",\"value\":\"Ow5cum0W03fW47N7KNs5uAdjZl5q72h5SxL5GcI-q14\"}",
       "plain_length": 256,
       "sealed_length": 284,
-      "sealed_base64": "IUtDFj/pi0deEF+cnqioN69r9QZu2RnrpbjxWVgHUFDNo6LPAs+0SNq6b/ap2cx5MAQwQSQKJLikoddsIVxFIc90ylGUnMYbt7yvZiv9MC6RP0zgzgO168At4dxg9YBizUePIGEsWXEjkQVuJcqrgEs7XKYRglNMHrMIBFzpkmcS/f1726MV/8uAmHHYfNplUgMnPw1666jppHncTL2gVpyHd+HH1gnXyM41LmoVrEazT4VU5vMsiUpWRxHmXwZnJsqJLbGtsoFXxR+j3P7nl+rU/0nH+kea1AiXqmUTtQIIkYfrusTT1GiWGNHRpYn2SLd+hzql3VqeHCK88pnL2exjFPI/bEezGtQKQvWpdZVfFZxuIm7W6npIhKk="
+      "sealed_base64": "IUtDFj/pi0deEF+cnqioN69r9QZu2RnrpbjxWVgHUFDNo6LPAs+0SNq6b/ap2cx5MAQwQSQKJLikodduJT1GM9duwhbcntoZ8q+1eW+DIjHVBhm65RbEh/Js+Px3vfYsilnUdysjKEoa1zZiAYKokSxsUfZe0AdOErFeRRC812UI/5IszuBAstv3iGKeC85yPBRMUV5vvsmt7gOQWey3RNSSBLmrw26UocNkP34X8UazT4VU5vMsiUpWRxHmXwZnJsqJLbGtsoFXxR+j3P7nl+rU/0nH+kea1AiXqmUTtQIIkYfrusTT1GiWGNHRpYn2SLd+hzql3VqeHCK88pnL2exjFPI/bEezGtQKQu+deSXO4nDmVon8ALFqXwI="
     },
     {
       "name": "accept proof",
@@ -101,10 +101,10 @@
       "box": "box_down",
       "key": "k_down",
       "nonce": "1520b36c0455d9705f849a72",
-      "json": "{\"id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"state\":\"active\",\"db\":\"0a1b2c3d4e5f\",\"person\":\"Ana\",\"agents\":[{\"agent\":\"atlas\",\"label\":\"Atlas\",\"newest\":2}],\"count\":0}",
+      "json": "{\"id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"state\":\"active\",\"db\":\"0a1b2c3d4e5f\",\"person\":\"Ana\",\"agents\":[{\"agent\":\"atlas\",\"name\":\"Atlas\",\"role\":\"Customer Support\",\"label\":\"Atlas (Customer Support)\",\"newest\":2}],\"count\":0}",
       "plain_length": 256,
       "sealed_length": 284,
-      "sealed_base64": "FSCzbARV2XBfhJpyN/iLq3Dw+M2ld4dxL0uGh0tDgSIADZkxQXQ6QwgzLwOBeIPgwgllFVpGOxlKltVnH2l/p8KPnbZncJzql2rM/a8/xADQ6CaBvn7ZBwegiHFHWXtUejKaUElXXQCkHf7kJYgpoXj/Ye4ByD9oZExjPLowhG2Ssz4sLGaxkxGW3L9W4BXwfc2SQkQCnFpokvratPJhIVy+Z0Gl6a2cSCSSMQdfdoZMtEQYa0uEgwjUy6JoQ1SQGOcFfW+xh31xnfs/z6VlxuQjlFlVlQmxSzCwQPmk3FuLSWikW/H6fKUqip99rOEvUeOvAJ8Y2He4wYB2cD9sdV93dmQTATrc2H7VT1qz1bDp8jDMNXiEYYlt2/I="
+      "sealed_base64": "FSCzbARV2XBfhJpyN/iLq3Dw+M2ld4dxL0uGh0tDgSIADZkxQXQ6QwgzLwOBeIPgwgllFVpGOxlKltVnH2l/p8KPnbZncJzql2rM/a8/xADQ6CaBvn7ZBwegiHFHWXtUejKaUElXXQCkHf7kJYgpoXj/Ye4ByD9oZExjPLowhG2Ssz4sLGaxkxGU3LBWrg3oHviKT1ZTklQ4k/PI87s3QBP/bnPkrrzTbj+WY1Idf4RAtghZKQ7IgRLWqvYkAgeQEIRQLjv+yjgjnYhqn/UqlLAqllVX20zmDmPkQuO2gSaHSyvrDr+ufr861599rOEvUeOvAJ8Y2He4wYB2cD9sdV93dmQTATrc2H7VT2+63nMxoMwkwbnpkdxPTJA="
     },
     {
       "name": "read",
@@ -408,7 +408,7 @@
     }
   ],
   "refused": {
-    "about": "Each end refuses each of these: X25519 of private_key with each of public_keys_of_zeros gives 32 zero bytes (RFC 7748, 6.1), and each of invite_texts is no invite file. invite_texts_taken are the two texts of one invite that are read: the line, and the line with one line feed.",
+    "about": "Each end refuses each of these: X25519 of private_key with each of public_keys_of_zeros gives 32 zero bytes (RFC 7748, 6.1), and each of invite_texts is no invite file. invite_texts_taken are the two texts of one invite that are read: the line, and the line with one line feed. too_deep is a message of 33 levels of objects, which the hub refuses as it opens it (32 at most); deep_taken has 32 levels, with brackets inside a string, and opens.",
     "private_key": "339f6d73e5de8155889cff7ac3e8eab77507c200aa36645d1df9e92610d105b0",
     "public_keys_of_zeros": [
       "0000000000000000000000000000000000000000000000000000000000000000",
@@ -442,6 +442,16 @@
     "invite_texts_taken": [
       "fzinvite1.4FyuaCXKvrIEYwp2XOyFhbXqFOVDh3Die7Hskpc3f-M.eZpgkptX2hh81JPSzzbMfjqK9XrmyDzCZ3mlqaYtYFs.1794484800",
       "fzinvite1.4FyuaCXKvrIEYwp2XOyFhbXqFOVDh3Die7Hskpc3f-M.eZpgkptX2hh81JPSzzbMfjqK9XrmyDzCZ3mlqaYtYFs.1794484800\n"
-    ]
+    ],
+    "too_deep": {
+      "key": "k_up",
+      "nonce": "7f63163309c07da823eee42b",
+      "sealed_base64": "f2MWMwnAfagj7uQr7HGsIUHN+M32JmlkmiB5rvn6YDDaGv22N486ytsmJ9GJ47z/HKabbvCu3KT4dyozBh1CA8G5uwPoPWDpIOBjoXu+uB2ij9bUal5o2HhOEUolSywk79dPhuSNOmY1kIBHDbmADt8t/PL5FNTyQozu3RgcfXwcgobSu1Dp44XRp3XtBZKi3FBBgGqbj2EC2kxXdM/Q140fvd3xJEX0QBNuqH42JYRqV2FMeN7KXhm0F/gY01wp+nef3MgjXZUlOxEMEuHfGDoBeIVjaH04jMkkawlwhXLHXoYOEFzeuWgpyNEQPjp0Z5aFpA16NcAbuvEGim2my3Qs1Bd/STO3iJaKX0lwNTSVXh1owKGzE6nagBA="
+    },
+    "deep_taken": {
+      "key": "k_up",
+      "nonce": "cd6ec75d83e6d0a077a5431c",
+      "sealed_base64": "zW7HXYPm0KB3pUMcqZEHGXdax1sds863YTo4YrvS4CobudkJU6QlB8AgXM8w4zzSkUwfDnuuDnjf+CZuEXublog2ovfJVw9ui3CmuwqgiQb3Qan4oguA4f45nIZQribh65McD2bz/z/cyo4fPn0wAybMbVnfMopyy6lzY3q27/uCSyq2SrPrvVEJYBDlIu0ZKWgy3vxd4NbXKEysmD/6OJq0Os7aaE1es9pdpvGhXyTQ2zWB/D1orOgIlUX8XmgpEnRbO6JAW6vJgrFbXRby7sXsihx9dpVfpc2Cz977nkb099O1Uwd/mslzcXMxr2zDP0jIIMrXWKSml9p1yea5o4eUalI9lt8KhYMMWJ5TQNlTsQ6RLGMYEsdswgg="
+    }
   }
 }

@@ -79,34 +79,66 @@ struct CopyScheduleTests {
 /// every case of it is decided here, over names and dates, with no folder and no disk.
 struct CopyFolderTests {
     private let now = Date(timeIntervalSince1970: 1_792_500_000)
+    private let fleet = "0f1e2d3c4b5a6978"
     private func copies(_ count: Int) -> [(name: String, at: Date)] {
         (0..<count).map { ("founderizer-0f1e2d3c4b5a6978-\($0).zip", now.addingTimeInterval(Double(-$0) * 3600)) }
     }
 
     @Test func theNewestStayAndTheOldestGo() {
         let found = copies(10)
-        let gone = CopyFolder.toDelete(found, keeping: 7)
+        let gone = CopyFolder.toDelete(found, keeping: 7, fleet: fleet)
         #expect(gone == ["founderizer-0f1e2d3c4b5a6978-7.zip", "founderizer-0f1e2d3c4b5a6978-8.zip",
                          "founderizer-0f1e2d3c4b5a6978-9.zip"])
     }
 
     @Test func nothingGoesUntilThereAreMoreThanHeIsTold() {
-        for count in 0...7 { #expect(CopyFolder.toDelete(copies(count), keeping: 7).isEmpty) }
+        for count in 0...7 { #expect(CopyFolder.toDelete(copies(count), keeping: 7, fleet: fleet).isEmpty) }
     }
 
-    /// His folder is his. A copy of the hub's own naming is the only thing this ever deletes — not a document,
-    /// not another app's archive, not a copy he renamed himself.
+    /// His folder is his. A copy of this fleet in the hub's own naming is the only thing this ever deletes — not a
+    /// document, not another app's archive, not a copy he renamed himself, not a copy of another fleet.
     @Test func nothingThatIsNotOneOfOurCopiesIsEverDeleted() {
         let his: [(name: String, at: Date)] = [
             ("Taxes 2026.zip", now.addingTimeInterval(-99 * 3600)),
             ("founderizer.zip", now.addingTimeInterval(-98 * 3600)),
             ("the one I keep.zip", now.addingTimeInterval(-97 * 3600)),
-            ("founderizer-0f1e2d3c4b5a6978-old.txt", now.addingTimeInterval(-96 * 3600))
+            ("founderizer-0f1e2d3c4b5a6978-old.txt", now.addingTimeInterval(-96 * 3600)),
+            ("founderizer-20261020T120000Z.zip", now.addingTimeInterval(-95 * 3600)),
+            ("founderizer-0123456789abcdef-20261020T120000Z.zip", now.addingTimeInterval(-94 * 3600))
         ]
-        #expect(CopyFolder.toDelete(his + copies(9), keeping: 7).allSatisfy { $0.hasPrefix(CopyFolder.prefix) })
-        #expect(CopyFolder.toDelete(his, keeping: 0).isEmpty)
+        #expect(CopyFolder.toDelete(his + copies(9), keeping: 7, fleet: fleet)
+                == ["founderizer-0f1e2d3c4b5a6978-7.zip", "founderizer-0f1e2d3c4b5a6978-8.zip"])
+        #expect(CopyFolder.toDelete(his, keeping: 0, fleet: fleet).isEmpty)
+        #expect(CopyFolder.toDelete(his + copies(3), keeping: 0, fleet: "").isEmpty)
         #expect(!CopyFolder.isACopy("Taxes 2026.zip"))
         #expect(CopyFolder.isACopy("founderizer-0f1e2d3c4b5a6978-20261020T120000Z.zip"))
+        #expect(CopyFolder.fleet(of: "founderizer-0f1e2d3c4b5a6978-20261020T120000Z.zip") == fleet)
+        #expect(CopyFolder.fleet(of: "founderizer-20261020T120000Z.zip") == nil)
+        #expect(CopyFolder.fleet(of: "founderizer-0F1E2D3C4B5A6978-20261020T120000Z.zip") == nil)
+        #expect(CopyFolder.fleet(of: "founderizer-0f1e2d3c4b5a697-20261020T120000Z.zip") == nil)
+    }
+
+    /// A copy whose hub sent no name gets the app's fallback name, which gives no fleet. Those copies still have a
+    /// limit (none of them takes a fleet's place, and no fleet's copy goes for them).
+    @Test func copiesWithTheFallbackNameHaveALimitToo() {
+        let fallback: [(name: String, at: Date)] = (0..<9).map {
+            ("founderizer-2026102\($0)T120000Z.zip", now.addingTimeInterval(Double(-$0) * 3600))
+        }
+        #expect(CopyFolder.toDelete(fallback + copies(9), keeping: 7, fleet: nil)
+                == ["founderizer-20261027T120000Z.zip", "founderizer-20261028T120000Z.zip"])
+        #expect(CopyFolder.toDelete([(".founderizer-20261020T120000Z.zip.icloud", now)] + copies(9), keeping: 0,
+                                    fleet: nil) == [".founderizer-20261020T120000Z.zip.icloud"])
+    }
+
+    /// A copy of another fleet in his folder is none of his fleet's days (19 November 2026: a copy of a test hub's
+    /// fleet landed there, and as one of the seven it pushed a day of his own fleet out). Seven of his and newer
+    /// copies of another fleet: none of his goes, and none of the other fleet's either.
+    @Test func aCopyOfAnotherFleetTakesNoPlaceOfHis() {
+        let other: [(name: String, at: Date)] = (0..<3).map {
+            ("founderizer-0123456789abcdef-\($0).zip", now.addingTimeInterval(Double($0 + 1) * 60))
+        }
+        #expect(CopyFolder.toDelete(other + copies(7), keeping: 7, fleet: fleet).isEmpty)
+        #expect(CopyFolder.toDelete(other + copies(8), keeping: 7, fleet: fleet) == ["founderizer-0f1e2d3c4b5a6978-7.zip"])
     }
 }
 
@@ -167,6 +199,6 @@ struct CopyEvictionTests {
             let name = index >= 6 ? ".\(plain).icloud" : plain
             found.append((name, now.addingTimeInterval(Double(-index) * 3600)))
         }
-        #expect(CopyFolder.toDelete(found, keeping: 7) == [".founderizer-0f1e2d3c4b5a6978-7.zip.icloud"])
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: "0f1e2d3c4b5a6978") == [".founderizer-0f1e2d3c4b5a6978-7.zip.icloud"])
     }
 }

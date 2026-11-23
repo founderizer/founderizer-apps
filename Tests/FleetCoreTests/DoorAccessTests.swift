@@ -419,6 +419,11 @@ struct DoorAccessTests {
         var filed = view
         filed.door_secrets = true
         #expect(DoorAccess.gitHubStep(filed, current: access, hub: hubAt) == nil)
+        // a hub from before owner API 1.298, which says nothing of that file, keeps the old path with its own key:
+        // the move, then the link (a bug that waited for door_secrets == false never linked such a hub again)
+        var older = view
+        older.door_secrets = nil
+        #expect(DoorAccess.gitHubStep(older, current: access, hub: hubAt) == .link(login: login, appID: "42"))
         view.linked = true
         #expect(DoorAccess.gitHubStep(view, current: access, hub: hubAt) == nil)
         view.github_app = nil
@@ -555,6 +560,67 @@ struct DoorAccessTests {
         #expect(file["fleet"] as? String == "0f1e2d3c4b5a6978")
         #expect(plan.changed)
         #expect(!DoorAccess.plan(current: file, facts: Self.facts()).changed)      // a Mac with no key keeps them
+    }
+
+    /// The door's file as a round leaves it, with the owner keys `held` (none: nil) and the fleet.
+    static func ownerFile(held: [String]?) -> [String: Any] {
+        var current = object(DoorAccess.plan(current: access, facts: facts()).file)
+        if let held { current["owner_keys"] = held }
+        current["fleet"] = "0f1e2d3c4b5a6978"
+        return current
+    }
+
+    /// **Each write of this Mac carries the SHA-256 of the bytes that its read printed** (E2): the round and the Save of
+    /// a GitHub App's key, on a door whose `access` takes `--was`, so the door refuses it when another Mac wrote the
+    /// file after that read (`test_door`: a stale `--was` is refused). Bugs: a hash of the file as this Mac parsed or
+    /// wrote it, which the door refuses at every write for good; a door from before given an option that it refuses.
+    @Test func aWriteCarriesTheHashOfWhatItsReadPrinted() {
+        let read = #"{"v": 1}"#                     // the door's own json.dump of its file, with its spaces
+        #expect(DoorAccess.writeProgram(read: read, was: true)
+                    == "/usr/bin/python3 -I /opt/fleet-door/current/door.py access --was 9ab2253fc38981f5be9c25cf0a34b62cdf334652344bdef16b3d5dbc0b74f2f1")
+        // an empty line that a login shell or a banner printed around the file: the door leaves it out too
+        #expect(DoorAccess.writeProgram(read: "\r\n\n" + read + " \r\n", was: true) == DoorAccess.writeProgram(read: read, was: true))
+        #expect(DoorAccess.writeProgram(read: read, was: false) == DoorAccess.writeProgram)
+        #expect(DoorAccess.writeProgram(was: "9AB2; reboot") == nil)
+    }
+
+    /// **A file of two Macs gets no write with no compare** (E2): the door's file as this Mac read it names two owner
+    /// keys, and the door did not say that it takes `--was` (an older door, or a probe that did not answer), so this Mac
+    /// writes nothing, as the door refuses it. Bug: a plain write that takes the other Mac's write back, its key with
+    /// it. One key keeps today's write.
+    @Test func aFileOfTwoOwnerKeysGetsNoWriteWithNoCompare() {
+        let two = String(decoding: DoorAccess.canonical(Self.ownerFile(held: ["AKey", "BKey"])), as: UTF8.self)
+        #expect(DoorAccess.writeProgram(read: two, was: false) == nil)
+        #expect(DoorAccess.writeProgram(read: two, was: true) == DoorAccess.writeProgram(was: DoorAccess.digest(two)))
+        let one = String(decoding: DoorAccess.canonical(Self.ownerFile(held: ["AKey"])), as: UTF8.self)
+        #expect(DoorAccess.writeProgram(read: one, was: false) == DoorAccess.writeProgram)
+    }
+
+    /// **The Save of a GitHub App's key writes again after a stale refusal** (E2): no round writes the file for the
+    /// owner's press, so a write that the door refused because another Mac wrote the file after its read reads the
+    /// file again and makes the new one from that read, which keeps the other Mac's write. Bugs: a Save that gives up
+    /// at the first refusal (his Save is lost), or that writes its first file again (the other Mac's write is lost).
+    @MainActor @Test func theSaveOfAnAppKeyWritesAgainAfterAStaleRefusal() async {
+        let first = String(decoding: DoorAccess.canonical(Self.ownerFile(held: ["AKey"])), as: UTF8.self)
+        let other = String(decoding: DoorAccess.canonical(Self.ownerFile(held: ["AKey", "BKey"])), as: UTF8.self)
+        var answers: [DoorAccess.Written] = [.changed, .written], writes: [(file: [String: Any], read: String)] = []
+        let written = await DoorAccess.pressedWrite(first: first, make: { file in
+            var made = file
+            made["fleet"] = "made"
+            return made
+        }, again: { other }, write: { file, read in
+            writes.append((Self.object(file), read))
+            return answers.removeFirst()
+        })
+        #expect(written == .written)
+        #expect(writes.map { $0.read } == [first, other])
+        #expect(writes.last?.file["owner_keys"] as? [String] == ["AKey", "BKey"])
+        #expect(writes.last?.file["fleet"] as? String == "made")
+        answers = [.changed, .changed, .changed, .written]
+        writes = []
+        #expect(await DoorAccess.pressedWrite(first: first, make: { $0 }, again: { other },
+                                              write: { file, read in writes.append((Self.object(file), read)); return answers.removeFirst() }) == .changed)
+        #expect(writes.count == 3)
     }
 
     @Test func everyOtherPartOfTheFileStaysAsTheOwnersMacSessionWroteIt() {

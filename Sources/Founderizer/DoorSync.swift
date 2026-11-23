@@ -40,6 +40,9 @@ final class DoorSyncModel {
     private var fleetInstall = false
     /// The door's check takes `--first` (API 1.241, `DoorAccess.firstProbe`).
     private var probeFirst = false
+    /// The door's `access` takes `--was` (`DoorAccess.wasProbe`): a write of this Mac is refused when another writer
+    /// changed the file after the read that it was made from (`write`).
+    private var probeWas = false
     /// The servers that did not answer this Mac's SSH or run a release that the door's install does not cover, with
     /// when: each is passed over for an hour (N8 (b)).
     private var skipped: [String: Date] = [:]
@@ -118,7 +121,7 @@ final class DoorSyncModel {
         }
 
         let read = await ssh(door, address: doorAddress, DoorAccess.readProgram)
-        guard let current = read.flatMap({ DoorAccess.file($0.output) }) else {
+        guard let output = read?.output, let current = DoorAccess.file(output) else {
             said.append("The door's access file could not be read over SSH.")
             return
         }
@@ -218,8 +221,16 @@ final class DoorSyncModel {
             // until this write answers, and no early return until a round with no problem
             lastRound = nil
             held = nil
-            guard let written = await ssh(door, address: doorAddress, DoorAccess.writeProgram, stdin: plan.file), written.ok else {
+            switch await write(plan.file, read: output, door: door, address: doorAddress) {
+            case .written: break
+            case .changed:
+                said.append("The door's access file changed after this round read it: the next round reads it again.")
+                return
+            case .refused:
                 said.append("The door refused the new access file, or SSH did not answer. Nothing was recorded.")
+                return
+            case .uncompared:
+                said.append("The door's access file names two or more owner keys, and the door did not say that it compares a write with its read: nothing was written.")
                 return
             }
         }
@@ -543,7 +554,7 @@ final class DoorSyncModel {
         guard let devices = await Self.tailnet(), let door = DoorAccess.door(in: devices), let address = door.address else {
             return String(l10n: "This Mac's Tailscale shows no door.")
         }
-        guard let read = await ssh(door, address: address, DoorAccess.readProgram), var current = DoorAccess.file(read.output) else {
+        guard var read = await ssh(door, address: address, DoorAccess.readProgram), let current = DoorAccess.file(read.output) else {
             return String(l10n: "The door's access file could not be read over SSH.")
         }
         // The successor of a key that works: the file names it only once the door holds its copy, so that the door
@@ -563,22 +574,50 @@ final class DoorSyncModel {
             guard holds else { return notYet }
             // A round can write the file while this waits: the write starts from the file of now, not from the read
             // of before the wait, which would put back what that round took out.
-            guard let again = await ssh(door, address: address, DoorAccess.readProgram), let now = DoorAccess.file(again.output) else {
+            guard let again = await ssh(door, address: address, DoorAccess.readProgram), DoorAccess.file(again.output) != nil else {
                 return String(l10n: "The door's access file could not be read over SSH.")
             }
-            current = now
+            read = again
         }
-        let file = DoorAccess.canonical(DoorAccess.withGitHubApp(current, owner: owner, login: login, appID: appID))
-        // Counted before the write: a round that read the file before then sees the count at its own write and does
-        // not write its plan over this file, which named the old key again while the owner read that the door had
-        // the new one.
-        outsideWrites += 1
-        guard let written = await ssh(door, address: address, DoorAccess.writeProgram, stdin: file), written.ok else {
+        // Only while the file is the one of the read that it was made from (E2): a round of another Mac of the owner
+        // after that read is not lost, and this Save reads the file again and writes again, a few times, since no
+        // round writes it for him. Each write is counted before it: a round that read the file before then sees the
+        // count at its own write and does not write its plan over this file, which named the old key again while the
+        // owner read that the door had the new one.
+        let written = await DoorAccess.pressedWrite(
+            first: read.output,
+            make: { DoorAccess.withGitHubApp($0, owner: owner, login: login, appID: appID) },
+            again: { await self.ssh(door, address: address, DoorAccess.readProgram)?.output },
+            write: { file, output in
+                self.outsideWrites += 1
+                return await self.write(file, read: output, door: door, address: address)
+            })
+        guard written == .written else {
             return String(l10n: "The door did not take its new access file.")
         }
         lastRound = nil
         held = nil      // this write began from a file that a round may have written after its read (API 1.234)
         return nil
+    }
+
+    /// **One write of the door's file, made from the read whose output was `read`** (the design of two equal Macs, E2):
+    /// on a door whose `access` takes `--was` (`DoorAccess.wasProbe`, asked until one says so), the door writes it only
+    /// while its file is the one of that read, so a write of another Mac of the owner after that read is not lost
+    /// (`changed`). A door from before writes it as before, unless that read named two or more owner keys
+    /// (`uncompared`: nothing is sent). An ask that got no answer sends nothing (`refused`). Any other refusal asks the
+    /// door again at the next write: a door put back to an older release takes no `--was`.
+    private func write(_ file: Data, read: String, door: DoorAccess.Device, address: String) async -> DoorAccess.Written {
+        if !probeWas {
+            guard let asked = await ssh(door, address: address, DoorAccess.wasProbe) else { return .refused }
+            probeWas = asked.output.contains("was=yes")
+        }
+        let was = probeWas      // of this write: another write of this model can clear it while this one waits
+        guard let program = DoorAccess.writeProgram(read: read, was: was) else { return .uncompared }
+        let answer = await ssh(door, address: address, program, stdin: file)
+        if answer?.ok == true { return .written }
+        if was, answer?.output.contains(DoorAccess.wasRefused) == true { return .changed }
+        probeWas = false
+        return .refused
     }
 
     /// The door's device on this Mac's own Tailscale, or nil.

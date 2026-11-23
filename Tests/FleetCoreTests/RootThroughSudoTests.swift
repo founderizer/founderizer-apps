@@ -105,7 +105,9 @@ struct RootThroughSudoTests {
                         DoorAccess.readProgram, DoorAccess.writeProgram, DoorAccess.hostProgram, DoorAccess.boxProgram,
                         try #require(DoorAccess.followProgram(hub: "100.80.1.2", port: 8765)), DoorAccess.recipientProgram,
                         try #require(DoorAccess.heldProgram(login: "bws://0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")),
-                        DoorAccess.hubSecretsProgram, DoorAccess.tokensProbe, "cat -- '/home/fleet/github-app.pem'",
+                        DoorAccess.hubSecretsProgram, DoorAccess.tokensProbe, DoorAccess.wasProbe,
+                        try #require(DoorAccess.writeProgram(was: String(repeating: "0f", count: 32))),
+                        "cat -- '/home/fleet/github-app.pem'",
                         ServerHardening.program(), ServerMemory.program(), ServerLibraries.program()]
         // The door's parts on a business's server (`DoorSync`). Through `sudo -n -i`, the bundle and the install lost
         // "$d" before 11 November 2026.

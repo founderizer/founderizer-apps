@@ -251,7 +251,7 @@ final class FleetCopyKeeper {
             try FileManager.default.moveItem(at: OwnerAccess.withKey(copy.file) ?? copy.file, to: kept)
             try await client.confirmCopy(hub: store.hub, database: database, client: store.installation,
                                          sha256: copy.sha256, bytes: copy.bytes)
-            prune(in: folder)
+            prune(in: folder, fleet: CopyFolder.fleet(of: copy.suggestedName))
             schedule.keptAt = now
             defaults.set(now.timeIntervalSince1970, forKey: "copyKeptAt")
             clearFailure()
@@ -260,18 +260,19 @@ final class FleetCopyKeeper {
         }
     }
 
-    /// The newest `keeps` stay, the older ones go — and only files of the hub's own naming, only in his folder.
-    private func prune(in folder: URL) {
+    /// The newest `keeps` of this fleet's copies stay, its older ones go — and only files of the hub's own naming
+    /// with this fleet's id, only in his folder. A copy whose name gives no fleet prunes the app's fallback names.
+    private func prune(in folder: URL, fleet: String?) {
         let manager = FileManager.default
         // Hidden files are listed too: an evicted iCloud copy is `.founderizer-….zip.icloud`, which is still
-        // one of his copies and has to be counted as one (`CopyFolder.isACopy(onDisk:)`).
+        // one of his copies and has to be counted as one (`CopyFolder.real`).
         guard let found = try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey],
                                                            options: []) else { return }
         let dated = found.map { file -> (name: String, at: Date) in
             let at = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             return (file.lastPathComponent, at ?? .distantPast)
         }
-        for name in CopyFolder.toDelete(dated, keeping: Self.keeps) {
+        for name in CopyFolder.toDelete(dated, keeping: Self.keeps, fleet: fleet) {
             try? manager.removeItem(at: folder.appendingPathComponent(name))
         }
     }

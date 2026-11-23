@@ -152,18 +152,50 @@ public enum CopyDefault {
 /// **Which copies go when a new one is kept.** It is the one thing in this feature that deletes a file of his, so
 /// it is a decision over names and dates and nothing else, proved on its own.
 ///
-/// Two rules, and both are about not touching what is not ours: only the hub's own naming
-/// (`founderizer-<fleet>-<time>.zip`) is ever considered, and only the oldest beyond the number he is told about.
-/// A folder of his with anything else in it comes out of this untouched.
+/// Three rules, and all are about not touching what is not ours: only the hub's own naming
+/// (`founderizer-<fleet>-<time>.zip`) is ever considered, only the copies of the fleet whose copy was just kept
+/// (or, when the kept copy has the app's fallback name with no fleet, only the fallback names), and only the oldest
+/// beyond the number he is told about. A folder of his with anything else in it comes out of this untouched.
 public enum CopyFolder {
     public static let prefix = "founderizer-"
 
-    /// Of these file names, the ones to delete, oldest first — each under the name it really has on the disk.
-    /// `kept` is how many copies stay.
-    public static func toDelete(_ files: [(name: String, at: Date)], keeping: Int) -> [String] {
+    /// Of these file names, the ones to delete — each under the name it really has on the disk. `keeping` is how
+    /// many copies of `fleet` stay. A copy of another fleet in the same folder is none of this fleet's days: it is
+    /// not counted and never deleted here. On 19 November 2026 a copy of a test hub's fleet landed in his folder,
+    /// and as one of the seven it pushed a day of his own fleet out. `fleet` is nil when the kept copy's name gave
+    /// none (the app's own fallback name, when a hub sent no name): then the fallback names are the group, so that
+    /// those copies have a limit too.
+    public static func toDelete(_ files: [(name: String, at: Date)], keeping: Int, fleet: String?) -> [String] {
         guard keeping >= 0 else { return [] }
-        let ours = files.filter { isACopy(onDisk: $0.name) }.sorted { $0.at > $1.at }
+        let group: (String) -> Bool
+        if let fleet {
+            guard isAFleet(fleet) else { return [] }
+            group = { Self.fleet(of: $0) == fleet }
+        } else {
+            group = isAFallback
+        }
+        let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }
         return ours.dropFirst(keeping).map(\.name)
+    }
+
+    /// The app's own name for a copy whose hub sent none (`FleetCopy.name(fromDisposition:)`): the prefix, the time
+    /// in UTC and `.zip`, with no fleet.
+    public static func isAFallback(_ name: String) -> Bool {
+        name.range(of: "^founderizer-[0-9]{8}T[0-9]{6}Z\\.zip$", options: .regularExpression) != nil
+    }
+
+    /// The fleet that a copy's name gives, or nil for a name that gives none: sixteen lowercase hex characters
+    /// between the prefix and the next dash, as the hub's `fleet_id` is.
+    public static func fleet(of name: String) -> String? {
+        guard isACopy(name) else { return nil }
+        let rest = name.dropFirst(prefix.count)
+        guard let dash = rest.firstIndex(of: "-") else { return nil }
+        let fleet = String(rest[..<dash])
+        return isAFleet(fleet) ? fleet : nil
+    }
+
+    static func isAFleet(_ fleet: String) -> Bool {
+        fleet.count == 16 && fleet.allSatisfy { "0123456789abcdef".contains($0) }
     }
 
     /// A copy this app wrote, by the only name the hub gives one.
