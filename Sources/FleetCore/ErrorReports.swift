@@ -340,7 +340,12 @@ public enum ErrorReportError: Error, Equatable, Sendable {
 
 extension ErrorReport {
     /// **One crash, from the JSON of its MetricKit call stack tree** (`MXCallStackTree.jsonRepresentation()`) **and its
-    /// numbers**: the signal, the exception's type and code, and the time of the payload that carried it.
+    /// numbers**: the signal, the exception's type and code, and the times of the payload that carried it: its begin
+    /// (`begin`, MetricKit's `timeStampBegin`) as the entry's first time, and its end (`time`, `timeStampEnd`) as its
+    /// last time. Whether a real payload's begin is at or before its crash is not known yet (`ErrorReportsSending`,
+    /// "Open"); the crashes' floor reads the first time, so it fails closed when it is. A begin after the end counts
+    /// as the end, and a begin before the contract's times as the contract's first time (September 2020), which no
+    /// floor of a clock after that time passes. With no begin, both times are the end.
     ///
     /// The frames are those of the thread that the crash is attributed to (`threadAttributed`), from its root frame
     /// (the one that ran) down through each frame's `subFrames`, at most `maxFrames`. A frame whose `binaryUUID` is one
@@ -349,15 +354,17 @@ extension ErrorReport {
     /// `binaryName`, not `address`, nothing else.
     ///
     /// nil only for a time outside the contract's: a clock that is that wrong gives no time worth sending.
-    public static func crash(stackTree json: Data, signal: Int?, type: Int?, code: Int?, at time: Date,
-                             own: Set<String>) -> Crash? {
+    public static func crash(stackTree json: Data, signal: Int?, type: Int?, code: Int?, from begin: Date? = nil,
+                             at time: Date, own: Set<String>) -> Crash? {
         let seconds = time.timeIntervalSince1970
         guard seconds.isFinite, Double(times.lowerBound) <= seconds, seconds <= Double(times.upperBound) else { return nil }
         let when = Int(seconds)
+        let start = begin.map { $0.timeIntervalSince1970 }.map { $0.isFinite ? $0 : -.infinity }
+        let first = start.map { Int(max(Double(times.lowerBound), min($0, seconds))) } ?? when
         return Crash(signal: signal.flatMap { signals.contains($0) ? $0 : nil },
                      type: type.flatMap { types.contains($0) ? $0 : nil },
                      code: code.flatMap { codes.contains($0) ? $0 : nil },
-                     frames: frames(of: json, own: Set(own.compactMap(uuid))), first: when, last: when)
+                     frames: frames(of: json, own: Set(own.compactMap(uuid))), first: first, last: when)
     }
 
     /// The crashed thread's frames, in the order of the stack: depth first, each frame before its sub-frames.
@@ -1154,8 +1161,19 @@ public enum ErrorReportsDay {
     /// clock that ran ahead and was then put right, carries a time after the run's start, and it can go.
     public static func installsSince(now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) -> Date {
         let base = valid(state(in: defaults).taken, now: now) ?? now.addingTimeInterval(-day).timeIntervalSince1970
-        let floor = lastAnswer(in: defaults).flatMap { $0.send ? min($0.since ?? $0.at, now.timeIntervalSince1970) : nil }
+        let floor = runStart(now: now, in: defaults)
         return Date(timeIntervalSince1970: max(base, floor ?? base))
+    }
+
+    /// **The start of the switch's run of answers "on"**, in seconds since 1970, never after `now`: the kept answer's
+    /// `since` (his press when `pressedOn` set it, else this Mac's first read "on"), or its own time for an answer from
+    /// before that field. nil when the kept answer is "off", or no answer is kept: no run, and nothing goes on it. The
+    /// installs of a day (`installsSince`) and the crashes of an attempt, new and kept (`ErrorReportsSending`), start
+    /// here, so the known limits of `installsSince` hold for a crash as for a stop: a run that starts before the true
+    /// "on" (R2-N3), and a crash or a stop of while the switch was off, on a clock that ran ahead and was then put
+    /// right, which carries a time after the run's start and can go.
+    public static func runStart(now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) -> Double? {
+        lastAnswer(in: defaults).flatMap { $0.send ? min($0.since ?? $0.at, now.timeIntervalSince1970) : nil }
     }
 
     /// **The answer that the day goes on while the hub at `hub` does not answer**: the day is due, the hub has been
@@ -1228,7 +1246,11 @@ public enum ErrorReportsDay {
 
 /// **The rules of the Mac's sends to our own site** (the app's `ErrorReportsSender` gives it the store's facts at each
 /// tick, and the calls to the hub and to our site; this type decides). **The crashes go only while the owner's switch is
-/// on, at that moment**: before each send it asks the hub (`GET /ui/error-reports`); off, or a hub with no switch, drops
+/// on, at that moment, and only a crash from after its run of "on" began** (`ErrorReportsDay.runStart`, the floor of the
+/// installs too): MetricKit gives a crash at a later start, up to about a day after it, so a crash from while the
+/// switch was off, or from before his first "on", comes after the "on" with its own older time, and is dropped then;
+/// so is a kept crash of an earlier run, and the kept file loses it.
+/// Before each send it asks the hub (`GET /ui/error-reports`); off, or a hub with no switch, drops
 /// them, and nothing of them is kept; on, they go with the fleet's id and the channel of the hub's own releases read
 /// (`GET /ui/releases`), as Report a problem names them. A send that can still go (our site's 429 or 5xx, or no answer,
 /// or no releases read) keeps them in one small file (`ErrorReport.keptFile`, at most 20 entries), which goes again with
@@ -1426,7 +1448,7 @@ public enum ErrorReportsDay {
         guard offs == offsAtStart else { return }
         guard on else { return off() }
         remember()
-        let crashes = !(batch.isEmpty && disk.isEmpty)
+        var crashes = !(batch.isEmpty && disk.isEmpty)
         var read: ReleaseState?
         if crashes || day { read = await calls.readReleases() }
         guard offs == offsAtStart else { return }
@@ -1437,6 +1459,37 @@ public enum ErrorReportsDay {
         let firstRunNo = FirstRunReports.waiting(in: defaults) == false
         let day = day && !firstRunNo
         if !firstRunNo { ErrorReportsDay.take(.on(known), hub: hub, now: now(), in: defaults) }
+        // **A crash goes only when it came after the start of the switch's run of "on"** (the crashes' floor, as the
+        // installs' one), a new one and a kept one alike: one from while the switch was off, from before his first "on"
+        // or from an earlier run (kept under another hub, or before a first-run "Don't send", "Start again", or by a
+        // build before this floor) is dropped, never written to the disk, and the kept file loses it at once. With no
+        // run (a first-run "no" waits, so no "on" is kept), no crash goes and the kept file goes, as at `off()`. Inside
+        // one run its start only moves earlier (`take(.on)`, `pressedOn`), so each crash kept in this run stays (the
+        // second reader's C1). The time compared is the crash's first time, the begin of the payload that carried it
+        // (MetricKit's `timeStampBegin`; its last time is the payload's end), so it fails closed when the begin is at
+        // or before the crash: a payload that begins before the "on" and ends after it does not go. **Open** (the
+        // validator's C.2): the times of a real payload of this app are not known. A live check got none (MetricKit
+        // refused an ad-hoc signed test bundle in a temporary folder, and this Mac's "Share with app developers" is
+        // off). So a payload with one time that the system wrote after the "on", for a crash before it, still passes.
+        //
+        // **A known limit** (C-N2): a crash of the first run after the owner's "Send" is dropped when the sender reads
+        // the hub's default "off" before the hub took that "Send" (`off()` empties what waits). The installs have
+        // `pressedOn` for that time; the crashes have nothing like it. **And one at the update from 0.1.453:** a file
+        // that it kept passed no floor, and its answer's own time stands for the run's start, so the kept crashes from
+        // before that time go in no report, once. Both fail closed. **Three more small losses**, which fail closed too:
+        // two equal crashes merge by the earlier time, so an entry with one crash before the start is dropped whole; a
+        // new address of the same hub starts a new run, and the cut takes that fleet's kept crashes; and a late "off"
+        // over a press starts the run at the next look, and the cut takes the kept crashes of the run before. And the
+        // begin rule drops a true crash after the "on" when its payload began before the "on".
+        let start = ErrorReportsDay.runStart(now: now(), in: defaults)
+        let inRun = start.map { start in batch.filter { Double($0.first) >= start } } ?? []
+        let keptInRun = start.map { start in disk.filter { Double($0.first) >= start } } ?? []
+        if keptInRun.count != disk.count {
+            // The cut took an entry: the file keeps only what stays.
+            if keptInRun.isEmpty { ErrorReport.forget(file) } else { try? ErrorReport.keep(keptInRun, in: file) }
+            onDisk = ErrorReport.kept(file)
+        }
+        crashes = !(inRun.isEmpty && keptInRun.isEmpty)
         guard crashes || day else { return }   // only a look at the switch: the file was tried at this start
         let stamp = now()
         // The hub answered the switch now: its reach is "none" in this day, whatever an earlier read gave.
@@ -1446,7 +1499,7 @@ public enum ErrorReportsDay {
         var failure: Error? = ErrorReportError.unready
         var dayWent = false
         if crashes, let read {
-            if let report = made(fleet: read.entitlement.fleet, crashes: disk + batch, app: app) {
+            if let report = made(fleet: read.entitlement.fleet, crashes: keptInRun + inRun, app: app) {
                 failure = await ErrorReportsDay.deliver(report, day: day, at: stamp, in: defaults, stillOn: stillOn) {
                     try await calls.send($0, read.channel)
                 }
@@ -1466,7 +1519,7 @@ public enum ErrorReportsDay {
         guard offs == offsAtStart, crashes else { return }   // the switch went off while it was sent
         diskTriedAt = now()
         // A 200 takes out what went; 429, 5xx or no answer keep them for the next start; any other answer drops them.
-        onDisk = ErrorReport.settle(batch, carriedKept: !disk.isEmpty, after: failure, in: file)
+        onDisk = ErrorReport.settle(inRun, carriedKept: !keptInRun.isEmpty, after: failure, in: file)
     }
 
     /// **The day while the hub does not answer** (Q5): on `answer`, to its channel, with the reach of the hub's last

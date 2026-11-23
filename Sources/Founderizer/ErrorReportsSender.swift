@@ -43,7 +43,8 @@ final class CrashSubscriber: NSObject, MXMetricManagerSubscriber, Sendable {
                 let code = crash.exceptionCode.map { Int(truncatingIfNeeded: $0.int64Value) }
                 if let entry = ErrorReport.crash(stackTree: crash.callStackTree.jsonRepresentation(),
                                                  signal: crash.signal?.intValue, type: crash.exceptionType?.intValue,
-                                                 code: code, at: payload.timeStampEnd, own: own) {
+                                                 code: code, from: payload.timeStampBegin, at: payload.timeStampEnd,
+                                                 own: own) {
                     crashes.append(entry)
                 }
             }

@@ -972,6 +972,110 @@ struct ErrorReportsDayTests {
                 "a stop in the minutes after a press on in Settings was lost")
     }
 
+    /// **A crash goes only when it came after the switch's run of "on" began** (the crashes' floor, as the installs'
+    /// one): MetricKit gives a crash at a later start, up to about a day after it. A crash timed while the switch was
+    /// off and given after the "on" does not go, nor one whose payload begins before the "on" and ends after it (the
+    /// floor reads the payload's begin); one timed after the "on" goes. A crash kept after a 503 goes again in
+    /// the same run. **A crash kept in an earlier run goes in none** (the second reader's C1): kept before a first-run
+    /// "Don't send", or under another hub, the kept file loses it at the next "on". While a first-run "no" waits there is
+    /// no run: no new crash goes, and the kept file neither.
+    @MainActor @Test func aCrashGoesOnlyWhenItCameAfterTheSwitchsOn() async throws {
+        func crash(_ at: Date, signal: Int) -> ErrorReport.Crash {
+            ErrorReport.Crash(signal: signal, type: 1, code: 0, frames: [.lib], first: Int(at.timeIntervalSince1970),
+                              last: Int(at.timeIntervalSince1970))
+        }
+        func signals(_ sent: [String: Any]?) -> [Int] {
+            (sent?["crashes"] as? [[String: Any]] ?? []).compactMap { $0["signal"] as? Int }
+        }
+        let h = Harness("ErrorReportsCrashFloor")
+        h.switchOn = false
+        await h.tick()                                      // the switch is off
+        h.now = Self.t0 + 2 * Self.hour
+        h.switchOn = true
+        await h.tick()                                      // the hourly look reads on: the run starts, the day goes
+        #expect(h.reads == 2 && h.sent.count == 1)
+        let on = h.now
+        h.sending.take([crash(on - Self.hour, signal: 11)])
+        h.now += 60
+        await h.tick()
+        #expect(h.reads == 3 && h.sent.count == 1, "a crash from while the switch was off went after the on")
+        // A crash whose payload begins before the "on" and ends after it: its first time is the begin, and it does not
+        // go. A begin after the end counts as the end.
+        let spanning = try #require(ErrorReport.crash(stackTree: Data("{}".utf8), signal: 10, type: 1, code: 0,
+                                                      from: on - 60, at: on + 30, own: []))
+        #expect(spanning.first == Int((on - 60).timeIntervalSince1970) && spanning.last == Int((on + 30).timeIntervalSince1970))
+        #expect(ErrorReport.crash(stackTree: Data("{}".utf8), signal: 10, type: 1, code: 0, from: on + 90, at: on + 30,
+                                  own: [])?.first == Int((on + 30).timeIntervalSince1970))
+        h.sending.take([spanning])
+        h.now += 60
+        await h.tick()
+        #expect(h.sent.count == 1, "a crash whose payload began before the on went")
+        h.sending.take([crash(on + 60, signal: 6)])
+        h.now += 60
+        await h.tick()
+        #expect(h.sent.count == 2 && signals(h.sent.last?.body) == [6])
+
+        // A crash kept after a 503 in this run goes again an hour later, in the same run.
+        let kept = crash(h.now + 60, signal: 4)
+        h.sending.take([kept])
+        h.answer = { _ in throw ErrorReportError.refused(503) }
+        h.now += 120
+        await h.tick()
+        #expect(h.sent.count == 3 && ErrorReport.kept(h.file) == [kept])
+        h.answer = { _ in }
+        h.now += ErrorReportsDay.retry
+        await h.tick()
+        #expect(h.sent.count == 4 && signals(h.sent.last?.body) == [4], "a crash kept in this run did not go again")
+        #expect(ErrorReport.kept(h.file).isEmpty)
+
+        // A crash kept before a first-run "Don't send" goes in no later run, and the file loses it.
+        let beforeNo = crash(h.now + 60, signal: 7)
+        h.sending.take([beforeNo])
+        h.answer = { _ in throw ErrorReportError.refused(503) }
+        h.now += 120
+        await h.tick()
+        #expect(h.sent.count == 5 && ErrorReport.kept(h.file) == [beforeNo])
+        h.answer = { _ in }
+        FirstRunReports.choose(false, in: h.defaults)
+        FirstRunReports.forget(in: h.defaults)
+        h.now += ErrorReportsDay.retry
+        await h.tick()
+        #expect(h.sent.count == 5, "a crash kept before a Don't send went after a later on")
+        #expect(ErrorReport.kept(h.file).isEmpty)
+
+        // A first-run "no" waits: there is no run, and neither a new crash nor the kept file goes; the file goes.
+        let beforeWait = crash(h.now + 60, signal: 8)
+        h.sending.take([beforeWait])
+        h.answer = { _ in throw ErrorReportError.refused(503) }
+        h.now += 120
+        await h.tick()
+        #expect(h.sent.count == 6 && ErrorReport.kept(h.file) == [beforeWait])
+        h.answer = { _ in }
+        FirstRunReports.choose(false, in: h.defaults)
+        h.sending.take([crash(h.now, signal: 9)])
+        h.now += 60
+        await h.tick()
+        #expect(h.sent.count == 6, "a crash went while a first-run no waits")
+        #expect(ErrorReport.kept(h.file).isEmpty, "the kept file stayed while a first-run no waits")
+
+        // A crash kept under hub A goes in no report of hub B, whose run began after it.
+        let other = Harness("ErrorReportsCrashFloorHub")
+        await other.tick()
+        let underA = crash(other.now + 60, signal: 5)
+        other.sending.take([underA])
+        other.answer = { _ in throw ErrorReportError.refused(503) }
+        other.now += 120
+        await other.tick()
+        #expect(other.sent.count == 2 && ErrorReport.kept(other.file) == [underA])
+        other.answer = { _ in }
+        ErrorReportsDay.forget(in: other.defaults)          // the Mac connects to hub B
+        other.releasesRead = Self.releases(fleet: "fedcba9876543210")
+        other.now += ErrorReportsDay.retry
+        await other.tick(hub: "http://other.example:8765/")
+        #expect(other.sent.count == 2, "a crash kept under hub A went with hub B's fleet id")
+        #expect(ErrorReport.kept(other.file).isEmpty)
+    }
+
     /// **While the hub answers, the day goes only on a new read of the switch** (review A, finding 4): a read that
     /// fails sends nothing on the kept answer and moves the day by an hour; a switch that read off is not asked again
     /// for the day before the hourly look.
@@ -1372,15 +1476,18 @@ struct ErrorReportsDayTests {
         await h.tick()
         #expect(h.reads == 1 && h.sent.isEmpty && ErrorReportsDay.lastAnswer(in: h.defaults)?.send == false)
         h.whileReading = { _ in }
-        h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: 1_763_300_000,
-                                          last: 1_763_300_000)])
         h.answer = { _ in
             h.sending.off()
             throw ErrorReportError.refused(400)
         }
         h.now += 2 * Self.hour
+        // A crash of after the "on" that this attempt reads (the crashes' floor).
+        let at = Int(h.now.timeIntervalSince1970)
+        h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: at, last: at)])
         await h.tick()
-        #expect(h.sent.count == 1 && h.sent[0].body["app"] != nil && h.sent[0].body["crashes"] != nil)
+        // The crash is in the first report, so the switch-off during its 400 is what stops a second send.
+        let crashes = h.sent.first?.body["crashes"] as? [[String: Any]]
+        #expect(h.sent.count == 1 && h.sent[0].body["app"] != nil && crashes?.compactMap { $0["signal"] as? Int } == [11])
         #expect(ErrorReport.kept(h.file).isEmpty)
     }
 
