@@ -146,7 +146,7 @@ struct SecretsListTests {
         // a login is never read: each of its grants is Uses it
         #expect(SecretsList.accessLines(access, holders: agents, login: true)
                 == [SecretsList.AccessLine(level: .use, agents: ["support", "writer", "builder"])])
-        // nobody has it yet (a new key): no line at all, only Manage
+        // nobody has it yet (a new key): no line at all, and the form says "No agent"
         #expect(SecretsList.accessLines([:], holders: agents, login: false).isEmpty)
         #expect(SecretsList.accessLines(["door": .use], holders: agents, login: false).isEmpty)
         // a name two times in the list of agents: one face, and no stop

@@ -1671,8 +1671,8 @@ struct NeedRequestCard: View {
 }
 
 extension EnvironmentValues {
-    /// The pointer is over the press that opens or folds a request card (`CardFoldStyle`): its chevron takes the words'
-    /// colour (`FoldChevron`).
+    /// The pointer is over a press that opens or folds in place (`CardFoldStyle`): its chevron takes the words' colour
+    /// (`FoldChevron`).
     @Entry var cardFoldHovered = false
 }
 
@@ -1681,7 +1681,9 @@ extension EnvironmentValues {
 /// pointer, and the chevron of the card's title line in the words' colour while the pointer is over the press
 /// (`FoldChevron`). The folded card is the press whole, with the soft fill of a row that opens (`FleetRowButtonStyle`)
 /// in the card's own corners: only its top ones where the files of his answer stand under it, in the card. The title's
-/// row of an opened card takes no fill.
+/// row of an opened card takes no fill. **The lines of a key form's Who can use it are such a press too**
+/// (`SecretEntryView.accessFold`), at the top of their card while its rows are open. A save of the form disables them:
+/// then no hand, no fill and no light in the chevron.
 struct CardFoldStyle: ButtonStyle {
     enum Fill { case off, whole, top }
     var fill = Fill.off
@@ -1691,32 +1693,35 @@ struct CardFoldStyle: ButtonStyle {
     private struct Press: View {
         let configuration: ButtonStyleConfiguration
         let fill: Fill
+        @Environment(\.isEnabled) private var isEnabled
         @State private var hovered = false
 
         var body: some View {
+            let lit = hovered && isEnabled
             configuration.label
-                .environment(\.cardFoldHovered, hovered)
+                .environment(\.cardFoldHovered, lit)
                 .background {
                     if fill != .off {
                         let corner = FormMetrics.radius, under = fill == .whole ? corner : 0
                         UnevenRoundedRectangle(topLeadingRadius: corner, bottomLeadingRadius: under,
                                                bottomTrailingRadius: under, topTrailingRadius: corner)
                             .fill(Color.white.opacity(configuration.isPressed ? FleetRowButtonStyle.pressFill
-                                                      : hovered ? FleetRowButtonStyle.hoverFill : 0))
+                                                      : lit ? FleetRowButtonStyle.hoverFill : 0))
                     }
                 }
                 .contentShape(Rectangle())
                 .onHover { hovered = $0 }
-                .pointerStyle(.link)
+                .pointerStyle(isEnabled ? .link : nil)
         }
     }
 }
 
-/// **The chevron at the end of a request card's title line**: down on a folded card, which opens in place, and up on
-/// an opened one, which folds (the owner, 20 November 2026, of a chevron that pointed right: "taht chevron looks like
-/// gooing to a different page, not Expand"). Muted, in the words' colour under the pointer (`CardFoldStyle`).
-private struct FoldChevron: View {
-    /// The folded card opens: down. An opened one folds: up.
+/// **The chevron at the end of a line that opens in place**, a request card's title line and the last line of a key
+/// form's Who can use it (`SecretEntryView`): down while a press opens, and up while a press folds (the owner, 20 November
+/// 2026, of a chevron that pointed right: "taht chevron looks like gooing to a different page, not Expand"). Muted, in
+/// the words' colour under the pointer (`CardFoldStyle`).
+struct FoldChevron: View {
+    /// Folded, a press opens: down. Open, a press folds: up.
     let opens: Bool
     @Environment(\.cardFoldHovered) private var hovered
 

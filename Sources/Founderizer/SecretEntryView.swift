@@ -128,10 +128,10 @@ struct SecretProgress: Equatable {
 /// **What a key's form holds in a card that `fleetModal` builds two times, outside the views that draw it** (Fable's
 /// reviews of 21 and 22 November 2026): `fleetModal` builds a card that is as high as its content two times, as it is
 /// and inside a scroll, and shows the one that fits (`FleetModalCard`). A form's state is one build's, so a card that
-/// grew past the window showed the other build: the typed value, the save's ring and its orange line were gone, and
-/// after Manage the rows were closed again, with an empty Key field. The card's own item holds this, and both builds
-/// draw from it, so they show one form and one save, and a save that one build started writes here when the other one
-/// shows. The places: the part "Value" of a key's card (`SecretCard`), Save a secret over the window
+/// grew past the window showed the other build: the typed value, the save's ring and its orange line were gone, and the
+/// open rows of Who can use it were closed again, with an empty Key field. The card's own item holds this, and both
+/// builds draw from it, so they show one form and one save, and a save that one build started writes here when the other
+/// one shows. The places: the part "Value" of a key's card (`SecretCard`), Save a secret over the window
 /// (`SecretPreset.kept`) and a key request in a job's card (`FleetStore.keptKeyForm`). It goes with the card: memory
 /// only, never on the disk, and the value is cleared once the hub has the reference, as the form's own is.
 @MainActor @Observable final class SecretValueKept {
@@ -142,13 +142,15 @@ struct SecretProgress: Equatable {
     fileprivate var saving = false
     fileprivate var central: String?
     fileprivate var mark = KeyValueMark()
-    /// The rest of the form: Manage, the rows, the note, his words about the request (`SecretFormDraft`).
-    fileprivate var draft: SecretFormDraft?
+    /// The rest of the form: who can use it, its open rows, the note, his words about the request (`SecretFormDraft`).
+    /// Not file-private, as the fields above are: it holds no value, and a view test sets a row in it as the row's
+    /// control does, because the control's list is a window on his screen, which no test opens.
+    var draft: SecretFormDraft?
 }
 
 /// **The form's choices and words**, which a form keeps in its own state, or in its card's item (`SecretValueKept`):
 /// none of them is a value. Each one is told where `SecretEntryView` reads it.
-fileprivate struct SecretFormDraft {
+struct SecretFormDraft {
     var access: [String: SecretGrant]
     var managing = false
     var touched: Set<String> = []
@@ -264,7 +266,7 @@ struct SecretEntryView: View {
     private var loginField: Binding<LoginSecret> { Binding(get: { login }, set: { login = $0 }) }
     /// The access that each agent gets, by name. An agent that is not in it gets none.
     private var access: [String: SecretGrant] { get { draft.access } nonmutating set { draft.access = newValue } }
-    /// **Manage opened the row of each agent** (`accessChoice`): they stay open while the form stands.
+    /// **The rows of the agents are open under the lines of Who can use it** (`accessFold`): what they give is in `access`.
     private var managing: Bool { get { draft.managing } nonmutating set { draft.managing = newValue } }
     /// The agents whose row the owner set himself in this form. A replace shows each other agent's level of now, and
     /// only a row that he set, or that a request proposes, makes a step (`SecretReplaceAccess`).
@@ -918,52 +920,77 @@ struct SecretEntryView: View {
 
     /// **Who can use it** (the owner, 21 November 2026, of a key request's card with a row for each of eleven agents:
     /// "do not show all agents, show the agent icons as the attached and the names on hover each one of them, for every
-    /// group of agents with the same access level, and a link to Manage that expands the agents rows like you already do
-    /// by default", "Subtitle at the bottom does not need to show at all", "No, no access does not need to show at
-    /// all", and of Add secret, "well if it's the same idea, then it should also apply"): a line for each level that
-    /// has agents, Uses it and then Reads it, with their faces (`SecretsList.accessLines`), and the link Manage, which
-    /// opens the row of each agent with its control, as before, for as long as the form stands. A new key has no agent
-    /// with access, so it shows the link alone. The section has no footer. What the rows give is the same either way.
+    /// group of agents with the same access level", "Subtitle at the bottom does not need to show at all", "No, no
+    /// access does not need to show at all", and of Add secret, "well if it's the same idea, then it should also apply";
+    /// then 23 November 2026, of the link Manage under the lines: "instead of Manage, just show a caret at the end of the
+    /// Reads it row and expand the list, and then let it collapse again,so we can remove the Manage button", and his
+    /// "Yes, as drawn" to its pictures): a line for each level that has agents, Uses it and then Reads it, with their
+    /// faces (`SecretsList.accessLines`), and a caret at the end of the last line. The lines are one press (`accessFold`)
+    /// that opens the row of each agent with its control under them, and a second press closes the rows. The lines stay
+    /// at the top while the rows are open, and draw again as he changes a row. **A press changes no access**: the lines
+    /// and the rows draw from `access`, and Save gives `access`, open or closed. The section has no footer.
     private var accessChoice: some View {
-        let lines = SecretsList.accessLines(access, holders: holders, login: login.kind == .login)
-        return VStack(alignment: onStep ? .center : .leading, spacing: 10) {
-            FormSection(compact ? nil : String(l10n: "Who can use it")) {
-                if managing {
-                    ForEach(holders, id: \.self) { agent in accessRow(agent) }
-                } else {
-                    ForEach(lines, id: \.level) { line in accessLine(line) }
-                }
-            }
-            if !managing {
-                Button { managing = true } label: {
-                    Text("Manage").padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                // the hand under the pointer, as a link shows it, over all that a click reaches (Details' own way)
-                .pointerStyle(.link)
-                .padding(.vertical, -IconMetrics.reach)
-                // the size of the card's Details link (12 points), and of a step's own link on a step
-                .font(onStep ? SetupMetrics.textFont : FormMetrics.detail).foregroundStyle(FleetStyle.link)
-                .help("Show each agent with its access")
-                .accessibilityIdentifier("secret-manage")
+        FormSection(compact ? nil : String(l10n: "Who can use it")) {
+            accessFold
+            if managing {
+                ForEach(holders, id: \.self) { agent in accessRow(agent) }
             }
         }
     }
 
-    /// **One level of Who can use it, closed**: the level's mark and word as its control shows them, then the faces of
-    /// its agents, which overlap, each with its name under the pointer, and "+N" past `SecretsList.lineFaces`, with the
-    /// names that it stands for under the pointer, so a line never grows past the 340 points of a card's own window.
-    /// The level's word begins where an open row's name begins (50 points in, `RowMark`). VoiceOver reads the level and
-    /// the names.
-    private func accessLine(_ line: SecretsList.AccessLine) -> some View {
-        let reads = line.level == .read
-        let word = reads ? String(l10n: "Reads it") : String(l10n: "Uses it")
+    /// **The lines of Who can use it, as one press** (`CardFoldStyle`: the hand and a light fill under the pointer, over
+    /// the whole width), with a hairline between two lines, as between two rows. A new key has no agent with access: one
+    /// muted line "No agent" holds the caret. VoiceOver reads one button: each level with its agents' names, whether the
+    /// rows are open, and while they are closed the words that the pointer shows.
+    private var accessFold: some View {
+        let lines = SecretsList.accessLines(access, holders: holders, login: login.kind == .login)
+        let words = lines.map { String(l10n: "\(Self.word($0.level)): \($0.agents.map(\.agentLabel).joined(separator: ", "))") }
+        let press = { managing.toggle() }
+        return Button(action: press) {
+            VStack(alignment: .leading, spacing: 0) {
+                if lines.isEmpty { noAgentLine }
+                ForEach(lines, id: \.level) { line in
+                    if line != lines.first { Rule().padding(.horizontal, FormMetrics.rowInset) }
+                    accessLine(line, caret: line == lines.last)
+                }
+            }
+        }
+        .buttonStyle(CardFoldStyle(fill: managing ? .top : .whole))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(lines.isEmpty ? String(l10n: "No agent") : words.joined(separator: "; "))
+        .accessibilityValue(managing ? String(localized: "Open (a state)", defaultValue: "Open", bundle: Localized.bundle,
+                                              locale: Localized.digits) : String(l10n: "Closed"))
+        .accessibilityAddTraits(.isButton)
+        // The element stands for the button, so it has the button's press (`ActivityCard`).
+        .accessibilityAction(.default, press)
+        // No hover words on the press itself: on macOS an outer hover wins over an inner one, also an empty one, so it
+        // would hide each face's own name. The words stand on the level's mark and word, on "No agent" and on the caret
+        // (`foldHint`), and VoiceOver hears them as the hint.
+        .accessibilityHint(foldHint)
+        .accessibilityIdentifier("secret-access-fold")
+    }
+
+    /// The words of a press that opens the rows, on the parts of the lines that are no face: shown only while the rows
+    /// are closed.
+    private var foldHint: Text { managing ? Text(verbatim: "") : Text("Show each agent with its access") }
+
+    private static func word(_ level: SecretGrant) -> String { level == .read ? String(l10n: "Reads it") : String(l10n: "Uses it") }
+
+    /// **One level of Who can use it**: the level's mark and word as its control shows them, then the faces of its
+    /// agents, which overlap, each with its name under the pointer, and "+N" past `SecretsList.lineFaces`, with the names
+    /// that it stands for under the pointer, so a line never grows past the 340 points of a card's own window. The
+    /// level's word begins where an open row's name begins (50 points in, `RowMark`). The last line has the caret at its
+    /// end.
+    private func accessLine(_ line: SecretsList.AccessLine, caret: Bool) -> some View {
         let (shown, rest) = SecretsList.lineFaces(line.agents)
         return HStack(spacing: 10) {
             HStack(spacing: 0) {
-                RowMark { Image(systemName: reads ? "eye" : "lock").font(IconMetrics.symbol(12)).foregroundStyle(FleetStyle.muted) }
-                Text(word).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1).fixedSize()
+                RowMark {
+                    Image(systemName: line.level == .read ? "eye" : "lock").font(IconMetrics.symbol(12)).foregroundStyle(FleetStyle.muted)
+                }
+                Text(Self.word(line.level)).font(FormMetrics.title).foregroundStyle(FleetStyle.text).lineLimit(1).fixedSize()
             }
+            .help(foldHint)
             HolderFaces(names: shown, named: true)
             if !rest.isEmpty {
                 Text(verbatim: String(l10n: "+\(rest.count)")).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).monospacedDigit()
@@ -971,11 +998,21 @@ struct SecretEntryView: View {
                     .help(rest.map(\.agentLabel).joined(separator: ", "))
             }
             Spacer(minLength: 0)
+            if caret { FoldChevron(opens: !managing).help(foldHint) }
         }
         .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 8).frame(minHeight: 40)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(l10n: "\(word): \(line.agents.map(\.agentLabel).joined(separator: ", "))"))
-        .accessibilityIdentifier("secret-level-\(line.level.rawValue)")
+    }
+
+    /// No agent has access: one muted line in the place of the levels' lines, with its words where theirs begin.
+    private var noAgentLine: some View {
+        HStack(spacing: 10) {
+            Text("No agent").font(FormMetrics.title).foregroundStyle(FleetStyle.muted).lineLimit(1).fixedSize()
+                .help(foldHint)
+                .padding(.leading, FormMetrics.markColumn + FormMetrics.markGap)
+            Spacer(minLength: 0)
+            FoldChevron(opens: !managing).help(foldHint)
+        }
+        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 8).frame(minHeight: 40)
     }
 
     private func accessRow(_ agent: String) -> some View {

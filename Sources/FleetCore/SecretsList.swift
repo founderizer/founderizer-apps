@@ -190,20 +190,20 @@ public enum SecretsList {
 
     // MARK: who can use it, closed
 
-    /// **One line of "Who can use it" while its rows are closed** (the owner, 21 November 2026, of a key request's card
-    /// with a row for each agent: "do not show all agents, show the agent icons ... for every group of agents with the
-    /// same access level, and a link to Manage that expands the agents rows", and "No, no access does not need to show
-    /// at all"): a level and its agents.
+    /// **One line of "Who can use it"** (the owner, 21 November 2026, of a key request's card with a row for each agent:
+    /// "do not show all agents, show the agent icons ... for every group of agents with the same access level", and "No,
+    /// no access does not need to show at all"): a level and its agents. A press on the lines opens and closes the row of
+    /// each agent under them (his "Yes, as drawn" of 23 November 2026).
     public struct AccessLine: Equatable, Sendable {
         public let level: SecretGrant
         public let agents: [String]
     }
 
-    /// The lines of "Who can use it" while its rows are closed: Uses it, then Reads it, each only with an agent, in the
-    /// order of `holders`. An agent with no access has no line: the rows that Manage opens show it. A login is never
-    /// read, so each of its grants is Uses it, as its row says. A grant of no holder (the door's) has no line. **A name
-    /// that `holders` has two times is one face** (Fable's review of 22 November 2026): a list with no second copy of a
-    /// key stopped the app on it.
+    /// The lines of "Who can use it": Uses it, then Reads it, each only with an agent, in the order of `holders`. An
+    /// agent with no access has no line: its row, once the rows are open, shows it. A login is never read, so each of its
+    /// grants is Uses it, as its row says. A grant of no holder (the door's) has no line. **A name that `holders` has two
+    /// times is one face** (Fable's review of 22 November 2026): a list with no second copy of a key stopped the app on
+    /// it.
     public static func accessLines(_ access: [String: SecretGrant], holders: [String], login: Bool) -> [AccessLine] {
         var seen = Set<String>()
         let agents = holders.filter { seen.insert($0).inserted }
@@ -214,7 +214,8 @@ public enum SecretsList {
     }
 
     /// The most faces that a line of "Who can use it" draws; past them, "+N". Eight faces of 16 points that overlap by
-    /// 6, with the level's mark and word, fit the 340 points of a card's own window, the narrowest that it can be.
+    /// 6, with the level's mark and word and the caret, fit the 340 points of a card's own window, the narrowest that it
+    /// can be.
     public static let lineFaces = 8
 
     /// The faces that a line draws, in its order, and the agents that its "+N" stands for, whose names it has under the

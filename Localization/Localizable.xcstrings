@@ -12380,16 +12380,6 @@
         }
       }
     },
-    "Manage" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gestionar"
-          }
-        }
-      }
-    },
     "Manager" : {
       "localizations" : {
         "es" : {

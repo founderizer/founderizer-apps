@@ -3,21 +3,25 @@ import Foundation
 
 /// **A stand-in hub on 127.0.0.1 for a view test that needs the hub's answer**: the app writes only within a moment of
 /// one (`FleetStore.canWrite`). It answers `GET /ui/state` with the reading that it holds, a `GET` of a path that the
-/// test gave an answer for (`give(_:at:)`) with that answer, and every other request with 404, and keeps each request's
-/// method, path, body and time, so a test reads what the app sent and when. `stop` ends it. Synthetic data only.
+/// test gave an answer for (`give(_:at:)`) or a route that a test gave an answer (`answer(_:_:with:)`) with that answer,
+/// and every other request with 404, and keeps each request's method, path, query, body and time, so a test reads what
+/// the app sent and when. `stop` ends it. Synthetic data only.
 final class LoopbackHub: @unchecked Sendable {
     struct Request: Sendable {
         let method: String
         let path: String
         let body: String
         let at: Date
+        /// What follows the path's `?`, or "".
+        var query = ""
     }
 
     let port: Int
     private let lock = NSLock()
     private var kept: [Request] = []
     private var reading: Data
-    private var answers: [String: Data] = [:]
+    /// The answers that a test gave, by "<method> <path>".
+    private var answers: [String: @Sendable (Request) -> (status: Int, body: Data)] = [:]
     private let listener: Int32
 
     var requests: [Request] { lock.withLock { kept } }
@@ -53,7 +57,13 @@ final class LoopbackHub: @unchecked Sendable {
     func give(_ state: Data) { lock.withLock { reading = state } }
 
     /// What the next `GET` of this path (without its query) gives: a knowledge file's text, say.
-    func give(_ answer: Data, at path: String) { lock.withLock { answers[path] = answer } }
+    func give(_ answer: Data, at path: String) { self.answer("GET", path) { _ in (status: 200, body: answer) } }
+
+    /// The answer of every later request of this method to this path, made from that request (it is in `requests`
+    /// already): a receipt names the request's own id.
+    func answer(_ method: String, _ path: String, with make: @escaping @Sendable (Request) -> (status: Int, body: Data)) {
+        lock.withLock { answers["\(method) \(path)"] = make }
+    }
 
     func stop() { Darwin.close(listener) }
 
@@ -83,14 +93,17 @@ final class LoopbackHub: @unchecked Sendable {
         let line = String(decoding: data[..<head.lowerBound], as: UTF8.self).components(separatedBy: "\r\n").first ?? ""
         let words = line.split(separator: " ")
         let method = words.first.map(String.init) ?? "", target = words.dropFirst().first.map(String.init) ?? ""
-        let path = String(target.split(separator: "?", maxSplits: 1).first ?? "")
+        let parts = target.split(separator: "?", maxSplits: 1)
+        let path = String(parts.first ?? ""), query = parts.count == 2 ? String(parts[1]) : ""
         let body = String(decoding: data[head.upperBound...], as: UTF8.self)
-        let state: Data? = lock.withLock {
-            kept.append(Request(method: method, path: path, body: body, at: Date()))
-            return method != "GET" ? nil : path == "/ui/state" ? reading : answers[path]
+        let request = Request(method: method, path: path, body: body, at: Date(), query: query)
+        let (state, make): (Data?, (@Sendable (Request) -> (status: Int, body: Data))?) = lock.withLock {
+            kept.append(request)
+            return (method == "GET" && path == "/ui/state" ? reading : nil, answers["\(method) \(path)"])
         }
-        let status = state == nil ? "404 Not Found" : "200 OK"
-        let text = state ?? Data(#"{"error":"not here"}"#.utf8)
+        let given = make?(request)
+        let status = given.map { "\($0.status) Answer" } ?? (state == nil ? "404 Not Found" : "200 OK")
+        let text = given?.body ?? state ?? Data(#"{"error":"not here"}"#.utf8)
         let answer = Data(["HTTP/1.1 \(status)", "Content-Type: application/json", "Content-Length: \(text.count)",
                            "Connection: close", "", ""].joined(separator: "\r\n").utf8) + text
         _ = answer.withUnsafeBytes { send(peer, $0.baseAddress, $0.count, 0) }
