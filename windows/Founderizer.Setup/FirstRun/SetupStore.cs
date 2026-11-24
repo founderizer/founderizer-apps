@@ -926,7 +926,7 @@ public sealed class SetupStore
                     {
                         failed.Note(progress);
                         if (log.Note(progress.Step, Recorded(progress.State), settings.Now())) Keep();
-                        Set(x => x with { Install = x.Install with { Steps = Merge(x.Install.Steps, progress), RunningSince = progress.State == ProgressState.Running ? settings.Now() : x.Install.RunningSince } });
+                        Set(x => x with { Install = x.Install.Reported(progress, settings.Now()) });
                         if (progress is { Step: "claim", State: ProgressState.Done } && installer.ClaimedHub is { } hub) Claimed(hub, log, Keep);
                     }, cancel).ConfigureAwait(false);
                     if (log.Done(settings.Now())) Keep();
@@ -975,14 +975,6 @@ public sealed class SetupStore
         ProgressState.Failed => RecordStepState.Failed,
         _ => RecordStepState.Running,
     };
-
-    private static IReadOnlyList<InstallProgress> Merge(IReadOnlyList<InstallProgress> steps, InstallProgress progress)
-    {
-        var all = steps.ToList();
-        var at = all.FindIndex(p => p.Step == progress.Step);
-        if (at >= 0) all[at] = progress; else all.Add(progress);
-        return all;
-    }
 
     /// <summary>**The claim step ended well**: this PC is the owner's computer of the new hub, its record has the hub's
     /// address, and the manager's own server joins as soon as the hub answers.</summary>
@@ -1080,7 +1072,7 @@ public sealed class SetupStore
             var checklist = await new Installer(plan, clock: settings.JoinClock).RunAsync(settings.Remote, progress =>
             {
                 if (log.Note(progress.Step, Recorded(progress.State), settings.Now())) Keep();
-                Set(s => s with { ManagerInstall = s.ManagerInstall with { Steps = Merge(s.ManagerInstall.Steps, progress), RunningSince = progress.State == ProgressState.Running ? settings.Now() : s.ManagerInstall.RunningSince } });
+                Set(s => s with { ManagerInstall = s.ManagerInstall.Reported(progress, settings.Now()) });
             }, cancel).ConfigureAwait(false);
             if (log.Done(settings.Now())) Keep();
             Set(s => s with { ManagerInstall = s.ManagerInstall with { Running = false, Checklist = checklist } });

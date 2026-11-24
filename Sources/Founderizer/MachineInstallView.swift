@@ -139,6 +139,9 @@ final class MachineInstallModel {
     /// The step that runs now and when it began, for the minutes that go down within a long step (`InstallPhases`).
     private(set) var runningStep: String?
     private(set) var runningSince = Date()
+    /// **The bar of this press, which never goes back** (`InstallHold`): each report is kept in it, a retry keeps it
+    /// (its steps start again from the first one), and a new press starts it again.
+    private(set) var hold = InstallHold()
     /// The Tailscale link this install waits on, while it waits: the lines of the step that is running.
     var networkSignIn: NetworkSignIn? {
         steps.last(where: { $0.state == .running }).flatMap { NetworkSignIn.found(in: $0.lines) }
@@ -264,7 +267,7 @@ final class MachineInstallModel {
     func installHub(store: FleetStore) {
         guard !running else { return }
         work?.cancel()      // the reading of a Mac's order before this one
-        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
+        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; hold = InstallHold(); checklist = nil
         job = .hub
         joinHub = nil
         // A new hub has no address yet: its record gets one at its claim step.
@@ -305,7 +308,7 @@ final class MachineInstallModel {
         // A hub with `server_names` names the server by its name in Tailscale at its join, so it is sent no name.
         let machine = to.asksName ? name : nil
         work?.cancel()      // the reading of a Mac's order before this one
-        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
+        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; hold = InstallHold(); checklist = nil
         job = .join
         // Only another hub is kept: a join to the store's own reads the store's hub and database as before.
         joinHub = hub
@@ -380,6 +383,7 @@ final class MachineInstallModel {
                 freshCode = retry.freshCode
                 if log?.retry(after: stopped.stop, cause: stopped.cause) == true { keepRecord() }
                 runCount += 1
+                // The steps start again from the first one; the bar stays where this press reached (`hold`).
                 steps = []
                 // Reads of this Mac's hub at the pace of the wait for a server (`InstallRetry.readEvery`).
                 await InstallRetry.wait(retry.wait,
@@ -419,7 +423,7 @@ final class MachineInstallModel {
         work?.cancel()      // the reading of the order before this one
         // No wait for the network of an install before this one, as the two other installs begin: with it still
         // set, this link was drawn as the network's question while it ran and after its good end (`MachineInstallRun`).
-        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; checklist = nil
+        running = true; failure = nil; failureDetail = nil; needsNetworkKey = false; networkFailure = nil; steps = []; planned = []; hold = InstallHold(); checklist = nil
         job = .join
         joinHub = nil
         server = asks ? machine : nil; made = nil
@@ -613,6 +617,7 @@ final class MachineInstallModel {
 
     private func record(_ progress: InstallProgress) {
         if let at = steps.firstIndex(where: { $0.step == progress.step }) { steps[at] = progress } else { steps.append(progress) }
+        if let phases = InstallPhases(steps: steps, planned: planned) { hold.keep(phases) }
         let now = steps.first(where: { $0.state == .running })?.step
         if now != runningStep { runningStep = now; runningSince = Date() }
         // The kept record: a step that began or ended, never a line that it printed. A hub has its address from its
@@ -706,7 +711,7 @@ final class MachineInstallModel {
         guard !running else { return }
         work?.cancel(); work = nil
         runCount += 1
-        steps = []; planned = []; checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
+        steps = []; planned = []; hold = InstallHold(); checklist = nil; failure = nil; failureDetail = nil; hubAddress = nil; needsNetworkKey = false; networkFailure = nil
         job = nil; joinHub = nil
         server = nil; made = nil; provenServer = nil; forAgent = nil
         // The record of the install that ended stays in its file; this model writes it no more.
@@ -846,9 +851,8 @@ struct MachineInstallRun: View {
     /// The hub that this install joins, for the prompt of a stop that the owner's agent can fix (`InstallFixPrompt`).
     /// Nil: no such row (the first run's own hub).
     var hub: URL?
-    /// The line of what runs now under the title: the first run's "Building your fleet" only, which the owner approved
-    /// on 5 November 2026.
-    var showsStatus = false
+    /// The server's name, for the line of a wait that this Mac cannot see; nil: its address.
+    var server: String?
     @Environment(\.openWindow) private var openWindow
     /// The prompt of this stop is on the clipboard: its button says Copied until the next stop.
     @State private var promptCopied = false
@@ -901,14 +905,19 @@ struct MachineInstallRun: View {
         VStack(alignment: .leading, spacing: 22) {
             // **While the install runs, the step's moving title alone** (T-36's own change, fix round 2): its rows, the
             // lines the machine printed and the footer stood under it for the whole install. They are what a failure
-            // needs, so they come with one. Under the title stand its four steps and the minutes left (`InstallPhases`).
+            // needs, so they come with one. Under the title stand the line of what runs, its minutes while they are
+            // true, and the bar of its four steps (`InstallPhases`, `SetupPhases`: F4's look (a), 22 November 2026).
             if model.failure == nil, model.running, InstallPhases(steps: model.steps, planned: model.planned) != nil {
                 // The minutes go down within a long step too, so they are counted again every 20 seconds.
                 TimelineView(.periodic(from: .now, by: 20)) { context in
                     if let phases = InstallPhases(steps: model.steps, planned: model.planned,
-                                                  runningFor: context.date.timeIntervalSince(model.runningSince)) {
+                                                  runningFor: context.date.timeIntervalSince(model.runningSince))
+                        .map(model.hold.applied(to:)) {
                         SetupPhases(names: InstallPhases.names, current: phases.current, minutesLeft: phases.minutesLeft,
-                                    status: showsStatus ? phases.status : nil)
+                                    status: phases.status,
+                                    note: phases.unreachable
+                                        ? String(l10n: "This Mac cannot reach \(server ?? model.host) now. It tries again.")
+                                        : nil)
                     }
                 }
                 .frame(maxWidth: .infinity)

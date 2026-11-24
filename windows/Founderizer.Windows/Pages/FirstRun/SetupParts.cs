@@ -16,9 +16,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
+using Windows.UI.ViewManagement;
 
 namespace Founderizer.Windows.Pages.FirstRun;
 
@@ -494,18 +496,30 @@ internal sealed class FleetSelect : Button
 /// <summary>**One server's line on the build page** (the Mac's <c>FleetBuildLine</c>, set 8's <c>.bl</c>): 240 wide, its
 /// words at 12 and the minutes left after them in the muted colour, the owner's turn in orange with no minutes, and 7
 /// under them a bar of four parts of 34 by 3, 4 apart: a part that is done in the words' faded colour, the part that runs
-/// in green as far as it ran. A box with no line keeps the line's room, so the boxes of a row stay level.</summary>
+/// in green as far as its steps ended. **The part that runs breathes** (the owner's "Yes, as drawn" of 22 November 2026
+/// to F4's picture P7: "each bar fills by the steps that ended, its part in work breathing"): its opacity from 1 to 0.3
+/// and back in 0.9 s each way, as the Mac's layer and the PC's <see cref="StepsBar"/> do, at least as wide as it is thick,
+/// so a part with no step ended yet still shows that it works; with Windows' animation effects off it stands still. A box
+/// with no line keeps the line's room, so the boxes of a row stay level.</summary>
 internal sealed class BuildLine : StackPanel
 {
     public const double LineWidth = 240, Part = 34, Gap = 4, Thickness = 3;
+    private static readonly UISettings Motion = new();
     private readonly TextBlock words = Look.Words(" ", 12, 16, wrap: false);
     private readonly StackPanel bar = new() { Orientation = Orientation.Horizontal, Spacing = Gap, HorizontalAlignment = HorizontalAlignment.Center };
     private readonly Rectangle[] fills = new Rectangle[InstallPhases.Names.Count];
+    private Storyboard? breath;
+    /// <summary>The part that runs, which breathes; null for none (an owner's turn, a ready server, no line).</summary>
+    private int? running;
+    private bool reduced;
 
     public BuildLine()
     {
         Width = LineWidth;
         Spacing = 7;
+        // A line that leaves the page stops its breath; one that comes back starts it again.
+        Loaded += (_, _) => Breathe();
+        Unloaded += (_, _) => Rest();
         words.HorizontalAlignment = HorizontalAlignment.Center;
         Children.Add(words);
         for (int i = 0; i < fills.Length; i++)
@@ -533,15 +547,55 @@ internal sealed class BuildLine : StackPanel
         }
         else words.Inlines.Add(new Run { Text = " " });
         bar.Opacity = row?.Parts is null ? 0 : 1;
+        // The part that runs: the first that is not full, while the row is no owner's turn (the Mac's `running`).
+        int? runs = null;
+        if (row is { OwnersTurn: false, Parts: { } all })
+            for (int i = 0; i < all.Count && runs is null; i++)
+                if (all[i] < 1) runs = i;
         for (int i = 0; i < fills.Length; i++)
         {
             double share = row?.Parts is { } parts && i < parts.Count ? Math.Clamp(parts[i], 0, 1) : 0;
-            fills[i].Width = Part * share;
+            fills[i].Width = i == runs ? Math.Max(Thickness, Part * share) : Part * share;
             fills[i].Fill = share >= 1 ? Look.Brush(Color.FromArgb((byte)Math.Round(0.62 * 255), 0xE6, 0xE6, 0xE6)) : Look.Green;
+        }
+        var still = !Motion.AnimationsEnabled;
+        if (runs != running || still != reduced)
+        {
+            Rest();
+            running = runs;
+            reduced = still;
+            if (IsLoaded) Breathe();
         }
         AutomationProperties.SetName(this, row?.Words ?? "");
         AutomationProperties.SetAccessibilityView(this, row?.Words is null
             ? Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw : Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Content);
+    }
+
+    /// <summary>The breath of the part that runs, unless Windows' animation effects are off.</summary>
+    private void Breathe()
+    {
+        if (breath is not null || running is not { } at || at >= fills.Length || reduced) return;
+        var animation = new DoubleAnimation
+        {
+            From = 1,
+            To = 0.3,
+            Duration = TimeSpan.FromSeconds(0.9),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        Storyboard.SetTarget(animation, fills[at]);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+        breath = new Storyboard();
+        breath.Children.Add(animation);
+        breath.Begin();
+    }
+
+    /// <summary>The breath stops: the line left the page, or another part runs.</summary>
+    private void Rest()
+    {
+        breath?.Stop();
+        breath = null;
     }
 }
 

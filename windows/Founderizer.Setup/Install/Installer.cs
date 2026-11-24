@@ -14,9 +14,11 @@ namespace Founderizer.Setup.Install;
 public enum ProgressState { Waiting, Running, Done, Failed }
 
 /// <summary>Where one step of an install stands, as the owner watches it (the Mac's InstallProgress). <c>Lines</c> are
-/// the last lines that the server printed, with the owner's secrets taken out; <c>Detail</c> what went wrong.</summary>
+/// the last lines that the server printed, with the owner's secrets taken out; <c>Detail</c> what went wrong.
+/// <c>Unreachable</c>: this PC's last reads of the step reached nothing (F4 of 22 November 2026, piece 5): the step goes
+/// on, and the next read that reaches the server reports it again without the flag.</summary>
 public sealed record InstallProgress(string Step, string Title, string Says, ProgressState State,
-                                     IReadOnlyList<string>? Lines = null, string? Detail = null)
+                                     IReadOnlyList<string>? Lines = null, string? Detail = null, bool Unreachable = false)
 {
     public IReadOnlyList<string> Lines { get; init; } = Lines ?? [];
 }
@@ -172,6 +174,12 @@ public sealed class Installer
     private bool installerMadeNoCode;
     private (string Code, Uri Claim)? foundClaim;
     private IReadOnlyList<string> lastOutput = [];
+    /// <summary>How the last program that <see cref="SshAsync"/> ran failed to reach the server, for a wait's count of
+    /// reads that reached nothing (the Mac's <c>lastStatus</c> of 255); null for one that reached it.</summary>
+    private RemoteFailure? lastFailure;
+
+    /// <summary>The reads in a row that reach nothing before the step says so (the Mac's <c>unreachedReads</c>).</summary>
+    internal const int UnreachedReads = 3;
 
     /// <summary>Where the install reaches the server: the address the owner gave, until the network step puts the
     /// server on the private network, and from then on its address there.</summary>
@@ -375,17 +383,30 @@ public sealed class Installer
 
     /// <summary>Reads the installer's log until it prints <paramref name="mark"/>. Each read that finds the installer at a
     /// new step of its own says so as this step's line. <paramref name="forClaim"/>: the wait for the link code, whose
-    /// reads with no code also ask the hub whether this PC owns it already.</summary>
+    /// reads with no code also ask the hub whether this PC owns it already.
+    /// **Reads that reach nothing are counted** (the Mac's <c>MachineInstaller.wait</c>, F4 piece 5): at the third in a
+    /// row the step is reported again as <see cref="InstallProgress.Unreachable"/>, with the installer's step that it said
+    /// last, and the next read that reaches the server reports it without. A count of reads and not a time decides, and it
+    /// ends nothing: the wait ends as before.</summary>
     private async Task<IReadOnlyList<string>> WaitAsync(IRemote remote, string program, string mark, double every, double within,
                                                         InstallStep step, bool forClaim, Action<InstallProgress> report,
                                                         CancellationToken cancel)
     {
         var deadline = clock.Now.AddSeconds(within);
         string? said = null;
+        var failed = 0;
+        var saidUnreachable = false;
         if (forClaim) { hubRefusals = 0; installerMadeNoCode = false; }
         while (clock.Now < deadline)
         {
             var raw = await SshAsync(remote, program, step.Title, null, ReadLimit, cancel, allowFailure: true, hide: false);
+            var reached = lastFailure is null;
+            failed = reached ? 0 : failed + 1;
+            if (failed == UnreachedReads)
+            {
+                saidUnreachable = true;
+                report(new InstallProgress(step.Id, step.Title, step.Says, ProgressState.Running, said is null ? [] : [said], Unreachable: true));
+            }
             if (forClaim && ClaimCode.Found(string.Join("\n", raw)) is { } found)
             {
                 // The link code is one-time: no line that this app shows holds it.
@@ -399,10 +420,16 @@ public sealed class Installer
             if (string.Join("\n", raw).Contains(mark, StringComparison.Ordinal)) return lines;
             if (forClaim && await OwnsTheHubAsync(step, lines, cancel)) return lines;
             var now = lines.LastOrDefault(l => InstallPhases.InstallerStep(l) is not null);
-            if (now is not null && now != said)
+            if (now is not null && (now != said || (reached && saidUnreachable)))
             {
                 said = now;
+                saidUnreachable = false;
                 report(new InstallProgress(step.Id, step.Title, step.Says, ProgressState.Running, [now]));
+            }
+            else if (reached && saidUnreachable)
+            {
+                saidUnreachable = false;
+                report(new InstallProgress(step.Id, step.Title, step.Says, ProgressState.Running, said is null ? [] : [said]));
             }
             await clock.DelayAsync(TimeSpan.FromSeconds(every), cancel);
         }
@@ -470,6 +497,7 @@ public sealed class Installer
     {
         var (answer, lines) = await CallAsync(remote, program, stdin, limit, runs, cancel, hide);
         lastOutput = lines;
+        lastFailure = answer.Failure;
         if (allowFailure || answer.ExitStatus == 0) return lines;
         ThrowFailure(title, answer, lines);
         throw InstallError.Step(title, lines.LastOrDefault() ?? $"The server answered {answer.ExitStatus}.");

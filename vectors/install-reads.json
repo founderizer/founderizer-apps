@@ -667,7 +667,7 @@
           "minutes_left" : 14,
           "parts" : [
             1,
-            0.44444444444444442,
+            0,
             0,
             0
           ],
@@ -711,7 +711,7 @@
           "parts" : [
             1,
             1,
-            0.048951048951048952,
+            0.12,
             0
           ],
           "status" : "Starting your hub",
@@ -782,7 +782,7 @@
           "parts" : [
             1,
             1,
-            0.51048951048951052,
+            0.71999999999999997,
             0
           ],
           "status" : "Installing security updates",
@@ -864,11 +864,11 @@
         "name" : "the installer's own checks",
         "phases" : {
           "current" : 2,
-          "minutes_left" : 2,
+          "minutes_left" : null,
           "parts" : [
             1,
             1,
-            1,
+            0.76000000000000001,
             0
           ],
           "status" : "Checking your hub",
@@ -953,7 +953,7 @@
           "parts" : [
             1,
             1,
-            0.090909090909090912,
+            0.20000000000000001,
             0
           ],
           "status" : "Starting your hub",
@@ -1038,7 +1038,7 @@
           "parts" : [
             1,
             1,
-            0.082517482517482518,
+            0.16,
             0
           ],
           "status" : "Linking your hub to this Mac",
@@ -1117,7 +1117,7 @@
             1,
             1,
             1,
-            0.40000000000000002
+            0
           ],
           "status" : "Checking your hub",
           "step" : "verify"
@@ -1296,14 +1296,14 @@
         "name" : "a join past its estimate",
         "phases" : {
           "current" : 2,
-          "minutes_left" : 2,
+          "minutes_left" : null,
           "parts" : [
             1,
             1,
-            1,
+            0,
             0
           ],
-          "status" : null,
+          "status" : "Installing Founderizer",
           "step" : "join"
         },
         "planned" : [
@@ -1336,6 +1336,273 @@
           }
         ],
         "running_for" : 500
+      },
+      {
+        "name" : "a join inside its estimate, with a heading that the app does not count",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 2,
+          "parts" : [
+            1,
+            1,
+            0,
+            0
+          ],
+          "status" : "Installing Founderizer",
+          "step" : "join"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "join",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+              "Founderizer step 3: base packages"
+            ],
+            "state" : "running",
+            "step" : "join"
+          }
+        ],
+        "running_for" : 359
+      },
+      {
+        "name" : "the hub's hardening after its security updates",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 2,
+          "parts" : [
+            1,
+            1,
+            0.83999999999999997,
+            0
+          ],
+          "status" : "Securing your server",
+          "step" : "wait_ready"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+              "Founderizer step 17: this server's own hardening"
+            ],
+            "state" : "running",
+            "step" : "wait_ready"
+          }
+        ],
+        "running_for" : 620
+      },
+      {
+        "name" : "a join's checks",
+        "phases" : {
+          "current" : 3,
+          "minutes_left" : 1,
+          "parts" : [
+            1,
+            1,
+            1,
+            0
+          ],
+          "status" : "Checking your server",
+          "step" : "verify"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "join",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "join"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "running",
+            "step" : "verify"
+          }
+        ],
+        "running_for" : 20
+      },
+      {
+        "name" : "a heading past the installer's count",
+        "phases" : {
+          "current" : 2,
+          "minutes_left" : 13,
+          "parts" : [
+            1,
+            1,
+            0.95999999999999996,
+            0
+          ],
+          "status" : "Starting your hub",
+          "step" : "wait_ready"
+        },
+        "planned" : [
+          "read",
+          "network",
+          "code",
+          "plan",
+          "start",
+          "wait_claim",
+          "claim",
+          "wait_ready",
+          "verify"
+        ],
+        "reported" : [
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "read"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "network"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "code"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "plan"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "start"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "wait_claim"
+          },
+          {
+            "lines" : [
+
+            ],
+            "state" : "done",
+            "step" : "claim"
+          },
+          {
+            "lines" : [
+              "Founderizer step 99: a new part"
+            ],
+            "state" : "running",
+            "step" : "wait_ready"
+          }
+        ],
+        "running_for" : 0
       },
       {
         "name" : "a step that failed",
@@ -1414,7 +1681,7 @@
           "parts" : [
             1,
             1,
-            0.02564102564102564,
+            0,
             0
           ],
           "status" : null,
@@ -1472,6 +1739,127 @@
         "running_for" : 0
       }
     ],
+    "heading_lines" : {
+      "hub" : [
+        {
+          "line" : "Starting your hub",
+          "words" : "this server and this copy of Founderizer"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "base packages"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the user"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the private network (Tailscale)"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the firewall: the private network only"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the Founderizer repository on this hub"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the first team.json"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the root helpers that make an agent's OS user"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "one OS user for each agent of this machine"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "this server's vault"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the services fleet-hub"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "each agent of this machine, under its own OS user"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the checks the owner can act on"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "this fleet's own id"
+        },
+        {
+          "line" : "Starting your hub",
+          "words" : "the server service of this server"
+        },
+        {
+          "line" : "Installing security updates",
+          "words" : "security updates"
+        },
+        {
+          "line" : "Securing your server",
+          "words" : "this server's own hardening"
+        },
+        {
+          "line" : "Securing your server",
+          "words" : "the network: a kept connection keeps its speed"
+        },
+        {
+          "line" : "Checking your hub",
+          "words" : "verify"
+        }
+      ],
+      "join" : [
+        {
+          "line" : "Installing Founderizer",
+          "words" : "base packages"
+        },
+        {
+          "line" : "Installing Founderizer",
+          "words" : "the user"
+        },
+        {
+          "line" : "Securing your server",
+          "words" : "the firewall: the private network only"
+        },
+        {
+          "line" : "Securing your server",
+          "words" : "this server's own hardening"
+        },
+        {
+          "line" : "Installing security updates",
+          "words" : "security updates"
+        },
+        {
+          "line" : "Preparing your server for agents",
+          "words" : "the root helpers that make an agent's OS user"
+        },
+        {
+          "line" : "Preparing your server for agents",
+          "words" : "one OS user for each agent of this machine"
+        },
+        {
+          "line" : "Preparing your server for agents",
+          "words" : "this server's vault"
+        },
+        {
+          "line" : "Checking your server",
+          "words" : "verify"
+        }
+      ]
+    },
+    "installer_headings" : {
+      "wait_ready" : 19
+    },
     "installer_step" : [
       {
         "line" : "Founderizer step 14: security updates",

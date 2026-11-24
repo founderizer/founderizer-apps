@@ -1561,7 +1561,8 @@ struct FirstRunView: View {
         if cloudBuilds { return .building(joining: cloud.stage == .joining, plan: Self.hubPlan) }
         if install.checklist != nil { return .ready }
         if let phases = InstallPhases(steps: install.steps, planned: install.planned,
-                                      runningFor: Date().timeIntervalSince(install.runningSince)) {
+                                      runningFor: Date().timeIntervalSince(install.runningSince))
+            .map(install.hold.applied(to:)) {
             return .installing(phases, afterBuild: work.hubBuilt)
         }
         return .starting(plan: Self.hubPlan, afterBuild: work.hubBuilt)
@@ -1575,6 +1576,7 @@ struct FirstRunView: View {
         if managerInstall.running {
             return InstallPhases(steps: managerInstall.steps, planned: managerInstall.planned,
                                  runningFor: Date().timeIntervalSince(managerInstall.runningSince))
+                .map(managerInstall.hold.applied(to:))
                 .map { .installing($0, joinFor: ManagerName.shown(model.managerName), afterBuild: true) }
                 ?? .starting(plan: Self.joinPlan, afterBuild: true)
         }
@@ -1640,7 +1642,7 @@ struct FirstRunView: View {
             CloudMark(provider: model.managersToken ?? provider, size: SetupMetrics.mark)
         } content: {
             if building {
-                CloudBuilding(stage: cloud.stage, provider: cloud.provider, showsStatus: true)
+                CloudBuilding(stage: cloud.stage, provider: cloud.provider)
             } else if let other = model.managersToken {
                 // **The token of the manager's own provider** (slice 2b): its page, as the hub's provider's, for the
                 // manager's model; once the provider took it, "Your fleet" again.
@@ -1746,8 +1748,7 @@ struct FirstRunView: View {
                     SetupStep(title: machineHead.title, waits: machineHead.waits) { mark } content: {
                         form {
                             MachineInstallRun(model: install, title: String(l10n: "Your hub"), next: AnyView(afterInstall),
-                                              again: { install.installHub(store: store) }, report: { store.reportAsk = $0 },
-                                              showsStatus: true)
+                                              again: { install.installHub(store: store) }, report: { store.reportAsk = $0 })
                         }
                     }
                 }

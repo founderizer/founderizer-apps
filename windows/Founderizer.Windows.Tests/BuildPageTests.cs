@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Founderizer.Setup.Cloud;
 using Founderizer.Setup.FirstRun;
 using Founderizer.Setup.Install;
@@ -38,7 +39,8 @@ public sealed class BuildPageTests
 
     /// <summary>**The hub's line follows its server from the provider to its checks** (the Mac's <c>hubRow</c>). The bug:
     /// the line of the provider's build ("Making your server") stays once the server is on the network and its install
-    /// runs, or a server that is ready keeps a line and a bar under its box.</summary>
+    /// runs, or a server that is ready keeps a line and a bar under its box; a step past its estimate that keeps "· 1 min"
+    /// (F4 of 22 November 2026: "· 2 min" stood for eight minutes of a join), or a bar that the clock fills.</summary>
     [TestMethod]
     public void TheHubsLineFollowsItsServerFromTheProviderToItsChecks()
     {
@@ -65,6 +67,18 @@ public sealed class BuildPageTests
         Assert.AreEqual(1.0, row.Parts![0]);
         Assert.AreEqual(1.0, row.Parts[1]);
         Assert.IsTrue(row.Parts[2] is > 0 and < 1, "the part that runs");
+        var late = BuildRows.Hub(installing, Now.AddSeconds(700));
+        Assert.AreEqual("Installing security updates", late.Words);
+        Assert.IsNull(late.Minutes, "past its estimate: no minutes");
+        CollectionAssert.AreEqual(row.Parts.ToList(), late.Parts!.ToList(), "the clock moves no part");
+        // The press's hold: a retry, which empties the steps, keeps the bar, and a heading that the table does not have
+        // keeps the line of the heading before it (the Mac's install.hold.applied).
+        var hold = new InstallHold([1, 1, 0.76, 0], "wait_ready", "Securing your server");
+        var retry = installing with { Install = installing.Install with { Steps = [], Hold = hold } };
+        CollectionAssert.AreEqual(new[] { 1, 1, 0.76, 0 }, BuildRows.Hub(retry, Now).Parts!.ToList(), "the retry's bar");
+        var newer = installing.Install.Steps.Take(7).Append(new InstallProgress("wait_ready", "Finish the install", "", ProgressState.Running,
+                                                                                ["Founderizer step 20: a part of a newer installer"])).ToList();
+        Assert.AreEqual("Securing your server", BuildRows.Hub(installing with { Install = installing.Install with { Steps = newer, Hold = hold } }, Now).Words);
 
         var ready = installing with { Install = installing.Install with { Running = false, Checklist = new VerifyChecklist([new VerifyCheck("service", "ok", "")]) } };
         Assert.AreEqual(FleetBuildRow.Ready, BuildRows.Hub(ready, Now));
@@ -73,7 +87,10 @@ public sealed class BuildPageTests
 
     /// <summary>**The manager's own server has a line while it is made and waits for the hub, and none while its choice
     /// after a refusal shows** (the Mac's <c>managersRow</c>). The bug: a line and a bar over the refused server's why and
-    /// its press, or no line for a server that waits for the hub, which reads as a server that nobody makes.</summary>
+    /// its press, no line for a server that waits for the hub, which reads as a server that nobody makes, or "Installing
+    /// security updates" for the whole join, also while it installs its packages (F4 of 22 November 2026, piece 4). A
+    /// join says "Installing Founderizer" for its whole step on both apps; piece 1 (join.sh headings, and a reader of a
+    /// join's lines as they come) is not built on either, and JoinHeadings waits for it.</summary>
     [TestMethod]
     public void TheManagersServerHasALineWhileItBuildsAndNoneWhileItsChoiceShows()
     {
@@ -86,6 +103,16 @@ public sealed class BuildPageTests
         Assert.AreEqual("Waiting for your hub", BuildRows.Managers(waits, choiceOpen: false, Now)!.Words);
         Assert.AreEqual("Making your server", BuildRows.Managers(waits with { ManagersCloud = Cloud(CloudStep.Stage.Making) }, false, Now)!.Words);
         Assert.AreEqual(2, BuildRows.Of(waits, false, Now).Count);
+
+        // Its join says the one table's line for the step that the PC reports, which has no heading, and its checks name
+        // its server.
+        InstallView Join(params InstallProgress[] steps) => new(true, steps, BuildRows.JoinPlan, Now.AddSeconds(-30), null, null, null, false);
+        var joined = new[] { new InstallProgress("read", "Read the server", "", ProgressState.Done),
+                             new InstallProgress("network", "The private network", "", ProgressState.Done) };
+        string? Line(params InstallProgress[] now) => BuildRows.Managers(waits with { ManagerInstall = Join([.. joined, .. now]) }, false, Now)!.Words;
+        Assert.AreEqual("Installing Founderizer", Line(new InstallProgress("join", "Join the fleet", "", ProgressState.Running)));
+        Assert.AreEqual("Checking Juno's server", Line(new InstallProgress("join", "Join the fleet", "", ProgressState.Done),
+                                                       new InstallProgress("verify", "Check the server", "", ProgressState.Running)));
 
         // The provider refused it: the build had named the server before it asked, and no provider's id or address came.
         var refused = waits with

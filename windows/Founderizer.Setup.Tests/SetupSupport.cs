@@ -241,6 +241,10 @@ internal sealed class SetupRig : IAsyncDisposable
     public List<InstallPlan> Plans { get; } = [];
     public SetupStore Store { get; }
 
+    /// <summary>How far the store's clock runs ahead of the real one: a test of the time that a step runs moves it.</summary>
+    public TimeSpan Ahead { get => TimeSpan.FromTicks(Interlocked.Read(ref ahead)); set => Interlocked.Exchange(ref ahead, value.Ticks); }
+    private long ahead;
+
     public SetupRig(Func<RemoteCall, RemoteResult?>? first = null)
     {
         foreach (var provider in CloudProviders.All) Clouds[provider] = new StandInCloud(provider, Status) { IsHeld = provider == CloudProvider.Hetzner };
@@ -254,6 +258,7 @@ internal sealed class SetupRig : IAsyncDisposable
             Owner = Owner, Box = Box, Remote = Remote, HostKeys = HostKeys, Records = Records, Tailscale = Net,
             Cloud = p => Clouds[p], Status = _ => Task.FromResult<string?>(Status.Json()), Choices = Choices,
             Pause = (_, cancel) => Task.Delay(1, cancel),
+            Now = () => DateTimeOffset.UtcNow + Ahead,
             Installer = (plan, key, sudo) =>
             {
                 lock (Plans) Plans.Add(plan);

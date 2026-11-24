@@ -36,9 +36,13 @@ struct FleetBuildPage<Mark: View, Below: View>: View {
 /// **One server's line on the build page** (`FleetBuildRow`): its words, the minutes left in the muted colour after
 /// them, the owner's turn in orange with no minutes, and under them the bar of four parts (VPS, Network, Install,
 /// Checks) as the picture has it: a part that is done in the words' faded colour, the part that runs in green as far as
-/// it ran, the rest empty. A box with no line keeps the line's room, so the boxes of a row stay level.
+/// its steps ended, the rest empty. **The part that runs breathes** (the owner's "Yes, as drawn" of 22 November 2026 to
+/// F4's picture P7: "each bar fills by the steps that ended, its part in work breathing"), at least as wide as it is
+/// thick, so a part with no step ended yet still shows that it works; with Reduce Motion it stands still. A box with no
+/// line keeps the line's room, so the boxes of a row stay level.
 struct FleetBuildLine: View {
     let row: FleetBuildRow?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The line's width, which its box takes at least: the words change as the build goes on, and the box keeps its size.
     /// The longest Spanish line ("Instalando actualizaciones de seguridad · 13 min", 273.9 points at 12, measured by
     /// the review of 17 November 2026) fits at its smallest size.
@@ -63,11 +67,14 @@ struct FleetBuildLine: View {
             words.font(ShapeMetrics.underFont).lineLimit(1).minimumScaleFactor(0.8)
             HStack(spacing: Self.gap) {
                 ForEach(0..<InstallPhases.names.count, id: \.self) { index in
-                    let share = self.share(index)
+                    let share = self.share(index), runs = index == running
                     Capsule().fill(Color.white.opacity(0.10))
                         .overlay(alignment: .leading) {
-                            Capsule().fill(share >= 1 ? FleetStyle.text.opacity(0.62) : Color.green)
-                                .frame(width: Self.part * share)
+                            // The part that runs is its breath alone, whose light comes and goes; green with Reduce Motion.
+                            Capsule().fill(share >= 1 ? FleetStyle.text.opacity(0.62)
+                                           : runs && !reduceMotion ? Color.clear : Color.green)
+                                .overlay { if runs, !reduceMotion { BreathingPart(color: NSColor(Color.green)) } }
+                                .frame(width: runs ? max(Self.thickness, Self.part * share) : Self.part * share)
                         }
                         .frame(width: Self.part, height: Self.thickness)
                 }
@@ -78,6 +85,12 @@ struct FleetBuildLine: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(row?.words ?? "")
         .accessibilityHidden(row?.words == nil)
+    }
+
+    /// The part that runs: the first that is not full, while the row is no owner's turn.
+    private var running: Int? {
+        guard let row, !row.ownersTurn, let parts = row.parts else { return nil }
+        return parts.firstIndex { $0 < 1 }
     }
 
     private func share(_ index: Int) -> CGFloat {

@@ -460,6 +460,101 @@ public sealed class SetupStoreTests
         Assert.AreEqual(2, rig.Plans.Count(p => p.Steps.Any(st => st.Id == "claim")), "the same install again");
     }
 
+    /// <summary>**A report of the step that runs keeps its start; a report of the next step sets a new one**
+    /// (<see cref="InstallView.Reported"/>, the Mac's <c>if now != runningStep</c>; F4 piece 2). The bug: each Running
+    /// report set the start to now, also a wait of the server check for apt's lock and a heading of the hub's installer,
+    /// so the minutes said "· 9 min" after eight minutes of one step.</summary>
+    [TestMethod]
+    public void A_report_of_the_step_that_runs_keeps_its_start_and_one_of_the_next_step_sets_a_new_one()
+    {
+        var t0 = new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero);
+        InstallProgress Step(string id, ProgressState state, params string[] lines) => new(id, id, "", state, lines);
+        var plan = InstallPlan.Hub(new InstallTarget("server"), "", null).Steps.Select(st => st.Id).ToList();
+        var view = new InstallView(true, [], plan, t0, null, null, null, false).Reported(Step("read", ProgressState.Running), t0.AddSeconds(1));
+        Assert.AreEqual(t0.AddSeconds(1), view.RunningSince, "the first step began");
+        view = view.Reported(Step("read", ProgressState.Running, "Waiting for apt's lock"), t0.AddSeconds(480));
+        Assert.AreEqual(t0.AddSeconds(1), view.RunningSince, "a wait of the same step");
+        view = view.Reported(Step("read", ProgressState.Done), t0.AddSeconds(490)).Reported(Step("network", ProgressState.Running), t0.AddSeconds(491));
+        Assert.AreEqual(t0.AddSeconds(491), view.RunningSince, "the next step");
+        // A retry empties the steps, so its first step has a time of its own.
+        view = (view with { Steps = [] }).Reported(Step("read", ProgressState.Running), t0.AddSeconds(600));
+        Assert.AreEqual(t0.AddSeconds(600), view.RunningSince, "the retry's first step");
+    }
+
+    /// <summary>**The minutes of a long step count from its start, not from its last heading** (the Mac's
+    /// <c>MachineInstallModel.record</c>; F4 piece 2). The bug: each heading of the hub's installer reports its step again,
+    /// and each report set the step's start to now, so the build page said "· 13 min" for the whole wait.</summary>
+    [TestMethod]
+    public async Task The_minutes_of_a_long_step_count_from_its_start_not_from_its_last_heading()
+    {
+        using var finish = new ManualResetEventSlim();
+        var reads = 0;
+        SetupRig? clock = null;
+        await using var rig = clock = new SetupRig(call =>
+        {
+            if (!call.Program.Contains("tail -n 40", StringComparison.Ordinal)) return null;
+            switch (Interlocked.Increment(ref reads))
+            {
+                case 1: clock!.Ahead = TimeSpan.FromSeconds(300); return StandInRemote.Said("Founderizer step 14: security updates");
+                case 2: clock!.Ahead = TimeSpan.FromSeconds(600); return StandInRemote.Said("Founderizer step 15: this server's own hardening");
+                default: finish.Wait(TimeSpan.FromSeconds(20)); return StandInRemote.Said("READY");
+            }
+        });
+        try
+        {
+            await Built(rig, ServersStep.One);
+            var s = await rig.Until(x => x.Install.Steps.Any(p => p is { Step: "wait_ready", State: ProgressState.Running } &&
+                                                                    p.Lines.Any(l => l.Contains("step 15", StringComparison.Ordinal))), "the second heading");
+            // 651 seconds after the step began, of its estimate of 650, and 51 after its last heading.
+            var at = DateTimeOffset.UtcNow + rig.Ahead + TimeSpan.FromSeconds(51);
+            Assert.IsNull(InstallPhases.Of(s.Install.Steps, s.Install.Planned, (at - s.Install.RunningSince).TotalSeconds)!.MinutesLeft,
+                          $"the step began at {s.Install.RunningSince:O}");
+        }
+        finally { finish.Set(); }
+        await rig.Until(x => x.Install.Checklist is not null, "the checks");
+    }
+
+    /// <summary>**A retry of the install never sends the build page's bar back, and a new press starts it again** (the
+    /// Mac's <c>InstallHold</c> in <c>MachineInstallModel</c>; F4 piece 3: "a part never goes back while one press runs,
+    /// also through a retry of the app"). The bugs: the retry empties the steps, so the bar fell back to its start while
+    /// the same press ran on; or Install again keeps the hold of the press before, so a new install shows parts that it
+    /// never did.</summary>
+    [TestMethod]
+    public async Task A_retry_of_the_install_never_sends_the_bar_back_and_a_new_press_starts_it_again()
+    {
+        var clones = 0;
+        await using var rig = new SetupRig(call => !call.Program.Contains("git clone", StringComparison.Ordinal) ? null
+            : Interlocked.Increment(ref clones) switch
+            {
+                1 => StandInRemote.Failed(RemoteFailure.Dropped),                          // a lost server: the press tries again
+                2 => StandInRemote.Said("fatal: unable to access the repository", 128),   // a stop: the press ends
+                _ => null,
+            });
+        var press = 1;
+        var shown = new List<(int Press, InstallHold? Hold, IReadOnlyList<double> Parts)>();
+        // The state at each change, read under one lock, so that the list goes in the store's own order.
+        rig.Store.Changed += (_, _) =>
+        {
+            lock (shown) if (rig.Store.State.Install is { Running: true } install && install.Phases(0) is { } now) shown.Add((press, install.Hold, now.Parts));
+        };
+        await Built(rig, ServersStep.One);
+        await rig.Until(x => x.Install.Failure is not null, "the second try's stop");
+        Assert.AreEqual(2, rig.Plans.Count(p => p.Steps.Any(st => st.Id == "claim")), "the lost server's retry");
+        lock (shown) press = 2;
+        rig.Store.InstallAgain();
+        await rig.Until(x => x.Install.Checklist is not null, "the new press's checks");
+        lock (shown)
+        {
+            var first = shown.Where(s => s.Press == 1).Select(s => s.Parts).ToList();
+            for (var i = 1; i < first.Count; i++)
+                for (var part = 0; part < first[i].Count; part++)
+                    Assert.IsTrue(first[i][part] >= first[i - 1][part], $"part {part} went back: {string.Join(" ", first[i - 1])} then {string.Join(" ", first[i])}");
+            var again = shown.First(s => s.Press == 2);
+            Assert.IsNull(again.Hold, "a new press starts a new hold");
+            CollectionAssert.AreEqual(new[] { 0.0, 0, 0, 0 }, again.Parts.ToList(), "the new press's bar starts at the plan's start");
+        }
+    }
+
     /// <summary>**A fleet key that Tailscale ended says L2's sentence and asks for the key again**: on the install's page a
     /// paste makes a new key and Install again shows; before a server the key's page comes again though the box holds the
     /// ended key. The bug: "Connect Tailscale again" with no way to connect it.</summary>

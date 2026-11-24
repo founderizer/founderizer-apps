@@ -45,24 +45,20 @@ public struct FleetBuildRow: Equatable, Sendable {
                       parts: [afterBuild ? startShare : 0, 0, 0, 0], ownersTurn: false)
     }
 
-    /// **An install that runs** (`InstallPhases`): its words, minutes and parts. The join of an agent's server says what
-    /// its long step does, the server's own first security updates, and its checks name the agent's server, where the
-    /// hub's words name the hub. An install whose steps are all done has no words and no minutes. `afterBuild`: the
-    /// provider made the server in this try, so the bar's first part goes on from where the build left it
-    /// (`building`'s 0.6) and never back.
+    /// **An install that runs** (`InstallPhases`): its words, minutes and parts. The words are the one table's
+    /// (`InstallPhases.status`, F4 piece 4), and the checks of an agent's server name that server, where the hub's words
+    /// name the hub. Until 22 November 2026 a join said "Installing security updates" for the whole step, also while it
+    /// installed its packages or closed the firewall. An install whose steps are all done has no words and no minutes,
+    /// and one whose step that runs has passed its estimate has its words and no minutes (`InstallPhases.minutesLeft`).
+    /// `afterBuild`: the provider made the server in this try, so the bar's first part goes on from where the build left
+    /// it (`building`'s 0.6) and never back.
     public static func installing(_ phases: InstallPhases, joinFor agent: String? = nil,
                                   afterBuild: Bool = false) -> FleetBuildRow {
         var parts = phases.parts
         if afterBuild, !parts.isEmpty { parts[0] = startShare + (1 - startShare) * parts[0] }
         var words = phases.status
-        if let agent {
-            switch phases.step {
-            case "join": words = String(l10n: "Installing security updates")
-            case "verify": words = String(l10n: "Checking \(agent)'s server")
-            default: break
-            }
-        }
-        return FleetBuildRow(words: words, minutes: phases.step == nil ? nil : max(1, phases.minutesLeft),
+        if let agent, phases.step == "verify" { words = String(l10n: "Checking \(agent)'s server") }
+        return FleetBuildRow(words: words, minutes: phases.step == nil ? nil : phases.minutesLeft.map { max(1, $0) },
                              parts: parts, ownersTurn: false)
     }
 

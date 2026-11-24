@@ -326,6 +326,20 @@ struct RemoteInstallVectorsTests {
                 + [("verify", InstallProgress.State.running, [String]())], hub, 30),
             ("every step done", hub.map { ($0, InstallProgress.State.done, [String]()) }, hub, 0),
             ("a join past its estimate", [("read", .done, []), ("network", .done, []), ("join", .running, [])], join, 500),
+            ("a join inside its estimate, with a heading that the app does not count",
+             [("read", .done, []), ("network", .done, []), ("join", .running, ["Founderizer step 3: base packages"])],
+             join, 359),
+            ("the hub's hardening after its security updates",
+             [("read", .done, []), ("network", .done, []), ("code", .done, []), ("plan", .done, []), ("start", .done, []),
+              ("wait_claim", .done, []), ("claim", .done, []),
+              ("wait_ready", .running, ["Founderizer step 17: this server's own hardening"])], hub, 620),
+            ("a join's checks", [("read", .done, []), ("network", .done, []), ("join", .done, []), ("verify", .running, [])],
+             join, 20),
+            ("a heading past the installer's count", [("read", .done, []), ("network", .done, []), ("code", .done, []),
+                                                      ("plan", .done, []), ("start", .done, []), ("wait_claim", .done, []),
+                                                      ("claim", .done, []),
+                                                      ("wait_ready", .running, ["Founderizer step 99: a new part"])],
+             hub, 0),
             ("a step that failed", [("read", .done, []), ("network", .failed, [])], join, 50),
             ("a negative time", [("read", .running, [])], join, -5),
             ("a step that the plan does not know", [("read", .done, []), ("network", .done, []), ("other", .running, [])],
@@ -337,7 +351,7 @@ struct RemoteInstallVectorsTests {
             var out: [String: Any] = ["name": name, "planned": planned, "running_for": running,
                                       "reported": reported.map { ["step": $0.0, "state": $0.1.rawValue, "lines": $0.2] }]
             if let phases = InstallPhases(steps: progress, planned: planned, runningFor: running) {
-                out["phases"] = ["current": phases.current, "minutes_left": phases.minutesLeft,
+                out["phases"] = ["current": phases.current, "minutes_left": orNull(phases.minutesLeft),
                                  "status": orNull(phases.status), "parts": phases.parts, "step": orNull(phases.step)]
             } else {
                 out["phases"] = NSNull()
@@ -347,8 +361,20 @@ struct RemoteInstallVectorsTests {
         let lines = ["Founderizer step 14: security updates", "Founderizer step 3:   the code  ", "Founderizer step 4:",
                      "Founderizer step x: no", "  Founderizer step 5: indented", "Founderizer step 15: verify"]
         return ["cases": read, "names": InstallPhases.names, "seconds": InstallPhases.seconds,
-                "other_step": InstallPhases.otherStep,
+                "other_step": InstallPhases.otherStep, "installer_headings": InstallPhases.installerHeadings,
+                "heading_lines": ["hub": headingLines(InstallPhases.hubHeadings, join: false),
+                                  "join": headingLines(InstallPhases.joinHeadings, join: true)],
                 "installer_step": lines.map { ["line": $0, "words": orNull(InstallPhases.installerStep($0))] }]
+    }
+
+    /// The one table of lines (F4 piece 4): each heading's start of words, with the line that it gives in a running
+    /// step of its install.
+    static func headingLines(_ table: [(words: String, line: InstallPhases.HeadingLine)], join: Bool) -> [[String: Any]] {
+        table.map { row in
+            let step = InstallProgress(step: join ? "join" : "wait_ready", title: "", says: "", state: .running,
+                                       lines: ["Founderizer step 1: " + row.words])
+            return ["words": row.words, "line": orNull(InstallPhases.status(step, join: join))]
+        }
     }
 
     static func checklists() -> [String: Any] {

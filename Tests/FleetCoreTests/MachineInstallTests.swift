@@ -1550,6 +1550,36 @@ struct MachineInstallTests {
         _ = try await MachineInstaller(plan: plan, authKey: "", ssh: standIn.path).run { _ in }
     }
 
+    /// **A wait that cannot reach the server says so at its third read in a row, and goes on** (F4 of 22 November 2026,
+    /// piece 5; the owner's "Yes, as drawn" to the picture P4): until then the page showed no sign until a limit of 30
+    /// minutes ended the wait. Two reads that fail say nothing; the third reports the step as `unreachable` with the
+    /// installer's step that it said last and no line of the server; the next read that reaches it reports the step
+    /// without it; and the wait ends at the installer's mark as before.
+    @Test func aWaitThatCannotReachTheServerSaysSoAtTheThirdReadAndGoesOn() async throws {
+        let standIn = try StandInSSH("""
+        case "$program" in
+          *"tail -n 40"*)
+            reads=$(cat "$dir/reads" 2>/dev/null || echo 0); reads=$((reads + 1)); printf '%s' "$reads" > "$dir/reads"
+            case "$reads" in
+              1|5) echo "Founderizer step 16: security updates" ;;
+              8) echo "READY" ;;
+              *) echo "ssh: connect to host 198.51.100.7 port 22: Operation timed out"; exit 255 ;;
+            esac ;;
+        esac
+        """)
+        let wait = InstallStep(id: "wait_ready", title: "Finish the install", says: "",
+                               action: .waitFor("tail -n 40 /root/fleet-install.log", mark: "READY", every: 0.01, within: 30))
+        let plan = InstallPlan(job: .hub, target: InstallTarget(host: "198.51.100.7"), steps: [wait], redactions: [])
+        let seen = Progressed()
+        _ = try? await MachineInstaller(plan: plan, authKey: "", ssh: standIn.path).run { seen.add($0) }
+        let heading = ["Founderizer step 16: security updates"]
+        let reports = seen.all.filter { $0.state == .running && !$0.lines.isEmpty }
+        // Reads 2 to 4 fail: the third says so. Read 5 reaches the server. Reads 6 and 7 fail: two say nothing.
+        #expect(reports.map(\.unreachable) == [false, true, false], "\(reports.map(\.lines))")
+        #expect(reports.allSatisfy { $0.lines == heading })
+        #expect(seen.all.last?.state == .done && seen.all.last?.step == "wait_ready")
+    }
+
     /// `git` on the server refused its own key: status 128, and not the owner's SSH key.
     @Test func aRefusalThatIsNotSshsOwnIsNotHisKey() async throws {
         let standIn = try StandInSSH("""

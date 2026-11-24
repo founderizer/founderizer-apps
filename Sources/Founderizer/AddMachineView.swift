@@ -903,7 +903,7 @@ struct AddServerView: View {
         case .linux:
             MachineInstallRun(model: model, title: installed ?? String(l10n: "The server"), next: AnyView(joined),
                               again: { model.installMachine(store: store) }, report: { store.reportAsk = $0 },
-                              hub: store.hub)
+                              hub: store.hub, server: installed)
         case .mac:
             // Try again links the same Mac again (fix round 3, item 51): it emptied the page.
             MachineInstallRun(model: model, title: installed ?? String(l10n: "The server"), next: AnyView(joined),

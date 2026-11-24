@@ -31,12 +31,25 @@ struct FleetBuildTests {
         #expect(row.words == "Waiting for your hub" && row.minutes == 9 && row.parts == [0.6, 0, 0, 0] && !row.ownersTurn)
     }
 
-    /// A join says what its long step does and checks the server by its agent's name; the hub's own install keeps the
-    /// hub's words; an install that ended has no words and no minutes.
+    /// A join says what its long step does (the one table of lines, F4 piece 4) and checks the server by its agent's
+    /// name; the hub's own install keeps the hub's words; an install that ended has no words and no minutes. A step past
+    /// its estimate keeps its words and its bar, and shows no minutes (F4 of 22 November 2026: "· 2 min" stood for eight
+    /// minutes of a join). The two lines of the picture P7: "Installing Founderizer · 8 min" while the manager's server
+    /// joins, where it said "Installing security updates" for the whole join, and "Securing your server · 2 min" while
+    /// the hub hardens its server.
     @Test func eachInstallSaysWhatRunsWithItsMinutesAndParts() throws {
-        let updates = FleetBuildRow.installing(try #require(InstallPhases(steps: steps(join, done: 2), planned: join,
+        let joining = FleetBuildRow.installing(try #require(InstallPhases(steps: steps(join, done: 2), planned: join,
                                                                           runningFor: 180)), joinFor: "Juno")
-        #expect(updates.words == "Installing security updates" && updates.parts == [1, 1, 0.5, 0] && updates.minutes == 5)
+        #expect(joining.words == "Installing Founderizer" && joining.parts == [1, 1, 0, 0] && joining.minutes == 5)
+        let late = FleetBuildRow.installing(try #require(InstallPhases(steps: steps(join, done: 2), planned: join,
+                                                                       runningFor: 400)), joinFor: "Juno")
+        #expect(late.words == "Installing Founderizer" && late.parts == [1, 1, 0, 0] && late.minutes == nil)
+        var hardening = steps(hub, done: 7)
+        hardening[7] = InstallProgress(step: "wait_ready", title: "wait_ready", says: "", state: .running,
+                                       lines: ["Founderizer step 17: this server's own hardening"])
+        let securing = FleetBuildRow.installing(try #require(InstallPhases(steps: hardening, planned: hub,
+                                                                           runningFor: 620)))
+        #expect(securing.words == "Securing your server" && securing.minutes == 2)
         let checks = FleetBuildRow.installing(try #require(InstallPhases(steps: steps(join, done: 3), planned: join)),
                                               joinFor: "Juno")
         #expect(checks.words == "Checking Juno's server" && checks.minutes == 2)

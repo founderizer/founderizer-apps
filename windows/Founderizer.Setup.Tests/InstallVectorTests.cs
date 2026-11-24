@@ -328,7 +328,9 @@ public sealed class InstallVectorTests
         Assert.AreEqual(InstallRetry.ReadEvery, retry.GetProperty("read_every").GetDouble());
     }
 
-    /// <summary>Other steps or minutes under the build's title than the Mac shows for the same install.</summary>
+    /// <summary>Other steps, line, minutes or bar under the build's title than the Mac shows for the same install: minutes
+    /// that stay once the step that runs passed its estimate, a part of the bar that the clock fills, or a line of the
+    /// installer's heading that is not the Mac's table's (F4 of 22 November 2026, pieces 2 to 4).</summary>
     [TestMethod]
     public void The_four_steps_and_the_minutes_left_are_the_Macs()
     {
@@ -337,6 +339,8 @@ public sealed class InstallVectorTests
         Assert.AreEqual(InstallPhases.OtherStep, phases.GetProperty("other_step").GetInt32());
         var seconds = phases.GetProperty("seconds").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
         CollectionAssert.AreEquivalent(seconds.ToList(), InstallPhases.Seconds.ToList());
+        var headings = phases.GetProperty("installer_headings").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
+        CollectionAssert.AreEquivalent(headings.ToList(), InstallPhases.InstallerHeadings.ToList());
         foreach (var c in phases.GetProperty("cases").EnumerateArray())
         {
             var reported = c.GetProperty("reported").EnumerateArray().Select(r => new InstallProgress(
@@ -348,13 +352,99 @@ public sealed class InstallVectorTests
             if (want.ValueKind == JsonValueKind.Null) { Assert.IsNull(made, at); continue; }
             Assert.IsNotNull(made, at);
             Assert.AreEqual(want.GetProperty("current").GetInt32(), made.Current, at);
-            Assert.AreEqual(want.GetProperty("minutes_left").GetInt32(), made.MinutesLeft, at);
+            var minutes = want.GetProperty("minutes_left");
+            Assert.AreEqual(minutes.ValueKind == JsonValueKind.Null ? null : minutes.GetInt32(), made.MinutesLeft, at);
             Assert.AreEqual(want.Text("status") is { } status ? Vectors.Pc(status) : null, made.Status, at);
             Assert.AreEqual(want.Text("step"), made.Step, at);
             CollectionAssert.AreEqual(want.GetProperty("parts").EnumerateArray().Select(p => p.GetDouble()).ToList(), made.Parts.ToList(), at);
         }
         foreach (var c in phases.GetProperty("installer_step").EnumerateArray())
             Assert.AreEqual(c.Text("words"), InstallPhases.InstallerStep(c.Text("line")!), c.Text("line"));
+        // The one table of lines (F4 piece 4): each heading of hub.sh and join.sh gives the Mac's line, in the Mac's order.
+        foreach (var (install, join) in new[] { ("hub", false), ("join", true) })
+        {
+            var rows = phases.GetProperty("heading_lines").GetProperty(install).EnumerateArray().ToList();
+            CollectionAssert.AreEqual(rows.Select(r => r.Text("words")).ToList(),
+                                      (join ? InstallPhases.JoinHeadings : InstallPhases.HubHeadings).Select(h => h.Words).ToList(), install);
+            foreach (var row in rows)
+            {
+                var step = new InstallProgress(join ? "join" : "wait_ready", "", "", ProgressState.Running,
+                                               ["Founderizer step 1: " + row.Text("words")]);
+                Assert.AreEqual(row.Text("line") is { } line ? Vectors.Pc(line) : null, InstallPhases.StatusOf(step, join), $"{install}: {row.Text("words")}");
+            }
+        }
+    }
+
+    private static readonly IReadOnlyList<string> HubSteps = InstallPlan.Hub(new InstallTarget("server"), "", null).Steps.Select(s => s.Id).ToList();
+
+    /// <summary>The Mac's test helper: the first <paramref name="done"/> steps done, the next one running (or failed) with
+    /// <paramref name="lines"/>, the rest waiting.</summary>
+    private static InstallPhases Phases(int done, bool failed = false, double runningFor = 0, bool unreachable = false, params string[] lines) =>
+        InstallPhases.Of(HubSteps.Select((id, i) => new InstallProgress(id, id, "", i < done ? ProgressState.Done
+                             : i == done ? failed ? ProgressState.Failed : ProgressState.Running : ProgressState.Waiting,
+                             i == done ? lines : null, Unreachable: i == done && unreachable)).ToList(), HubSteps, runningFor)!;
+
+    /// <summary>**A retry never sends the bar back** (the Mac's <c>aRetryOfTheAppNeverSendsTheBarBack</c>; F4 piece 3: "a
+    /// part never goes back while one press runs, also through a retry of the app"). The bug: the installer's step that
+    /// failed at its 15th heading counts no heading, and the retry reports its steps again from the first one, so the
+    /// bar fell from 0.76 to 0.2, then to nothing; a log that a run of the installer starts again gives a lower heading
+    /// inside one try.</summary>
+    [TestMethod]
+    public void A_retry_never_sends_the_bar_back_and_a_new_press_starts_it_again()
+    {
+        var hardening = Phases(7, lines: "Founderizer step 15: this server's own hardening");
+        var again = Phases(7, lines: "Founderizer step 3: the user");
+        var stopped = Phases(7, failed: true, lines: "Founderizer step 15: this server's own hardening");
+        var none = InstallPhases.Of([], HubSteps)!;
+        var read = Phases(0);
+        var hold = InstallHold.None.Keep(hardening).Keep(again).Keep(stopped).Keep(none).Keep(read);
+        foreach (var now in new[] { again, stopped, none, read })
+        {
+            var shown = hold.Applied(now);
+            CollectionAssert.AreEqual(new[] { 1, 1, 0.76, 0 }, shown.Parts.ToList(), now.Step);
+            Assert.AreEqual((2, now.Status, now.MinutesLeft, now.Step), (shown.Current, shown.Status, shown.MinutesLeft, shown.Step), now.Step);
+        }
+        // A part that the retry passes goes on from there; a new press starts its bar again.
+        var further = Phases(8);
+        CollectionAssert.AreEqual(new[] { 1, 1, 1, 0.0 }, hold.Keep(further).Applied(further).Parts.ToList());
+        Assert.AreEqual(3, hold.Keep(further).Applied(further).Current);
+        Assert.AreSame(read, InstallHold.None.Applied(read));
+    }
+
+    /// <summary>**A heading that the table does not have holds the line** (the Mac's
+    /// <c>aHeadingThatTheTableDoesNotHaveHoldsTheLine</c>; F4 piece 4). The PC installs hub.sh from the public repository,
+    /// so an app older than its installer meets new headings. The bug: "Securing your server" went back to "Starting your
+    /// hub" at a heading that the table did not have yet.</summary>
+    [TestMethod]
+    public void A_heading_that_the_table_does_not_have_holds_the_line()
+    {
+        var hardening = Phases(7, lines: "Founderizer step 17: this server's own hardening");
+        var newer = Phases(7, lines: "Founderizer step 18: a part of a newer installer");
+        var hold = InstallHold.None.Keep(hardening).Keep(newer);
+        Assert.AreEqual("Securing your server", hold.Applied(newer).Status);
+        // A known heading after it says its own line again, and the next step has its own.
+        var verify = Phases(7, lines: "Founderizer step 19: verify: is this machine of the fleet healthy?");
+        hold = hold.Keep(verify);
+        Assert.AreEqual("Checking your hub", hold.Applied(verify).Status);
+        Assert.AreEqual("Checking your hub", hold.Applied(Phases(8)).Status);
+        // The same unknown heading in a press with no line before it: the step's own line.
+        Assert.AreEqual("Starting your hub", InstallHold.None.Applied(newer).Status);
+    }
+
+    /// <summary>**A wait that this PC cannot reach shows no minutes** (the Mac's
+    /// <c>aWaitThatThisMacCannotReachShowsNoMinutes</c>; F4 piece 5): no count of ours is true while no read reaches the
+    /// server. The bug: the minutes went down while the server was out of reach.</summary>
+    [TestMethod]
+    public void A_wait_that_this_PC_cannot_reach_shows_no_minutes()
+    {
+        var unreached = Phases(7, runningFor: 60, unreachable: true, lines: "Founderizer step 16: security updates");
+        Assert.IsTrue(unreached.Unreachable);
+        Assert.IsNull(unreached.MinutesLeft);
+        Assert.AreEqual("Installing security updates", unreached.Status);
+        CollectionAssert.AreEqual(new[] { 1, 1, 0.8, 0 }, unreached.Parts.ToList());
+        var reached = Phases(7, runningFor: 60, lines: "Founderizer step 16: security updates");
+        Assert.AreEqual((false, (int?)12), (reached.Unreachable, reached.MinutesLeft));
+        CollectionAssert.AreEqual(unreached.Parts.ToList(), reached.Parts.ToList());
     }
 
     /// <summary>Checks read in another way: a server whose list the Mac reads as not ready would be ready on the PC, or a

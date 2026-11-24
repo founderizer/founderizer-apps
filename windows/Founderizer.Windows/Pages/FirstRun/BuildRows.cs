@@ -24,13 +24,13 @@ internal static class BuildRows
     public static IReadOnlyList<FleetBuildRow?> Of(SetupState s, bool managersChoiceOpen, DateTimeOffset now) =>
         s.MakesManagersServer ? [Hub(s, now), Managers(s, managersChoiceOpen, now)] : [Hub(s, now)];
 
-    /// <summary>**The hub's server**: its build at the provider, an install that runs (with its four parts), the start
-    /// of one with no step yet, or ready once its checks came.</summary>
+    /// <summary>**The hub's server**: its build at the provider, an install that runs (with its four parts, held by its
+    /// press: <see cref="InstallView.Phases"/>), the start of one with no step yet, or ready once its checks came.</summary>
     public static FleetBuildRow Hub(SetupState s, DateTimeOffset now)
     {
         if (s.CloudBuilds) return FleetBuildRow.Building(s.Cloud?.Stage == CloudStep.Stage.Joining, HubPlan);
         if (s.Install.Checklist is not null) return FleetBuildRow.Ready;
-        if (InstallPhases.Of(s.Install.Steps, s.Install.Planned, Seconds(now - s.Install.RunningSince)) is { } phases)
+        if (s.Install.Phases(Seconds(now - s.Install.RunningSince)) is { } phases)
             return FleetBuildRow.Installing(phases, afterBuild: s.HubBuilt);
         return FleetBuildRow.Starting(HubPlan, s.HubBuilt);
     }
@@ -46,7 +46,7 @@ internal static class BuildRows
         if (install.Running)
         {
             var name = ManagerName.Shown(s.ManagerName);
-            return InstallPhases.Of(install.Steps, install.Planned, Seconds(now - install.RunningSince)) is { } phases
+            return install.Phases(Seconds(now - install.RunningSince)) is { } phases
                 ? FleetBuildRow.Installing(phases, name, afterBuild: true)
                 : FleetBuildRow.Starting(JoinPlan, afterBuild: true);
         }

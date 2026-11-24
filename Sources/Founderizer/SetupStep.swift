@@ -309,65 +309,70 @@ struct SetupTitle: View {
     }
 }
 
-/// **The steps of a long wait, and the minutes left, under its moving title** (the owner, 4 November 2026: "maybe we
-/// should add some time estimation for each step.. so user knows that it can take so long..or a progress bar with the
-/// different steps and see how we move through them?", and his yes the same day to "Steps and minutes"). One line of
-/// dots with each step's name under it, in the step's one size: a done step in the words' colour, the one that runs in
-/// the green of work with a soft ring, the rest dim. Green and not violet, because a state is never violet (D-8). The
-/// minutes are our own estimate, never under one, and they go once every step is done.
+/// **A server's setup under its moving title: what runs now, its minutes while they are true, and a thin bar of its
+/// four steps** (look (a): the owner's choice of 22 November 2026 for F4, "The line and the thin bar, as in picture 2",
+/// and his "Yes, as drawn" to that picture; before it, his yes of 4 November 2026 to "Steps and minutes" and of 5
+/// November 2026 to the line). One grey line, "Installing security updates · 6 min", from the one table of lines
+/// (`InstallPhases.status`), and 12 points under it the bar of the four steps (VPS, Network, Install, Checks) in the
+/// measures of an agent's install (`SetupStepsBar`): a step that is done in the words' faded colour, the one that runs
+/// in the green of work, which breathes, the rest empty. The names of the steps are VoiceOver's only. The minutes are
+/// our own estimate, never under one; they go once every step is done, and while the step that runs has passed its
+/// estimate (`InstallPhases.minutesLeft` is nil). Once every step is done the line goes and keeps its room, so the bar
+/// does not move. **A wait that this Mac cannot see has one muted line under the bar** (`note`; F4 piece 5, the owner's
+/// "Yes, as drawn" to the picture P4: "This Mac cannot reach web-1 now. It tries again.").
 struct SetupPhases: View {
     let names: [String]
     /// The step that runs now; `names.count` once all of them are done.
     let current: Int
     var minutesLeft: Int?
-    /// **What runs now, in a few words, as the line under the title** (the owner's yes of 5 November 2026 to the status
-    /// line of "Building your fleet"): grey, one line, above the dots. Only the first run passes one.
+    /// **What runs now, in a few words**: the line over the bar.
     var status: String?
-
-    private static let dot: CGFloat = 10, ring: CGFloat = 18, rule: CGFloat = 2
+    /// One muted line under the bar, 14 points under it.
+    var note: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(spacing: SetupMetrics.gap / 2) {
-            if let status, current < names.count {
-                Text(status).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                    .padding(.bottom, SetupMetrics.gap / 2)
-                    .accessibilityIdentifier("setup-status")
-            }
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(Array(names.enumerated()), id: \.offset) { index, name in
-                    VStack(spacing: 8) {
-                        ZStack {
-                            HStack(spacing: 0) {
-                                Rectangle().fill(index == 0 ? Color.clear : segment(index)).frame(height: Self.rule)
-                                Rectangle().fill(index == names.count - 1 ? Color.clear : segment(index + 1))
-                                    .frame(height: Self.rule)
-                            }
-                            Circle().fill(Color.green.opacity(index == current ? 0.25 : 0))
-                                .frame(width: Self.ring, height: Self.ring)
-                            Circle().fill(dot(index)).frame(width: Self.dot, height: Self.dot)
+        VStack(spacing: 12) {
+            line.font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .opacity(status != nil && current < names.count ? 1 : 0)
+                .accessibilityIdentifier("setup-status")
+            HStack(spacing: SetupStepsBar.gap) {
+                ForEach(names.indices, id: \.self) { index in
+                    Capsule().fill(fill(index))
+                        .overlay {
+                            if index == current, !reduceMotion { BreathingPart(color: NSColor(AgentPresence.working.color)) }
                         }
-                        .frame(height: Self.ring)
-                        Text(name).foregroundStyle(index <= current ? FleetStyle.text : FleetStyle.muted)
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    .frame(maxWidth: .infinity)
                 }
             }
-            if let minutesLeft, current < names.count {
-                Text("About \(max(1, minutesLeft)) min").foregroundStyle(FleetStyle.muted)
+            .frame(width: SetupStepsBar.width, height: SetupStepsBar.thickness)
+            .animation(reduceMotion ? nil : FleetMotion.bar, value: current)
+            if let note {
+                Text(note).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("setup-note")
             }
         }
         .frame(maxWidth: SetupMetrics.width)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
+        .accessibilityLabel(note.map { spoken + " " + $0 } ?? spoken)
     }
 
-    /// The line into step `index`: done once that step has begun.
-    private func segment(_ index: Int) -> Color { index <= current ? FleetStyle.text.opacity(0.85) : FleetStyle.muted.opacity(0.3) }
+    /// The words and the minutes after them while they are true, in the muted colour; a line with no words keeps its
+    /// room.
+    private var line: Text {
+        guard let status else { return Text(verbatim: " ") }
+        guard let minutesLeft, current < names.count else { return Text(status) }
+        return Text(status) + Text(verbatim: " · ") + Text(String(l10n: "\(max(1, minutesLeft)) min"))
+    }
 
-    private func dot(_ index: Int) -> Color {
-        index < current ? FleetStyle.text : index == current ? .green : FleetStyle.muted.opacity(0.35)
+    /// A step that is done in the words' faded colour; the one that runs is the track under its breath, and green with
+    /// Reduce Motion; the rest is the track.
+    private func fill(_ index: Int) -> Color {
+        if index < current { return FleetStyle.text.opacity(0.62) }
+        if index == current { return reduceMotion ? AgentPresence.working.color : SetupStepsBar.track }
+        return SetupStepsBar.track
     }
 
     private var spoken: String {
@@ -657,15 +662,16 @@ struct SetupStepsBar: View {
 }
 
 /// The part of the bar that runs: the green of work, whose light comes and goes in a Core Animation layer, so the window
-/// does not draw again at each frame ("Marks before words": a motion that goes on).
-private struct BreathingPart: NSViewRepresentable {
+/// does not draw again at each frame ("Marks before words": a motion that goes on). The bars of an agent's install, of a
+/// server's setup (`SetupPhases`) and of the first run's build page (`FleetBuildLine`) draw it.
+struct BreathingPart: NSViewRepresentable {
     let color: NSColor
 
     func makeNSView(context: Context) -> BreathingPartView { BreathingPartView() }
     func updateNSView(_ view: BreathingPartView, context: Context) { view.color = color }
 }
 
-private final class BreathingPartView: NSView {
+final class BreathingPartView: NSView {
     var color = NSColor.systemGreen { didSet { if color != oldValue { needsDisplay = true } } }
 
     override init(frame: NSRect) {

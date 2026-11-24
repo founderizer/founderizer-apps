@@ -34,21 +34,18 @@ public sealed record FleetBuildRow(string? Words, int? Minutes, IReadOnlyList<do
     public static FleetBuildRow Starting(IReadOnlyList<string> plan, bool afterBuild) =>
         new("Starting your server", MinutesOf(SecondsOf(plan)), [afterBuild ? StartShare : 0, 0, 0, 0], false);
 
-    /// <summary>**An install that runs**: its words, minutes and parts. The join of an agent's server says what its long
-    /// step does, and its checks name the agent's server.</summary>
+    /// <summary>**An install that runs**: its words, minutes and parts. The words are the one table's
+    /// (<see cref="InstallPhases.Status"/>, F4 piece 4), and the checks of an agent's server name that server. An install whose steps are all done has no words and no
+    /// minutes, and one whose step that runs has passed its estimate has its words and no minutes
+    /// (<see cref="InstallPhases.MinutesLeft"/>).</summary>
     public static FleetBuildRow Installing(InstallPhases phases, string? joinFor = null, bool afterBuild = false)
     {
         var parts = phases.Parts.ToList();
         if (afterBuild && parts.Count > 0) parts[0] = StartShare + (1 - StartShare) * parts[0];
         var words = phases.Status;
-        if (joinFor is not null)
-            words = phases.Step switch
-            {
-                "join" => "Installing security updates",
-                "verify" => $"Checking {joinFor}'s server",
-                _ => words,
-            };
-        return new FleetBuildRow(words, phases.Step is null ? null : Math.Max(1, phases.MinutesLeft), parts, false);
+        if (joinFor is not null && phases.Step == "verify") words = $"Checking {joinFor}'s server";
+        return new FleetBuildRow(words, phases.Step is null || phases.MinutesLeft is not { } left ? null : Math.Max(1, left),
+                                 parts, false);
     }
 
     /// <summary>The hub puts the manager on its server with its AI program.</summary>

@@ -12,11 +12,16 @@ public struct InstallProgress: Equatable, Sendable, Identifiable {
     public let lines: [String]
     /// What went wrong, in one line, when this step failed.
     public let detail: String?
+    /// **This Mac's last reads reached nothing** (F4 of 22 November 2026, piece 5: the owner's "Yes, as drawn" to the
+    /// picture P4): the step goes on, and its page says that this Mac cannot reach the server now and tries again, with
+    /// no minutes. The next read that reaches the machine reports the step again without it.
+    public let unreachable: Bool
     public var id: String { step }
 
-    public init(step: String, title: String, says: String, state: State, lines: [String] = [], detail: String? = nil) {
+    public init(step: String, title: String, says: String, state: State, lines: [String] = [], detail: String? = nil,
+                unreachable: Bool = false) {
         self.step = step; self.title = title; self.says = says; self.state = state
-        self.lines = lines; self.detail = detail
+        self.lines = lines; self.detail = detail; self.unreachable = unreachable
     }
 }
 
@@ -129,6 +134,8 @@ public actor MachineInstaller {
     /// says it in other words leaves the wait as it was.
     static let noCodeMade = "no code was made"
     private var lastOutput = ""
+    /// The status of the last program that `ssh` ran, for a wait's count of reads that reached nothing.
+    private var lastStatus: Int32 = 0
     /// Where the install reaches the machine: the address the owner gave, until the network step puts the machine on
     /// the private network, and from then on its address there. Both installers let SSH in over that network only
     /// (`hubsetup.py firewall`), so a step after them that went to a public address would not arrive, and this is the
@@ -382,28 +389,51 @@ public actor MachineInstaller {
     ///
     /// `forClaim`: the wait for the link code (`InstallStep.Action.waitForClaim`). A read with no code asks the hub
     /// itself whether this Mac owns it already, and the wait then ends with no code.
+    ///
+    /// **Reads that reach nothing are counted** (F4 piece 5, the picture P4): at the third in a row the step is reported
+    /// again as `unreachable`, with the installer's step that it said last, and the next read that reaches the machine
+    /// reports it without. A count of reads and not a time decides, and it ends nothing: the wait ends as before.
     private func wait(_ program: String, mark: String, every: Double, within: Double, step: InstallStep,
                       forClaim: Bool = false, report: @Sendable (InstallProgress) -> Void) async throws -> [String] {
         let deadline = Date().addingTimeInterval(within)
         var said: String?
+        var failed = 0, saidUnreachable = false
         // The two signs of a hub that refuses this Mac are of this wait alone.
         if forClaim { hubRefusals = 0; installerMadeNoCode = false }
         while Date() < deadline {
             let lines = try await ssh(program, title: step.title, timeout: 120, allowFailure: true)
+            let reached = !Self.unreached(lastStatus)
+            failed = reached ? 0 : failed + 1
+            if failed == Self.unreachedReads {
+                saidUnreachable = true
+                report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .running,
+                                       lines: said.map { [$0] } ?? [], unreachable: true))
+            }
             let text = lines.joined(separator: "\n")
             if let stop = InstallPlan.stopLine(in: lines) {
                 throw InstallError.step(step.title, stop)
             }
             if text.contains(mark) { return lines }
             if forClaim, try await ownsTheHub(step, log: lines) { return lines }
-            if let now = lines.last(where: { InstallPhases.installerStep($0) != nil }), now != said {
-                said = now
+            if let now = lines.last(where: { InstallPhases.installerStep($0) != nil }), now != said || (reached && saidUnreachable) {
+                said = now; saidUnreachable = false
                 report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .running, lines: [now]))
+            } else if reached, saidUnreachable {
+                saidUnreachable = false
+                report(InstallProgress(step: step.id, title: step.title, says: step.says, state: .running,
+                                       lines: said.map { [$0] } ?? []))
             }
             try await Task.sleep(nanoseconds: UInt64(every * 1_000_000_000))
         }
         throw InstallError.timedOut(step.title)
     }
+
+    /// The reads in a row that reach nothing before the page says so.
+    static let unreachedReads = 3
+
+    /// **A read that did not reach the machine**: `ssh` itself ended it (255: no connection, a refusal, its own limit of
+    /// 20 seconds to connect), or this Mac's limit for the read ended it with a signal.
+    static func unreached(_ status: Int32) -> Bool { status == 255 || status == SIGTERM || status == SIGKILL }
 
     /// Tailscale's sign-in: started on the machine, then read until the machine is on the network. The link goes to the
     /// screen as this step's lines, and the owner's approval ends the wait (`NetworkSignIn`).
@@ -439,6 +469,7 @@ public actor MachineInstaller {
         let answer = try await remote(program, stdin: stdin, timeout: timeout, runs: runs)
         let text = redact(answer.output)
         lastOutput = text
+        lastStatus = answer.status
         guard answer.status == 0 || allowFailure else {
             // 255 is `ssh` itself, which can end with "Disconnected from …" after the line that says why. Any other
             // status is the program's: a `git` on the server that was refused its own key is not his SSH key.

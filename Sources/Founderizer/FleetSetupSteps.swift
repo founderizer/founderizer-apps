@@ -891,21 +891,19 @@ extension ServerBoxChoice {
     }
 }
 
-/// While a server is made at a provider and joins the private network: the moving title of the whole build, and
-/// its first two steps.
+/// While a server is made at a provider and joins the private network: the moving title of the whole build, the line
+/// of what runs and the bar of its four steps (`SetupPhases`; F4's look (a), the owner's choice of 22 November 2026).
+/// The first step runs for the whole build: the install that follows starts at it too ("Starting your server"), so the
+/// bar never goes back between the two pages.
 struct CloudBuilding: View {
     let stage: FleetCloudModel.Stage
     /// The install that follows the build: the fleet's own VPS, or a server that joins it.
     var job: InstallJob = .hub
     /// The provider that makes the server, for the line of what runs now.
     var provider: CloudProvider?
-    /// The line of what runs now under the title: the first run's "Building your fleet" only (the owner's yes of 5
-    /// November 2026).
-    var showsStatus = false
 
     var body: some View {
-        SetupPhases(names: InstallPhases.names, current: stage == .joining ? 1 : 0, minutesLeft: minutesLeft,
-                    status: showsStatus ? status : nil)
+        SetupPhases(names: InstallPhases.names, current: 0, minutesLeft: minutesLeft, status: status)
             .accessibilityIdentifier("cloud-phases")
     }
 

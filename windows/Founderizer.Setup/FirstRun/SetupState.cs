@@ -74,9 +74,33 @@ public sealed record VpsView(VpsPhase Phase, string Address, InstallTarget? Targ
 /// checklist, and the hub that the claim gave.</summary>
 public sealed record InstallView(bool Running, IReadOnlyList<InstallProgress> Steps, IReadOnlyList<string> Planned, DateTimeOffset RunningSince,
                                  string? Failure, VerifyChecklist? Checklist, string? ClaimedHub, bool NeedsNetworkKey, string? Server = null,
-                                 string? JoinHub = null, string? NetworkFailure = null)
+                                 string? JoinHub = null, string? NetworkFailure = null, InstallHold? Hold = null)
 {
     public static InstallView None { get; } = new(false, [], [], DateTimeOffset.MinValue, null, null, null, false);
+
+    /// <summary>**One report of an install that runs** (the Mac's <c>MachineInstallModel.record</c>): the step in its
+    /// place; the time since the step that runs began, new (<paramref name="now"/>) only when the id of the first step
+    /// that runs changes, since the installer reports a step again at each wait of its check, at each heading of the
+    /// hub's installer and at each read of the network sign-in (F4 piece 2: the minutes counted from the last report,
+    /// "· 13 min" for the whole wait of the hub's installer); and the press's hold, kept at each report, so that the bar
+    /// never goes back inside one try nor across a retry (pieces 3 and 4). A new press makes a new view, and so a new
+    /// hold; a retry empties the steps, so its first step has a new time, and keeps the hold.</summary>
+    public InstallView Reported(InstallProgress progress, DateTimeOffset now)
+    {
+        var steps = Steps.ToList();
+        var at = steps.FindIndex(p => p.Step == progress.Step);
+        if (at >= 0) steps[at] = progress; else steps.Add(progress);
+        var hold = InstallPhases.Of(steps, Planned) is { } phases ? (Hold ?? InstallHold.None).Keep(phases) : Hold;
+        static string? Runs(IReadOnlyList<InstallProgress> all) => all.FirstOrDefault(p => p.State == ProgressState.Running)?.Step;
+        return this with { Steps = steps, RunningSince = Runs(steps) == Runs(Steps) ? RunningSince : now, Hold = hold };
+    }
+
+    /// <summary>**The phases of this install as the build page shows them**: its steps, with the time that the step
+    /// which runs has run (<paramref name="runningFor"/>), held by this press's <see cref="Hold"/>, so that a retry never
+    /// sends the bar back and a heading that the table does not have keeps the line (the Mac's
+    /// <c>InstallPhases(...).map(install.hold.applied(to:))</c>). Null for a plan with no network step.</summary>
+    public InstallPhases? Phases(double runningFor) =>
+        InstallPhases.Of(Steps, Planned, runningFor) is { } phases ? (Hold ?? InstallHold.None).Applied(phases) : null;
 
     /// <summary>The install's checks let the first run go on: none failed, or only the sign-in.</summary>
     public bool Passed => Checklist is { } list && (list.IsReady || list.OnlyNeedsSignIn);

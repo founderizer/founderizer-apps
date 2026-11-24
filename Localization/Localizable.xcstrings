@@ -3820,16 +3820,6 @@
         }
       }
     },
-    "About %lld min" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unos %lld min"
-          }
-        }
-      }
-    },
     "About Founderizer" : {
       "localizations" : {
         "es" : {
@@ -6156,6 +6146,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Comprobando tu hub"
+          }
+        }
+      }
+    },
+    "Checking your server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprobando tu servidor"
           }
         }
       }
@@ -10766,6 +10766,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Instalando %@…"
+          }
+        }
+      }
+    },
+    "Installing Founderizer" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instalando Founderizer"
           }
         }
       }
@@ -15830,6 +15840,16 @@
         }
       }
     },
+    "Preparing your server for agents" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparando tu servidor para los agentes"
+          }
+        }
+      }
+    },
     "Press Full access in Founderizer on your Mac." : {
       "localizations" : {
         "es" : {
@@ -18136,6 +18156,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Secretos"
+          }
+        }
+      }
+    },
+    "Securing your server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protegiendo tu servidor"
           }
         }
       }
@@ -24216,6 +24246,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este Mac no encuentra tu hub%@."
+          }
+        }
+      }
+    },
+    "This Mac cannot reach %@ now. It tries again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este Mac no puede conectar con %@ ahora. Lo intenta de nuevo."
           }
         }
       }

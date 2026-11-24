@@ -93,6 +93,31 @@ public sealed class InstallerTests
         Assert.AreEqual(0, claims.Count);
     }
 
+    /// <summary>**A wait that cannot reach the server says so at the third read in a row, and goes on** (the Mac's
+    /// <c>aWaitThatCannotReachTheServerSaysSoAtTheThirdReadAndGoesOn</c>; F4 piece 5): the reads 2 to 4 reach nothing, the
+    /// 5th reaches the server, the 6th and 7th reach nothing. The bug: the minutes went down while no read reached the
+    /// server, or a lost read ended the wait.</summary>
+    [TestMethod]
+    public async Task A_wait_that_cannot_reach_the_server_says_so_at_the_third_read_and_goes_on()
+    {
+        const string Updates = "Founderizer step 14: security updates";
+        var reads = 0;
+        var remote = Answering(first: call => !call.Program.Contains("tail -n 40", StringComparison.Ordinal) ? null
+            : Interlocked.Increment(ref reads) switch
+            {
+                1 or 5 => StandInRemote.Said(Updates),
+                2 or 3 or 4 or 6 or 7 => StandInRemote.Failed(RemoteFailure.NoAnswer),
+                _ => StandInRemote.Said("READY"),
+            });
+        var seen = new List<InstallProgress>();
+        var checklist = await Hub(InstallPlan.Hub(Server, InstallPlan.DefaultSource, AuthKey), []).RunAsync(remote, seen.Add, CancellationToken.None);
+
+        Assert.IsTrue(checklist.IsReady, "the wait ends as before");
+        CollectionAssert.AreEqual(new[] { ("", false), (Updates, false), (Updates, true), (Updates, false) },
+                                  seen.Where(p => p is { Step: "wait_ready", State: ProgressState.Running })
+                                      .Select(p => (string.Join("|", p.Lines), p.Unreachable)).ToList());
+    }
+
     /// <summary>**A server that IRemote did not reach stops the step with the PC's sentence for that way**, and the kind
     /// that decides a retry: a refused port read as a step that failed would never be tried again at the hub's code.</summary>
     [TestMethod]
