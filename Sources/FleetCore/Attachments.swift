@@ -188,12 +188,13 @@ public struct MessageAttachment: Decodable, Identifiable, Sendable, Equatable {
 /// memory, and it writes JPEG, so neither app needs AppKit or UIKit for this.
 extension MessageAttachment {
     /// A small picture of these bytes, at most `maxPixels` on its longest side. nil when the bytes are no picture.
-    public static func thumbnail(_ data: Data, maxPixels: Int = 320) -> CGImage? {
+    public static func thumbnail(_ data: Data, maxPixels: Int = 320, decodeImmediately: Bool = false) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData,
                                                        [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
         return CGImageSourceCreateThumbnailAtIndex(source, 0, [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: decodeImmediately,
             kCGImageSourceThumbnailMaxPixelSize: maxPixels] as CFDictionary)
     }
 

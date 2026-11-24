@@ -128,13 +128,20 @@ struct StagedFilesStrip: View {
     }
 
     @ViewBuilder private func picture(_ file: FleetStore.StagedFile) -> some View {
-        if file.mime.hasPrefix("image/"),
-           let data = KeptFile.bytes(of: store.stagedURL(file), atMost: MessageAttachment.sizeLimit),
-           let small = MessageAttachment.thumbnail(data, maxPixels: 64) {
-            Image(decorative: small, scale: 1).resizable().aspectRatio(contentMode: .fill)
-                .frame(width: 26, height: 26).clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+        if file.mime.hasPrefix("image/") {
+            let url = store.stagedURL(file)
+            let key = PicturePreviews.Key(file: "staged/\(store.filesGeneration)/\(file.previewRead ?? file.requestID)", pixels: 64)
+            CachedThumbnail(previews: store.picturePreviews, key: key, bytes: { KeptFile.bytes(of: url, atMost: MessageAttachment.sizeLimit) }) { small, _ in
+                if let small {
+                    Image(decorative: small, scale: 1).resizable().aspectRatio(contentMode: .fill)
+                        .frame(width: 26, height: 26).clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+                } else {
+                    Image(systemName: "photo")
+                        .font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted).frame(width: 26, height: 26)
+                }
+            }
         } else {
-            Image(systemName: file.mime.hasPrefix("image/") ? "photo" : "doc")
+            Image(systemName: "doc")
                 .font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted).frame(width: 26, height: 26)
         }
     }
@@ -664,34 +671,37 @@ struct PictureTile: View {
         // **"Reading…" stands half a second once it drew** (fix round 3b; D-1 rule 1, as a loading line's `settle`): the
         // picture, or "Not loaded", waits for it. It stood 0.45–0.55 s on a 1.5-s read, and 10–45 ms after ↻.
         let wordsStand = wordsDrawn.map { !QuietClock.shared.passed($0 + LoadingLine.stands) } ?? false
-        let data = wordsStand ? nil : store.heldBytes(of: file)
-        let picture = data.flatMap { MessageAttachment.thumbnail($0, maxPixels: 720) }
+        let held = store.heldBytes(of: file)
+        let data = wordsStand ? nil : held
+        let key = PicturePreviews.Key(file: "held/\(store.filesGeneration)/\(file.size)/\(file.sha256)", pixels: 720)
         // A read that failed, or one that cannot go while the hub is away.
         let failed = !wordsStand && data == nil && (store.unloadedFiles.contains(file.id) || !store.isFresh)
         // A stack, so the reads below stay one through the picture's states.
-        ZStack {
-            if let picture {
-                let ratio = max(CGFloat(picture.width) / CGFloat(max(1, picture.height)), 0.01)
-                // Whole, at its own proportions, as large as the place allows: the place's height, and its width, which
-                // is the column's where the column is narrower.
-                Image(decorative: picture, scale: 1).resizable().aspectRatio(ratio, contentMode: .fit)
-                    .frame(maxWidth: square ? .infinity : min(Self.widest, Self.height * ratio))
-                    .clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
-                    .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
-                    .help(words)
-                    .overlay(alignment: .topTrailing) {
-                        if let save {
-                            SaveFileIcon(words: String(l10n: "Save \(file.name) to Downloads"), action: save)
-                                .accessibilityIdentifier("save-file-\(file.id)").padding(6)
-                        } else if let menu {
-                            // In the view while the pointer is elsewhere, only not drawn: the menu that it opened stays
-                            // open while the pointer is on the menu. VoiceOver has its choices on the file itself.
-                            menu.padding(6).opacity(menuShows ? 1 : 0).allowsHitTesting(menuShows)
-                                .accessibilityHidden(true)
+        CachedThumbnail(previews: store.picturePreviews, key: key, available: held != nil, bytes: { held }) { picture, decoded in
+            ZStack {
+                if let picture, !wordsStand {
+                    let ratio = max(CGFloat(picture.width) / CGFloat(max(1, picture.height)), 0.01)
+                    // Whole, at its own proportions, as large as the place allows: the place's height, and its width, which
+                    // is the column's where the column is narrower.
+                    Image(decorative: picture, scale: 1).resizable().aspectRatio(ratio, contentMode: .fit)
+                        .frame(maxWidth: square ? .infinity : min(Self.widest, Self.height * ratio))
+                        .clipShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+                        .contentShape(RoundedRectangle(cornerRadius: FormMetrics.inner))
+                        .help(words)
+                        .overlay(alignment: .topTrailing) {
+                            if let save {
+                                SaveFileIcon(words: String(l10n: "Save \(file.name) to Downloads"), action: save)
+                                    .accessibilityIdentifier("save-file-\(file.id)").padding(6)
+                            } else if let menu {
+                                // In the view while the pointer is elsewhere, only not drawn: the menu that it opened stays
+                                // open while the pointer is on the menu. VoiceOver has its choices on the file itself.
+                                menu.padding(6).opacity(menuShows ? 1 : 0).allowsHitTesting(menuShows)
+                                    .accessibilityHidden(true)
+                            }
                         }
-                    }
-            } else {
-                plate(data: data, failed: failed)
+                } else {
+                    plate(data: decoded ? data : nil, failed: failed)
+                }
             }
         }
         .modifier(Place(square: square, side: side))

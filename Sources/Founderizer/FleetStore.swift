@@ -966,6 +966,9 @@ final class FleetStore {
         /// When the hub took its upload, by the hub's own clock (`MessageAttachment.created`); nil for a file that is
         /// not on the hub, or one that an older version of this app kept.
         var hubCreated: Double?
+        /// Another read on upload can find a replaced or restored file under this request id.
+        var previewRead: UUID?
+        enum CodingKeys: String, CodingKey { case requestID, name, mime, size, attachmentID, failure, hubCreated }
         var id: UUID { requestID }
         var isOnHub: Bool { attachmentID != nil }
     }
@@ -1135,18 +1138,24 @@ final class FleetStore {
         guard let state, !file.isOnHub, !uploading.contains(file.requestID) else { return }
         // Only a regular file of a staged file's size is read, with no wait (`KeptFile`). A larger file there is not
         // one that this app staged: it gets the words that the upload gave it before, with no read of it.
+        func readForUpload(_ failure: String?) {
+            change(file, in: composer) {
+                $0.failure = failure
+                if $0.mime.hasPrefix("image/") { $0.previewRead = UUID() }
+            }
+        }
         let found = KeptFile.read(stagedURL(file), atMost: MessageAttachment.sizeLimit)
         if found == .refused(.tooLarge) {
-            change(file, in: composer) { $0.failure = AttachmentError.tooLarge.errorDescription }
+            readForUpload(AttachmentError.tooLarge.errorDescription)
             return
         }
         guard case .bytes(let data) = found else {
-            change(file, in: composer) { $0.failure = String(l10n: "The bytes of this file are gone. Pick it again.") }
+            readForUpload(String(l10n: "The bytes of this file are gone. Pick it again."))
             return
         }
         uploading.insert(file.requestID)
         defer { uploading.remove(file.requestID) }
-        change(file, in: composer) { $0.failure = nil }
+        readForUpload(nil)
         do {
             let sent = try await client.upload(data, name: file.name, mime: file.mime, requestID: file.requestID,
                                                client: installation, hub: hub, database: state.db)
@@ -1612,6 +1621,7 @@ final class FleetStore {
     private(set) var fileProblems: [Int: String] = [:]
     func setFileProblem(_ words: String?, for file: Int) { fileProblems[file] = words }
     /// The bytes of the files that the chat shows, by attachment number, oldest first.
+    @ObservationIgnored private(set) var picturePreviews = PicturePreviews()
     private(set) var fileData: [Int: Data] = [:]
     /// The SHA-256 that the read of each file of `fileData` checked (`heldBytes(of:)`).
     private var fileSums: [Int: String] = [:]
@@ -1629,6 +1639,7 @@ final class FleetStore {
         guard fleet != filesFleet else { return }
         filesFleet = fleet
         filesGeneration += 1
+        picturePreviews = PicturePreviews()
         // A chip that went up to the hub before names a file of that hub: it goes up again before its send
         // (`freshFiles`). A chip of the same hub gets its own row back, under its own request number.
         for (composer, files) in staged where files.contains(where: { $0.hubCreated != nil }) {

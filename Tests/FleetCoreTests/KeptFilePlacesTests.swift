@@ -258,7 +258,7 @@ struct KeptFilePlacesTests {
 
     /// **The Mac app reads its kept files through the reader too**: the readings that it kept for a window's first
     /// frame (read on the main thread at the app's start) and the staged files of a message (read in `upload`, and
-    /// in a view's body for the small picture). The app's target has no tests, so its source is read, as
+    /// when making the small picture). The app's target has no tests, so its source is read, as
     /// `InstallStartTests` reads it, with each run of spaces and line ends as one space, so a line that is wrapped
     /// anew is the same line. The system's own reader stays for the file that the owner picks himself.
     @Test func theMacAppReadsItsKeptFilesThroughTheReader() throws {
@@ -277,7 +277,8 @@ struct KeptFilePlacesTests {
             #expect(store.contains("KeptFile.bytes(of: \(own), atMost: KeptFile.largestReading)"), "\(own)")
         }
         #expect(store.contains("KeptFile.read(stagedURL(file), atMost: MessageAttachment.sizeLimit)"))
-        #expect(views.contains("KeptFile.bytes(of: store.stagedURL(file), atMost: MessageAttachment.sizeLimit)"))
+        #expect(views.contains("let url = store.stagedURL(file)"))
+        #expect(views.contains("KeptFile.bytes(of: url, atMost: MessageAttachment.sizeLimit)"))
         // A staged file that is too large keeps the words that its upload gave it before, with no read of it: they
         // stand in `upload` before the file is marked as going up.
         let upload = try #require(store.range(of: "func upload(_ file: StagedFile, for composer: String) async {"))
