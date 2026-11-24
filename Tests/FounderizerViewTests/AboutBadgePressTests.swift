@@ -39,14 +39,18 @@ import Testing
              "event_id": number, "created": now - 300 + Double(number), "client": "example-mac", "read_at": now - 200,
              "about": about]
         }
+        let db = "view-test-\(UUID().uuidString)"
+        let tasks = [task(1, "Find the old build files", ["job_name": "Move the CI to Node 24"]),
+                     task(2, "Check the builds", ["job": 1])]
+        let messages = [message(1, "Good work on the builds.", about: ["task": 2, "title": "Check the builds"]),
+                        message(2, "Thanks for the whole move.", about: ["job": 2, "title": "Move the CI to Node 24"])]
+        // Both badges and the tasks that they open come from older blocks, before the hub answers.
         let state: [String: Any] = [
-            "schema_version": 1, "db": "view-test-\(UUID().uuidString)", "time": Int(now),
+            "schema_version": 1, "db": db, "time": Int(now),
             "agents": [["name": "manager", "role": "manager", "runtime": "claude", "can": [], "placed": true]],
-            "tasks": [task(1, "Find the old build files", ["job_name": "Move the CI to Node 24"]),
-                      task(2, "Check the builds", ["job": 1])],
-            "messages": [message(1, "Good work on the builds.", about: ["task": 2, "title": "Check the builds"]),
-                         message(2, "Thanks for the whole move.", about: ["job": 2, "title": "Move the CI to Node 24"])],
-            "holds": [], "outcomes": [], "notes": [], "needs": [], "permissions": [], "reports": [],
+            "tasks": [], "messages": [], "holds": [], "outcomes": [], "notes": [], "needs": [], "permissions": [], "reports": [],
+            "older_tasks": ["before": 4, "block": 4, "mark": "tasks", "tasks": tasks.count],
+            "older_rows": ["messages": ["before": 4, "block": 4, "mark": "messages", "rows": messages.count]],
             "ui_features": ["direct_chat", "message_about"]]
         let reading = try JSONSerialization.data(withJSONObject: state)
         // A first store makes the test's folder the app's (`ViewHost`), before anything is written to it.
@@ -58,7 +62,22 @@ import Testing
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         // the kept reading of the hub of the tests, http://127.0.0.1:9 (`FleetStore.keptFile`)
         try reading.write(to: folder.appendingPathComponent("state-127.0.0.1-9.json"))
-        return ViewHost.store(try HubState.decode(reading))
+        let hub = try HubClient.address("http://127.0.0.1:9")
+        func block(_ fields: [String: Any], in directory: URL) throws {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: fields).write(to: directory.appendingPathComponent("0.json"))
+        }
+        try block(["db": db, "from": 0, "mark": "tasks", "tasks": tasks,
+                   "notes": [], "permissions": [], "holds": [], "outcomes": [], "steers": []],
+                  in: StartAgain.olderFolder(of: hub, in: folder))
+        try block(["db": db, "from": 0, "list": "messages", "mark": "messages", "messages": messages],
+                  in: StartAgain.olderRowsFolder(of: hub, list: "messages", in: folder))
+        AppDefaults.store.set([hub.absoluteString], forKey: "hubsAnswered")
+        AppDefaults.store.set([hub.absoluteString: "task.2"], forKey: "lastPages")
+        let store = FleetStore()
+        try #require(store.destination == .activity && store.detail?.shown == .task(2))
+        try #require(store.state?.tasks.count == 2 && store.chatTimeline.count(for: "manager") == 2)
+        return store
     }
 
     private static func message(_ number: Int) -> String { "aaaaaaaa-0000-4000-8000-00000000000\(number)" }
@@ -86,6 +105,7 @@ import Testing
             NSApp.accessibilitySetValue(true, forAttribute: enhanced)
             defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
             let store = try Self.store()
+            store.closeDetail()
             store.destination = .agent("manager")
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }

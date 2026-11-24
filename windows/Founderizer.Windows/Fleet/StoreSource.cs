@@ -218,6 +218,8 @@ public sealed class StoreSource : IFleetSource
 
     public Task<string?> TalkAsync(long need) => store.TalkAsync(need);
 
+    public void KeepKey(string box) => store.KeepKey(box);
+
     public Task RefreshAsync() => store.RefreshAsync();
 
     public Task RetryAsync() => store.RetryAsync();

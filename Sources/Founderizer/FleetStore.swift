@@ -1864,6 +1864,7 @@ final class FleetStore {
     private func forgetOlder() {
         olderRead?.cancel(); olderRead = nil
         olderReads += 1
+        launchHistory?.cancel(); launchHistory = nil
         older = OlderTasks(); lastWindow = nil
         olderRowsRead?.cancel(); olderRowsRead = nil
         olderRowsReads += 1
@@ -1903,17 +1904,6 @@ final class FleetStore {
                 guard name.hasSuffix(".json"), let from = Int(name.dropLast(5)), !named.contains(from) else { continue }
                 try? FileManager.default.removeItem(at: folder.appendingPathComponent(name))
             }
-        }
-    }
-
-    /// The blocks that this Mac kept for this hub, each read as a kept reading is (`KeptFile`): a file that is no
-    /// block is none.
-    private func keptBlocks() -> [OlderBlock] {
-        let folder = StartAgain.olderFolder(of: hub, in: readingsFolder)
-        return ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).compactMap { name in
-            guard name.hasSuffix(".json"), Int(name.dropLast(5)) != nil else { return nil }
-            return KeptFile.bytes(of: folder.appendingPathComponent(name), atMost: KeptFile.largestRecord)
-                .flatMap { try? OlderBlock.decode($0) }
         }
     }
 
@@ -1997,21 +1987,8 @@ final class FleetStore {
         }
     }
 
-    /// The blocks of older rows that this Mac kept for this hub, of the three lists, each read as a kept reading is
-    /// (`KeptFile`): a file that is no block of its folder's list is none.
-    private func keptRowBlocks() -> [OlderRowsBlock] {
-        var kept: [OlderRowsBlock] = []
-        for list in OlderRowsList.allCases {
-            let folder = StartAgain.olderRowsFolder(of: hub, list: list.rawValue, in: readingsFolder)
-            for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
-                guard name.hasSuffix(".json"), Int(name.dropLast(5)) != nil,
-                      let data = KeptFile.bytes(of: folder.appendingPathComponent(name), atMost: KeptFile.largestRecord),
-                      let block = try? OlderRowsBlock.decode(data), block.kind == list else { continue }
-                kept.append(block)
-            }
-        }
-        return kept
-    }
+    /// The complete disk cache for this launch, ready before the first live window can need a later block.
+    @ObservationIgnored private var launchHistory: Task<(OlderTasks, OlderRows), Never>?
 
     init() {
         // **A launch's `-hubAddress` that is no hub address stops the app** (review B9, fix round 2): it fell back to his
@@ -2072,9 +2049,18 @@ final class FleetStore {
         // these reads hold the window's first frame. What is not read is no kept reading: the window waits for the
         // hub's first answer, as on a Mac that kept none.
         if let data = KeptFile.bytes(of: lastReadingFile, atMost: KeptFile.largestReading), let kept = try? HubState.decode(data) {
-            // With the blocks of older tasks that this Mac kept beside it (`keepBlock`): the first frame has every task.
-            if kept.older_tasks?.isValid == true { older = OlderTasks(kept: keptBlocks(), db: kept.db) }
-            if kept.older_rows?.isValid == true { olderRows = OlderRows(kept: keptRowBlocks(), db: kept.db) }
+            let files = KeptHistory(window: kept, hub: hub, folder: readingsFolder, tasks: true, rows: true)
+            let first = KeptHistory.read(files.needed)
+            if kept.older_tasks?.isValid == true { older = OlderTasks(kept: first.tasks, db: kept.db) }
+            if kept.older_rows?.isValid == true { olderRows = OlderRows(kept: first.rows, db: kept.db) }
+            if !files.later.isEmpty {
+                let db = kept.db, hasTasks = older.db == kept.db, hasRows = olderRows.db == kept.db
+                launchHistory = Task.detached(priority: .utility) {
+                    let rest = KeptHistory.read(files.later, priority: .utility)
+                    return (hasTasks ? OlderTasks(kept: first.tasks + rest.tasks, db: db) : OlderTasks(),
+                            hasRows ? OlderRows(kept: first.rows + rest.rows, db: db) : OlderRows())
+                }
+            }
             lastWindow = kept
             let shown = joined(kept, shown: nil)
             state = shown
@@ -2434,11 +2420,27 @@ final class FleetStore {
             guard requestedHub == hub else { return }
             // The window of the tasks, joined with the blocks of older tasks that this Mac holds (`OlderTasks`): at
             // the first read of a fleet in this start (a connect, a launch that kept no reading), the ones on its disk.
-            if window.older_tasks?.isValid == true, older.db != window.db {
-                older = OlderTasks(kept: keptBlocks(), db: window.db)
+            let generation = olderReads
+            if let loading = launchHistory {
+                if window.db == lastWindow?.db {
+                    let all = await loading.value
+                    guard requestedHub == hub, generation == olderReads else { return }
+                    (older, olderRows) = all
+                }
+                launchHistory = nil
             }
-            if window.older_rows?.isValid == true, olderRows.db != window.db {
-                olderRows = OlderRows(kept: keptRowBlocks(), db: window.db)
+            let needsTasks = window.older_tasks?.isValid == true && older.db != window.db
+            let needsRows = window.older_rows?.isValid == true && olderRows.db != window.db
+            if needsTasks || needsRows {
+                let folder = readingsFolder
+                let blocks = await Task.detached(priority: .userInitiated) {
+                    let files = KeptHistory(window: window, hub: requestedHub, folder: folder,
+                                            tasks: needsTasks, rows: needsRows)
+                    return KeptHistory.read(files.needed + files.later)
+                }.value
+                guard requestedHub == hub, generation == olderReads else { return }
+                if needsTasks { older = OlderTasks(kept: blocks.tasks, db: window.db) }
+                if needsRows { olderRows = OlderRows(kept: blocks.rows, db: window.db) }
             }
             let fresh = joined(window, shown: state)
             lastWindow = window

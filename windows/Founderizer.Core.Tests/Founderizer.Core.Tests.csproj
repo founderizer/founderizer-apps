@@ -21,8 +21,10 @@
     <None Include="../../vectors/*.json" Link="vectors/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- The credit of FleetCore, which CreditTests holds the library's credit equal to. -->
     <None Include="../../Sources/FleetCore/Credit.swift" Link="sources/Credit.swift" CopyToOutputDirectory="PreserveNewest" />
+    <!-- FleetCore's rule of a key in a text, whose patterns KeyHoldTests holds KeyInText.cs equal to. -->
+    <None Include="../../Sources/FleetCore/KeyInText.swift" Link="sources/KeyInText.swift" CopyToOutputDirectory="PreserveNewest" />
     <!-- The Swift views whose words the library gives the screens (SwiftWordsTests): their literals are the words. -->
-    <None Include="../../Sources/Founderizer/NeedRequestCard.swift;../../Sources/Founderizer/AttachmentViews.swift;../../Sources/Founderizer/FleetView.swift;../../Sources/Founderizer/AgentStatusPanel.swift;../../Sources/Founderizer/ThreadViews.swift" Link="sources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../Sources/Founderizer/NeedRequestCard.swift;../../Sources/Founderizer/AttachmentViews.swift;../../Sources/Founderizer/FleetView.swift;../../Sources/Founderizer/AgentStatusPanel.swift;../../Sources/Founderizer/ThreadViews.swift;../../Sources/Founderizer/SecretRequestViews.swift" Link="sources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../ios/Sources/AgentPage.swift;../../ios/Sources/ChatPage.swift" Link="sources/ios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

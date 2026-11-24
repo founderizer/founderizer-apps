@@ -131,6 +131,10 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
             VerticalAlignment = VerticalAlignment.Bottom,
         };
         composer.Typed += text => source.SetDraft(agent, text);
+        // Words that look like a key wait for his choice (KeyHold): they stay in the field, and "Keep it" lets them go.
+        composer.HoldsKey = text => source.State.HoldsKey(KeyHold.Chat(agent), text);
+        composer.KeepPressed += () => source.KeepKey(KeyHold.Chat(agent));
+        composer.SizeChanged += (_, _) => Lift();
         composer.PlusPressed += AddFiles;
         composer.Sent += () =>
         {
@@ -235,6 +239,7 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         composer.Visibility = model.Composer.ShowsField ? Visibility.Visible : Visibility.Collapsed;
         composer.Show(model.Composer.Placeholder, model.Composer.ShowsPlus, model.Composer.CanSend);
         composer.Hovers(model.Composer.PlusHover, model.Composer.SendHover);
+        composer.ShowHold(model.Composer.KeyHold);
         ((TextBlock)((Border)latest.Content).Child).Text = model.LatestWords;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(latest, model.LatestWords);
         note.Text = model.Composer.Note ?? "";
@@ -326,9 +331,16 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
         else source.RemoveFile("agent:" + agent, chip.File.RequestId);
     }
 
-    /// <summary>The thread ends over the request line while it stands.</summary>
-    private void Lift() => thread.Scroll.Margin = new Thickness(0, 0, 0,
-        64 + (bar.Visibility == Visibility.Visible ? bar.ActualHeight : 0));
+    /// <summary>The thread ends over the request line while it stands, and the line, the note and Latest stand over the
+    /// composer while it grows over its one line (a hold of a key, his files).</summary>
+    private void Lift()
+    {
+        var over = Math.Max(0, composer.ActualHeight - composer.LineHeight);
+        bar.Margin = new Thickness(0, 0, 0, 64 + over);
+        note.Margin = new Thickness(23.5 + 2, 0, 23.5, 58 + over);
+        latest.Margin = new Thickness(0, 0, 0, 76 + over);
+        thread.Scroll.Margin = new Thickness(0, 0, 0, 64 + over + (bar.Visibility == Visibility.Visible ? bar.ActualHeight : 0));
+    }
 
     /// <summary>"Earlier messages": as many items again (the Mac's 60).</summary>
     public void ShowEarlier()
@@ -338,7 +350,11 @@ internal sealed class ChatPage : Grid, IPageView, IThreadContext
     }
 
     public bool CanSendAnswer(RequestCard card) =>
-        AnswerBoxModel.CanSend(state, now, card.Answer.Draft, card.Answer.Files.Count);
+        AnswerBoxModel.CanSend(state, now, card.Answer.Draft, card.Answer.Files.Count, held: card.Answer.KeyHold is not null);
+
+    public bool HoldsKey(string box, string text) => source.State.HoldsKey(box, text);
+
+    public void KeepKey(string box) => source.KeepKey(box);
 
     // Each answer of a card waits 5 seconds with Undo, then goes (OwnerStore.Hold).
     public void Press(long need, int choice) => source.Hold(need, CardAnswer.Option(choice));

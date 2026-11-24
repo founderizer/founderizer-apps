@@ -1,0 +1,1617 @@
+{
+  "about" : "What FleetCore's KeyInText finds in each example text (`found`: its first UTF-16 unit and its count of them, or null), and what KeyInText.looksRandom says of each run. Join the parts of each text: no part holds a key's whole shape. Every key here is made up.",
+  "made_by" : "app/Tests/FleetCoreTests/KeyInTextVectorsTests.swift",
+  "runs" : [
+    {
+      "random" : true,
+      "run" : "Xk7Qp2Lm9Rt4Vb8Nc3Wz6Hd1Jf5Gs0Ya"
+    },
+    {
+      "random" : false,
+      "run" : "Xk7Qp2Lm9Rt4Vb8Nc3Wz6Hd1Jf5Gs0Y"
+    },
+    {
+      "random" : false,
+      "run" : "thisIsAVeryLongFunctionNameForTesting123"
+    },
+    {
+      "random" : false,
+      "run" : "3f786850e387550fdab836ed7e6dc881de23001b"
+    },
+    {
+      "random" : false,
+      "run" : "ABCDEF0123456789ABCDEF0123456789XYZ"
+    },
+    {
+      "random" : false,
+      "run" : "/srv/example/agents/app/Sources/Founderizer"
+    },
+    {
+      "random" : false,
+      "run" : "aaaaBBBB1111ccccDDDD2222eeeeFFFF3333"
+    },
+    {
+      "random" : true,
+      "run" : "Zm9vYmFyMTIzQUJDZGVmR0hJams0NTZMTU5vcFFSUw=="
+    },
+    {
+      "random" : false,
+      "run" : "OPENAI_API_KEY_FOR_THE_STUDIO_AGENT_2026"
+    },
+    {
+      "random" : true,
+      "run" : "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"
+    },
+    {
+      "random" : false,
+      "run" : "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa1"
+    },
+    {
+      "random" : false,
+      "run" : "abc//Xk7Qp2Lm9Rt4Vb8Nc3Wz6Hd1Jf5Gs0Ya"
+    },
+    {
+      "random" : true,
+      "run" : "1aBcD3fGhIjKlMnOpQrStUvWxYz0123456789"
+    },
+    {
+      "random" : true,
+      "run" : "Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9Ab1Cd2Ef3Gh4Ij5Kl6"
+    },
+    {
+      "random" : true,
+      "run" : "Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1Wx2"
+    },
+    {
+      "random" : false,
+      "run" : "ABCD1234abcdEFGH5678efghIJKL9012ijkl"
+    },
+    {
+      "random" : false,
+      "run" : "Xk7Qp2Lm9Rt4helloworldexampleVb8Nc3Wz6"
+    },
+    {
+      "random" : true,
+      "run" : "Xk7Qp2Lm9Rt4Vb8helloNc3Wz6Hd1Jf5Gs0Yamore"
+    },
+    {
+      "random" : true,
+      "run" : "h9wVbRGg4qDsj7QsLcb8ky1gghBFSl5E"
+    },
+    {
+      "random" : true,
+      "run" : "iG0lPjCK6W7LmkEazzerAR68WE5329qtJCr9zt"
+    },
+    {
+      "random" : true,
+      "run" : "k59unWVXbfp7NJcDAGdW5xXoeznVfFVOa"
+    },
+    {
+      "random" : true,
+      "run" : "j1x4LEd9w7mcevWGb5EthDSC55NPJN4IF0NDv"
+    },
+    {
+      "random" : true,
+      "run" : "FOW77rRHuWjP43hhIGCumHILSN693ttzU3"
+    },
+    {
+      "random" : true,
+      "run" : "qy69BSIEbjCl4nGya40QqDFGd3KrN2cqtM"
+    },
+    {
+      "random" : true,
+      "run" : "7JeHcSLnsuB0EfKnP0feaP4kikr52Oo1cw"
+    },
+    {
+      "random" : true,
+      "run" : "cyZ8F3XtuBjlEADxci9uaw5uG9XPhZ6v11YD"
+    },
+    {
+      "random" : false,
+      "run" : "WkNvsWUikKyZlNsuNInXjUaWUvZEISAe"
+    },
+    {
+      "random" : true,
+      "run" : "9Dv8mxdAmONYDwztQvxBewavP0yCmUG2TI"
+    },
+    {
+      "random" : true,
+      "run" : "lZX9COIPAXHlXzEuiRf6TL3oUfZGOEPFbXk"
+    },
+    {
+      "random" : true,
+      "run" : "CrSsnwE2ieleUWCkljWy5NPCgdyJiF4qOj"
+    },
+    {
+      "random" : true,
+      "run" : "AXk2lm2rRuq9oj726wVO9hLBo1RYeunLJLEi"
+    },
+    {
+      "random" : true,
+      "run" : "U8ikPpa7fVEz5blf5VKLOgTaYahVJVEB"
+    },
+    {
+      "random" : true,
+      "run" : "yfnZ4ipSU9vqSkvRS0295dXudwSCNCvEX6uH"
+    },
+    {
+      "random" : true,
+      "run" : "wAwL5m3ydPloCopW1KVkwtAcxeUTFi4LK"
+    },
+    {
+      "random" : true,
+      "run" : "Uu8BturV83iUpfHxeIWWRsvBfPKFuWiZ"
+    },
+    {
+      "random" : true,
+      "run" : "F72xuljSfqclgIzTac7bh6nuAyJWqwk8NfhBe"
+    },
+    {
+      "random" : true,
+      "run" : "HMfql01JKDlVfmp0EfV9QsAecJCnxiBl3LitJ"
+    },
+    {
+      "random" : true,
+      "run" : "dicvAMBaMjclRk5NZpDpggkAgWDqNrae"
+    },
+    {
+      "random" : true,
+      "run" : "qcn8cvw3xRXIrk6l1B64ir1PnLpFW5onXP9M7R"
+    },
+    {
+      "random" : true,
+      "run" : "wWI1JcMA6vejZlzGanbjX4nNRmkmbRF71j"
+    },
+    {
+      "random" : true,
+      "run" : "kpRKtmwr99kYONQcgXTaySP8PzFn7UyyOAd5oez"
+    },
+    {
+      "random" : true,
+      "run" : "sBxlhR0pJ2zLb8QZ9fVCYtAmgLuAAVq2afN"
+    },
+    {
+      "random" : true,
+      "run" : "8UDcH3JFxlGvohFfawlhsI4fSn4mGZWEad5QS"
+    },
+    {
+      "random" : true,
+      "run" : "dCHfqqEdxBWXfcCfJuco1sGdxrasQMetdEBDntM"
+    },
+    {
+      "random" : true,
+      "run" : "FXIq1BKED82qO61SXQNXg9Q0txVBVhkL6uWTWg"
+    },
+    {
+      "random" : true,
+      "run" : "SIEKfZE1ZhWtWFgBRdrBDrk1PoIeDg1gpcO"
+    },
+    {
+      "random" : true,
+      "run" : "zrV8sIzyq0fq8xoiadegKRTYCRhsOxtX"
+    },
+    {
+      "random" : true,
+      "run" : "IU0rZxFDa8RBxXnXD19UrGqIFozcDMYH"
+    },
+    {
+      "random" : true,
+      "run" : "mU8cPUb7iH4Eu61oJmt5AHqbkbxhvABoR"
+    },
+    {
+      "random" : true,
+      "run" : "ALtfCvdHcpr5C2gAtWyuEBAPVKESOOb4T9qHPW"
+    },
+    {
+      "random" : true,
+      "run" : "sI4rIMVMiEVOFmFBdkpXlX6fNU4Df4fdcdeae"
+    },
+    {
+      "random" : true,
+      "run" : "eBAb57JqS83nYafTT4foS7IAEEXGvG4vhzX"
+    },
+    {
+      "random" : true,
+      "run" : "LY5EYPIFqdQUcOSXo5uf4l5J93D3o0ovsJ7K3W"
+    },
+    {
+      "random" : true,
+      "run" : "zz9Blb9SeU2vktGodgo5zkNgPKJfykBmKv"
+    },
+    {
+      "random" : true,
+      "run" : "j7KTe87gdavYIJn4qyfvpbMfAVYzENLKPycs"
+    },
+    {
+      "random" : true,
+      "run" : "9SjsXOUeBMAiH6rgAdepdlXN1CgI9B1XiErNlU"
+    },
+    {
+      "random" : true,
+      "run" : "6yGcAuevSPgqnKGxei5rvfcjaEi9xLYEHz"
+    },
+    {
+      "random" : true,
+      "run" : "YFHLXYsS0s6VCnia2LEZ1BKPcILdPnIMs7mHP"
+    },
+    {
+      "random" : true,
+      "run" : "Ez6vmQYQ4G42Iz1fxdmV3fgRqfbXlKmFmR"
+    },
+    {
+      "random" : true,
+      "run" : "k6fRaG82SCnh3mne6SRDbdTPcg7qJRSF"
+    },
+    {
+      "random" : true,
+      "run" : "ngeovyq0FHu9Rn8osi59K3rYKWdet8eO4NV"
+    },
+    {
+      "random" : true,
+      "run" : "keXOVBZeeTMWsvigxSTh26FfQagtQDpO"
+    },
+    {
+      "random" : true,
+      "run" : "Y1eJ2EYcAWdsqC2iAXBoQJM2wKdYc9J7"
+    },
+    {
+      "random" : true,
+      "run" : "gdvwWz8x8bkP08SapJwzYnQpZ5SBl4bjt2c1XL"
+    },
+    {
+      "random" : true,
+      "run" : "pe4zU3mt6FbWVK3mzoFMms3A0Re6GM6Z7MPec4j"
+    },
+    {
+      "random" : true,
+      "run" : "TIwFol12es7QOtxEoGOTa1sZQ5cam9glxYLo"
+    },
+    {
+      "random" : true,
+      "run" : "VdcmrQUi44ih6LagelTw4ubjmIDoQ3hh2N5"
+    },
+    {
+      "random" : true,
+      "run" : "MqguACv4z9oznE4kiHlhAWx3U2saO9DtLcpvnYn"
+    },
+    {
+      "random" : true,
+      "run" : "Wq3nJtiSyDGrYBYXUympnOthWGHOdvZLlAh8PF"
+    },
+    {
+      "random" : true,
+      "run" : "N56QelflxNwxPnSasvIXcKa0BtSlKHwE6e31m"
+    },
+    {
+      "random" : true,
+      "run" : "Chqx5yyt9aUpT166RrLCP54vrRODq8TgtV4x4"
+    },
+    {
+      "random" : true,
+      "run" : "Vwyk7LbJKL9nDbylmSk67cpQggaqYNQRsPlhv2"
+    },
+    {
+      "random" : true,
+      "run" : "K1z7xtrJrfN7hYfdIaffyeupzxDl0PfQH0"
+    },
+    {
+      "random" : true,
+      "run" : "UETw7uhonHZqqDfNVQlUbtuROnKWKGc93"
+    },
+    {
+      "random" : true,
+      "run" : "s5AL685FusGy4dBZ1VzVOv68DSeXXmxv7wB"
+    },
+    {
+      "random" : true,
+      "run" : "BWr3ZtBnfmjQ850jdvAdNA2XxDhTlms0a"
+    },
+    {
+      "random" : true,
+      "run" : "ZKraEK4COD7GDnQnNqLgZnWOwEzXbv4gdz"
+    },
+    {
+      "random" : true,
+      "run" : "6ACRhURnD0b9mftBc6kHn00VIlCSbO9o"
+    },
+    {
+      "random" : true,
+      "run" : "asPWs24iMcF2edIOVKM8ClVCGFhfQ9JP2W3roW"
+    },
+    {
+      "random" : true,
+      "run" : "rkN0F2gAiHtGua2sH0roMhWI21uXxykCwUSqO6Z"
+    },
+    {
+      "random" : true,
+      "run" : "yb5ewKf2bu9q2YnnLrexgqceTQsJcQXUVYas"
+    },
+    {
+      "random" : true,
+      "run" : "44uB8MyTbcdKmNDCr4UwUZMDon75stYg1uuvgTY"
+    },
+    {
+      "random" : true,
+      "run" : "SUnd8j0cmbwcQ3R7sB96ZH2925aNbw6Ep2Mf"
+    },
+    {
+      "random" : true,
+      "run" : "XXcfW9u05GMGpn41T8zyWIyhE7yBlxuPUxbfO"
+    },
+    {
+      "random" : true,
+      "run" : "uRHMRTQENX3UielDaLocjdqI3LE6BqKV"
+    },
+    {
+      "random" : true,
+      "run" : "d8OQ3c3Axr9jqI9jbZyaLrY34XWAyaQqhsvUSWB"
+    },
+    {
+      "random" : true,
+      "run" : "5NRqVjE1qUb8hLzNUuWGodqLzIPLWdKLfktF"
+    },
+    {
+      "random" : true,
+      "run" : "qaBsJG2xYUeVBWtg3b3yUllsh9glVkGw"
+    },
+    {
+      "random" : true,
+      "run" : "ntHXQuuXWvxfZYVCfQvTfnpm4b2krOF73glTF"
+    },
+    {
+      "random" : true,
+      "run" : "hftFYmtVcH3gYim8Tp1YX9M5AeAmL7A6hiHxGQc"
+    },
+    {
+      "random" : true,
+      "run" : "ReaP3CQYZxJTgwFzteyP0oiVVdjISkACn2K7"
+    },
+    {
+      "random" : true,
+      "run" : "CPcF7eN9bJ3C2KlHai3bkJjvhA8FtWX9PG0N4qm"
+    },
+    {
+      "random" : true,
+      "run" : "Rx4Sk8sbD4MR4TVubrmSzol8osu3UtCqZCWgV"
+    },
+    {
+      "random" : true,
+      "run" : "VzW0CRQtZgWqDopYkRcAYkFcVzxMjzTnKb6z"
+    },
+    {
+      "random" : true,
+      "run" : "GSYK1b3srq2c9v6reEHC433qh4dGMX1rsp"
+    },
+    {
+      "random" : true,
+      "run" : "bdVjs31uRdDz4C11qN9dEpfMFJvgtUvX68AqGkn"
+    },
+    {
+      "random" : true,
+      "run" : "SjIKFGi9VfOydL9Hum9CyNgm89h2fWsOgA"
+    },
+    {
+      "random" : true,
+      "run" : "sCPMPLGz7lNdh7Ry4PEciP9pMCWHoTWjio6WfxR"
+    },
+    {
+      "random" : true,
+      "run" : "Gio8oZWsyANjIXER3l2t1j9dyCysywMi5oD"
+    },
+    {
+      "random" : true,
+      "run" : "JXVQOpfFztCE1wS6uwZTeYR7jIOFX73Dnn"
+    },
+    {
+      "random" : true,
+      "run" : "G534lhFhW7oTvhzsMwv9uwqVGHG1ysvwqMCmrz"
+    },
+    {
+      "random" : true,
+      "run" : "IG0tAJV0JWEa0wW3Cj3WBCRx3oa7tvLWf"
+    },
+    {
+      "random" : true,
+      "run" : "9vPyJp8KMoK20ligTh7ikP6SWoWt2pLSMhH7s8"
+    },
+    {
+      "random" : true,
+      "run" : "eOBVp1WE6WfT7EG4Clj3C6hfbUkdrWv5I1797z1"
+    },
+    {
+      "random" : true,
+      "run" : "YQ17h9YxlOXetrUFBmRJi4z1pmTIdgBNIzYOqQ"
+    },
+    {
+      "random" : true,
+      "run" : "3MdUNLnvmOpkND58FjFuA48bt7fWdAdY8BK"
+    },
+    {
+      "random" : true,
+      "run" : "vyJE9QS2zCLmBM0Y0hjd9JcI6zrq4BJWDAFI"
+    },
+    {
+      "random" : true,
+      "run" : "m6m4UPpGFS9XJTcFRZYOAwqvhuAf6oYN8Ah"
+    },
+    {
+      "random" : true,
+      "run" : "pLV8ndCz2xjGX8kZTyZ27aSZc4IRyCHbUiQX"
+    },
+    {
+      "random" : true,
+      "run" : "oBTkcdF459wfpioEH6QQwHOy1gcnINxOB"
+    },
+    {
+      "random" : true,
+      "run" : "rGQkC3gwZM2t1alQES0BtWZ6lJWKSpQl0Tx"
+    },
+    {
+      "random" : true,
+      "run" : "CYgu2aKfMERv34AY4hV3nxIGu0p7QlPYHYWS8hb"
+    },
+    {
+      "random" : true,
+      "run" : "NQ9N7sHhut203TMg3cfXUOVwkGllu6iEppJZh"
+    },
+    {
+      "random" : true,
+      "run" : "iNvFOyquFZ4FXZL1LCnxjtSae9oC68dzAvMlbH"
+    },
+    {
+      "random" : true,
+      "run" : "zbaT7nP8EOguo1rePfjGqMPoabFIeTfc6x00Y"
+    },
+    {
+      "random" : true,
+      "run" : "5O4vS2mL3hbZtqlIQg2B12CtBeqmoPE1"
+    },
+    {
+      "random" : true,
+      "run" : "qptC9rVPuKPdDjUwPH5jBMYOqPvtqjFPv"
+    },
+    {
+      "random" : true,
+      "run" : "73fDb0Js5lmvpMKdJGnQVwUCQuF6f9kR0bu0"
+    },
+    {
+      "random" : true,
+      "run" : "NsRJNDXSZiikh2y1kzvLZwG335GDhhW5K6"
+    },
+    {
+      "random" : true,
+      "run" : "RIJLDfb1lojQZgE7rK2OCZOtjOZIr7Oy"
+    },
+    {
+      "random" : true,
+      "run" : "1th3lwnPjMLlArqJzqX5fXgxMu94qTyEehp8D0I"
+    },
+    {
+      "random" : true,
+      "run" : "g0IEKa6p78DxeQR100EHdyClF5dTUw7b752j"
+    },
+    {
+      "random" : true,
+      "run" : "1GxFoLYiEjR5Ig4j1iMdfgAkxWEGxgcdwxKCmJ6"
+    },
+    {
+      "random" : true,
+      "run" : "5eHCAhH5AGCrgwCyt3eDSNFGYf2RlhqW"
+    },
+    {
+      "random" : true,
+      "run" : "L7UQJvrYYgvU52w5XyLw7vcSR1KFC1GMyURwV"
+    },
+    {
+      "random" : true,
+      "run" : "Od98GMsVcJJI4kVyWtai97cNLIUUa7uS0wdx"
+    },
+    {
+      "random" : true,
+      "run" : "HFapMz63DdL04Vor1yQlrWXlGc141HuZEKWAtm"
+    },
+    {
+      "random" : true,
+      "run" : "lj4fZ7xuHkTLIp31gCTUbqvbWO4q7qa6fSw97"
+    },
+    {
+      "random" : true,
+      "run" : "mbhEIT8QM7l42wH3MG0v8CIUOlfEoxJwwiCyJ"
+    },
+    {
+      "random" : true,
+      "run" : "fzlJereJt3Mf4yMuyIe82AF28NMoZjyuXg"
+    },
+    {
+      "random" : true,
+      "run" : "pYoXxyo8wv3j23Ivfi00uqauzbrjyLQirX"
+    },
+    {
+      "random" : true,
+      "run" : "kNTMH09S2LQUtpnSOgivC02VhFs4HcFYx"
+    },
+    {
+      "random" : true,
+      "run" : "qLMhBaoVz6yKOEXZr1pcunaQMNgjKN8j4Y3Weh"
+    },
+    {
+      "random" : true,
+      "run" : "BEqV1Beo4AV0m9UpvJEh3alyHkEsZaYaipK"
+    },
+    {
+      "random" : true,
+      "run" : "rrMf6LAEVxgSEsyZ3Sm9DnZkgAbyO2Rsoo88h"
+    },
+    {
+      "random" : true,
+      "run" : "CkfKTCRPW9P0YITUNfP2ziGBv7GlacEyZc"
+    },
+    {
+      "random" : true,
+      "run" : "fd26XDkzUQNTuJOLqrEnSaClDUDUGhr2f6vr"
+    },
+    {
+      "random" : true,
+      "run" : "WAfIdQ69dnYZ0hZJdbKFQssnuA3vI3tr02kunle"
+    }
+  ],
+  "texts" : [
+    {
+      "found" : [
+        6,
+        40
+      ],
+      "text" : [
+        "here: sk",
+        "-proj-Q3",
+        "vT9xLm2N",
+        "pR7sKw4Y",
+        "bZ8cHj6F",
+        "dA1eGu a",
+        "nd more"
+      ],
+      "what" : "an OpenAI key in a sentence"
+    },
+    {
+      "found" : [
+        15,
+        40
+      ],
+      "text" : [
+        "OPENAI_A",
+        "PI_KEY=s",
+        "k-proj-Q",
+        "3vT9xLm2",
+        "NpR7sKw4",
+        "YbZ8cHj6",
+        "FdA1eGu"
+      ],
+      "what" : "a key with a shape after its name"
+    },
+    {
+      "found" : [
+        20,
+        32
+      ],
+      "text" : [
+        "export S",
+        "TUDIO_TO",
+        "KEN=Xk7Q",
+        "p2Lm9Rt4",
+        "Vb8Nc3Wz",
+        "6Hd1Jf5G",
+        "s0Ya"
+      ],
+      "what" : "a run after its name"
+    },
+    {
+      "found" : [
+        6,
+        40
+      ],
+      "text" : [
+        "token gh",
+        "p_A1b2C3",
+        "d4E5f6G7",
+        "h8I9j0K1",
+        "l2M3n4O5",
+        "p6Q7r8 o",
+        "k"
+      ],
+      "what" : "a GitHub token"
+    },
+    {
+      "found" : [
+        0,
+        20
+      ],
+      "text" : [
+        "AKIAIOSF",
+        "ODNN7EXA",
+        "MPLE"
+      ],
+      "what" : "an AWS key alone"
+    },
+    {
+      "found" : [
+        4,
+        32
+      ],
+      "text" : [
+        "use Xk7Q",
+        "p2Lm9Rt4",
+        "Vb8Nc3Wz",
+        "6Hd1Jf5G",
+        "s0Ya as ",
+        "the key"
+      ],
+      "what" : "a run in a sentence"
+    },
+    {
+      "found" : [
+        47,
+        32
+      ],
+      "text" : [
+        "call htt",
+        "ps://api",
+        ".example",
+        ".test/v1",
+        "/items?a",
+        "pi_key=X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya ",
+        "now"
+      ],
+      "what" : "a run in the query of a web address"
+    },
+    {
+      "found" : [
+        30,
+        32
+      ],
+      "text" : [
+        "open htt",
+        "ps://exa",
+        "mple.com",
+        "/page#Xk",
+        "7Qp2Lm9R",
+        "t4Vb8Nc3",
+        "Wz6Hd1Jf",
+        "5Gs0Ya"
+      ],
+      "what" : "a run after the fragment mark of a web address"
+    },
+    {
+      "found" : [
+        0,
+        102
+      ],
+      "text" : [
+        "-----BEG",
+        "IN OPENS",
+        "SH PRIVA",
+        "TE KEY--",
+        "---\nb3Bl",
+        "bnNzaC1r",
+        "ZXktdjEA",
+        "AAAABG5v",
+        "bmU=\n---",
+        "--END OP",
+        "ENSSH PR",
+        "IVATE KE",
+        "Y-----"
+      ],
+      "what" : "a private key from its first line to its last"
+    },
+    {
+      "found" : [
+        0,
+        31
+      ],
+      "text" : [
+        "-----BEG",
+        "IN RSA P",
+        "RIVATE K",
+        "EY-----\n",
+        "MIIEpAIB",
+        "AAKCAQEA"
+      ],
+      "what" : "a private key with no last line"
+    },
+    {
+      "found" : [
+        7,
+        45
+      ],
+      "text" : [
+        "my key s",
+        "k-ant-ap",
+        "i03-EXAM",
+        "PLEexamp",
+        "leEXAMPL",
+        "Eexample",
+        "0123"
+      ],
+      "what" : "an Anthropic key"
+    },
+    {
+      "found" : [
+        0,
+        32
+      ],
+      "text" : [
+        "sk_live_",
+        "EXAMPLEe",
+        "xample01",
+        "23456789"
+      ],
+      "what" : "a Stripe live key"
+    },
+    {
+      "found" : [
+        4,
+        32
+      ],
+      "text" : [
+        "use rk_t",
+        "est_EXAM",
+        "PLEexamp",
+        "le012345",
+        "6789"
+      ],
+      "what" : "a Stripe restricted test key"
+    },
+    {
+      "found" : [
+        0,
+        31
+      ],
+      "text" : [
+        "whsec_EX",
+        "AMPLEexa",
+        "mpleEXAM",
+        "PLE0123"
+      ],
+      "what" : "a Stripe webhook secret"
+    },
+    {
+      "found" : [
+        0,
+        55
+      ],
+      "text" : [
+        "github_p",
+        "at_11EXA",
+        "MPLE0exa",
+        "mple0EXA",
+        "MPLE0exa",
+        "mple0EXA",
+        "MPLE0ex"
+      ],
+      "what" : "a fine-grained GitHub token"
+    },
+    {
+      "found" : [
+        0,
+        28
+      ],
+      "text" : [
+        "glpat-EX",
+        "AMPLEexa",
+        "mple0123",
+        "4567"
+      ],
+      "what" : "a GitLab token"
+    },
+    {
+      "found" : [
+        0,
+        30
+      ],
+      "text" : [
+        "xoxb-123",
+        "4567890-",
+        "EXAMPLEe",
+        "xample"
+      ],
+      "what" : "a Slack bot token"
+    },
+    {
+      "found" : [
+        0,
+        22
+      ],
+      "text" : [
+        "xapp-1-A",
+        "0EXAMPLE",
+        "-12345"
+      ],
+      "what" : "a Slack app token"
+    },
+    {
+      "found" : [
+        0,
+        39
+      ],
+      "text" : [
+        "AIzaSyEX",
+        "AMPLEexa",
+        "mpleEXAM",
+        "PLEexamp",
+        "le01234"
+      ],
+      "what" : "a Google API key"
+    },
+    {
+      "found" : [
+        0,
+        43
+      ],
+      "text" : [
+        "SG.EXAMP",
+        "LEexampl",
+        "e0123.EX",
+        "AMPLEexa",
+        "mple0123",
+        "456"
+      ],
+      "what" : "a SendGrid key"
+    },
+    {
+      "found" : [
+        0,
+        26
+      ],
+      "text" : [
+        "hf_EXAMP",
+        "LEexampl",
+        "eEXAMPLE",
+        "ex"
+      ],
+      "what" : "a Hugging Face token"
+    },
+    {
+      "found" : [
+        10,
+        34
+      ],
+      "text" : [
+        "npm toke",
+        "n npm_EX",
+        "AMPLEexa",
+        "mpleEXAM",
+        "PLE01234",
+        "5678"
+      ],
+      "what" : "an npm token"
+    },
+    {
+      "found" : [
+        0,
+        38
+      ],
+      "text" : [
+        "xai-EXAM",
+        "PLEexamp",
+        "leEXAMPL",
+        "Eexample",
+        "012345"
+      ],
+      "what" : "an xAI key"
+    },
+    {
+      "found" : [
+        0,
+        92
+      ],
+      "text" : [
+        "eyJhbGci",
+        "OiJIUzI1",
+        "NiJ9.eyJ",
+        "zdWIiOiI",
+        "xMjM0NTY",
+        "3ODkwIn0",
+        ".SflKxwR",
+        "JSMeKKF2",
+        "QT4fwpMe",
+        "Jf36POk6",
+        "yJV_adQs",
+        "sw5c"
+      ],
+      "what" : "a signed token"
+    },
+    {
+      "found" : [
+        0,
+        32
+      ],
+      "text" : [
+        "sk_test_",
+        "EXAMPLEe",
+        "xample01",
+        "23456789"
+      ],
+      "what" : "the made-up key of the guide's tests"
+    },
+    {
+      "found" : [
+        11,
+        40
+      ],
+      "text" : [
+        "Clé für ",
+        "😀 sk-pr",
+        "oj-Q3vT9",
+        "xLm2NpR7",
+        "sKw4YbZ8",
+        "cHj6FdA1",
+        "eGu"
+      ],
+      "what" : "a key after words in other scripts and an emoji"
+    },
+    {
+      "found" : [
+        0,
+        20
+      ],
+      "text" : [
+        "ASIAIOSF",
+        "ODNN7EXA",
+        "MPLE"
+      ],
+      "what" : "an AWS temporary key"
+    },
+    {
+      "found" : [
+        0,
+        29
+      ],
+      "text" : [
+        "gsk_EXAM",
+        "PLEexamp",
+        "leEXAMPL",
+        "E0123"
+      ],
+      "what" : "a Groq key"
+    },
+    {
+      "found" : [
+        0,
+        37
+      ],
+      "text" : [
+        "pplx-EXA",
+        "MPLEexam",
+        "pleEXAMP",
+        "LEexampl",
+        "e0123"
+      ],
+      "what" : "a Perplexity key"
+    },
+    {
+      "found" : [
+        0,
+        40
+      ],
+      "text" : [
+        "sk-or-v1",
+        "-EXAMPLE",
+        "exampleE",
+        "XAMPLE01",
+        "23456789"
+      ],
+      "what" : "an OpenRouter key"
+    },
+    {
+      "found" : [
+        29,
+        32
+      ],
+      "text" : [
+        "see http",
+        "s://exam",
+        "ple.com/",
+        "page​Xk7",
+        "Qp2Lm9Rt",
+        "4Vb8Nc3W",
+        "z6Hd1Jf5",
+        "Gs0Ya"
+      ],
+      "what" : "a run after a web address and a zero-width space"
+    },
+    {
+      "found" : [
+        6,
+        23
+      ],
+      "text" : [
+        "key: ́sk",
+        "-abcdefg",
+        "hij01234",
+        "56789"
+      ],
+      "what" : "a key after a space and a combining mark"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "a​sk-abc",
+        "defghij0",
+        "12345678",
+        "9"
+      ],
+      "what" : "a key after a letter and a zero-width space"
+    },
+    {
+      "found" : [
+        6,
+        23
+      ],
+      "text" : [
+        "key: ‍sk",
+        "-abcdefg",
+        "hij01234",
+        "56789"
+      ],
+      "what" : "a key after a space and a zero-width joiner"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "key: ःsk",
+        "-abcdefg",
+        "hij01234",
+        "56789"
+      ],
+      "what" : "a key after a space and a spacing mark"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "𝐀sk-abc",
+        "defghij0",
+        "12345678",
+        "9"
+      ],
+      "what" : "a key after a letter outside the first plane"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "Ⅰsk-abcd",
+        "efghij01",
+        "23456789"
+      ],
+      "what" : "a key after a letter number"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "the task",
+        "-force-r",
+        "ecommend",
+        "ations-2",
+        "026 plan"
+      ],
+      "what" : "a key's prefix inside a word"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "https://",
+        "example.",
+        "com/doc#",
+        "️Xk7Qp2L",
+        "m9Rt4Vb8",
+        "Nc3Wz6Hd",
+        "1Jf5Gs0Y",
+        "a"
+      ],
+      "what" : "a run after a fragment mark and a variation selector"
+    },
+    {
+      "found" : [
+        5,
+        32
+      ],
+      "text" : [
+        "x://́Xk7",
+        "Qp2Lm9Rt",
+        "4Vb8Nc3W",
+        "z6Hd1Jf5",
+        "Gs0Ya"
+      ],
+      "what" : "a run after an address's marks and a combining mark"
+    },
+    {
+      "found" : [
+        7,
+        32
+      ],
+      "text" : [
+        "x://a#‍X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a fragment mark and a zero-width joiner"
+    },
+    {
+      "found" : [
+        7,
+        32
+      ],
+      "text" : [
+        "x://a#ःX",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a fragment mark and a spacing mark"
+    },
+    {
+      "found" : [
+        7,
+        32
+      ],
+      "text" : [
+        "x://a؀#X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a prepended mark and a fragment mark"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "x://ःa/X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after an address's marks, a spacing mark and a path"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "x://a#‌X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a fragment mark and a zero-width non-joiner"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "https://",
+        "example.",
+        "com/a#‌X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a web address, its fragment mark and a zero-width non-joiner"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "x://a#⃝X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a fragment mark and an enclosing mark"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "x://́x:/",
+        "/a.b/Xk7",
+        "Qp2Lm9Rt",
+        "4Vb8Nc3W",
+        "z6Hd1Jf5",
+        "Gs0Ya"
+      ],
+      "what" : "a run after an address's marks and a combining mark, then another address's marks"
+    },
+    {
+      "found" : [
+        9,
+        33
+      ],
+      "text" : [
+        "x://a#́b",
+        "#cXk7Qp2",
+        "Lm9Rt4Vb",
+        "8Nc3Wz6H",
+        "d1Jf5Gs0",
+        "Ya"
+      ],
+      "what" : "a run after a fragment mark and a combining mark, then another fragment mark"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "x://a?́X",
+        "k7Qp2Lm9",
+        "Rt4Vb8Nc",
+        "3Wz6Hd1J",
+        "f5Gs0Ya"
+      ],
+      "what" : "a run after a query mark and a combining mark"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "x?y://a.",
+        "b/Xk7Qp2",
+        "Lm9Rt4Vb",
+        "8Nc3Wz6H",
+        "d1Jf5Gs0",
+        "Ya"
+      ],
+      "what" : "a run after a query mark that comes before an address's marks"
+    },
+    {
+      "found" : [
+        8,
+        32
+      ],
+      "text" : [
+        "x://a/😀",
+        "Xk7Qp2Lm",
+        "9Rt4Vb8N",
+        "c3Wz6Hd1",
+        "Jf5Gs0Ya"
+      ],
+      "what" : "a run after an address and an emoji"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "what?htt",
+        "ps://exa",
+        "mple.com",
+        "/Xk7Qp2L",
+        "m9Rt4Vb8",
+        "Nc3Wz6Hd",
+        "1Jf5Gs0Y",
+        "a"
+      ],
+      "what" : "a run in the path of a web address after a query mark in the words before it"
+    },
+    {
+      "found" : [
+        36,
+        40
+      ],
+      "text" : [
+        "https://",
+        "a.exampl",
+        "e/go?nex",
+        "t=https:",
+        "//b.exam",
+        "ple/Xk7Q",
+        "p2Lm9Rt4",
+        "Vb8Nc3Wz",
+        "6Hd1Jf5G",
+        "s0Ya"
+      ],
+      "what" : "a run in the path of a web address in another's query"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "AKIAIOSF",
+        "ODNN7EXA",
+        "MPLE​x"
+      ],
+      "what" : "an AWS key before a zero-width space"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "AKIAIOSF",
+        "ODNN7EXA",
+        "MPLÉ ok"
+      ],
+      "what" : "an AWS key before a combining mark"
+    },
+    {
+      "found" : [
+        0,
+        20
+      ],
+      "text" : [
+        "AKIAIOSF",
+        "ODNN7EXA",
+        "MPLE ok"
+      ],
+      "what" : "an AWS key before a space"
+    },
+    {
+      "found" : [
+        0,
+        32
+      ],
+      "text" : [
+        "Xk7Qp2Lm",
+        "9Rt4Vb8N",
+        "c3Wz6Hd1",
+        "Jf5Gs0Ya",
+        " then gh",
+        "p_A1b2C3",
+        "d4E5f6G7",
+        "h8I9j0K1",
+        "l2M3n4O5",
+        "p6Q7r8"
+      ],
+      "what" : "a run that ends before a key with a shape"
+    },
+    {
+      "found" : [
+        10,
+        32
+      ],
+      "text" : [
+        "the valu",
+        "e\tXk7Qp2",
+        "Lm9Rt4Vb",
+        "8Nc3Wz6H",
+        "d1Jf5Gs0",
+        "Ya\nnext ",
+        "line"
+      ],
+      "what" : "a run after a tab and before a new line"
+    },
+    {
+      "found" : [
+        8,
+        44
+      ],
+      "text" : [
+        "secret: ",
+        "Zm9vYmFy",
+        "MTIzQUJD",
+        "ZGVmR0hJ",
+        "ams0NTZM",
+        "TU5vcFFS",
+        "Uw=="
+      ],
+      "what" : "a run with base64's padding"
+    },
+    {
+      "found" : [
+        4,
+        32
+      ],
+      "text" : [
+        "a=b=Xk7Q",
+        "p2Lm9Rt4",
+        "Vb8Nc3Wz",
+        "6Hd1Jf5G",
+        "s0Ya"
+      ],
+      "what" : "a run after two equals signs"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "use Xk7Q",
+        "p2Lm9Rt4",
+        "Vb8Nc3Wz",
+        "6Hd1Jf5G",
+        "s0Y as t",
+        "he key"
+      ],
+      "what" : "a run of 31"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "call thi",
+        "sIsAVery",
+        "LongFunc",
+        "tionName",
+        "ForTesti",
+        "ng123 no",
+        "w"
+      ],
+      "what" : "a name in camel case"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "commit 3",
+        "f786850e",
+        "387550fd",
+        "ab836ed7",
+        "e6dc881d",
+        "e23001b"
+      ],
+      "what" : "a commit's hash"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "the toke",
+        "n is 9f8",
+        "6d081884",
+        "c7d659a2",
+        "feaa0c55",
+        "ad015a3b",
+        "f4f1b"
+      ],
+      "what" : "a hash in hex"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "bws://8c",
+        "2f9a4e-1",
+        "b7d-4f3a",
+        "-9e6c-2d",
+        "5b8a1f7e",
+        "30"
+      ],
+      "what" : "a reference of a login"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "see /srv",
+        "/example",
+        "/agents/",
+        "app/Sour",
+        "ces/Foun",
+        "derizer/",
+        "FleetVie",
+        "w.swift"
+      ],
+      "what" : "a path"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "https://",
+        "example.",
+        "com/aVer",
+        "yLongPat",
+        "hSegment",
+        "/withMor",
+        "eText/an",
+        "dNumbers",
+        "123"
+      ],
+      "what" : "the path of a web address"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "the plan",
+        " is at h",
+        "ttps://d",
+        "ocs.goog",
+        "le.com/d",
+        "ocument/",
+        "d/1aBcD3",
+        "fGhIjKlM",
+        "nOpQrStU",
+        "vWxYz012",
+        "3456789/",
+        "edit ple",
+        "ase"
+      ],
+      "what" : "the id of a document in a web address"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "https://",
+        "example.",
+        "com/file",
+        "s/Xk7Qp2",
+        "Lm9Rt4Vb",
+        "8Nc3Wz6H",
+        "d1Jf5Gs0",
+        "Ya/view"
+      ],
+      "what" : "a run in the path of a web address"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "Please s",
+        "ave the ",
+        "OpenAI k",
+        "ey for t",
+        "he studi",
+        "o agent ",
+        "today."
+      ],
+      "what" : "words about a key"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "OPENAI_A",
+        "PI_KEY_F",
+        "OR_THE_S",
+        "TUDIO_AG",
+        "ENT_2026"
+      ],
+      "what" : "a variable's name"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "the orde",
+        "r is 550",
+        "e8400-e2",
+        "9b-41d4-",
+        "a716-446",
+        "65544000",
+        "0"
+      ],
+      "what" : "a UUID"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "Refund o",
+        "rder 104",
+        "52 for t",
+        "he custo",
+        "mer and ",
+        "tell the",
+        "m it goe",
+        "s out on",
+        " Tuesday",
+        " at 9:30",
+        "."
+      ],
+      "what" : "a sentence with numbers"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "sk-short",
+        " and ghp",
+        "_abc and",
+        " AKIA123",
+        "4"
+      ],
+      "what" : "a prefix with too short a body"
+    },
+    {
+      "found" : null,
+      "text" : [
+        "ref ABCD",
+        "EF012345",
+        "6789ABCD",
+        "EF012345",
+        "6789XYZ"
+      ],
+      "what" : "a run of capitals and digits"
+    },
+    {
+      "found" : null,
+      "text" : [
+        ""
+      ],
+      "what" : "nothing"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Founderizer.Core;
 using Founderizer.Windows.Marks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -44,8 +45,24 @@ internal sealed class Field : Grid
     /// <summary>The plus: he wants to add files.</summary>
     public event Action? PlusPressed;
 
+    /// <summary>"Keep it" of the hold of a key over the line (<see cref="ShowHold"/>).</summary>
+    public event Action? KeepPressed;
+
+    /// <summary>Whether the words of the field wait for his choice now (the store's <see cref="StoreState.HoldsKey"/>):
+    /// then Enter and Send do nothing, also in the moment before the next draw shows the hold. Null: no hold.</summary>
+    public Func<string, bool>? HoldsKey { get; set; }
+
     // 12 over the chips, under the field's edge (picture 4: 13 from the edge's top to the chip).
     private readonly StackPanel chips = new() { Orientation = Orientation.Horizontal, Spacing = 8, Padding = new Thickness(6, 12, 8, 0), Visibility = Visibility.Collapsed };
+    /// <summary>The hold of a key, over the line inside the field's edge, as the Mac's stands inside its capsule.</summary>
+    private readonly ContentControl hold = new()
+    {
+        IsTabStop = false,
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        Margin = new Thickness(6, 6, 6, 0),
+        Visibility = Visibility.Collapsed,
+    };
+    private KeyHoldView? holdView;
     private readonly double lineHeight;
 
     public Field(double height, double fontSize, double textLeft, FieldLook? look = null)
@@ -129,7 +146,7 @@ internal sealed class Field : Grid
             Content = new Grid { Children = { sendFill, sendArrow } },
             Visibility = Visibility.Collapsed,
         };
-        send.Click += (_, _) => Sent?.Invoke();
+        send.Click += (_, _) => Send();
         Tint(Look.Accent, Color.FromArgb(255, 255, 255, 255));
 
         plus.Click += (_, _) => PlusPressed?.Invoke();
@@ -137,8 +154,11 @@ internal sealed class Field : Grid
         var rows = new Grid();
         rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         rows.Children.Add(chips);
-        Grid.SetRow(line, 1);
+        Grid.SetRow(hold, 1);
+        rows.Children.Add(hold);
+        Grid.SetRow(line, 2);
         rows.Children.Add(line);
         frame.Child = rows;
         // The edge's lighter bottom line stays at the foot while the field grows by its files.
@@ -152,6 +172,25 @@ internal sealed class Field : Grid
         chips.Children.Clear();
         foreach (var file in files) chips.Children.Add(file);
         chips.Visibility = files.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>**The hold of words that look like a key** over the line (the model's <see cref="KeyHoldModel"/>, the
+    /// Mac's KeyHoldBanner): its mark, its two lines and "Keep it"; null takes it away. The field grows by its height.</summary>
+    public void ShowHold(KeyHoldModel? model)
+    {
+        if (model is null)
+        {
+            hold.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (holdView is null)
+        {
+            holdView = new KeyHoldView();
+            holdView.Kept += () => KeepPressed?.Invoke();
+            hold.Content = holdView;
+        }
+        holdView.Show(model);
+        hold.Visibility = Visibility.Visible;
     }
 
     public double LineHeight => lineHeight;
@@ -211,7 +250,14 @@ internal sealed class Field : Grid
     {
         if (e.Key != VirtualKey.Enter) return;
         e.Handled = true;
-        if (showing || EnterAlwaysSends) Sent?.Invoke();
+        if (showing || EnterAlwaysSends) Send();
+    }
+
+    /// <summary>Enter or Send, unless the words wait for his choice (<see cref="HoldsKey"/>): they stay in the field.</summary>
+    private void Send()
+    {
+        if (HoldsKey?.Invoke(box.Text) == true) return;
+        Sent?.Invoke();
     }
 
     private static Grid Center(FrameworkElement child)
@@ -219,5 +265,58 @@ internal sealed class Field : Grid
         child.HorizontalAlignment = HorizontalAlignment.Center;
         child.VerticalAlignment = VerticalAlignment.Center;
         return new Grid { Children = { child } };
+    }
+}
+
+/// <summary>**The hold of words that look like a key** (the Mac's KeyHoldBanner, in Windows' look): orange at 10 % with an
+/// orange edge at 35 %, corners of 4, 10 inside; the key's mark in orange, the hold's words in the text colour and the line
+/// under them muted, 12 on 16, and "Keep it", Windows' button, at the right. Longer words take a second line, and the
+/// hold grows. The Mac's second button, "Save it as a secret", is not here: this app has no form of a secret yet
+/// (<see cref="KeyHoldModel"/>).</summary>
+internal sealed class KeyHoldView : Grid
+{
+    private readonly TextBlock words = Look.Words("", 12, 16, semibold: true);
+    private readonly TextBlock line = Look.Words("", 12, 16, Look.Muted);
+    private readonly Button keep;
+    private readonly TextBlock keepWords;
+
+    /// <summary>"Keep it".</summary>
+    public event Action? Kept;
+
+    public KeyHoldView()
+    {
+        Background = Look.Brush(Color.FromArgb(26, 0xFF, 0x9F, 0x0A));
+        BorderBrush = Look.Brush(Color.FromArgb(89, 0xFF, 0x9F, 0x0A));
+        BorderThickness = new Thickness(1);
+        CornerRadius = new CornerRadius(4);
+        Padding = new Thickness(10, 8, 8, 8);
+        // the Mac's key.horizontal: Segoe Fluent Icons' key, which Windows has
+        var mark = new FontIcon { Glyph = "\uE8D7", FontSize = 14, Foreground = Look.Orange, VerticalAlignment = VerticalAlignment.Center };
+        var lines = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Children = { words, line } };
+        keep = Buttons.Plain("");
+        keepWords = (TextBlock)((Border)keep.Content).Child;
+        keep.Click += (_, _) => Kept?.Invoke();
+        ColumnSpacing = 10;
+        ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Children.Add(mark);
+        SetColumn(lines, 1);
+        Children.Add(lines);
+        SetColumn(keep, 2);
+        Children.Add(keep);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(this, "KeyHold");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(keep, "KeyHoldKeep");
+        // an assistive app says the hold when it comes
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(this, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+    }
+
+    public void Show(KeyHoldModel model)
+    {
+        words.Text = model.Words;
+        line.Text = model.Line;
+        keepWords.Text = model.KeepWords;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(this, model.Spoken);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(keep, model.KeepWords);
     }
 }

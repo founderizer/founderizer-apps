@@ -343,6 +343,35 @@ renamed or removed without a word to the screens lane.
     does not stand.
   - The proofs' sample state `clarify` puts the feature on the hub, `clarify` on the manager's cards, and a question and
     a reply under the card about the email.
+- **Words that look like a key wait for his choice** (UI-API 1.249; the Mac's `KeyHoldBanner`; the owner's "Yes, as
+  drawn" of 22 November 2026 to `windows-key-hold-2026-11-22.png`, and his "Yes, as shown (Recommended)" of the same
+  day to `windows-key-hold-card-2026-11-22.png` and `windows-key-hold-clarify-2026-11-22.png`): in the chat's
+  composer, a request's answer box and the field of Needs clarification.
+  - The rule is `KeyInText` (`First(text)`, its place in UTF-16 units, and `Contains`), FleetCore's rule for rule;
+    `app/vectors/key-in-text.json`, which FleetCore's `KeyInTextVectorsTests` writes, holds the two equal
+    (`KeyHoldTests`), and the test holds its 15 shapes and its run equal to the literals of `KeyInText.swift`. The
+    vectors hold each text in parts that a reader joins, so that no file holds a key's whole shape. Where .NET's own
+    rules differ from the Mac's, the rule takes the Mac's: ICU's word boundary (`KeyInText.Boundary`: a combining mark
+    or a format character is skipped, and a letter outside the first plane is a letter), Apple's whitespace, which
+    holds the zero-width space, and Foundation's search where it looks for `://`, `?` and `#` in a web address (by
+    UTF-16 unit, and a find does not count when a non-spacing or enclosing mark, a variation selector or U+200C comes
+    right after it; some other marks differ, see the commit).
+  - `ComposerModel.KeyHold`, `AnswerBoxModel.KeyHold` and `ClarifyModel.KeyHold` (`KeyHoldModel`): while the box's
+    words hold such a key and he did not keep it (`StoreState.HoldsKey(box, text)`, the boxes `KeyHold.Chat(agent)`,
+    `Answer(need)` and `Talk(need)`), draw the hold over the line inside the field's edge, its `Words`, its `Line` and
+    the button `KeepWords`, and no Send (`CanSend` is false; `AnswerBoxModel.CanSend(..., held:)`). The button is
+    `KeepKey(box)`. Enter and Send do nothing while `HoldsKey` is true, also before the next draw.
+  - The store sends no such words, by any path (`SendMessageAsync`, `Hold` of typed words, which then does not fold the
+    card, `AnswerAsync`, `TalkAsync`), until `KeepKey`; "Keep it" lasts while the box's words hold a key, so the next
+    key asks again. The hold is decided once, at his press, and a write that waits behind another write carries that
+    decision: the field empties as his Send goes, which ends "Keep it". The drafts' file keeps no draft with such words,
+    also after "Keep it", and a box that held one stays out of the file until it is empty or its words went
+    (`StoreState.KeyDrafts`): one Backspace in a pasted key leaves words that no longer match. Undo marks the words
+    that it gives back in the same way. The safe side, by choice: new words typed over a whole key (select all, then
+    type) also stay out of the file until the box is empty once.
+  - Not here, as the Mac has them: "Save it as a secret" (this app has no form of a secret yet, `secrets` waits for
+    2.3), and the hold of a paste ("Paste it anyway"), which is that button's way to the clipboard: a pasted key stands
+    in the box and the hold takes it. Guidance for a task and a card's feedback have no hold yet.
 - An element that needs a hub feature asks the model, which reads `ui_features` (`state.Offers(...)`): the
   task's controls (`task_controls`) and its guidance (`task_steering`), the plus of the files
   (`attachments`), the chat of an agent other than the manager (`direct_chat`).

@@ -100,7 +100,8 @@ public sealed partial class OwnerStore
     ///
     /// **His typed words stay in the store's draft, and in its file, while they wait** (<see cref="SetAnswerDraft"/>): the
     /// box that empties at his Send is the view's change, so a crash, a kill or the app's end in the 5 seconds loses
-    /// nothing; the outbox's receipt takes them out of the draft, as before (Finish).</summary>
+    /// nothing, except words with a key that he kept, which the drafts' file never holds, by design
+    /// (<see cref="KeepDrafts"/>); the outbox's receipt takes them out of the draft, as before (Finish).</summary>
     /// <returns>The words that the card's box shows now, where the store put them into its draft at once: a quick reply
     /// that waits for nothing (a key request, a card whose own request waits unsent, a file of its box that goes up), whose
     /// words stand in the box as before. Null where the box keeps what it shows.</returns>
@@ -111,6 +112,8 @@ public sealed partial class OwnerStore
             return null;
         if (s.HeldOn(need) is { Leaving: true }) return null;
         if (answer.Kind == CardAnswerKind.Words) answer = answer with { Words = s.AnswerDrafts.GetValueOrDefault(need, "").Trim() };
+        // typed words that look like a key wait for his choice in the box, and do not fold the card (KeyHold)
+        if (answer.Kind == CardAnswerKind.Words && s.HoldsKey(KeyHold.Answer(need), answer.Words)) return null;
         // a press behind this card's own request that waits unsent is dropped at once, as before (Press)
         if (item.AsksForSecret || s.WaitsUnsent(need) || answer.Kind == CardAnswerKind.Reply && s.FilesWait("need:" + need))
         {
@@ -155,11 +158,14 @@ public sealed partial class OwnerStore
             if (x.HeldOn(need) is not { Leaving: false } held) return x;
             taken = held;
             var words = held.Answer.Kind == CardAnswerKind.Words ? held.Answer.Words : "";
+            var givesBack = words.Length > 0 && x.AnswerDrafts.GetValueOrDefault(need, "").Length == 0;
             return x with
             {
                 HeldAnswers = x.HeldAnswers.Remove(need),
-                AnswerDrafts = words.Length > 0 && x.AnswerDrafts.GetValueOrDefault(need, "").Length == 0
-                    ? x.AnswerDrafts.SetItem(need, words) : x.AnswerDrafts,
+                AnswerDrafts = givesBack ? x.AnswerDrafts.SetItem(need, words) : x.AnswerDrafts,
+                // words with a key that come back stay out of the drafts' file, as typed ones do (StoreState.KeyDrafts):
+                // a refusal of registered login text can have emptied the box, and its mark, while they waited
+                KeyDrafts = givesBack && KeyInText.Contains(words) ? x.KeyDrafts.Add(KeyHold.Answer(need)) : x.KeyDrafts,
                 Undone = x.Undone.SetItem(need, new UndoneAnswer(number, held.Answer.Ticks)),
             };
         });

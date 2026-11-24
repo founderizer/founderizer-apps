@@ -77,6 +77,10 @@ public interface IFleetSource : IAsyncDisposable
     /// <summary>His message under a card goes to its agent through the outbox; the card stays open.</summary>
     Task<string?> TalkAsync(long need);
 
+    /// <summary>"Keep it" of the hold over a box whose words look like a key (KeyHold.Chat, Answer or Talk): they go at
+    /// his next Send.</summary>
+    void KeepKey(string box);
+
     /// <summary>A read now (the line's Try again, the request line's Refresh receipt).</summary>
     Task RefreshAsync();
 

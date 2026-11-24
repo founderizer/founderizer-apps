@@ -42,6 +42,20 @@ public sealed class SwiftWordsTests
         Assert.AreEqual(card.UndoWords, new RequestStep().UndoWords, "the same word on Needs you");
     }
 
+    /// <summary>The hold of words that look like a key says the Mac's words (KeyHoldBanner): its first line, the start of
+    /// its second up to what this app cannot do (the vault's form), and "Keep it". A Windows word of its own would be a
+    /// word that the owner did not approve.</summary>
+    [TestMethod]
+    public void TheHoldOfAKeySaysTheMacsWords()
+    {
+        var line = Literal("SecretRequestViews.swift", "In a message, \\(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \\(agent.agentLabel) gets only its name.");
+        var s = State(Decode(Snapshot()), Clock) with { Drafts = System.Collections.Immutable.ImmutableDictionary<string, string>.Empty.Add("wren", "sk-proj-" + "EXAMPLEexampleEXAMPLE0123456789ab") };
+        var hold = Screens.Chat(s, "wren", Clock, Utc).Composer.KeyHold!;
+        Assert.AreEqual(Literal("SecretRequestViews.swift", "This message holds what looks like a key."), hold.Words);
+        Assert.AreEqual(Literal("SecretRequestViews.swift", "Keep it"), hold.KeepWords);
+        Assert.AreEqual(With(line, "\\(agent.agentLabel)", "Customer Support")[..hold.Line.Length], hold.Line);
+    }
+
     [TestMethod]
     public void TheComposersPlusHasTheAttachButtonsHover()
     {

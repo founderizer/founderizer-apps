@@ -48,6 +48,11 @@ internal interface IAnswers
     void TypeClarify(long need, string text) { }
     void SendClarify(long need) { }
 
+    /// <summary>The hold of words that look like a key (KeyHold): whether the words of a box wait for his choice now (the
+    /// store's StoreState.HoldsKey), and its "Keep it" (OwnerStore.KeepKey).</summary>
+    bool HoldsKey(string box, string text) => false;
+    void KeepKey(string box) { }
+
     /// <summary>Undo at the end of a folded card's answer line while his answer waits (OwnerStore.Undo), the mark that
     /// opens its task's page, and the task's Pause at the end of the line (OwnerStore.ControlAsync).</summary>
     void Undo(long need) { }
@@ -146,6 +151,9 @@ internal sealed class AnswerParts
         options = new StackPanel { Spacing = step ? 8 : 7 };
         answerBox = new Field(step ? 44 : 40, step ? 15 : 14, 42);
         answerBox.Typed += text => answers.Type(need, text);
+        // words that look like a key stay in the box until "Keep it" (KeyHold), and do not fold the card
+        answerBox.HoldsKey = text => answers.HoldsKey(KeyHold.Answer(need), text);
+        answerBox.KeepPressed += () => answers.KeepKey(KeyHold.Answer(need));
         answerBox.PlusPressed += () => answers.AddFiles(need);
         Watch(answerBox.SendButton);
         answerBox.Sent += () =>
@@ -197,6 +205,8 @@ internal sealed class AnswerParts
         {
             if (clarifyField.Typed(text) is { } card) answers.TypeClarify(card, text);
         };
+        clarifyBox.HoldsKey = text => answers.HoldsKey(KeyHold.Talk(clarifyNeed), text);
+        clarifyBox.KeepPressed += () => answers.KeepKey(KeyHold.Talk(clarifyNeed));
         Watch(clarifyBox.SendButton);
         clarifyBox.Sent += () =>
         {
@@ -235,6 +245,7 @@ internal sealed class AnswerParts
         if (load is not null) clarifyBox.Load(load);
         clarifyLink.Visibility = model is not null && !stands ? Visibility.Visible : Visibility.Collapsed;
         clarifyBox.Visibility = stands ? Visibility.Visible : Visibility.Collapsed;
+        clarifyBox.ShowHold(stands ? model!.KeyHold : null);
         if (model is null) return;
         clarifyBox.Show(model.Placeholder, showsPlus: false, model.CanSend);
         clarifyBox.Hovers(null, model.SendHover);
@@ -302,6 +313,7 @@ internal sealed class AnswerParts
         need = id;
         filesWait = box.FilesWait;
         answerBox.Show(box.Placeholder, box.ShowsPlus, canSend);
+        answerBox.ShowHold(box.KeyHold);
         answerBox.Hovers(box.PlusHover, box.SendHover);
         answerBox.ShowChips(box.Chips.Select(chip => (UIElement)new FileChipView(chip, (c, again) => answers.Chip(id, c, again))).ToList());
         if (same)

@@ -339,6 +339,19 @@ public sealed record StoreState
     /// there by mistake must not stay on this PC's disk; they go when the hub refuses registered login text, with the
     /// generation, and at each read for a card that is no longer open.</summary>
     public ImmutableDictionary<long, string> ClarifyDrafts { get; init; } = ImmutableDictionary<long, string>.Empty;
+    /// <summary>**The boxes whose words hold what looks like a key that he chose to send** ("Keep it" of the hold,
+    /// <see cref="KeyHold"/>), by their names (<see cref="KeyHold.Chat"/>, <see cref="KeyHold.Answer"/>,
+    /// <see cref="KeyHold.Talk"/>), in memory only, while their words still hold a key.</summary>
+    public ImmutableHashSet<string> KeysKept { get; init; } = ImmutableHashSet<string>.Empty;
+    /// <summary>**The drafts that held what looks like a key since their box was last empty**, by their boxes
+    /// (<see cref="KeyHold.Chat"/>, <see cref="KeyHold.Answer"/>): the drafts' file keeps none of them, also once the
+    /// words hold no key any more (one Backspace in a pasted key leaves 31 of its 32 characters), until the box is empty
+    /// or its words went.</summary>
+    public ImmutableHashSet<string> KeyDrafts { get; init; } = ImmutableHashSet<string>.Empty;
+
+    /// <summary>**The words of <paramref name="box"/> wait for his choice**: they hold what looks like a key
+    /// (<see cref="KeyInText"/>), and he did not choose to keep it. They do not go, and Send stands down.</summary>
+    public bool HoldsKey(string box, string text) => !KeysKept.Contains(box) && KeyInText.Contains(text);
     /// <summary>How many times the store itself put words into the field of each card while it may stand (the Discard
     /// of a refused message gives its words back): the window loads the store's words then, and when the field comes to
     /// stand, never on another draw (<see cref="ClarifyField"/>).</summary>
@@ -702,6 +715,12 @@ public sealed record StoreChange
             if (after.Seen.GetValueOrDefault(agent) != before.Seen.GetValueOrDefault(agent)) agents.Add(agent);
         foreach (var (agent, draft) in after.Drafts.Concat(before.Drafts))
             if (after.Drafts.GetValueOrDefault(agent) != before.Drafts.GetValueOrDefault(agent)) chats.Add(agent);
+        // the hold over a box comes or goes with "Keep it"
+        foreach (var box in after.KeysKept.SymmetricExcept(before.KeysKept))
+        {
+            if (box.StartsWith("agent:", StringComparison.Ordinal)) chats.Add(box[6..]);
+            else if (long.TryParse(box.AsSpan(5), out var card)) needs.Add(card);
+        }
         foreach (var key in after.Staged.Keys.Concat(before.Staged.Keys))
         {
             if (Equals(after.Staged.GetValueOrDefault(key), before.Staged.GetValueOrDefault(key))) continue;

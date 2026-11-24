@@ -96,7 +96,8 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
             step.Visibility = Visibility.Visible;
             // The pictures of its options, as a message's: the request draws again when one came.
             step.Show(hand with { Options = reads.Mark(hand.Options) },
-                      AnswerBoxModel.CanSend(next, at, hand.Answer.Draft, hand.Answer.Files.Count));
+                      AnswerBoxModel.CanSend(next, at, hand.Answer.Draft, hand.Answer.Files.Count,
+                                            held: hand.Answer.KeyHold is not null));
         }
         else step.Visibility = Visibility.Collapsed;
         emptyWords.Text = model.EmptyWords;
@@ -141,6 +142,10 @@ internal sealed class NeedsPage : Grid, IPageView, IAnswers, ILaneContext
     public void TypeClarify(long need, string text) => source.SetClarifyDraft(need, text);
 
     public void SendClarify(long need) => _ = source.TalkAsync(need);
+
+    public bool HoldsKey(string box, string text) => source.State.HoldsKey(box, text);
+
+    public void KeepKey(string box) => source.KeepKey(box);
 
     private readonly HashSet<(long, string)> openParts = new();
 

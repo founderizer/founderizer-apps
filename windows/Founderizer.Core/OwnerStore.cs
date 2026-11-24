@@ -1041,7 +1041,12 @@ public sealed partial class OwnerStore : IAsyncDisposable
 
     public void SetDraft(string agent, string text)
     {
-        Update(x => x with { Drafts = text.Length == 0 ? x.Drafts.Remove(agent) : x.Drafts.SetItem(agent, text) });
+        var key = KeyInText.Contains(text);
+        Update(x => x with
+        {
+            Drafts = text.Length == 0 ? x.Drafts.Remove(agent) : x.Drafts.SetItem(agent, text),
+            KeyDrafts = key ? x.KeyDrafts.Add(KeyHold.Chat(agent)) : x.KeyDrafts,
+        });
         KeepDrafts();
     }
 
@@ -1056,7 +1061,12 @@ public sealed partial class OwnerStore : IAsyncDisposable
 
     private void WriteDraft(long need, string text)
     {
-        Update(x => x with { AnswerDrafts = text.Length == 0 ? x.AnswerDrafts.Remove(need) : x.AnswerDrafts.SetItem(need, text) });
+        var key = KeyInText.Contains(text);
+        Update(x => x with
+        {
+            AnswerDrafts = text.Length == 0 ? x.AnswerDrafts.Remove(need) : x.AnswerDrafts.SetItem(need, text),
+            KeyDrafts = key ? x.KeyDrafts.Add(KeyHold.Answer(need)) : x.KeyDrafts,
+        });
         KeepDrafts();
     }
 
@@ -1076,6 +1086,13 @@ public sealed partial class OwnerStore : IAsyncDisposable
         Update(x => !x.ClarifyDrafts.ContainsKey(need) || x.ClarifyDrafts[need] == text
             ? x : x with { ClarifyDrafts = x.ClarifyDrafts.SetItem(need, text) });
     }
+
+    /// <summary>**"Keep it" of the hold over a box** (<see cref="KeyHold"/>, the Mac's keepHeldKey): the words of
+    /// <paramref name="box"/> that look like a key go at his next Send, and no second question comes while the key stays
+    /// in the box. Nothing while its words hold no key. The drafts' file still keeps none of them.</summary>
+    public void KeepKey(string box) =>
+        Update(x => x.KeysKept.Contains(box) || KeyHold.TextOf(x, box) is not { } text || !KeyInText.Contains(text)
+            ? x : x with { KeysKept = x.KeysKept.Add(box) });
 
     /// <summary>Sends one file up for a composer ("agent:&lt;name&gt;" or "need:&lt;id&gt;"), before the message that
     /// carries it. Null when it went; else the owner's words.</summary>
@@ -1254,12 +1271,24 @@ public sealed partial class OwnerStore : IAsyncDisposable
     // words of why nothing went. A write that comes while another write is on its way, or while the reading waits for
     // a read that comes, waits and goes then, in the order the presses came (StoreState.HoldsWrites).
 
-    /// <summary>Sends the agent's draft (or <paramref name="text"/>) and the files of its composer.</summary>
-    public Task<string?> SendMessageAsync(string agent, string? text = null) =>
-        WriteAsync(text ?? State.Drafts.GetValueOrDefault(agent, ""), recipient: agent, files: State.ReadyFiles("agent:" + agent));
+    /// <summary>Sends the agent's draft (or <paramref name="text"/>) and the files of its composer. **Words that look
+    /// like a key wait for his choice** (<see cref="KeyHold"/>): the hold is decided here, at his press, and the write
+    /// carries that decision through each turn that it waits behind another write. A later state cannot decide it again:
+    /// the field empties as his Send goes, and that ends his "Keep it".</summary>
+    public Task<string?> SendMessageAsync(string agent, string? text = null)
+    {
+        var words = text ?? State.Drafts.GetValueOrDefault(agent, "");
+        return State.HoldsKey(KeyHold.Chat(agent), words) ? NoWrite
+            : WriteAsync(words, recipient: agent, files: State.ReadyFiles("agent:" + agent));
+    }
 
     /// <summary>Sends the typed answer of an open request (its draft, or <paramref name="text"/>) with its files.</summary>
-    public Task<string?> AnswerAsync(long need, string? text = null) => Answer(need, text, still: null);
+    public Task<string?> AnswerAsync(long need, string? text = null)
+    {
+        // the hold is decided at his press, as a message's (SendMessageAsync); a held answer's is decided in Hold
+        var words = text ?? State.AnswerDrafts.GetValueOrDefault(need, "");
+        return State.HoldsKey(KeyHold.Answer(need), words) ? NoWrite : Answer(need, words, still: null);
+    }
 
     private Task<string?> Answer(long need, string? text, Func<StoreState, bool>? still)
     {
@@ -1448,6 +1477,8 @@ public sealed partial class OwnerStore : IAsyncDisposable
     public Task<string?> TalkAsync(long need)
     {
         var words = State.ClarifyDrafts.GetValueOrDefault(need, "");
+        // the hold is decided at his press, as a message's (SendMessageAsync)
+        if (State.HoldsKey(KeyHold.Talk(need), words)) return NoWrite;
         return WriteAsync(words, command: OwnerCommand.Talk(need), feature: NeedClarify.Feature,
                           still: s => s.ClarifyDrafts.GetValueOrDefault(need, "").Trim() == words.Trim());
     }
@@ -1561,6 +1592,8 @@ public sealed partial class OwnerStore : IAsyncDisposable
         if (command is { Kind: "control" }) text = "";
         else if ((text.Length == 0 && files.Count == 0) || new StringInfo(text).LengthInTextElements > StoreState.TextLimit) return null;
         if (needId is { } n && !fleet.Needs.Any(x => x.Id == n && x.IsOpen)) return null;
+        // (Words that look like a key: their hold was decided at his press, SendMessageAsync, AnswerAsync, TalkAsync and
+        // Hold, and is not asked again here with a later state.)
         // his message under a card: a card that takes one now, whose answer is not on its way, within the hub's most
         if (command is { Kind: OwnerCommand.TalkKind } talk &&
             (fleet.Needs.FirstOrDefault(x => x.Id == talk.Target)?.Clarifies(fleet) != true ||
@@ -2279,12 +2312,18 @@ public sealed partial class OwnerStore : IAsyncDisposable
             new KeptChats(s.Hub.ToString(), s.Fleet?.Db ?? keptDatabase, chats), CoreJson.Default.KeptChats));
     }
 
+    /// <summary>The drafts' file, **with no words that look like a key** (<see cref="KeyInText"/>), also after his "Keep
+    /// it": they stay in memory while the app runs, as the Mac's draft of a card's message does, and a key on this PC's
+    /// disk would outlive them. A draft that takes a key leaves the file until the box is empty or its words
+    /// went.</summary>
     private void KeepDrafts()
     {
         var s = State;
         Keep("drafts.json", JsonSerializer.SerializeToUtf8Bytes(
-            new KeptDrafts(new Dictionary<string, string>(s.Drafts),
-                           s.AnswerDrafts.ToDictionary(p => p.Key.ToString(CultureInfo.InvariantCulture), p => p.Value)),
+            new KeptDrafts(s.Drafts.Where(p => !s.KeyDrafts.Contains(KeyHold.Chat(p.Key)) && !KeyInText.Contains(p.Value))
+                               .ToDictionary(p => p.Key, p => p.Value),
+                           s.AnswerDrafts.Where(p => !s.KeyDrafts.Contains(KeyHold.Answer(p.Key)) && !KeyInText.Contains(p.Value))
+                               .ToDictionary(p => p.Key.ToString(CultureInfo.InvariantCulture), p => p.Value)),
             CoreJson.Default.KeptDrafts));
     }
 
@@ -2328,7 +2367,9 @@ public sealed partial class OwnerStore : IAsyncDisposable
         {
             var next = change(state);
             if (ReferenceEquals(next, state)) return;
-            state = next with { Version = state.Version + 1 };
+            // "Keep it" lasts while the box's words hold a key, and a draft that held one stays out of the file until its
+            // box is empty (KeyHold.Tidy)
+            state = KeyHold.Tidy(next) with { Version = state.Version + 1 };
         }
         Raise();
     }

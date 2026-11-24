@@ -394,14 +394,16 @@ public static partial class Screens
         if (!need.Clarifies(s.Fleet)) return null;
         var stands = s.ClarifyDrafts.TryGetValue(need.Id, out var draft);
         var words = (draft ?? "").Trim();
+        var hold = stands ? KeyHold.Of(s, KeyHold.Talk(need.Id), words, need.By) : null;
         return new ClarifyModel
         {
             Stands = stands,
             Draft = draft ?? "",
             Given = s.ClarifyGiven.GetValueOrDefault(need.Id),
             Placeholder = "Message to " + s.Names.Label(need.By),
+            KeyHold = hold,
             CanSend = stands && s.CanWrite(now) && words.Length > 0 && NeedClarify.Length(words) <= NeedClarify.Most &&
-                      !s.AnswersTaken.ContainsKey(need.Id),
+                      !s.AnswersTaken.ContainsKey(need.Id) && hold is null,
         };
     }
 
@@ -481,6 +483,7 @@ public static partial class Screens
         {
             Placeholder = "Your answer",
             Draft = draft,
+            KeyHold = KeyHold.Of(s, KeyHold.Answer(need.Id), draft, need.By),
             Given = s.Undone.GetValueOrDefault(need.Id)?.Number ?? 0,
             ShowsPlus = s.Offers("attachments") && need.TakesFiles,
             Files = Unsent(s, s.Staged.GetValueOrDefault(composer)),
@@ -550,8 +553,10 @@ public static partial class Screens
         else if (count > 15_500) note = $"{count.ToString("N0", CultureInfo.CurrentCulture)} of 16,000 characters";
         var files = Unsent(s, s.Staged.GetValueOrDefault("agent:" + agent));
         var waits = s.FilesWait("agent:" + agent);
+        var hold = canChat ? KeyHold.Of(s, KeyHold.Chat(agent), draft, agent) : null;
         return new ComposerModel
         {
+            KeyHold = hold,
             Placeholder = "Message " + s.Names.Label(agent),
             ShowsField = canChat,
             ShowsPlus = canChat && s.Offers("attachments"),
@@ -561,8 +566,10 @@ public static partial class Screens
             PlusHover = AttachWords.PlusHover(s.Staged.GetValueOrDefault("agent:" + agent)?.Count ?? 0),
             Note = note,
             NoteIsWarning = warning,
-            // A file on its way, or one that did not go, holds the message back (filesAreWaiting).
-            CanSend = canChat && s.CanWrite(now) && !waits && count <= StoreState.TextLimit && (count > 0 || files.Count > 0),
+            // A file on its way, or one that did not go, holds the message back (filesAreWaiting), and so do words that
+            // look like a key until he chose to keep them (KeyHold).
+            CanSend = canChat && s.CanWrite(now) && !waits && count <= StoreState.TextLimit && (count > 0 || files.Count > 0) &&
+                      hold is null,
             SendHover = "Send this message to " + s.Names.Label(agent),
         };
     }
@@ -1528,6 +1535,9 @@ public sealed record ComposerModel
     public string PlusHover { get; init; } = "";
     public string? Note { get; init; }
     public bool NoteIsWarning { get; init; }
+    /// <summary>The hold over the line while his words hold what looks like a key (<see cref="Founderizer.Core.KeyHold"/>),
+    /// or null.</summary>
+    public KeyHoldModel? KeyHold { get; init; }
     /// <summary>Send shows only while this is true.</summary>
     public bool CanSend { get; init; }
     public string SendHover { get; init; } = "";
@@ -1655,11 +1665,15 @@ public sealed record AnswerBoxModel
     public string? Note { get; init; }
     public bool NoteIsWarning { get; init; }
     public string SendHover { get; init; } = "";
+    /// <summary>The hold over the box while his words hold what looks like a key (<see cref="Founderizer.Core.KeyHold"/>),
+    /// or null.</summary>
+    public KeyHoldModel? KeyHold { get; init; }
 
-    /// <summary>Send shows while the store can write, no file of the box waits, and the box holds words or files, within
-    /// the limit. <paramref name="files"/>: the box's files that the hub holds.</summary>
-    public static bool CanSend(StoreState s, DateTimeOffset now, string text, int files, bool filesWait = false) =>
-        s.CanWrite(now) && !filesWait && new StringInfo(text.Trim()).LengthInTextElements is var n && n <= StoreState.TextLimit &&
+    /// <summary>Send shows while the store can write, no file of the box waits, no hold of a key stands over it
+    /// (<paramref name="held"/>), and the box holds words or files, within the limit. <paramref name="files"/>: the box's
+    /// files that the hub holds.</summary>
+    public static bool CanSend(StoreState s, DateTimeOffset now, string text, int files, bool filesWait = false, bool held = false) =>
+        s.CanWrite(now) && !filesWait && !held && new StringInfo(text.Trim()).LengthInTextElements is var n && n <= StoreState.TextLimit &&
         (n > 0 || files > 0);
 }
 
@@ -1765,7 +1779,11 @@ public sealed record ClarifyModel
     /// <summary>The store gave the field words of its own (<see cref="StoreState.ClarifyGiven"/>): a new number loads them.</summary>
     public int Given { get; init; }
     public string Placeholder { get; init; } = "";
-    /// <summary>Send shows: the store can write, and the field holds words within the hub's most.</summary>
+    /// <summary>The hold over the field while his words hold what looks like a key (<see cref="Founderizer.Core.KeyHold"/>),
+    /// or null.</summary>
+    public KeyHoldModel? KeyHold { get; init; }
+    /// <summary>Send shows: the store can write, the field holds words within the hub's most, and no hold of a key
+    /// stands over it.</summary>
     public bool CanSend { get; init; }
     public string SendHover => "Send this message";
 }

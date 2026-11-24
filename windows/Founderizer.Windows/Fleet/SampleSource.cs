@@ -37,6 +37,7 @@ public sealed partial class SampleSource : IFleetSource
     private ImmutableDictionary<string, string> drafts = ImmutableDictionary<string, string>.Empty;
     private ImmutableDictionary<long, string> answerDrafts = ImmutableDictionary<long, string>.Empty;
     private ImmutableDictionary<long, string> clarifyDrafts = ImmutableDictionary<long, string>.Empty;
+    private ImmutableHashSet<string> keysKept = ImmutableHashSet<string>.Empty;
     private MobileSnapshot fleet;
     private StoreState state;
     private long version;
@@ -148,6 +149,13 @@ public sealed partial class SampleSource : IFleetSource
 
     public Task<string?> TalkAsync(long need) => Task.FromResult<string?>(null);
 
+    /// <summary>"Keep it" of a hold, as the store's: the hold goes while the box's words hold that key.</summary>
+    public void KeepKey(string box)
+    {
+        lock (gate) keysKept = keysKept.Add(box);
+        Renew();
+    }
+
     public Task RefreshAsync() => Task.CompletedTask;
 
     public Task RetryAsync() => Task.CompletedTask;
@@ -222,8 +230,16 @@ public sealed partial class SampleSource : IFleetSource
         return at.ToUnixTimeMilliseconds() / 1000.0;
     }
 
-    /// <summary>A whole new state, read at <paramref name="at"/>.</summary>
-    private StoreState Read(DateTimeOffset at) => Picture(new()
+    /// <summary>A whole new state, read at <paramref name="at"/>; "Keep it" lasts while the box's words hold a key, as the
+    /// store's (KeyHold.Tidy).</summary>
+    private StoreState Read(DateTimeOffset at)
+    {
+        var read = KeyHold.Tidy(Shown(at));
+        keysKept = read.KeysKept;
+        return read;
+    }
+
+    private StoreState Shown(DateTimeOffset at) => Picture(new()
     {
         Version = ++version,
         // The Mac's example address and this PC's line as Settings shows them (picture 6), with an example address of
@@ -243,6 +259,7 @@ public sealed partial class SampleSource : IFleetSource
         Drafts = drafts,
         AnswerDrafts = answerDrafts,
         ClarifyDrafts = clarifyDrafts,
+        KeysKept = keysKept,
     }, at);
 
     private void Renew()
