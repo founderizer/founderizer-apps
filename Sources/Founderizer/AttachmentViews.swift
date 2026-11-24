@@ -36,8 +36,7 @@ struct AttachFilesButton: View {
     }
 
     var body: some View {
-        IconButton(symbol: "plus", words: words, size: 14,
-                   tint: room > 0 ? FleetStyle.muted : Color(white: 0.35)) { picking = true }
+        IconButton(symbol: "plus", words: words, size: 14) { picking = true }
         .disabled(room == 0 || store.storageError != nil)
         .accessibilityLabel("Attach a file")
         .accessibilityIdentifier("attach-file")
@@ -201,10 +200,9 @@ struct OwnFileMenu: View {
             Image(systemName: "ellipsis").font(IconMetrics.symbol(12))
                 .foregroundStyle(onPicture ? FleetStyle.text : FleetStyle.muted)
         }
-        // the app's icon button, as the eye: its circle at rest, lighter under the pointer, darker while pressed
-        .buttonStyle(FleetIconButtonStyle(side: onPicture ? IconMetrics.side : IconMetrics.small, rest: true))
+        // the app's icon button, as the eye
+        .buttonStyle(FleetIconButtonStyle(side: onPicture ? IconMetrics.side : IconMetrics.small))
         .background(onPicture ? FleetStyle.surface : .clear, in: Circle())
-        .environment(\.onCard, onPicture)
         // the hand, as on the file's row, also over a picture
         .pointerStyle(.link)
         .disabled(store.keeping.contains(file.id))
@@ -530,7 +528,7 @@ private struct DragsOut: ViewModifier {
 /// up to 380 points wide so the name keeps its room beside the buttons; under the pointer the hand and a lighter fill,
 /// as a row that opens its detail. At its end, at rest, the eye, which opens the preview as a press on the row does,
 /// and for an agent's file the save to Downloads, for his own file the "…" of its menu (`OwnFileMenu`): the app's icon
-/// buttons, muted on their rest fill, their words on hover.
+/// buttons, muted, their words on hover.
 struct FileRowLook: View {
     let name: String
     let symbol: String
@@ -597,7 +595,7 @@ private struct SaveFileIcon: View {
     let words: String
     var side: CGFloat = IconMetrics.side
     /// Over a picture: the text's colour in a round field of the page's surface. In a file's row: as the app's icon
-    /// buttons, muted on their rest fill.
+    /// buttons, muted.
     var onPicture = true
     let action: () -> Void
 
@@ -612,7 +610,6 @@ private struct SaveFileIcon: View {
             action()
         }
             .background(onPicture ? FleetStyle.surface : .clear, in: Circle())
-            .environment(\.onCard, onPicture)
     }
 }
 
@@ -785,7 +782,6 @@ struct PictureTile: View {
                 IconButton(symbol: "arrow.clockwise", words: String(l10n: "Read \(file.name) again"), size: 12) {
                     Task { await read() }
                 }
-                .environment(\.onCard, true)
                 .padding(6)
                 .accessibilityIdentifier("reload-file-\(file.id)")
             }

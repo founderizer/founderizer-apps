@@ -258,6 +258,30 @@ import Vision
         return nil
     }
 
+    /// **The pointer comes onto `point` of the window**, as AppKit tells the window's own tracking areas: the window
+    /// server sends no move to a window that no screen shows, so the test gives each area of the window's root view
+    /// that follows the pointer its entry and its move. A chat's message under the pointer takes its badges' presses
+    /// (`ChatSelection`). The owner's own pointer does not move.
+    static func pointerComes(to point: NSPoint, in window: NSWindow) {
+        guard let root = window.contentView else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        for area in root.trackingAreas where area.options.contains(.mouseMoved) {
+            guard let owner = area.owner as? NSResponder else { continue }
+            // the event's tracking number is its area, which `NSEvent.trackingArea` gives back
+            if let enter = NSEvent.enterExitEvent(with: .mouseEntered, location: point, modifierFlags: [], timestamp: now,
+                                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                                  trackingNumber: Int(bitPattern: Unmanaged.passUnretained(area).toOpaque()),
+                                                  userData: nil) {
+                owner.mouseEntered(with: enter)
+            }
+            if let move = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: now,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                             clickCount: 0, pressure: 0) {
+                owner.mouseMoved(with: move)
+            }
+        }
+    }
+
     /// A press of the pointer at a point of the window: its down and its up.
     static func click(_ point: NSPoint, in window: NSWindow) -> [NSEvent] {
         [NSEvent.EventType.leftMouseDown, .leftMouseUp].compactMap { type in

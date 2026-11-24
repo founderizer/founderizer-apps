@@ -358,9 +358,11 @@ struct SidebarSymbol: View {
 /// its accessibility label. `IconButton` is the control itself; `FleetIconButtonStyle` is for a button whose label
 /// draws something else (the round Send), and `.iconSurface()` for an icon that opens a menu.
 ///
-/// **An icon button stands in a soft grey circle at rest** (the owner's yes of 28 October 2026, D-8, as Grok Bot draws
-/// its icons): "+", pause, stop, refresh and trash read as buttons before the pointer finds them. A mark that only
-/// opens its words (`StateMark`) and a message's own footer, which shows under the pointer, keep no circle at rest.
+/// **An icon button has no ground at rest** (the owner, 23 November 2026: "dont add the grey backgroundto the icon
+/// buttons unless on hover"): its symbol stands alone, and the grey circle comes under the pointer and is a step stronger
+/// while pressed. It takes the place of the soft grey circle at rest of 28 October 2026 (D-8). **A disabled one has no
+/// circle and its symbol is dimmed** (0.45, as a disabled checkbox, `FleetCheckboxStyle`): with no circle at rest, the dim
+/// is the one sign that a press does nothing.
 enum IconMetrics {
     /// **The two drawn sizes of an icon button**: the square of every icon button that stands alone (the composer's
     /// plus, Send, pause, stop, refresh, trash, close), and the smaller one of an icon in a line of words (a message's
@@ -377,30 +379,25 @@ enum IconMetrics {
     /// size from here, so no view writes a font of its own.
     static func symbol(_ size: CGFloat, weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight) }
 
-    /// The circle's fill: white 0.06 at rest (0.08 on a card, a step lighter), 0.11 under the pointer and 0.14 while
-    /// pressed; none at rest for a control that keeps no circle there, and none at all while it is disabled.
-    static func fill(hovered: Bool, pressed: Bool, enabled: Bool, rest: Bool = false, onCard: Bool = false) -> Color {
+    /// The circle's fill: none at rest, white 0.11 under the pointer and 0.14 while pressed; none at all while the control
+    /// is disabled.
+    static func fill(hovered: Bool, pressed: Bool, enabled: Bool) -> Color {
         guard enabled else { return .clear }
-        return Color.white.opacity(pressed ? 0.14 : hovered ? 0.11 : rest ? (onCard ? 0.08 : 0.06) : 0)
+        return Color.white.opacity(pressed ? 0.14 : hovered ? 0.11 : 0)
     }
 }
 
-/// The circle under an icon: it fills under the pointer, and at rest for an icon button (`rest`), and gives the
-/// symbol room on every side.
+/// The circle under an icon: it fills under the pointer, and gives the symbol room on every side.
 struct IconSurface: ViewModifier {
     var side: CGFloat = IconMetrics.side
     var pressed = false
-    /// An icon button: the soft circle shows at rest too.
-    var rest = false
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.onCard) private var onCard
     @State private var hovered = false
 
     func body(content: Content) -> some View {
         content
             .frame(minWidth: side, minHeight: side)
-            .background(IconMetrics.fill(hovered: hovered, pressed: pressed, enabled: isEnabled, rest: rest, onCard: onCard),
-                        in: Circle())
+            .background(IconMetrics.fill(hovered: hovered, pressed: pressed, enabled: isEnabled), in: Circle())
             .contentShape(Circle())
             .onHover { hovered = $0 }
     }
@@ -425,18 +422,15 @@ struct FleetIconButtonStyle: ButtonStyle {
     var side: CGFloat = IconMetrics.side
     /// A label that draws its own filled shape.
     var filled = false
-    /// An icon button that shows its soft circle at rest (`IconButton`).
-    var rest = false
 
     func makeBody(configuration: Configuration) -> some View {
-        IconButtonBody(configuration: configuration, side: side, filled: filled, rest: rest)
+        IconButtonBody(configuration: configuration, side: side, filled: filled)
     }
 
     private struct IconButtonBody: View {
         let configuration: ButtonStyleConfiguration
         let side: CGFloat
         let filled: Bool
-        let rest: Bool
         @Environment(\.isEnabled) private var isEnabled
         @State private var hovered = false
 
@@ -446,7 +440,8 @@ struct FleetIconButtonStyle: ButtonStyle {
                     .brightness(isEnabled ? (configuration.isPressed ? -0.14 : hovered ? -0.07 : 0) : 0)
                     .onHover { hovered = $0 }
             } else {
-                configuration.label.modifier(IconSurface(side: side, pressed: configuration.isPressed, rest: rest))
+                configuration.label.opacity(isEnabled ? 1 : 0.45)
+                    .modifier(IconSurface(side: side, pressed: configuration.isPressed))
                     .iconReach(side)
             }
         }
@@ -506,7 +501,7 @@ struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol).font(IconMetrics.symbol(size)).foregroundStyle(tint)
         }
-        .buttonStyle(FleetIconButtonStyle(side: side, rest: true))
+        .buttonStyle(FleetIconButtonStyle(side: side))
         .help(words)
         .accessibilityLabel(words)
     }

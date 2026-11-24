@@ -930,7 +930,7 @@ internal sealed class RequestCardView : Grid
         undo = LinkPress("Undo", 12, 16);
         undo.Margin = new Thickness(8, 0, 0, 0);
         undo.Click += (_, _) => { if (card is { Holds: true } c) answers.Undo(c.Id); };
-        pause = Buttons.IconOnly(Icons.Pause, "Pause", side: 20, size: 12, face: false);
+        pause = Buttons.IconOnly(Icons.Pause, "Pause", side: 20, size: 12);
         // its 20 stand over the line of 16 and do not make it taller: the card keeps its height when Pause comes and goes
         pause.Margin = new Thickness(8, -2, 0, -2);
         pause.Click += (_, _) => { if (card?.Pause is { } t) answers.Pause(t); };

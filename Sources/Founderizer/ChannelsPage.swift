@@ -277,9 +277,9 @@ struct ChannelsPage: View {
             case .remove: if let account = card.account { Task { await remove(account.id, app: account.app) } }
             }
         }) {
-            Image(systemName: "ellipsis").frame(height: 15)
+            Image(systemName: "ellipsis").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
         }
-        .buttonStyle(FleetOutlineButtonStyle()).disabled(!canChange).help(title)
+        .buttonStyle(FleetIconButtonStyle()).disabled(!canChange).help(title)
         .accessibilityIdentifier("channels-menu-\(card.app)")
     }
 

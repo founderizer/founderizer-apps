@@ -27,30 +27,6 @@ import Testing
         store.keep(LoginReading(team: snapshot, profiles: nil), as: "secrets.logins.fleet")
     }
 
-    /// **The pointer comes onto `point` of the window**, as AppKit tells the window's own tracking areas: the window
-    /// server sends no move to a window that no screen shows, so the test gives each area of the window's root view
-    /// that follows the pointer its entry and its move. A chat's message under the pointer takes its badges' presses
-    /// (`ChatSelection`). The owner's own pointer does not move.
-    @MainActor private static func pointerComes(to point: NSPoint, in window: NSWindow) {
-        guard let root = window.contentView else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        for area in root.trackingAreas where area.options.contains(.mouseMoved) {
-            guard let owner = area.owner as? NSResponder else { continue }
-            // the event's tracking number is its area, which `NSEvent.trackingArea` gives back
-            if let enter = NSEvent.enterExitEvent(with: .mouseEntered, location: point, modifierFlags: [], timestamp: now,
-                                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0,
-                                                  trackingNumber: Int(bitPattern: Unmanaged.passUnretained(area).toOpaque()),
-                                                  userData: nil) {
-                owner.mouseEntered(with: enter)
-            }
-            if let move = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: now,
-                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0,
-                                             clickCount: 0, pressure: 0) {
-                owner.mouseMoved(with: move)
-            }
-        }
-    }
-
     @Test func aPressOnAKeysBadgeOpensTheKeysCardOverTheChat() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop { () -> (card: Bool, chat: Bool) in
             let now = Int(Date().timeIntervalSince1970)
@@ -108,7 +84,7 @@ import Testing
             guard let badge = try ViewHost.middle(of: "EXAMPLE_API_KEY", in: window) else {
                 throw ViewHost.Missing(description: "the agent's message does not show the key's name")
             }
-            Self.pointerComes(to: badge, in: window)
+            ViewHost.pointerComes(to: badge, in: window)
             let press = ViewHost.turn(10) {
                 window.contentView?.superview?.hitTest(badge).map { String(reflecting: type(of: $0)) }?
                     .contains("ChatBadgePress") == true

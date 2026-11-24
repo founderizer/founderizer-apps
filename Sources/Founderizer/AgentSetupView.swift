@@ -509,7 +509,7 @@ struct AgentSetupView: View {
                 // **A 28-pt circle, as every icon button** (T-21; the sidebar's search and +): it was a 40.5 × 28 capsule.
                 Image(systemName: "ellipsis").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
             }
-            .buttonStyle(FleetIconButtonStyle(rest: true)).disabled(busy || acting.isEmpty).help(title)
+            .buttonStyle(FleetIconButtonStyle()).disabled(busy || acting.isEmpty).help(title)
             .accessibilityLabel(title)
             .accessibilityIdentifier("settings-more")
         }

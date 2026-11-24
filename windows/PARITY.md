@@ -259,3 +259,10 @@ Mac, and a device route is all that the PC reaches.
   from the column would cut the role first. The search card's agent row draws the name, then " · " and the role
   muted, as the Mac's search palette row (`SearchAgentRow.Role`, `Trail`, `Spoken`, `Pages/SearchCard.cs`), and an
   assistive app reads the name, the role and the row's line, as VoiceOver reads the Mac's.
+- **An icon button has no grey ground at rest** (the owner, 23 November 2026: "dont add the grey backgroundto the icon
+  buttons unless on hover"; the Mac's `IconMetrics.fill`). Windows: built. `Buttons.IconOnly` drew Windows' button face at
+  rest in two places (Read again of a picture that did not load, in a chat and in a request's option); it draws none now,
+  as every other icon button of the window, and Windows' subtle fill comes under the pointer and on the press
+  (`WindowRulesTests`). The iPhone has no pointer, and nothing changes there. **While one cannot be pressed its mark is
+  dimmed** (0.45, the Mac's): its mark has a brush of its own, which the style's disabled colour never reached, so a
+  disabled Pause or Stop looked as one that acts, with its face and without it.

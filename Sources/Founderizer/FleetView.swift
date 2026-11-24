@@ -580,12 +580,12 @@ struct FleetView: View {
     private static let lightsEnd: CGFloat = 72
 
     /// One icon of the band: a muted symbol whose soft circle shows only under the pointer, and while `selected` the
-    /// selected row's fill. A button with nowhere to go keeps its place, dimmed.
+    /// selected row's fill. A button with nowhere to go keeps its place, dimmed by its style (`FleetIconButtonStyle`).
     private func bandButton(_ symbol: String, words: String, enabled: Bool = true, selected: Bool = false,
                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(IconMetrics.symbol(14))
-                .foregroundStyle(selected ? FleetStyle.text : FleetStyle.muted.opacity(enabled ? 1 : 0.45))
+                .foregroundStyle(selected ? FleetStyle.text : FleetStyle.muted)
         }
         .buttonStyle(FleetIconButtonStyle(side: Self.bandSide))
         .background(selected ? FleetStyle.bubble : .clear, in: Circle())

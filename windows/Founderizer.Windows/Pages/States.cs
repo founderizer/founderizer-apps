@@ -175,8 +175,12 @@ internal static class Buttons
         Child = content,
     };
 
-    /// <summary>A square button that holds only a mark (Stop of a paused task, a file's cross), with its hover words.</summary>
-    public static Button IconOnly(Icon icon, string hover, double side = 32, double size = 16, Brush? ink = null, bool face = true)
+    /// <summary>A square button that holds only a mark (Read again of a picture, a file's cross), with its hover words.
+    /// **No ground at rest** (the owner, 23 November 2026: "dont add the grey backgroundto the icon buttons unless on
+    /// hover"): Windows' subtle fill comes under the pointer and on the press (QuietButtonStyle). **While it cannot be
+    /// pressed its mark is dimmed** (0.45, the Mac's): the mark has a brush of its own, which the style's disabled colour
+    /// does not reach.</summary>
+    public static Button IconOnly(Icon icon, string hover, double side = 32, double size = 16, Brush? ink = null)
     {
         var glyph = Icons.Of(icon, ink ?? Look.Text, size);
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
@@ -185,17 +189,9 @@ internal static class Buttons
         {
             Style = (Style)Application.Current.Resources["QuietButtonStyle"],
             VerticalAlignment = VerticalAlignment.Center,
-            Content = face ? new Border
-            {
-                Width = side,
-                Height = side,
-                CornerRadius = new CornerRadius(4),
-                Background = Look.Brush(Look.White(0.06)),
-                BorderBrush = Look.FieldEdge(side, Look.White(0.08), Look.White(0.04)),
-                BorderThickness = new Thickness(1),
-                Child = glyph,
-            } : new Grid { Width = side, Height = side, Children = { glyph } },
+            Content = new Grid { Width = side, Height = side, Children = { glyph } },
         };
+        button.IsEnabledChanged += (_, _) => glyph.Opacity = button.IsEnabled ? 1 : 0.45;
         ToolTipService.SetToolTip(button, hover);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, hover);
         return button;
@@ -359,13 +355,13 @@ internal sealed class FileChipView : Grid
         var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         if (act is not null && chip.ShowsSendAgain)
         {
-            var again = Buttons.IconOnly(Icons.Refresh, chip.SendAgainHover, 20, 12, Look.Muted, face: false);
+            var again = Buttons.IconOnly(Icons.Refresh, chip.SendAgainHover, 20, 12, Look.Muted);
             again.Click += (_, _) => act(chip, true);
             tools.Children.Add(again);
         }
         if (act is not null && chip.ShowsTakeOut)
         {
-            var cross = Buttons.IconOnly(Icons.Dismiss12, chip.TakeOutHover, 20, 12, Look.Muted, face: false);
+            var cross = Buttons.IconOnly(Icons.Dismiss12, chip.TakeOutHover, 20, 12, Look.Muted);
             cross.Click += (_, _) => act(chip, false);
             tools.Children.Add(cross);
         }

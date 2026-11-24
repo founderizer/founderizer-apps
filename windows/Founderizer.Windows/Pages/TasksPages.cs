@@ -676,6 +676,8 @@ internal sealed class TaskPage : Grid, IPageView, IThreadContext
             Style = (Style)Application.Current.Resources["QuietButtonStyle"],
             Content = new Grid { Children = { mark } },
         };
+        // dimmed while it cannot be pressed (Buttons.IconOnly)
+        button.IsEnabledChanged += (_, _) => mark.Opacity = button.IsEnabled ? 1 : 0.45;
         ToolTipService.SetToolTip(button, words);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, words);
         button.Click += (_, _) => _ = source.ControlAsync(id, action);

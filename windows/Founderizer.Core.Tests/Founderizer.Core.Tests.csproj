@@ -26,5 +26,7 @@
     <!-- The Swift views whose words the library gives the screens (SwiftWordsTests): their literals are the words. -->
     <None Include="../../Sources/Founderizer/NeedRequestCard.swift;../../Sources/Founderizer/AttachmentViews.swift;../../Sources/Founderizer/FleetView.swift;../../Sources/Founderizer/AgentStatusPanel.swift;../../Sources/Founderizer/ThreadViews.swift;../../Sources/Founderizer/SecretRequestViews.swift" Link="sources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../ios/Sources/AgentPage.swift;../../ios/Sources/ChatPage.swift" Link="sources/ios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The window's own source, whose rules WindowRulesTests reads: WinUI, which it calls, loads in no test. -->
+    <None Include="../Founderizer.Windows/**/*.cs;../Founderizer.Windows/**/*.xaml" Exclude="../Founderizer.Windows/bin/**;../Founderizer.Windows/obj/**" Link="sources/windows/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

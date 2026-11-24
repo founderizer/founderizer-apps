@@ -290,7 +290,7 @@ struct KnowledgePage: View {
             } label: {
                 Image(systemName: "plus").font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted)
             }
-            .buttonStyle(FleetIconButtonStyle(rest: true))
+            .buttonStyle(FleetIconButtonStyle())
             .disabled(!canChange)
             .help(words)
             // In the column of the rows' −, which stand the rows' inset in from the card's edge.
