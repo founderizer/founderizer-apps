@@ -335,12 +335,21 @@ final class FleetStore {
         providerSetups = [:]
         settingsModels = [:]
     }
+    /// Shared by the chat rows and agent icons until the next fleet reading.
+    private(set) var openTasksByAgent: [String: [FleetTask]] = [:]
+    private var newestReplies: [String: Int] = [:]
+
     var state: HubState? {
         // Each agent's role, for every line of the app that names an agent (`AgentNames`): its name, and its role
         // beside it where the agent is an entry of its own (the owner's answers of 22 November 2026).
         didSet {
             AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) })
             askCache = nil
+            openTasksByAgent = Dictionary(grouping: (state?.tasks ?? []).lazy.filter { !$0.isTerminal }, by: \.owner)
+            newestReplies = (state?.reports ?? []).reduce(into: [:]) { newest, reply in
+                let agent = reply.chatAgent
+                newest[agent] = max(newest[agent] ?? reply.id, reply.id)
+            }
             closeAnsweredTakeOvers()        // owner feature need_takeover: the way in closes at his answer
             forgetFilesOfAnotherFleet()     // a new hub or database numbers its files from 1 again
             dropUnsendableGuidanceFiles()   // a task's box that can send no more keeps no file
@@ -2914,17 +2923,16 @@ final class FleetStore {
     /// generation, and none while that generation has no marks yet (`markRepliesSeen`).
     func hasNewReply(from agent: String) -> Bool {
         guard let state, seenContext == "\(hub.absoluteString)\n\(state.db)" else { return false }
-        return Self.newestReply(agent, in: state) > (seenReplies[agent] ?? 0)
+        return newestReply(agent) > (seenReplies[agent] ?? 0)
     }
 
-    private static func newestReply(_ agent: String, in state: HubState) -> Int {
-        state.reports.lazy.filter { $0.chatAgent == agent }.map(\.id).max() ?? 0
+    private func newestReply(_ agent: String) -> Int {
+        newestReplies[agent] ?? 0
     }
 
     /// The agent has written in its chat at least once, so Mark as unread has a reply to mark.
     func hasReply(from agent: String) -> Bool {
-        guard let state else { return false }
-        return Self.newestReply(agent, in: state) > 0
+        newestReply(agent) > 0
     }
 
     /// Mark as read, from the right-click of the agent's row: its newest reply counts as seen, as if he had opened
@@ -2935,18 +2943,18 @@ final class FleetStore {
         guard seenContext == "\(hub.absoluteString)\n\(state.db)" else { return }   // its marks wait (markRepliesSeen)
         if keptUnread == agent { keptUnread = nil }
         var seen = seenReplies
-        seen[agent] = Self.newestReply(agent, in: state)
+        seen[agent] = newestReply(agent)
         keep(seen, context: seenContext)
     }
 
     /// Mark as unread: the agent's newest reply is new again, so its dot comes back until he opens the chat.
     func markUnread(_ agent: String) {
-        guard let state, Self.newestReply(agent, in: state) > 0 else { return }
+        guard let state, newestReply(agent) > 0 else { return }
         markRepliesSeen()
         guard seenContext == "\(hub.absoluteString)\n\(state.db)" else { return }   // its marks wait (markRepliesSeen)
         if case .agent(let open) = destination, open == agent { keptUnread = agent }
         var seen = seenReplies
-        seen[agent] = Self.newestReply(agent, in: state) - 1
+        seen[agent] = newestReply(agent) - 1
         keep(seen, context: seenContext)
     }
 
@@ -2972,10 +2980,10 @@ final class FleetStore {
         if seenContext != context, let window = lastWindow, window.db == state.db, rowsReadFailed != state.db,
            olderRows.behind(window).contains(.reports) { return }
         var seen = seenContext == context ? seenReplies : [:]
-        if seenContext != context { for agent in state.agents { seen[agent.name] = Self.newestReply(agent.name, in: state) } }
+        if seenContext != context { for agent in state.agents { seen[agent.name] = newestReply(agent.name) } }
         // **Not while the card over the window covers the chat** (`detail`): its replies are read when it closes.
         if detail == nil, case .agent(let name) = destination, name != keptUnread, shown.countsAsRead(name) {
-            seen[name] = Self.newestReply(name, in: state)
+            seen[name] = newestReply(name)
         }
         keep(seen, context: context)
     }

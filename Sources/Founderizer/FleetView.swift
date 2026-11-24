@@ -368,7 +368,7 @@ struct FleetView: View {
         guard let state = store.state else { return [:] }
         var presences: [String: AgentPresence] = [:]
         for agent in state.agents {
-            let open = state.tasks.filter { $0.owner == agent.name && !$0.isTerminal }
+            let open = store.openTasksByAgent[agent.name] ?? []
             // For the glyphs that move and have no store (the pill over a chat): work moves only by an answer of
             // this wake (`marksMove`). `.working` and `.workingAtLastRead` differ only in motion.
             presences[agent.name] = agent.presence(isFresh: store.marksMove, serverTime: state.time, openTasks: open,
@@ -651,7 +651,7 @@ struct FleetView: View {
     /// as the chat's "Thinking" does, and it has no dot. A dot is a problem.
     private func agentRow(_ agent: FleetAgent) -> some View {
         let providerSetup = store.providerSetup(hub: store.hub, database: store.state?.db, agent: agent.name)
-        let open = store.state?.tasks.filter { $0.owner == agent.name && !$0.isTerminal } ?? []
+        let open = store.openTasksByAgent[agent.name] ?? []
         let presence = agent.presence(isFresh: store.isFresh, serverTime: store.state?.time ?? 0, openTasks: open,
                                       holds: store.state?.holds ?? [], waits: store.state?.ownerWaits(of: open) ?? [:],
                                       request: store.state?.ownKeyRequest(of: agent.name), thinking: store.thinks(agent.name))
@@ -665,12 +665,12 @@ struct FleetView: View {
         // **The line, in its one order** (`ChatList.line`): a request that waits for him and is the newest thing in its
         // chat, in orange; else his answer with a saved key, the check of its card with no words; else its words.
         let line = ChatList.line(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
-                                 needs: store.state?.needs ?? [], tasks: store.state?.tasks ?? [])
+                                 needs: store.state?.needs ?? [], tasks: open)
         let request = line?.request, savedKey = line?.isSavedKey == true, preview = line?.words
         // **While the agent works, its line says what it does now** (`AgentActivity.actionNow`, hub 1.148; the owner, 13
         // November 2026, to the picture of this line: "Yes, build it"): the agent's own words for its command, or the
         // hub's plain words for a tool, in place of the task's title. It moves as every line of an agent at work.
-        let action = presence == .working ? AgentActivity.actionNow(agent.name, tasks: store.state?.tasks ?? []) : nil
+        let action = presence == .working ? AgentActivity.actionNow(agent.name, tasks: open) : nil
         // When its chat's last message is from, or its waiting card, as a chat app writes it at the row's end (`ChatList.time`).
         let time = (request.map { ChatList.requestTime($0, last: last) } ?? ChatList.lastTime(last))
             .map { ChatList.time($0, now: store.state?.time ?? Date().timeIntervalSince1970) }
