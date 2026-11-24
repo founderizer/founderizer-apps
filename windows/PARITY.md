@@ -22,6 +22,7 @@ Mac, and a device route is all that the PC reaches.
 | `thread_events` | built | `GET /ui/tasks/<id>/events` every 3 seconds for the open task (`HubClient.TaskEventsAsync`), the Mac's whole thread (`TaskThread.cs`, `Screens.Task` `Thread`); the iPhone does not read it |
 | `task_controls` | built | `OwnerCommand.Control`, `POST /ui/tasks/<id>/control`, with its receipt; also the Pause at the end of an answered card's line while the mark is its task's work (`RequestCard.Pause`) |
 | `limit_holds` | built | the agents' `limit`: "Usage limit" in a chat's waiting line, a task's page and the panel |
+| `outcome_checks` | built | TaskOutcome.Checker; WaitsOnOwner(…, routed) in Activity.OwnerChecks and the task page's limit line (ScreensTests) |
 | `liveness` | built | `MobileAgent.HelperIsRecent` |
 | `live_desktop` | waits (step 2) | a task's screen; not at the iPhone's level |
 | `machines` | waits (2.1) | a setup page of the Mac |

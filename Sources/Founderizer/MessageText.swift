@@ -48,6 +48,10 @@ struct MessageText: View, Equatable {
     /// Their links keep their presses above the cut, as words with no field do. A folded text takes no `selection`: its
     /// blocks would set their own selection inside `FoldedWords`, and their fields would come back under the fold.
     var fold: CGFloat? = nil
+    /// **The room before the words of the first block, when it is a paragraph**: what stands at the start of his words
+    /// on their first line (the badges of the skills that he gave, `OwnerBubble`) lies over it. A kern on a no-break
+    /// space before the words, so that the line's other words and the next lines wrap as before; 0 for no room.
+    var lead: CGFloat = 0
     /// **A block or a cell of more than this many bytes (UTF-8) keeps its fields** in a text with a selection (a
     /// block's Markdown, a cell's words): making or dropping the field of a block took about 4 ms for each 1,000
     /// characters (266 to 295 ms for a block of 70,089, as a Word, RTF or PDF file comes in: its paragraphs end with
@@ -142,12 +146,18 @@ struct MessageText: View, Equatable {
     /// the chat's book reads the words once (`ChatNames.words`), and `badges` are where its names stand, for their
     /// drawing (`chatBadges`). **The text is the same in every row**: the pointer that comes onto the message or leaves
     /// it makes none of its texts again (`ChatBadges`).
-    private func linked(_ block: Block) -> (text: Text, badges: [ChatBadgeMap.Entry], lead: CGFloat) {
+    private func linked(_ block: Block, room: CGFloat = 0) -> (text: Text, badges: [ChatBadgeMap.Entry], lead: CGFloat) {
         let size = step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize
-        guard let chatNames else {
-            return (CardBadgeText.text(block.formatted, names: names, size: size, values: values), [], 0)
+        var formatted = block.formatted
+        if room > 0 {
+            var before = AttributedString("\u{00A0}")
+            before.swiftUI.kern = room
+            formatted = before + formatted
         }
-        return ChatBadgeText.text(chatNames.words(block.formatted), links: block.links, size: size)
+        guard let chatNames else {
+            return (CardBadgeText.text(formatted, names: names, size: size, values: values), [], 0)
+        }
+        return ChatBadgeText.text(chatNames.words(formatted), links: block.links, size: size)
     }
 
     var body: some View {
@@ -162,7 +172,7 @@ struct MessageText: View, Equatable {
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    let words = linked(block)
+                    let words = linked(block, room: index == 0 ? lead : 0)
                     ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
                         .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
                         .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
@@ -470,38 +480,69 @@ struct OwnerBubble: View {
     /// What stands over his words, 6 points over them, inside the bubble and above its fold: the badge of the task or
     /// the job that the message is about (`SentMessageView`, `AboutBadgeView`).
     var over: AnyView? = nil
+    /// **The names of the skills that he gave with these words** (owner feature `message_skills`): each its badge with
+    /// the bolt (`SkillBadge`), as his picture drew it, at the start of his words on their first line, with a space
+    /// after it, and the whole bubble of a gift with no words. Over his words where they do not begin with a paragraph
+    /// (a list, a heading, code) or where the badges would fill most of a line.
+    var gifts: [String] = []
     /// His @ tags in these words, each its agent's badge (`MessageText.mentions`).
     var mentions: [AgentTags.Mention]? = nil
     @State private var expanded = false
     private var canCollapse: Bool { text.count > 420 || text.filter { $0 == "\n" }.count > 5 }
     /// A long message at rest: the height of its first six lines, the last of them fading into the bubble.
     private static let foldedHeight = ChatStyle.line * 6 + ChatStyle.lineSpacing * 5
+    /// The widest that the gifts' badges stand on the line of his words.
+    private static let giftsInLineMost: CGFloat = 320
+
+    /// The room of the gifts' badges before his words on their first line, or nil where they stand over his words.
+    private var giftsRoom: CGFloat? {
+        guard !gifts.isEmpty, !text.isEmpty, MessageBlock.parse(text).first?.kind == .paragraph else { return nil }
+        let width = SkillBadge.width(of: gifts)
+        return width <= Self.giftsInLineMost ? width : nil
+    }
+
+    private var giftBadges: some View {
+        HStack(spacing: SkillBadge.spacing) {
+            ForEach(Array(gifts.enumerated()), id: \.offset) { _, name in SkillBadge(name: name) }
+        }.fixedSize()
+    }
 
     var body: some View {
-        let folded = canCollapse && !expanded
+        let folded = canCollapse && !expanded, room = giftsRoom
         BubbleLayout(trailing: !theirs) {
         VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 6) {
             if let over { over }
+            if !gifts.isEmpty, room == nil { giftBadges }
             // **His words are drawn from their Markdown, as an agent's are** (3 November 2026: "chat messages dont
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
             // under them reads, where the literal text ran them all together.
-            MessageText(text: text, chat: true, chatNames: names, mentions: mentions, fold: folded ? Self.foldedHeight : nil)
-                .equatable()
-                .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
-                .mask {
-                    VStack(spacing: 0) {
-                        Color.black
-                        if folded {
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: ChatStyle.line)
+            if !text.isEmpty {
+                MessageText(text: text, chat: true, chatNames: names, mentions: mentions, fold: folded ? Self.foldedHeight : nil,
+                            lead: room ?? 0)
+                    .equatable()
+                    .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
+                    .mask {
+                        VStack(spacing: 0) {
+                            Color.black
+                            if folded {
+                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: ChatStyle.line)
+                            }
+                        }
+                        // A badge's edge reaches over the first line and under the last (`CardBadge.bleed`): the mask cut
+                        // it. Not under a fold, which still ends where it fades.
+                        .padding(names == nil ? EdgeInsets()
+                                 : EdgeInsets(top: -CardBadge.bleed, leading: -CardBadge.bleed,
+                                              bottom: folded ? 0 : -CardBadge.bleed, trailing: -CardBadge.bleed))
+                    }
+                    // the gifts' badges in the room before his words, their middle on the middle of the first line
+                    .overlay(alignment: .topLeading) {
+                        if room != nil {
+                            giftBadges.alignmentGuide(.top) { $0[VerticalAlignment.center] - ChatStyle.line / 2 }
+                                .allowsHitTesting(false)
                         }
                     }
-                    // A badge's edge reaches over the first line and under the last (`CardBadge.bleed`): the mask cut
-                    // it. Not under a fold, which still ends where it fades.
-                    .padding(names == nil ? EdgeInsets() : EdgeInsets(top: -CardBadge.bleed, leading: -CardBadge.bleed,
-                                                                       bottom: folded ? 0 : -CardBadge.bleed,
-                                                                       trailing: -CardBadge.bleed))
-                }
+            }
             }
             if canCollapse {
                 // The click reaches over and under the words (`IconMetrics.reach`); the bubble keeps its size.
@@ -534,6 +575,46 @@ struct OwnerBubble: View {
                     .alignmentGuide(.bottom) { $0[VerticalAlignment.center] + 12 + ChatStyle.line / 2 }
             }
         }
+    }
+}
+
+/// **A skill that he gave the agent with his message** (owner feature `message_skills`; his yes of 21 November 2026 to the
+/// skill's badge with the bolt, and of 22 November to the given skill): the name badge of a card's words (`CardBadge`),
+/// with the skill's mark (`CardBadgeIcon.skill`) in the room before the skill's name, at the start of his words. It opens
+/// nothing, as his picture drew it (a badge with no press): the app has no page of a skill.
+struct SkillBadge: View {
+    let name: String
+
+    /// Between two badges of one message.
+    static let spacing: CGFloat = 4
+
+    /// **The width of these badges side by side, as the words of a chat measure them**: the room of the icon
+    /// (`ChatBadgeText.room`), each name in the chat's font, and the end of each badge. The room before his words
+    /// (`MessageText.lead`) is this, and the no-break space before them is the space after the last badge.
+    static func width(of names: [String]) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: ChatStyle.size)
+        let badges = names.map { name in
+            ChatBadgeText.room(ChatStyle.size) + (name as NSString).size(withAttributes: [.font: font]).width
+                + ChatStyle.size * CardBadgeText.end
+        }
+        return badges.reduce(0, +) + spacing * CGFloat(max(names.count - 1, 0))
+    }
+
+    var body: some View {
+        let room = ChatBadgeText.room(ChatStyle.size)
+        Text(name).font(ChatStyle.font).foregroundStyle(FleetStyle.link).lineLimit(1).truncationMode(.middle)
+            .padding(.leading, room).padding(.trailing, ChatStyle.size * CardBadgeText.end).padding(.vertical, 1)
+            .background {
+                Canvas { context, size in
+                    // as a name's badge in the words: its room before the name, and the icon in it (`CardBadge.icon`)
+                    let frame = CGRect(origin: .zero, size: size)
+                    let place = CardBadge.icon(room: CGRect(x: 0, y: 0, width: room, height: size.height), frame: frame)
+                    CardBadge.draw(frame, over: false, room: .symbol(CardBadgeIcon.skillSymbol), at: place,
+                                   in: &context) { _, _ in }
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(name)
     }
 }
 

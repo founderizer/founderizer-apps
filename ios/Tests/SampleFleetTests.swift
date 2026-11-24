@@ -112,6 +112,27 @@ struct SampleFleetTests {
         }
     }
 
+    /// **A join that gets no answer says to check Tailscale on this phone** (F7, piece A5): the hub answers only on the
+    /// owner's private network, and a phone with Tailscale off said "Check that its server is on." about a server that
+    /// was on. A read of the phone's own addresses did not see Tailscale off on the owner's iPhone (his check of 23
+    /// November 2026), so every join that gets no answer says the one line. The stand-in of the phone's network
+    /// answers nothing, as a hub behind a tunnel that is off.
+    @MainActor @Test("a join that gets no answer says to check that Tailscale is on on this phone, in each language")
+    func joinWithNoAnswer() async throws {
+        try await Self.withoutHub {
+            SilentHubNetwork.paths.withLock { $0 = [] }
+            UserDefaults.standard.set("http://\(SilentHubNetwork.host):8765", forKey: "hubAddress")
+            let store = MobileStore(client: MobileClient(answering: SilentHubNetwork.host, with: SilentHubNetwork.self))
+            #expect(!store.hasNoHub)
+            #expect(await store.enroll(code: "ABCD-2345", read: false)
+                    == "Your hub did not answer. Check that Tailscale is on on this phone.")
+            // The code went to the hub, and nothing answered it: not a guard of the phone's that kept it back.
+            #expect(SilentHubNetwork.paths.withLock { $0 } == ["/ui/owner/enroll"])
+            let spanish = try PhoneSpanish.run { MobileError.enrollWords(.noAnswer) }
+            #expect(spanish == "Tu hub no ha respondido. Comprueba que Tailscale esté activado en este teléfono.")
+        }
+    }
+
     @MainActor @Test("opens, refuses a message and a file, and leaves nothing of itself behind")
     func store() async throws {
         try await Self.withoutHub {
@@ -1029,6 +1050,21 @@ private final class NoHubNetwork: URLProtocol {
     override func startLoading() {
         Self.requests.withLock { $0 += 1 }
         client?.urlProtocol(self, didFailWithError: URLError(.cannotFindHost))
+    }
+    override func stopLoading() {}
+}
+
+/// **The network of a phone whose hub does not answer, as a check sees it** (`SampleFleetTests.joinWithNoAnswer`): each
+/// request to the hub's address is kept by its path and runs out of time, as one does behind a tunnel that is off.
+private final class SilentHubNetwork: URLProtocol {
+    static let host = "100.84.1.2"
+    static let paths = Mutex<[String]>([])
+
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == host }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.paths.withLock { $0.append(request.url?.path ?? "") }
+        client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
     }
     override func stopLoading() {}
 }

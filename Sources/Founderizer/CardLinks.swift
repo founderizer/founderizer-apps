@@ -6,13 +6,6 @@ import SwiftUI
 /// the mockup: repositories, servers and app pages, and Open the page). `CardNames` finds the names; this is where the
 /// card opens what they name, in this window.
 extension FleetStore {
-    /// The names that a request's words link: the agents of the hub's reading with their roles, the repositories of
-    /// the Apps page's last reading and of the grants of the open requests, and the servers of the Servers page's
-    /// last reading. Nothing is read for it: a name that no kept reading holds stays plain words. One book serves every
-    /// card, and it is made again only when what it is made of changes (`cardBook`): a card's words are drawn at each
-    /// reading of the hub.
-    var cardNames: CardNames { books(quiet: false).card }
-
     /// **The book of a chat's messages** (`MessageText.chatNames`): the same names by the chat's stricter rules
     /// (`ChatNames`), made again with the card's book. **A chat reads the pages' readings that it is made of with no
     /// watch** (`quietReading`): the chat draws again at each reading of the hub, which brings what changed; the Servers
@@ -24,7 +17,9 @@ extension FleetStore {
     /// chat's book and read as it is.
     var chatServerSymbols: [String: String] { books(quiet: true).symbols }
 
-    private func books(quiet: Bool) -> (card: CardNames, chat: ChatNames, symbols: [String: String]) {
+    /// `given`: the repositories of one card's own Give, whose book `card` is (`cardNames(for:)`); none: the one book.
+    private func books(quiet: Bool, given: [String] = [])
+        -> (card: CardNames, chat: ChatNames, symbols: [String: String]) {
         let integrations: IntegrationsSnapshot? = quiet ? quietReading("apps.integrations.fleet")
                                                         : reading("apps.integrations.fleet")
         let servers: ServerList? = quiet ? quietReading("servers.list") : reading("servers.list")
@@ -50,18 +45,31 @@ extension FleetStore {
         hasher.combine(symbols)
         for secret in secrets { hasher.combine(secret.name); hasher.combine(secret.key) }
         let key = hasher.finalize()
-        if let kept = cardBook, kept.key == key { return (kept.book, kept.chat, kept.symbols) }
-        let book = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets)
+        let kept = cardBook.flatMap { $0.key == key ? $0 : nil }
+        if let kept, let card = kept.cards[given] { return (card, kept.chat, kept.symbols) }
+        let card = CardNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets,
+                             given: given)
+        if let kept {               // the same names: only the book of this Give was not made yet
+            cardBook?.cards[given] = card
+            return (card, kept.chat, kept.symbols)
+        }
         // a new book with the same names keeps what the old one read (`ChatNames.keeping`)
         let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets)
             .keeping(cardBook?.chat)
         let byName = Dictionary(symbols.map { ($0[0], $0[1]) }, uniquingKeysWith: { first, _ in first })
-        cardBook = (key, book, chat, byName)
-        return (book, chat, byName)
+        cardBook = (key, [given: card], chat, byName)
+        return (card, chat, byName)
     }
 
-    /// The book of the names of a request's words: the one book (`cardNames`).
-    func cardNames(for need: OwnerNeed) -> CardNames { cardNames }
+    /// The names that a request's words link: the agents of the hub's reading with their roles, the repositories of
+    /// the Apps page's last reading and of the grants of the open requests, and the servers of the Servers page's
+    /// last reading. Nothing is read for it: a name that no kept reading holds stays plain words. One book serves every
+    /// card with no Give, and it is made again only when what it is made of changes (`cardBook`): a card's words are
+    /// drawn at each reading of the hub.
+    /// A request with a Give has a book with the short names of the Give's repositories too (the owner, 23 November
+    /// 2026: "Yes: a name that the card's Give names is a badge"), which no other card and no chat takes, kept with the
+    /// one book (`cardBook`).
+    func cardNames(for need: OwnerNeed) -> CardNames { books(quiet: false, given: need.give?.repos ?? []).card }
 
     /// The symbol of each server of the Servers page's last reading by its name, for its badge in a request's words: a
     /// Mac or a server rack (`ServerEntry.symbol`).

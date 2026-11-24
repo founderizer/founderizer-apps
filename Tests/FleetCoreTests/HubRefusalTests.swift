@@ -21,6 +21,12 @@ struct HubRefusalTests {
         #expect(refusal.names == ["server": "vps-2"])
         // With no table of words for a language, the hub's own English stands.
         #expect(refusal.words == "vps-2 sent no reading in the last 10 minutes: check that it is on")
+        #expect(refusal.refusedGift == nil)
+        // A refused gift of a skill names its ZIP's number (owner API 1.304), whose chip shows the words: read wrong,
+        // a 422 about the skill would be taken for login text in his words, which empties every draft of his.
+        let gift = read(#"{"error":"run.sh is a link. A skill holds plain files only.","refused_gift":41}"#, status: 422)
+        #expect(gift.refusedGift == 41 && gift.hubWords == "run.sh is a link. A skill holds plain files only.")
+        #expect(read(#"{"error":"x","refused_gift":"41"}"#, status: 422).refusedGift == nil)
     }
 
     @Test func aBodyWithACodeAndNoNamesHasNoNames() {
@@ -100,12 +106,12 @@ struct HubRefusalTests {
 
     @Test func aRefusalSurvivesTheDiskAndAnOlderRecordHasNoCodeAndNoNames() throws {
         let refusal = HubRefusal(status: 409, hubWords: "vps-2 sent no reading in the last 10 minutes: check that it is on",
-                                 code: "server_silent", names: ["server": "vps-2", "tasks": 3])
+                                 code: "server_silent", names: ["server": "vps-2", "tasks": 3], refusedGift: 41)
         let data = try JSONEncoder().encode(refusal)
         #expect(try JSONDecoder().decode(HubRefusal.self, from: data) == refusal)
         let older = try JSONDecoder().decode(HubRefusal.self, from: Data(#"{"status":403,"hubWords":"owner only"}"#.utf8))
         #expect(older == HubRefusal(status: 403, hubWords: "owner only"))
-        #expect(older.code == nil && older.names.isEmpty)
+        #expect(older.code == nil && older.names.isEmpty && older.refusedGift == nil)
     }
 
     @Test func theFallbackSentenceIsTheHubsNoWordsAndSaidIsNilForIt() {

@@ -31,6 +31,15 @@ public struct TaskOutcome: Decodable, Identifiable, Sendable {
     public let kind: String
     public let state: String
     public let note: String?
+    /// **Who checks it, as the hub says** (owner API 1.324; the owner, 23 November 2026, of the cards that were left:
+    /// "this sohuld be automatically reattempted or reviewed by the agents!"): `""` a session of the task's own agent,
+    /// an agent's name for the agent above it on the chain that the hub gave the check to, or `"owner"` when no agent
+    /// can check it. Read only from a hub that serves `outcome_checks` (`routed` below): a hub that went back to an
+    /// older release still sends the column and gives no check to anyone, so its reading keeps the app's own rule.
+    public let checker: String?
+
+    /// The feature name of a hub that gives each unknown outcome its `checker`.
+    public static let routedFeature = "outcome_checks"
 
     /// **Whether the owner checks this action, and not its agent** (the owner, 19 November 2026, of an orange "Check
     /// before repeating" on a task whose new session had not started yet: "what does this mean?? who needs to
@@ -42,9 +51,14 @@ public struct TaskOutcome: Decodable, Identifiable, Sendable {
     /// for its next session, each new session of its agent gets the list of these actions first (the hub's start of
     /// a resumed session) and records each one with `resolve_outcome`, and the hub refuses its completed result, a
     /// sign-in and a send until it has. `taskEnded` is nil when the reading has no such task: it counts as ended, as
-    /// before. The hub's `owner_count` keeps the same rule for the count on the phone's icon.
-    public func waitsOnOwner(holds: [TaskHold], taskEnded: Bool?, shellOff: Bool) -> Bool {
-        state == "unknown"
+    /// before. **A hub that says who checks it decides alone** (`routed`: its `ui_features` has `outcome_checks`, and
+    /// the row has its `checker`): only `"owner"` is the owner's, because the hub gives a check that the task's agent
+    /// cannot make to its requester first, and the owner gets it only when no agent can (a narrowed pair's task, or a
+    /// check that the manager cannot make or leaves). The hub's `owner_count`, the count on the phone's icon, counts
+    /// the same rows.
+    public func waitsOnOwner(holds: [TaskHold], taskEnded: Bool?, shellOff: Bool, routed: Bool = false) -> Bool {
+        if routed, let checker { return state == "unknown" && checker == "owner" }
+        return state == "unknown"
             && (shellOff || taskEnded != false || holds.contains { $0.task == task && $0.state != "released" })
     }
 

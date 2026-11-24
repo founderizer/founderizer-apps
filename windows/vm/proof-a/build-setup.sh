@@ -44,7 +44,7 @@ commit="$(git -C "$repo" rev-parse "$ref")" || proof_die "no commit $ref"
 sources=(app/windows/Directory.Build.props app/windows/global.json app/windows/nuget.config app/windows/Founderizer.Core
          app/windows/Founderizer.Install app/windows/Founderizer.Launcher app/windows/Founderizer.Owner
          app/windows/Founderizer.Remote app/windows/Founderizer.Setup app/windows/Founderizer.Windows
-         app/windows/release/build-release.ps1 app/vectors/agent-marks.json)
+         app/windows/release app/vectors/agent-marks.json)
 [ -z "$(git -C "$repo" status --porcelain -- "${sources[@]}")" ] ||
     proof_say "note: the sources have changes that are not committed; the build takes the commit $commit, not them"
 
@@ -82,7 +82,7 @@ PY
 
 "$vm_sh" run 'if (Test-Path C:\fz\proof-a\src) { Remove-Item -Recurse -Force C:\fz\proof-a\src }; New-Item -ItemType Directory -Force -Path C:\fz\proof-a\src\windows, C:\fz\proof-a\src\vectors | Out-Null'
 ( cd "$work/app/windows" && "$vm_sh" copy Directory.Build.props global.json nuget.config Founderizer.Core Founderizer.Install \
-    Founderizer.Launcher Founderizer.Owner Founderizer.Remote Founderizer.Setup Founderizer.Windows vm:C:/fz/proof-a/src/windows/ )
+    Founderizer.Launcher Founderizer.Owner Founderizer.Remote Founderizer.Setup Founderizer.Windows release vm:C:/fz/proof-a/src/windows/ )
 "$vm_sh" copy "$work/app/vectors/agent-marks.json" vm:C:/fz/proof-a/src/vectors/
 "$vm_sh" copy "$work/build-release-welcome.ps1" vm:C:/fz/proof-a/
 

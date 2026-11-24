@@ -1882,6 +1882,10 @@ public sealed partial class OwnerStore : IAsyncDisposable
         try
         {
             var enrollment = await client.EnrollAsync(hub, code);
+            // **He went to another hub while the code waited** (the iPhone's enrollAlone, F7 round of the enroll key fix):
+            // nothing of the hub that answered moves in. Its key is tied to this PC's address at that hub, so kept
+            // here it went to the other hub at the next read, which refused it and gave no access; the code is spent.
+            if (!Equals(State.Hub, hub)) return "This PC could not keep its key. Make a new code.";
             try
             {
                 settings.Keys.Write(enrollment.Key);

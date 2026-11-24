@@ -155,7 +155,8 @@ public static class Activity
     private static bool OwnerChecks(MobileSnapshot snapshot, long task, MobileTaskHead? row)
     {
         var shellOff = row is not null && ShellOff(snapshot, row.Owner);
-        return snapshot.Outcomes.Any(o => o.Task == task && o.WaitsOnOwner(snapshot.Holds, row?.IsTerminal, shellOff));
+        var routed = snapshot.Offers(TaskOutcome.RoutedFeature);
+        return snapshot.Outcomes.Any(o => o.Task == task && o.WaitsOnOwner(snapshot.Holds, row?.IsTerminal, shellOff, routed));
     }
 
     /// <summary>What each task waits for from the owner, by task (HubState.ownerWaits): an unknown outcome that its agent

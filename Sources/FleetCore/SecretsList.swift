@@ -245,4 +245,35 @@ public enum SecretsList {
             .sorted { ($0.name.lowercased(), $0.name) < ($1.name.lowercased(), $1.name) }
             .map { ($0.name, $0.isAPIKey) }
     }
+
+    // MARK: a secret's card
+
+    /// What the card of one secret shows (`card(_:in:fresh:)`).
+    public enum Card: Equatable, Sendable {
+        /// The secret of the list: its name, its kind and the rest of its card.
+        case entry(TeamLogin)
+        /// The list that the card has does not have it, and no reading of this visit of the card says yet that it
+        /// went: the card shows no name and no kind until a reading comes.
+        case waiting
+        /// A list that this visit of the card read does not have it: the card closes.
+        case gone
+
+        /// The secret's entry, only in `entry`.
+        public var entry: TeamLogin? {
+            if case .entry(let entry) = self { return entry }
+            return nil
+        }
+    }
+
+    /// **The card of a secret that left the list closes, and no card names a secret by its reference** (a Fable read of
+    /// 22 November 2026): a key can leave the fleet somewhere else (at another device, with an agent's removal) while
+    /// the list that this Mac keeps still has it, so its badge stays, and its press opens its card. The card then
+    /// showed the raw `bws://` reference as its name and "Login" as its kind. `catalog`: the list that the card has
+    /// now, nil before its first reading and when the hub's list could not be read; `fresh`: this Mac kept that list
+    /// after the page or the card opened, not before.
+    /// Only a list of this visit closes the card: an older list can lack a key that the fleet has now.
+    public static func card(_ reference: String, in catalog: [String: TeamLogin]?, fresh: Bool) -> Card {
+        if let entry = catalog?[reference] { return .entry(entry) }
+        return catalog != nil && fresh ? .gone : .waiting
+    }
 }

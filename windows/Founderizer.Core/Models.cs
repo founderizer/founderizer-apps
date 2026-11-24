@@ -219,7 +219,7 @@ public sealed record TaskHold(
     string? By = null);
 
 public sealed record TaskOutcome(long Id, long Task, long Attempt, string Title, string Kind, string State,
-                                 string? Note = null)
+                                 string? Note = null, string? Checker = null)
 {
     /// <summary>Whether the owner checks this action, and not its agent (FleetCore's TaskOutcome.waitsOnOwner; the owner,
     /// 19 November 2026, of an orange check on a task whose new session had not started yet: "who needs to check?"): its
@@ -227,10 +227,20 @@ public sealed record TaskOutcome(long Id, long Task, long Attempt, string Title,
     /// holds the task (any hold), the task has ended (<paramref name="taskEnded"/> null: the reading has no such task,
     /// which counts as ended), or its agent's sessions cannot record a finding (<paramref name="shellOff"/>). While the
     /// task runs or waits for its next session, each new session of its agent gets the list of these actions first and
-    /// records each one, so no Needs-you row, count or orange line asks the owner. The hub's owner_count keeps the same
-    /// rule for the number on the phone's icon.</summary>
-    public bool WaitsOnOwner(IReadOnlyList<TaskHold> holds, bool? taskEnded, bool shellOff) =>
-        State == "unknown" && (shellOff || taskEnded != false || holds.Any(h => h.Task == Task && h.State != "released"));
+    /// records each one, so no Needs-you row, count or orange line asks the owner. A hub that says who checks it
+    /// decides alone, as on the Mac (<paramref name="routed"/>: the hub serves <see cref="RoutedFeature"/>, and the row
+    /// has its <see cref="Checker"/>, owner API 1.324: "" the task's own agent, an agent's name, or "owner"): only
+    /// "owner" is the owner's, because the hub gives a check that the task's agent cannot make to its requester first.
+    /// A null Checker, or a hub that does not serve the name (an older one, or one that went back to an older release
+    /// and still sends the column), keeps the rule above. The hub's owner_count, the number on the phone's icon, counts
+    /// the same rows.</summary>
+    public bool WaitsOnOwner(IReadOnlyList<TaskHold> holds, bool? taskEnded, bool shellOff, bool routed = false) =>
+        routed && Checker is not null
+            ? State == "unknown" && Checker == "owner"
+            : State == "unknown" && (shellOff || taskEnded != false || holds.Any(h => h.Task == Task && h.State != "released"));
+
+    /// <summary>The feature name of a hub that gives each unknown outcome its <see cref="Checker"/>.</summary>
+    public const string RoutedFeature = "outcome_checks";
 
     /// <summary>Whether the sessions of an agent with this role and these Tools boxes have no resolve_outcome (FleetCore's
     /// TaskOutcome.shellOff): a worker's or a lead's whose Shell box is off, as the hub's shell_off reads it. A manager's

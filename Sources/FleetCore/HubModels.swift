@@ -459,24 +459,37 @@ extension HubState {
     /// The same for the task `row` of this reading, with no search of the tasks.
     public func outcomeUnknown(of row: FleetTask) -> Bool { ownerChecks(row.id, row: row) }
 
-    /// The outcomes that the owner checks (`TaskOutcome.waitsOnOwner`), of every task.
+    /// The outcomes that the owner checks (`TaskOutcome.waitsOnOwner`), of every task, each row by its own rule: a hub
+    /// that routes the checks (`routesOutcomes`) can give one row of a task to the owner and keep another with an
+    /// agent (a pass up of one row), and the iPhone's list reads each row the same way.
     public var ownerOutcomes: [TaskOutcome] {
         let unknown = (outcomes ?? []).filter { $0.state == "unknown" }
         guard !unknown.isEmpty else { return [] }
         let ids = Set(unknown.map(\.task))
         let rows = Dictionary(tasks.filter { ids.contains($0.id) }.map { ($0.id, $0) }) { first, _ in first }
-        let theirs = Set(ids.filter { ownerChecks($0, row: rows[$0]) })     // once for each task
-        return unknown.filter { theirs.contains($0.task) }
+        let routed = routesOutcomes
+        return unknown.filter { outcome in
+            let row = rows[outcome.task]
+            let shellOff = row.flatMap { row in agents.first { $0.name == row.owner } }
+                .map { TaskOutcome.shellOff(role: $0.role, can: $0.can) } ?? false
+            return outcome.waitsOnOwner(holds: holds ?? [], taskEnded: row?.isTerminal, shellOff: shellOff,
+                                        routed: routed)
+        }
     }
 
     /// Whether an unknown outcome of the task `task` (its row `row`, nil when the reading has none) waits on the owner.
     private func ownerChecks(_ task: Int, row: FleetTask?) -> Bool {
         let shellOff = row.flatMap { row in agents.first { $0.name == row.owner } }
             .map { TaskOutcome.shellOff(role: $0.role, can: $0.can) } ?? false
+        let routed = routesOutcomes
         return (outcomes ?? []).contains {
-            $0.task == task && $0.waitsOnOwner(holds: holds ?? [], taskEnded: row?.isTerminal, shellOff: shellOff)
+            $0.task == task && $0.waitsOnOwner(holds: holds ?? [], taskEnded: row?.isTerminal, shellOff: shellOff,
+                                               routed: routed)
         }
     }
+
+    /// Whether this hub gives each unknown outcome its `checker` (owner API 1.324), which then decides alone.
+    public var routesOutcomes: Bool { ui_features?.contains(TaskOutcome.routedFeature) == true }
 }
 
 /// **One task's state in a few words, the same on every screen of both apps** (T-12; fix round 2 of 29 October 2026). A
@@ -880,6 +893,10 @@ public struct OwnerMessage: Decodable, Identifiable, Sendable, Equatable {
     /// **His @ tags in these words** (owner feature `agent_tags`, API 1.288): the list that the hub stored, from the
     /// app's own reading or from the hub's; nil from a hub before it.
     public let mentions: MessageMentions?
+    /// **The skills of this message** (owner feature `message_skills`; `MessageSkills`): a skill that he gave the
+    /// agent with it, with the name that the hub stored, and a skill that he asked it to use; nil from a hub before it
+    /// and for his message on its way, whose gift comes with the hub's copy, as its files do.
+    public var skills: MessageSkills? = nil
     public var id: String { request_id }
 }
 

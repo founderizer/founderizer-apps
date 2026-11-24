@@ -12,7 +12,7 @@ import Synchronization
 ///   ("I asked Marketing", "goes to Sales"), never after a sentence's end, a quote, a bracket, a colon, a digit, a mark
 ///   or at a line's start ("Marketing spend rose 10%", "(1) Sales grew 5%"): on real messages of one fleet the role
 ///   "Marketing" named its agent often, and every wrong one of the reviews stood so;
-/// - a server or a repository as it is written, in its own capitals ("app-1", "acme/web");
+/// - a server or a repository as it is written, in its own capitals ("app-1", "acme/web"), and never in inline code;
 /// - a knowledge file by its path, as a card does;
 /// - a secret of the fleet's by its name, as a card does (`CardNames`: word for word, in words only when it has a
 ///   character that is no letter and no space, and a name of letters only only as the whole of an inline code; the
@@ -83,7 +83,8 @@ public struct ChatNames: Equatable, Sendable {
     public func pieces(_ text: AttributedString) -> [CardNames.Piece] {
         let given = text.runs[AgentTags.Given.self].contains { $0.0 == true }
         let read = given ? (text: text, after: Set<Int>()) : Self.reading(text)
-        let found = read.after.isEmpty ? book.pieces(text) : Self.restored(book.pieces(read.text), in: text, at: read.after)
+        let names = book.pieces(read.text, codedRepositories: false)
+        let found = read.after.isEmpty ? names : Self.restored(names, in: text, at: read.after)
         var pieces: [CardNames.Piece] = [], line = "", offset = 0     // the words of the line before each piece, its place
         for (index, piece) in found.enumerated() {
             var shown = piece

@@ -235,6 +235,8 @@ struct ChatBadgeIcon: Equatable {
                                               absent: presences[name] == .offline || presences[name] == .unknown))
         case .symbol(let name):
             return ChatBadgeIcon(room: .symbol(name))
+        case .skill:
+            return ChatBadgeIcon(room: .symbol(CardBadgeIcon.skillSymbol))
         case .github:
             return ChatBadgeIcon(room: .mark, mark: Mark(name: "github", image: Image(nsImage: GitHubMark.image)
                 .renderingMode(.template).interpolation(.high), size: GitHubMark.image.size, tinted: true))

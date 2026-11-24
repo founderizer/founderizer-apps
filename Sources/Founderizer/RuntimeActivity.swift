@@ -741,7 +741,9 @@ struct TaskOutcomeCheck: View {
     /// He chose "Keep it" or "Paste it anyway" for the key in the note: no second question while it is in it.
     @State private var keyAllowed = false
     @FocusState private var noteFocused: Bool
-    private var unknown: [TaskOutcome] { store.state?.outcomes?.filter { $0.task == task.id && $0.state == "unknown" } ?? [] }
+    /// The rows that the owner checks, each by its own rule (`HubState.ownerOutcomes`): a row whose check is with an
+    /// agent stays out of his form, also beside one that is his.
+    private var unknown: [TaskOutcome] { store.state?.ownerOutcomes.filter { $0.task == task.id } ?? [] }
     /// The note's key for the guard of a key: the task's agent reads the note when the task runs again (the hub's
     /// outcome lines), so a key in it waits for his choice, as in the chat's composer (`KeyHoldBanner`).
     private func noteKey(_ outcome: TaskOutcome) -> String { "outcome:\(store.state?.db ?? ""):\(outcome.id)" }

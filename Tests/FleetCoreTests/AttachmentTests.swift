@@ -193,6 +193,19 @@ import Testing
         older.removeValue(forKey: "attachments")
         let old = try JSONDecoder().decode(PendingRequest.self, from: JSONSerialization.data(withJSONObject: older))
         #expect(old.attachments.isEmpty)
+        // **A skill that he gives goes as `{"give": <its ZIP's number>}` alone** (owner feature `message_skills`), never
+        // also in `attachments`, where the agent would get it as a file too; the hub refuses an entry with a second key,
+        // and skills on an answer. A record that a version before it saved has none, and sends no field.
+        let giving = PendingRequest(hub: hub, database: "gen-1", client: "c", recipient: "studio", attachments: [3],
+                                    skills: [.give(41)], text: "")
+        let given = try JSONSerialization.jsonObject(with: giving.body()) as! [String: Any]
+        #expect(given["skills"] as? [[String: Int]] == [["give": 41]] && given["attachments"] as? [Int] == [3])
+        #expect(giving.givenFiles == [41])
+        #expect(!(try JSONSerialization.jsonObject(with: plain.body()) as! [String: Any]).keys.contains("skills"))
+        #expect(PendingRequest(hub: hub, database: "gen-1", client: "c", needID: 7, skills: [.give(41)], text: "Yes")
+            .skills == nil)
+        #expect(try JSONDecoder().decode(PendingRequest.self, from: JSONEncoder().encode(giving)).skills == [.give(41)])
+        #expect(old.skills == nil)
         // A guidance carries its files beside its words (owner API 1.223): a body without them was a file dropped in
         // silence. No other command carries a file.
         let guidance = PendingRequest(hub: hub, database: "gen-1", client: "c", command: .steer(task: 8, attempt: 2),

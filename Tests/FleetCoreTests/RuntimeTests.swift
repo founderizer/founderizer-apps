@@ -72,13 +72,17 @@ private func requesterStop(_ state: String, _ fields: [String: Any] = [:]) -> [S
         "kind": "other", "state": "unknown", "created": 130, "resolved": NSNull(), "by": NSNull(), "note": NSNull()]
     let settled = outcome.merging(["id": 10, "tool_call_id": "save", "state": "not_done", "resolved": 150, "by": "worker",
                                    "note": "The page shows the draft."]) { _, new in new }
-    func hub(_ hold: [String: Any]) throws -> HubState {
-        try HubState.decode(JSONSerialization.data(withJSONObject: ["schema_version": 1, "db": "db", "time": 200,
+    func hub(_ hold: [String: Any], checker: String? = nil, routed: Bool? = nil) throws -> HubState {
+        var row = outcome
+        if let checker { row["checker"] = checker }
+        let features: [String] = routed ?? (checker != nil) ? [TaskOutcome.routedFeature] : []
+        return try HubState.decode(JSONSerialization.data(withJSONObject: ["schema_version": 1, "db": "db", "time": 200,
+            "ui_features": features,
             "agents": [], "notes": [], "needs": [], "permissions": [], "messages": [], "reports": [],
             "tasks": [["id": 7, "title": "Chrome task", "details": "Send the form", "done_when": "Sent", "needs": "browser",
                        "goal": "Local", "owner": "worker", "requester": "manager", "state": "working", "created": 90, "attempt": 2,
                        "restarts": 1, "nudge_level": 0, "stop_sent": 0]],
-            "holds": [hold], "outcomes": [outcome, settled]]))
+            "holds": [hold], "outcomes": [row, settled]]))
     }
     let state = try hub(requesterStop("released", ["confirmed": 120, "detail": "1 process ended", "released": 140,
                                                    "released_by": "manager", "resume_mode": "check"]))
@@ -96,6 +100,19 @@ private func requesterStop(_ state: String, _ fields: [String: Any] = [:]) -> [S
     #expect(!state.outcomeUnknown(7) && state.ownerTasks.isEmpty)
     for held in ["requested", "not_confirmed", "stopped"] { #expect(try hub(requesterStop(held)).outcomeUnknown(7)) }
     #expect(try hub(requesterStop("stopped")).stoppedAttempt(of: 8) == nil)
+    // **A hub that says who checks it decides alone** (owner API 1.324; the owner, 23 November 2026: "this sohuld be
+    // automatically reattempted or reviewed by the agents!"): a held task whose check the hub gave its requester, or
+    // that its own agent checks, asks the owner for nothing; only "owner" does, also with no hold. A reading with no
+    // checker is an older hub's, and so is one of a hub that does not serve outcome_checks, also when it sends the
+    // column (a hub that went back to an older release): each keeps the rule above.
+    for checker in ["manager", ""] {
+        let held = try hub(requesterStop("stopped"), checker: checker)
+        #expect(held.routesOutcomes && !held.outcomeUnknown(7) && held.ownerTasks.isEmpty && held.ownerOutcomes.isEmpty)
+    }
+    #expect(try hub(requesterStop("stopped"), checker: "manager", routed: false).outcomeUnknown(7))
+    #expect(try hub(requesterStop("stopped"), routed: true).outcomeUnknown(7))       // a row with no checker
+    let owners = try hub(requesterStop("released", ["released": 140]), checker: "owner")
+    #expect(owners.outcomeUnknown(7) && owners.ownerTasks.map(\.id) == [7] && owners.ownerOutcomes.map(\.id) == [9])
 }
 
 @Test func runtimePagesRejectWrongTaskAndBrokenCursor() throws {

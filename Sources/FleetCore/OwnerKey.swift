@@ -273,6 +273,37 @@ public struct FleetKeychainItem: Sendable {
         return .success(data)
     }
 
+    /// **A read of the item, told apart** (two Opus readers of the Windows owner key, and the Door area's read, 24
+    /// November 2026): `none` only when the keychain says that the item is not there; `notNow` for any other status
+    /// (locked, refused, a missing entitlement, a build with no Developer ID) and for held data that `decode` cannot
+    /// read now. Only `none` may lead to a new value: else one passing error puts a new value over the one kept.
+    public enum Held<Value> {
+        case value(Value)
+        case none
+        case notNow(Failure)
+    }
+
+    /// `Held` of the keychain's answer `read`.
+    public func held<Value>(_ read: Result<Data, Failure>, decode: (Data) -> Value?) -> Held<Value> {
+        switch read {
+        case .success(let data):
+            if let value = decode(data) { return .value(value) }
+            return .notNow(Failure(label: label, status: errSecDecode))
+        case .failure(let failure):
+            return failure.status == errSecItemNotFound ? .none : .notNow(failure)
+        }
+    }
+
+    /// **A new value goes in only where the keychain says that the item is not there**: it throws for held data and for
+    /// every other status, so nothing is kept over a value that a read could not give now.
+    public func mayMake(_ read: Result<Data, Failure>) throws {
+        switch read {
+        case .failure(let failure) where failure.status == errSecItemNotFound: return
+        case .failure(let failure): throw failure
+        case .success: throw Failure(label: label, status: errSecDuplicateItem)
+        }
+    }
+
     /// Takes the item away. One that is not there is no failure.
     public func remove(fleet: String) {
         guard Self.developerIDSigned else { return }
@@ -307,27 +338,66 @@ public enum OwnerKeychain {
     /// Whether this Mac holds an owner key for the fleet, without reading it.
     public static func isHeld(fleet: String) -> Bool { item.isHeld(fleet: fleet) }
 
-    /// The owner key this Mac holds for the fleet, or nil.
+    /// **What this Mac holds for the fleet, told apart** (two Opus readers of the Windows owner key, 24 November 2026):
+    /// `none` only when the keychain says that the item is not there; `notNow` when the keychain gives another status
+    /// (locked, refused, a build with no Developer ID) or holds data that no key opens now (the enclave refused its own
+    /// wrapped form). Only `none` may lead to a new key: before, one passing error made `key` nil, and the install then
+    /// made a new owner key over the old one, a new identity for the hub with no word to the owner, whose pins the
+    /// Linux brokers refuse.
+    public enum Lookup {
+        case key(any OwnerKey)
+        case none
+        case notNow(FleetKeychainItem.Failure)
+    }
+
+    /// The owner key this Mac holds for the fleet, told apart from none and from a read that failed now.
+    public static func lookup(fleet: String) -> Lookup {
+        lookup(item.lookup(fleet: fleet), open: open)
+    }
+
+    /// The owner key this Mac holds for the fleet, or nil (none, or not now): for a step that signs, which stops.
     public static func key(fleet: String) -> (any OwnerKey)? {
-        guard let data = item.read(fleet: fleet) else { return nil }
+        if case .key(let key) = lookup(fleet: fleet) { return key }
+        return nil
+    }
+
+    /// `lookup`'s rule, with the keychain's answer and the opening of its data given.
+    static func lookup(_ read: Result<Data, FleetKeychainItem.Failure>, open: (Data) -> (any OwnerKey)?) -> Lookup {
+        switch item.held(read, decode: open) {
+        case .value(let key): return .key(key)
+        case .none: return .none
+        case .notNow(let failure): return .notNow(failure)
+        }
+    }
+
+    /// An enclave key from its wrapped form, else a software key from its raw form, else nil.
+    static func open(_ data: Data) -> (any OwnerKey)? {
         if SecureEnclave.isAvailable, let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) {
             return EnclaveOwnerKey(key: key)
         }
         return (try? P256.Signing.PrivateKey(rawRepresentation: data)).map { SoftwareOwnerKey($0) }
     }
 
-    /// A new owner key for the fleet, kept in place of any earlier one. The install that follows gives the central
-    /// vault its public half and takes the earlier one away, so one Mac at a time signs for a fleet.
+    /// A new owner key for the fleet. The install that follows gives the central vault its public half and takes the
+    /// earlier one away, so one Mac at a time signs for a fleet. **Only where the keychain says that no owner key is
+    /// there**: any other answer throws and keeps what is there. A software key only on a Mac with no Secure Enclave; an
+    /// enclave that refuses a key now throws, and the next try makes one.
     public static func make(fleet: String) throws -> any OwnerKey {
-        let made: (any OwnerKey, Data)
-        // A Mac whose enclave refuses a key still gets one: a software key, kept the same way.
-        if SecureEnclave.isAvailable, let key = try? SecureEnclave.P256.Signing.PrivateKey() {
-            made = (EnclaveOwnerKey(key: key), key.dataRepresentation)
-        } else {
-            let key = P256.Signing.PrivateKey()
-            made = (SoftwareOwnerKey(key), key.rawRepresentation)
-        }
+        try item.mayMake(item.lookup(fleet: fleet))
+        let made = try new(enclave: SecureEnclave.isAvailable) { try SecureEnclave.P256.Signing.PrivateKey() }
         try item.keep(made.1, fleet: fleet)
         return made.0
+    }
+
+    /// The new key: the enclave's where this Mac has one, and its error then goes up; a software key only where it has
+    /// none.
+    static func new(enclave available: Bool, enclave make: () throws -> SecureEnclave.P256.Signing.PrivateKey) throws
+        -> (any OwnerKey, Data) {
+        if available {
+            let key = try make()
+            return (EnclaveOwnerKey(key: key), key.dataRepresentation)
+        }
+        let key = P256.Signing.PrivateKey()
+        return (SoftwareOwnerKey(key), key.rawRepresentation)
     }
 }

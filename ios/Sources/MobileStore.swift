@@ -642,32 +642,11 @@ final class MobileStore {
             if read { await refresh() }
             return nil
         } catch let error as MobileError {
-            // A join that got no answer says what this phone can see of its private network (F7, piece A5).
-            if error == .noAnswer { return MobileError.noAnswerWords(addresses: Self.ownAddresses()) }
             return MobileError.enrollWords(error)
         } catch {
             enrollDetail = error.localizedDescription
             return String(l10n: "The hub did not take the code.")
         }
-    }
-
-    /// **This phone's own addresses**, as text, on each interface that is up (`getifaddrs`), for the words of a join
-    /// that got no answer (`MobileError.noAnswerWords`). The read stays on the phone: nothing of it is kept or sent.
-    nonisolated static func ownAddresses() -> [String] {
-        var first: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&first) == 0, let first else { return [] }
-        defer { freeifaddrs(first) }
-        var addresses: [String] = []
-        for entry in sequence(first: first, next: { $0.pointee.ifa_next }).map(\.pointee) {
-            guard entry.ifa_flags & UInt32(IFF_UP) != 0, let address = entry.ifa_addr else { continue }
-            let family = Int32(address.pointee.sa_family)
-            guard family == AF_INET || family == AF_INET6 else { continue }
-            let length = socklen_t(family == AF_INET ? MemoryLayout<sockaddr_in>.size : MemoryLayout<sockaddr_in6>.size)
-            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-            guard getnameinfo(address, length, &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }
-            addresses.append(String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self))
-        }
-        return addresses
     }
 
     // MARK: The Mac's picture of a code
@@ -1773,11 +1752,15 @@ final class MobileStore {
     /// checks first, while the task runs or waits for its next session (`TaskOutcome.waitsOnOwner`).
     var openHolds: [TaskHold] { snapshot?.holds ?? [] }
     var openOutcomes: [TaskOutcome] {
-        (snapshot?.outcomes ?? []).filter { outcome in
+        let routed = routesOutcomes
+        return (snapshot?.outcomes ?? []).filter { outcome in
             let row = head(outcome.task)
-            return outcome.waitsOnOwner(holds: openHolds, taskEnded: row?.isTerminal, shellOff: shellOff(row?.owner))
+            return outcome.waitsOnOwner(holds: openHolds, taskEnded: row?.isTerminal, shellOff: shellOff(row?.owner),
+                                        routed: routed)
         }
     }
+    /// Whether this hub gives each unknown outcome its `checker` (owner API 1.324; `TaskOutcome.waitsOnOwner`).
+    var routesOutcomes: Bool { snapshot?.ui_features?.contains(TaskOutcome.routedFeature) == true }
     /// Whether the agent `name`'s sessions record no outcome (`TaskOutcome.shellOff`), with a `can` that the hub did not
     /// send read as `[]`, as `askReading` reads it.
     func shellOff(_ name: String?) -> Bool {
@@ -1864,12 +1847,19 @@ final class MobileStore {
         // A correction stands for the message that it replaced (`ChatAskPlaces`).
         for message in messages { if let replaced = message.replaces_request_id { here.insert(replaced.lowercased()) } }
         guard askTasks.contains(where: { $0.ask.map { here.contains($0.lowercased()) } == true }) else { return nil }
+        return Self.askReading(snapshot, tasks: askTasks, messages: messages)
+    }
+
+    /// `askReading`'s reading of these tasks and messages: with the reading's features, so that a check of an unknown
+    /// outcome that the hub gave an agent (`outcome_checks`) asks the owner nothing in the chat either.
+    nonisolated static func askReading(_ snapshot: MobileSnapshot, tasks: [FleetTask],
+                                       messages: [OwnerMessage]) -> HubState {
         let agents = snapshot.agents.map {
             FleetAgent(phoneName: $0.name, role: $0.role, runtime: $0.runtime, limit: $0.limit, can: $0.can ?? [])
         }
-        return HubState(phoneTime: snapshot.time, db: snapshot.db, agents: agents, tasks: askTasks,
+        return HubState(phoneTime: snapshot.time, db: snapshot.db, agents: agents, tasks: tasks,
                         needs: snapshot.needs + (snapshot.answered_needs ?? []), messages: messages,
-                        holds: snapshot.holds, outcomes: snapshot.outcomes)
+                        holds: snapshot.holds, outcomes: snapshot.outcomes, features: snapshot.ui_features)
     }
 
     /// **What came of his answer to `need`, in the place of its check** (owner feature `need_marks`; the owner's "Yes,

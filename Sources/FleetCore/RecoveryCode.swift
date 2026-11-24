@@ -86,13 +86,23 @@ public enum RecoveryKeychain {
 
     /// The code this Mac keeps for the fleet, or nil.
     public static func code(fleet: String) -> RecoveryCode? {
-        item.read(fleet: fleet).flatMap { String(data: $0, encoding: .utf8) }.flatMap(RecoveryCode.init)
+        item.read(fleet: fleet).flatMap(decode)
     }
 
-    /// The code this Mac keeps for the fleet, made and kept now when it keeps none. It is read back before it is
-    /// returned, because a recovery key whose code is not kept would seal every backup to a key nobody has.
+    static func decode(_ data: Data) -> RecoveryCode? { String(data: data, encoding: .utf8).flatMap(RecoveryCode.init) }
+
+    /// The code this Mac keeps for the fleet, made and kept now **only when the keychain says that none is there**
+    /// (`FleetKeychainItem.held`): a read that fails now throws and keeps the code, because a new one would leave each
+    /// backup that was sealed to the old one with no code to open it (the Door area's read of 24 November 2026). It is
+    /// read back before it is returned, because a recovery key whose code is not kept would seal every backup to a key
+    /// nobody has.
     public static func kept(fleet: String) throws -> RecoveryCode {
-        if let code = code(fleet: fleet) { return code }
+        let read = item.lookup(fleet: fleet)
+        switch item.held(read, decode: decode) {
+        case .value(let code): return code
+        case .notNow(let failure): throw failure
+        case .none: try item.mayMake(read)
+        }
         let code = try RecoveryCode.make()
         try item.keep(Data(code.normalized.utf8), fleet: fleet)
         guard Self.code(fleet: fleet) == code else { throw FleetKeychainItem.Failure(label: item.label, status: errSecItemNotFound) }

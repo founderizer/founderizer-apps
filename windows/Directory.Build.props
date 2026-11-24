@@ -1,4 +1,4 @@
-<Project>
+<Project TreatAsLocalProperty="FounderizerTesterOn">
   <!-- What every project of Founderizer for Windows shares. -->
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
@@ -11,5 +11,45 @@
     <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
     <!-- JSON only from source generation: a read or write by reflection fails at run time. -->
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <!-- The .NET runtime of the release SDK (release/global.json), which each build carries; release/build-release.ps1
+         stops when its SDK has another one. -->
+    <FounderizerReleaseRuntime>10.0.15</FounderizerReleaseRuntime>
   </PropertyGroup>
+  <!-- The kind of a build (windows-app-plan-v2.md, section 4, rule 20, and piece T1): a tester build is a build with
+       -p:FounderizerTester=true on its command line, and each of its projects compiles with TESTER; every other build is
+       a signed build. MSBuild also fills a property that nobody set from an environment variable of that name: a build
+       with a variable FounderizerTester is no tester build, and FounderizerTesterOn is set here before its condition,
+       so that a variable of that name is never read; it is a local property (TreatAsLocalProperty above), so that
+       -p:FounderizerTesterOn on a command line changes nothing either. -->
+  <PropertyGroup>
+    <FounderizerTesterOn>false</FounderizerTesterOn>
+    <FounderizerTesterOn Condition="'$(FounderizerTester)' == 'true' And '$([System.Environment]::GetEnvironmentVariable(`FounderizerTester`))' == ''">true</FounderizerTesterOn>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(FounderizerTesterOn)' == 'true'">
+    <DefineConstants>$(DefineConstants);TESTER</DefineConstants>
+  </PropertyGroup>
+  <!-- Only the switch makes a tester build, and the switch always makes one: the build stops when TESTER is in
+       DefineConstants and the switch is off (a variable DefineConstants, which the SDK takes and only adds to, or
+       -p:DefineConstants=TESTER), or when the switch is on and TESTER is not (-p:DefineConstants on the command line
+       replaces the list). -->
+  <Target Name="FounderizerBuildKind" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_FounderizerCompilesTester>$([System.Text.RegularExpressions.Regex]::IsMatch(`$(DefineConstants)`, `(^|[;,\s])TESTER($|[;,\s])`))</_FounderizerCompilesTester>
+    </PropertyGroup>
+    <Error Condition="'$(FounderizerTesterOn)' != 'true' And '$(_FounderizerCompilesTester)' == 'True'"
+           Text="TESTER is defined, but this is no tester build: only -p:FounderizerTester=true on the command line makes one (windows-app-plan-v2.md, section 4, rule 20)." />
+    <Error Condition="'$(FounderizerTesterOn)' == 'true' And '$(_FounderizerCompilesTester)' != 'True'"
+           Text="This is a tester build (-p:FounderizerTester=true), but TESTER is not defined: DefineConstants was replaced (windows-app-plan-v2.md, section 4, rule 20)." />
+  </Target>
+  <!-- A project that is trimmed or checked for trimming gets the SDK's own package Microsoft.NET.ILLink.Tasks, at the
+       version of that SDK's runtime, and its lock file names that version. Every SDK takes the release SDK's version
+       here, so a lock file is the same on each machine: the release machine restores it in locked mode, and a restore on
+       this Mac, whose SDK is another (its tests are not a release), changes none. -->
+  <Target Name="FounderizerILLinkPack" BeforeTargets="ProcessFrameworkReferences">
+    <ItemGroup>
+      <KnownILLinkPack Condition="'%(KnownILLinkPack.TargetFramework)' == 'net10.0'">
+        <ILLinkPackVersion>$(FounderizerReleaseRuntime)</ILLinkPackVersion>
+      </KnownILLinkPack>
+    </ItemGroup>
+  </Target>
 </Project>

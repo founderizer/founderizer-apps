@@ -5,7 +5,9 @@ import Foundation
 /// then his picks of the mockup: repositories, servers and app pages too). An agent opens its page, a repository its
 /// page on GitHub, a server its page, and a page of the app that a step names ("Settings › Apps", "the Apps page")
 /// that page. The book holds what the app already knows: the agents of the hub's reading with their roles, and the
-/// repositories and servers of the readings that the app kept. A word that it does not know stays plain words.
+/// repositories and servers of the readings that the app kept. A word that it does not know stays plain words. A card
+/// whose request has a Give has a book of its own: the same names, and the short names of the Give's repositories
+/// (`given`).
 ///
 /// A link that opens the wrong thing is worse than none, so a name counts only where it cannot be part of something
 /// else (`Rule`):
@@ -13,8 +15,15 @@ import Foundation
 ///   more of a role that no other role starts with, when no word with a capital follows ("Customer Support", but not
 ///   "Head of" in "Head of Sales"); its name with a capital, or a role of one word, when no word with a capital stands
 ///   beside it ("Nova", but not "Studio" in "Visual Studio" or "Manager" in "Password Manager");
-/// - a repository: owner/name, in any case, or its name alone when it has a hyphen or an underscore, starts with no
-///   point, and no other repository of the book has that name ("shop-api");
+/// - a repository: owner/name, in any case, on a card also as the whole of an inline code (the owner, 23 November
+///   2026, of a code that is "owner/name of a repository of your fleet": "The repository's badge"); its name alone when
+///   it has a hyphen or an underscore, starts with no point, and no other repository of the book has that name
+///   ("shop-api"); and on the card whose own Give names the repository, its name alone in any form, also of letters
+///   only ("web"; the owner, that day: "Yes: a name that the card's Give names is a badge"), but for one that starts
+///   with a point or that a secret or a page of the book also is, in any case ("Stripe", "Resources"): in small
+///   letters, as the hub gives the Give, or in other capitals with no word with a capital beside it ("Web", but not
+///   "Studio" in "Visual Studio" for acme/studio). A name that two repositories of that Give have names neither. No
+///   name alone counts in inline code;
 /// - a server: its name, in any case, when it has a digit or a hyphen ("app-1");
 /// - a knowledge file of the owner's: its path, word for word ("knowledge/owner/brand.md"), also as the whole of an
 ///   inline code, which is how agents write a path;
@@ -48,7 +57,7 @@ public struct CardNames: Equatable, Sendable {
         /// A name that can stand as the whole of an inline code, which its badge draws with no code look.
         var fromCode: Bool {
             switch self {
-            case .knowledge, .secret: true
+            case .knowledge, .secret, .repository: true
             default: false
             }
         }
@@ -97,7 +106,8 @@ public struct CardNames: Equatable, Sendable {
     enum Rule: Equatable, Sendable {
         /// Anywhere between two word boundaries: a role of more than one word, a repository, a server.
         case exact
-        /// With no word with a capital beside it: an agent's own name, a role of one word.
+        /// With no word with a capital beside it: an agent's own name, a role of one word, and the name alone of a
+        /// repository of the card's own Give in other capitals than the Give's.
         case alone
         /// With no word with a capital after it: the start of a role.
         case start
@@ -154,9 +164,12 @@ public struct CardNames: Equatable, Sendable {
 
     /// agents: each agent's name and role (nil for none); repositories: owner/name; servers: their names; knowledge:
     /// the paths of the owner's knowledge files; secrets: each secret's name that one secret has, and whether it is an
-    /// API key (`FleetStore.cardSecrets`).
+    /// API key (`FleetStore.cardSecrets`); given: the repositories, owner/name, of the card's own Give, for the book of
+    /// that one card. **A short name of the Give stands with the repositories in the book's order**: an agent of the
+    /// same words stays the agent, and it comes before a server of the same words, as a short name with a hyphen does.
+    /// A secret's or a page's words are no short name of the Give, in any case: the Give would hide them.
     public init(agents: [(name: String, role: String?)], repositories: [String] = [], servers: [String] = [],
-                knowledge: [String] = [], secrets: [(name: String, key: Bool)] = []) {
+                knowledge: [String] = [], secrets: [(name: String, key: Bool)] = [], given: [String] = []) {
         var names: [Name] = []
         func add(_ words: String, anyCase: Bool, _ target: Target, _ rule: Rule) {
             if !words.isEmpty {
@@ -179,13 +192,24 @@ public struct CardNames: Equatable, Sendable {
         for agent in agents where agent.name.contains(where: \.isLetter) {
             add(agent.name.capitalized, anyCase: false, .agent(agent.name), .alone)
         }
-        let repos = Set(repositories.map { $0.lowercased() }.filter { $0.split(separator: "/").count == 2 })
+        let own = Set(given.map { $0.lowercased() })
+        let repos = Set(repositories.map { $0.lowercased() }).union(own)
+            .filter { $0.split(separator: "/").count == 2 }
         let short = Dictionary(grouping: repos, by: { String($0.split(separator: "/")[1]) })
+        // a review of 23 November 2026: a Give of x/stripe made the key `Stripe` a copy chip, and a Give of
+        // x/resources made "Resources" open GitHub, not the page, and took the card's Open <page>
+        let taken = Set(secrets.map { $0.name.lowercased() } + Self.pages.map { $0.words.lowercased() })
         for repo in repos.sorted() {
             add(repo, anyCase: true, .repository(repo), .exact)
             let alone = String(repo.split(separator: "/")[1])
-            if short[alone]?.count == 1, alone.contains(where: { $0 == "-" || $0 == "_" }), !alone.hasPrefix(".") {
-                add(alone, anyCase: true, .repository(repo), .exact)
+            if alone.hasPrefix(".") { continue }            // ".github" is a folder of every repository
+            let named = short[alone] ?? []
+            let mine = named.filter(own.contains) == [repo] && !taken.contains(alone)
+            if alone.contains(where: { $0 == "-" || $0 == "_" }) {
+                if mine || named == [repo] { add(alone, anyCase: true, .repository(repo), .exact) }
+            } else if mine {
+                add(alone, anyCase: false, .repository(repo), .exact)
+                add(alone, anyCase: true, .repository(repo), .alone)
             }
         }
         for server in Set(servers) where server.contains(where: { $0.isNumber || $0 == "-" }) {
@@ -280,6 +304,11 @@ public struct CardNames: Equatable, Sendable {
     /// is, in any case of letters, shows in a card's words as that repository's or server's badge, and its press opens
     /// that one. The title of a Replace card is free of it: its book holds the one key and nothing else
     /// (`NeedRequestCard.titleNames`).
+    ///
+    /// **A known hole of a Give's short names** (the validation of F9, 24 November 2026): on the card whose Give names a
+    /// repository, its short name is a badge also where the words mean something else: with acme/api, "the api key"
+    /// shows a badge; with acme/acme.com, "acme.com" opens the repository on GitHub, not the site. It fits his words
+    /// ("a name that the card's Give names is a badge"), and his card of that answer had no such case.
     public func find(in text: String) -> [Found] {
         var found: [Found] = [], index = text.startIndex
         while index < text.endIndex {
@@ -311,9 +340,11 @@ public struct CardNames: Equatable, Sendable {
     }
 
     /// The names of `text` that its words show, each with its range in `text`'s characters: none in the words of a link
-    /// of its own, and none in inline code but a knowledge file's path or a secret's name that is the whole of one
-    /// (`wholeCode`); a secret's name of letters only shows only there (`distinct`).
-    private func shown(in text: AttributedString) -> [(Found, Range<AttributedString.Index>)] {
+    /// of its own, and none in inline code but a knowledge file's path, a secret's name or, with `codedRepositories`, a
+    /// repository's owner/name that is the whole of one (`wholeCode`); a secret's name of letters only shows only there
+    /// (`distinct`).
+    private func shown(in text: AttributedString, codedRepositories: Bool = true)
+        -> [(Found, Range<AttributedString.Index>)] {
         let plain = String(text.characters)
         return find(in: plain).compactMap { found in
             let lower = plain.distance(from: plain.startIndex, to: found.range.lowerBound)
@@ -327,6 +358,9 @@ public struct CardNames: Equatable, Sendable {
             }
             switch found.target {
             case .knowledge, .secret: return Self.wholeCode(text, range) ? (found, range) : nil
+            // its owner/name only: a name alone in code is a value to copy ("The repository's badge")
+            case .repository(let repo) where codedRepositories && plain[found.range].lowercased() == repo:
+                return Self.wholeCode(text, range) ? (found, range) : nil
             default: return nil
             }
         }
@@ -364,11 +398,12 @@ public struct CardNames: Equatable, Sendable {
     /// **`text` in pieces, each name that it shows a piece of its own with its link**, which a card draws as a badge
     /// with its icon (the owner, 20 November 2026: "for servers, show a server/vps or mac icon before its name, and
     /// enclose it in like a badge entirely", "Same for agents", and "Badge them too" of repositories and the app's
-    /// pages). The pieces hold every character of `text` once, in its order; a name in inline code or in the words of a
-    /// link of its own stays words.
-    public func pieces(_ text: AttributedString) -> [Piece] {
+    /// pages). The pieces hold every character of `text` once, in its order; a name in the words of a link of its own
+    /// or in inline code stays words, but for those that can be the whole of one (`shown`). `codedRepositories`: a
+    /// repository's owner/name is one of them, which is a card's rule and no chat's (`ChatNames`).
+    public func pieces(_ text: AttributedString, codedRepositories: Bool = true) -> [Piece] {
         var pieces: [Piece] = [], start = text.startIndex
-        for (found, range) in shown(in: text) {
+        for (found, range) in shown(in: text, codedRepositories: codedRepositories) {
             if start < range.lowerBound {
                 pieces.append(Piece(words: AttributedString(text[start..<range.lowerBound]), badge: nil))
             }

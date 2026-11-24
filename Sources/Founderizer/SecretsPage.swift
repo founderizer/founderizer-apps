@@ -114,8 +114,10 @@ struct SecretsPage: View {
     /// saw last shows in the first frame when he comes back, and the read that starts then changes only what changed.
     /// The team it is made from is kept for the other pages that draw it too ("team.snapshot").
     private var reading: LoginReading? {
-        get { store.reading("secrets.logins.\(agent ?? "fleet")") } nonmutating set { store.keep(newValue, as: "secrets.logins.\(agent ?? "fleet")") }
+        get { store.reading(readingName) } nonmutating set { store.keep(newValue, as: readingName) }
     }
+    /// The name of that reading in the store.
+    private var readingName: String { "secrets.logins.\(agent ?? "fleet")" }
     /// `GET /ui/resources` (owner feature `resource_grants`): who may give each secret, with the version a change of
     /// it goes against. nil on a hub without it, and then no secret shows the row. It is the reading of the MCPs and
     /// Apps lists (`AccessSettings.name`).
@@ -125,7 +127,8 @@ struct SecretsPage: View {
     /// When the first of the reads that failed in a row failed, or nil while the last read answered: `reading` is then
     /// the last good one, or nil. One break of them says nothing (`FleetStore.pageReadingIsOld`).
     @State private var failedSince: ContinuousClock.Instant?
-    /// When this visit began: a kept list that this visit reads again is not old before that read has had a second.
+    /// When this visit began: a kept list that this visit reads again is not old before that read has had a second, and
+    /// only a list kept since then closes a secret's detail that it does not have (`detail`).
     @State private var opened = ContinuousClock.now
     /// The form of Add secret shows in the list's place.
     @State private var adding = false
@@ -612,20 +615,35 @@ struct SecretsPage: View {
 
     /// The detail of one secret: its name and kind, each agent with its access and its control, and
     /// it, and Remove for a secret that nobody has. Done, Esc or a click outside closes it.
+    ///
+    /// **A secret that left the list closes its detail by itself** (`SecretsList.card`; a Fable read of 22 November
+    /// 2026): a key that left the fleet somewhere else kept its badge while this Mac's kept list was old, and the card
+    /// that its press opened showed the raw `bws://` reference as its name and "Login" as its kind. Now the first list
+    /// of this visit that does not have it closes the card (its own read, or another reader of the same list). Until a
+    /// list of this visit comes (after a change of the hub's generation the card has no list), the card shows no name,
+    /// no kind and no part, only Done. No new words and no new element.
     private func detail(_ card: SecretCard) -> some View {
-        let reference = card.id, entry = reading?.catalog[reference]
+        let reference = card.id
+        // A list that the hub gave in a form this app cannot read is no list (`hasCatalog`), never an empty one: else the
+        // card would close as gone, with what the owner typed in Value.
+        let shows = SecretsList.card(reference, in: reading.flatMap { $0.hasCatalog ? $0.catalog : nil },
+                                     fresh: !store.readingWaits(readingName, since: opened))
+        let entry = shows.entry
         return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
-                IconTile(symbol: entry?.isAPIKey == true ? "key.horizontal" : "person.badge.key")
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(entry?.name ?? reference)
-                        .font(entry?.isAPIKey == true ? FormMetrics.title.monospaced() : FormMetrics.title)
-                        .lineLimit(1).truncationMode(.middle).textSelection(.enabled).accessibilityAddTraits(.isHeader)
-                    HStack(spacing: 4) {
-                        Text(entry?.isAPIKey == true ? "API key" : "Login").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                        MessageAction(symbol: copied == reference ? "checkmark" : "square.on.square", label: String(l10n: "Copy the reference"),
-                                      help: String(l10n: "Copy its reference, \(reference)"), height: 16) { copyMessage(reference); copied = reference }
-                            .foregroundStyle(FleetStyle.muted)
+                // Its mark, name and kind come only from its entry.
+                if let entry {
+                    IconTile(symbol: entry.isAPIKey ? "key.horizontal" : "person.badge.key")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.name)
+                            .font(entry.isAPIKey ? FormMetrics.title.monospaced() : FormMetrics.title)
+                            .lineLimit(1).truncationMode(.middle).textSelection(.enabled).accessibilityAddTraits(.isHeader)
+                        HStack(spacing: 4) {
+                            Text(entry.isAPIKey ? "API key" : "Login").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                            MessageAction(symbol: copied == reference ? "checkmark" : "square.on.square", label: String(l10n: "Copy the reference"),
+                                          help: String(l10n: "Copy its reference, \(reference)"), height: 16) { copyMessage(reference); copied = reference }
+                                .foregroundStyle(FleetStyle.muted)
+                        }
                     }
                 }
                 Spacer(minLength: 12)
@@ -696,14 +714,15 @@ struct SecretsPage: View {
                             .help("Remove it from this list. Its value stays in the vaults.").accessibilityIdentifier("secret-remove")
                     }
                 }
-            } else {
-                Text("This secret is no longer in the list.").font(FormMetrics.text).foregroundStyle(FleetStyle.muted)
             }
         }
         // The width of every card over the page that holds an item (margins row 27): an MCP server's, a repository's,
         // an account's and a file's are 560 points, and this one stood 540.
         .padding(22).frame(width: 560)
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
+        // `initial`: also a card that opens over a list of this visit that does not have it. The card has two builds
+        // (`fleetModal`), and each closes it: the second close changes nothing.
+        .onChange(of: shows == .gone, initial: true) { _, gone in if gone { close() } }
     }
 
     /// One agent's access to one secret, with its control. No access: Give (`use`). A login: Take back. An API key:

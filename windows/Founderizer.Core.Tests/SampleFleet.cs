@@ -122,6 +122,8 @@ internal sealed class FakeHub : IDisposable
     public ManualResetEventSlim? Hold;
     /// <summary>While it is set and not open, each read of the fleet waits for it: a read that has no answer yet.</summary>
     public ManualResetEventSlim? HoldReads;
+    /// <summary>While it is set and not open, an enrollment waits for it before its answer: a code that waits.</summary>
+    public ManualResetEventSlim? HoldEnroll;
     /// <summary>The refusal of each upload while it is set: its status and body.</summary>
     public (int Status, string Body)? RefuseUpload;
     public int MobileReads;
@@ -239,7 +241,10 @@ internal sealed class FakeHub : IDisposable
             return LoopbackHub.Json(200, $$"""{"db":"{{Db}}","token":"{{WaitToken ?? Snapshot["token"]!.GetValue<string>()}}"}""");
         }
         if (path == "/ui/owner/enroll")
+        {
+            HoldEnroll?.Wait(TimeSpan.FromSeconds(20));
             return LoopbackHub.Json(200, """{"device":"pc","label":"PC","key":"device-key-1","since":1.0}""");
+        }
         if (path == "/ui/owner/devices")
             return LoopbackHub.Json(200, $$"""{"db":"{{Db}}","devices":[{"device":"pc","label":"PC","address":"192.0.2.7","key":true,"since":1.0,"last_seen":{{SampleFleet.Now - 30}},"this_device":true}]}""");
         if (path == "/health") return LoopbackHub.Json(200, """{"ok":true}""");

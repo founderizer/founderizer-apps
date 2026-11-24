@@ -1,10 +1,13 @@
-# Installs the newest .NET 10 SDK for Windows on ARM64 in the build VM (README.md in the folder above).
+# Installs a .NET 10 SDK for Windows on ARM64 in the build VM (README.md in the folder above): with -Version that SDK
+# (a release machine takes the one of release/global.json, ../../release/README.md), without it the newest.
 #
 # It reads Microsoft's release list of the 10.0 channel, downloads the SDK installer from Microsoft, checks the
 # installer's SHA-512 against the list, and installs it for the whole machine with no question. Run it over SSH:
 #
 #   vm.sh copy app/windows/vm/setup/install-dotnet.ps1 vm:C:/fz/install-dotnet.ps1
-#   vm.sh run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\fz\install-dotnet.ps1'
+#   vm.sh run 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\fz\install-dotnet.ps1 -Version 10.0.404'
+
+param([string]$Version = '')
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -12,8 +15,9 @@ $folder = 'C:\fz\downloads'
 New-Item -ItemType Directory -Force -Path $folder | Out-Null
 
 $channel = Invoke-RestMethod -Uri 'https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json'
-$version = $channel.'latest-sdk'
-$release = $channel.releases | Where-Object { $_.sdks.version -contains $version } | Select-Object -First 1
+if (-not $Version) { $Version = $channel.'latest-sdk' }
+$release = $channel.releases | Where-Object { $_.sdks.version -contains $Version } | Select-Object -First 1
+if (-not $release) { throw "no SDK $Version in Microsoft's release list of the 10.0 channel" }
 $sdk = $release.sdks | Where-Object { $_.version -eq $version } | Select-Object -First 1
 $file = $sdk.files | Where-Object { $_.rid -eq 'win-arm64' -and $_.name -like '*.exe' } | Select-Object -First 1
 if (-not $file) { throw "no win-arm64 installer for SDK $version" }

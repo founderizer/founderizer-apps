@@ -49,6 +49,29 @@ public sealed class AddThisPcTests
     private OwnerStore Launch(IDeviceKeyStore? keys = null) =>
         new(new StoreSettings { Folder = folder, Keys = keys ?? new FileKeyStore(keyFile, new TestProtection()) });
 
+    /// <summary>Bug that this catches (the Opus validator of the iPhone's enroll key fix): he presses Connect to another
+    /// hub while the code waits for its answer, and the key of the hub that answered moves in, so the next read sends it
+    /// to the other hub, which refuses it (the hub ties a key to this PC's address) and gives no access. So an answer of
+    /// a hub that is no longer this PC's moves nothing in: no key is kept, none reaches the other hub, and no words of
+    /// success (the iPhone's enrollAlone).</summary>
+    [TestMethod]
+    public async Task AnAnswerOfAHubThatThePcLeftMovesNothingIn()
+    {
+        using var other = new FakeHub();
+        var keys = new MemoryKeyStore();
+        await using var store = Launch(keys);
+        await store.ConnectAsync(hub.Address.ToString());
+        hub.HoldEnroll = new System.Threading.ManualResetEventSlim(false);
+        var enrolling = store.EnrollAsync("ABCD-EFGH");
+        for (var i = 0; i < 200 && !hub.Server.Received.Any(r => r.Target == "/ui/owner/enroll"); i++) await Task.Delay(25);
+        Assert.IsNull(await store.ConnectAsync(other.Address.ToString()), "he goes to another hub while the code waits");
+        hub.HoldEnroll.Set();
+        Assert.AreEqual("This PC could not keep its key. Make a new code.", await enrolling);
+        await store.RefreshAsync();
+        Assert.AreEqual(((string?)null, KeyState.None), (keys.Read(), store.State.Key), "no key moved in");
+        Assert.IsFalse(other.Server.Received.Any(r => r.Header("Authorization") is not null), "no key reached the other hub");
+    }
+
     [TestMethod]
     public async Task AnEnrollmentNamesThePcsKindAndTheDeviceListSaysIt()
     {

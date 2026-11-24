@@ -7,7 +7,9 @@ import SwiftUI
 /// changed. When the hub refuses it with 409 because the profile changed elsewhere, the save reads the profile again and
 /// sends only this rule's change again, with no question; when that same rule changed elsewhere, the editor shows the
 /// new text instead. An edit stays in memory while other pages show, until the app quits. A refused login text clears
-/// the edits, as it clears every draft. Another hub or hub generation starts again with no reading and no edit.
+/// the edits, as it clears every draft. Another hub or hub generation starts again with no reading and no edit. **A save
+/// waits while the rule's words hold what looks like a key**, until the owner saves it as a secret or keeps it
+/// (`holdsKey`, `KeyHoldBanner`): until 22 November 2026 a rule took such words to the agent's profile with no question.
 @MainActor @Observable
 final class TeamModel {
     struct EditKey: Hashable {
@@ -100,29 +102,72 @@ final class TeamModel {
         return key
     }
 
-    func setTitle(_ title: String, of key: EditKey) { edits[key]?.title = title }
-    func setText(_ text: String, of key: EditKey) { edits[key]?.text = text }
+    func setTitle(_ title: String, of key: EditKey) { edits[key]?.title = title; keptKeyCheck(key) }
+    func setText(_ text: String, of key: EditKey) { edits[key]?.text = text; keptKeyCheck(key) }
 
-    /// Saves a rule: at once when nothing else is sent, else after the requests before it.
-    func save(_ key: EditKey, store: FleetStore) { enqueue(key, deleting: false, store: store) }
+    /// Saves a rule: at once when nothing else is sent, else after the requests before it. **Not while its words hold a
+    /// key that waits for the owner's choice** (`holdsKey`): the question stands over its editor, and false comes back.
+    @discardableResult func save(_ key: EditKey, store: FleetStore) -> Bool {
+        if holdsKey(key, store: store) {
+            store.heldKey = HeldKey(composer: Self.guardKey(key), hold: .text)
+            return false
+        }
+        enqueue(key, deleting: false, store: store)
+        return true
+    }
     /// Deletes a rule that the owner added, in the same queue.
     func delete(_ key: EditKey, store: FleetStore) { enqueue(key, deleting: true, store: store) }
 
-    /// The same request again while it waits for its answer; else the save or delete again.
-    func retry(_ key: EditKey, store: FleetStore) {
-        if let unanswered, unanswered.key == key { Task { await store.retry() } }
-        else { enqueue(key, deleting: deleting.contains(key), store: store) }
+    /// The same request again while it waits for its answer; else the save or delete again. False while the save waits
+    /// for his choice on a key in the rule's words, as `save`.
+    @discardableResult func retry(_ key: EditKey, store: FleetStore) -> Bool {
+        if let unanswered, unanswered.key == key { Task { await store.retry() }; return true }
+        if deleting.contains(key) { enqueue(key, deleting: true, store: store); return true }
+        return save(key, store: store)
     }
 
     /// Drops a new rule that the owner did not add.
     func discard(_ key: EditKey) {
         guard edits[key]?.isNew == true, !order.contains(key) else { return }
-        edits[key] = nil; states[key] = nil
+        edits[key] = nil; states[key] = nil; keyKept.remove(key)
     }
 
     /// Removes every edit: after a refused login text, and on another hub or hub generation.
     func clear() {
-        edits = [:]; states = [:]; order = []; deleting = []; versions = [:]; unanswered = nil
+        edits = [:]; states = [:]; order = []; deleting = []; versions = [:]; unanswered = nil; keyKept = []
+    }
+
+    // MARK: A key in a rule's words
+
+    /// The rules whose words hold what looks like a key that the owner chose to keep ("Keep it" or "Paste it anyway" of
+    /// `KeyHoldBanner`): no second question while it is in them.
+    private var keyKept: Set<EditKey> = []
+
+    /// The name of one rule's words for the guard of a key (`HeldKey`).
+    static func guardKey(_ key: EditKey) -> String { "rule:\(key.agent):\(key.id.key):\(key.id.occurrence)" }
+
+    /// **A key in a rule waits for the owner's choice, as in the chat's composer** (`KeyHoldBanner`): true while the words
+    /// that he writes and a save sends (the text, and the title of a rule of his own) hold what looks like a key
+    /// (`KeyInText`) that he did not keep, on a hub where he can save it as a secret. A rule is in each start of its
+    /// agent and in the fleet's files.
+    func holdsKey(_ key: EditKey, store: FleetStore) -> Bool {
+        edits[key].map { holdsKey($0, key: key, store: store) } ?? false
+    }
+
+    /// "Keep it" or "Paste it anyway": his choice, until the rule's words hold no key.
+    func keepKey(_ key: EditKey) { keyKept.insert(key) }
+
+    private func holdsKey(_ edit: ProfileSectionEdit, key: EditKey, store: FleetStore) -> Bool {
+        SecretEntryView.isOffered(by: store) && !keyKept.contains(key) && Self.wordsHoldKey(edit)
+    }
+
+    private static func wordsHoldKey(_ edit: ProfileSectionEdit) -> Bool {
+        KeyInText.contains(edit.text) || (edit.id.key == "other" && KeyInText.contains(edit.title))
+    }
+
+    /// Words with no key end his choice: a key that comes into them later gets the question again.
+    private func keptKeyCheck(_ key: EditKey) {
+        if keyKept.contains(key), edits[key].map(Self.wordsHoldKey) != true { keyKept.remove(key) }
     }
 
     private func enqueue(_ key: EditKey, deleting removing: Bool, store: FleetStore) {
@@ -163,11 +208,14 @@ final class TeamModel {
         }
     }
 
-    /// One save or delete of a rule, again on the newer version after each 409 that a change elsewhere caused.
-    private func send(_ first: ProfileSectionEdit, key: EditKey, deleting removing: Bool, store: FleetStore) async -> SaveState {
+    /// One save or delete of a rule, again on the newer version after each 409 that a change elsewhere caused. nil when
+    /// the words to send hold a key that waits for the owner's choice (`holdsKey`): words that he wrote after the save
+    /// came into the queue, while the requests before it or a 409 waited. Nothing goes, and his editor asks him.
+    private func send(_ first: ProfileSectionEdit, key: EditKey, deleting removing: Bool, store: FleetStore) async -> SaveState? {
         var edit = first
         var words = String(l10n: "Not saved.")
         for _ in 0..<3 {
+            if !removing && holdsKey(edit, key: key, store: store) { return nil }
             guard let payload = try? edit.payload(deleting: removing) else { return .failed(String(l10n: "The hub cannot take this profile. Check the rule.")) }
             var result = await store.save(edit.command, note: payload, queue: false)
             if case .unconfirmed(let id) = result {
@@ -322,7 +370,8 @@ struct BehaviourView: View {
             }.padding(.vertical, 10)
             Spacer(minLength: 16)
             HStack(spacing: 10) {
-                SaveMark(state: team.states[key]) { team.retry(key, store: store) }
+                // A save that waits for his choice on a key in the rule's words opens its editor, where the question stands.
+                SaveMark(state: team.states[key]) { if !team.retry(key, store: store) { open(.agentRule(agent, entry.id)) } }
                 Button("Edit") { open(.agentRule(agent, entry.id)) }.buttonStyle(FleetOutlineButtonStyle())
                     .accessibilityIdentifier("rule-edit-\(entry.id.key)-\(entry.id.occurrence)")
             }.padding(.vertical, 8)
@@ -338,7 +387,9 @@ struct BehaviourView: View {
 /// The editor of one rule of an agent's Behaviour, over the whole page: its name and the one line on what to write in
 /// it, the title of a rule that the owner added, and its text. It saves itself after 2 seconds without typing, and on
 /// Done, Back or another page. A new rule is in the profile only after Add rule. A rule that the owner added can be
-/// deleted.
+/// deleted. **A key in it waits for his choice, as in the chat's composer** (`KeyHoldBanner` over the text): one that he
+/// pastes into the text is not pasted, and one that he types holds the save, Done and Back, until he saves it as a
+/// secret (the agent gets the secret's name in its chat where he has one) or keeps it (`TeamModel.holdsKey`).
 struct RuleEditor: View {
     @Bindable var store: FleetStore
     let team: TeamModel
@@ -347,6 +398,8 @@ struct RuleEditor: View {
     let id: ProfileSectionID?
     let open: (Destination) -> Void
     @State private var newKey: TeamModel.EditKey?
+    /// The text has the cursor: Cmd+V of a key there is held (`keyPasteGuard`).
+    @FocusState private var textFocused: Bool
 
     /// The rule; for a new one, the one Add rule began, or **before it is begun the one it will begin**.
     private var key: TeamModel.EditKey? {
@@ -403,6 +456,7 @@ struct RuleEditor: View {
             .animation(SaveState.lineMotion, value: edit.flatMap { status($0)?.text })
             .frame(maxWidth: FormMetrics.formWidth, maxHeight: .infinity, alignment: .top)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            .keyPasteGuard(store: store, composer: textFocused && SecretEntryView.isOffered(by: store) ? key.map(TeamModel.guardKey) : nil)
         } actions: { actions }
         .task(id: "\(store.hub.absoluteString)/\(store.state?.db ?? "")") {
             team.visited()
@@ -423,11 +477,55 @@ struct RuleEditor: View {
             do { try await Task.sleep(for: .seconds(2)) } catch { return }
             if let key, let edit, !edit.isNew, edit.isChanged { team.save(key, store: store) }
         }
+        // Also the words that the editor opens with: a rule that holds a key, or a save that waits for his choice.
+        .onChange(of: edit.map { "\($0.title)\n\($0.text)" }, initial: true) { heldKeyCheck() }
         .onChange(of: state) { _, state in
             // A new rule that the hub added: its place is in the list now.
             if isNew, state == .saved { open(.agentDetail(agent, .behaviour)) }
         }
-        .onDisappear { if let key, let edit, !edit.isNew, edit.isChanged { team.save(key, store: store) } }
+        .onDisappear {
+            if let key, let edit, !edit.isNew, edit.isChanged { team.save(key, store: store) }
+            // The question of a key goes with the editor, so no other box waits behind it; the rule's words wait in
+            // memory, as a box's unsent words do, and the editor asks again when it opens.
+            if let key, store.heldKey?.composer == TeamModel.guardKey(key) { store.heldKey = nil }
+        }
+    }
+
+    /// Words that hold a key, however they came in, get the question once; words without one end it.
+    private func heldKeyCheck() {
+        guard let key, SecretEntryView.isOffered(by: store) else { return }
+        let mine = HeldKey(composer: TeamModel.guardKey(key), hold: .text)
+        if !team.holdsKey(key, store: store) {
+            if store.heldKey == mine { store.heldKey = nil }
+        } else if store.heldKey == nil {
+            store.heldKey = mine
+        }
+    }
+
+    /// "Save it as a secret": the key goes into the secure form over the page and out of the rule's words, and the
+    /// agent gets the secret's name in its chat where he has one, as from a task's guidance. A paste reads the clipboard
+    /// again now.
+    private func saveHeldKey(_ held: HeldKey, key: TeamModel.EditKey) {
+        store.heldKey = nil
+        var cut: String?
+        if held.hold == .paste { cut = KeyCut.onClipboard() }
+        else if let edit = team.edits[key] {
+            if let split = KeyCut.split(edit.text) { team.setText(split.rest, of: key); cut = split.key }
+            else if edit.id.key == "other", let split = KeyCut.split(edit.title) { team.setTitle(split.rest, of: key); cut = split.key }
+        }
+        store.secretForm = SecretPreset(tell: store.canChat(with: agent) ? agent : nil, key: cut, kept: SecretValueKept())
+    }
+
+    /// "Paste it anyway" or "Keep it": his choice, with no second question while the key is in the rule's words, and the
+    /// save that waited for it goes. A new rule waits for Add rule.
+    private func keepHeldKey(_ held: HeldKey, key: TeamModel.EditKey) {
+        store.heldKey = nil
+        team.begin(key)
+        team.keepKey(key)
+        if held.hold == .paste, let pasted = NSPasteboard.general.string(forType: .string) {
+            team.setText((team.edits[key]?.text ?? "") + pasted, of: key)
+        }
+        if let edit = team.edits[key], !edit.isNew, edit.isChanged { team.save(key, store: store) }
     }
 
     /// The header's title: the rule's own name once it is read, else the name of its kind; "New rule" for one he adds.
@@ -459,6 +557,9 @@ struct RuleEditor: View {
                 .fleetField()
                 .accessibilityIdentifier("rule-title")
         }
+        if let held = store.heldKey, held.composer == TeamModel.guardKey(key) {
+            KeyHoldBanner(hold: held.hold, agent: agent, holds: .rule) { saveHeldKey(held, key: key) } goOn: { keepHeldKey(held, key: key) }
+        }
         TextEditor(text: Binding(get: { team.edits[key]?.text ?? edit.text }, set: { team.begin(key); team.setText($0, of: key) }))
             .font(FormMetrics.text)
             // The words where they stood: the box's own 7 points of room come out of the row's inset.
@@ -475,7 +576,7 @@ struct RuleEditor: View {
             // **The one look of a box of several lines** (`fleetTextBox`; fix round 3c, HIG): it kept a card's look —
             // a 1.39:1 edge, no ring with the cursor, room that took no click, and no stronger edge with Increase
             // Contrast — under a Title field in the field look.
-            .fleetTextBox()
+            .fleetTextBox(focus: $textFocused)
             .accessibilityLabel(edit.isNew ? String(l10n: "Rule text") : edit.name).accessibilityIdentifier("rule-text")
         // **Only while it has something to show** (the margins of 30 October 2026, row 32): empty, its line still took the
         // stack's 14 pt, and the box ended 38 pt over the window's bottom edge, where every page's last block ends 24 over it.
@@ -510,11 +611,12 @@ struct RuleEditor: View {
         return nil
     }
 
-    /// Back to Behaviour. A changed rule saves first. A new rule that was not added stays for the next Add rule while it
-    /// has text.
+    /// Back to Behaviour. A changed rule saves first; **while its save waits for his choice on a key in its words, the
+    /// editor stays, with the question over the text** (`TeamModel.save`). A new rule that was not added stays for the
+    /// next Add rule while it has text.
     private func close() {
         if let key, let edit {
-            if !edit.isNew, edit.isChanged { team.save(key, store: store) }
+            if !edit.isNew, edit.isChanged, !team.save(key, store: store) { return }
             if edit.isNew, edit.normalizedTitle.isEmpty, edit.normalizedText.isEmpty { team.discard(key) }
         }
         open(.agentDetail(agent, .behaviour))

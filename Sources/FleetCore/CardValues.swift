@@ -8,8 +8,9 @@ import Foundation
 /// added. This is the one rule of which words are values, so that a test reads it without a view; where a card draws
 /// values at all (a request's reason, its task, its steps and its details) is the card's to say.
 ///
-/// Not a value: inline code in the words of a link, whose press is the link's; a knowledge file's path that is the whole
-/// of one inline code, which stays its badge (`CardNames`), because no words are a badge and a value at once; and code
+/// Not a value: inline code in the words of a link, whose press is the link's; a knowledge file's path, a secret's name
+/// or a repository's owner/name that is the whole of one inline code, which is its badge (`CardNames`; of a repository
+/// the owner's "The repository's badge", 23 November 2026), because no words are a badge and a value at once; and code
 /// of white space only, which holds nothing to copy. A code block is no inline code: it has its own copy icon.
 public enum CardValues {
     /// The values of words that are no badge, in their order, by their ranges in `words`: each run of inline code with no

@@ -29,6 +29,49 @@ It signs with the build VM's test certificate (`vm/setup/build-window.ps1` makes
 Artifact Signing (plan decision D2) takes that step's place, with a timestamp, once the owner's identity check is done.
 `-Proofs` makes the proofs' build; `-Reuse` packs the last publish again with a new version and build number.
 
+## The two kinds: signed and tester
+
+A tester build is a build made with `-Tester` (`-p:FounderizerTester=true`, rule 20 of
+`~/dev/founderizer-plans/windows-app-plan-v2.md`, section 4, and its piece T1); every other build is a signed build
+and says `-p:FounderizerTester=false`, in all three publishes. A tester build signs no file, its `build.json` says
+`"tester": true`, its stages are `stage-tester-<arch>` and its files go to `<Out>\<version>-<build>-tester\`. Each
+of its projects compiles with `TESTER`, which only that switch gives (`../Directory.Build.props`: a variable
+`FounderizerTester` makes no tester build, and `TESTER` from anywhere else stops the build). Only a tester build has
+`Founderizer.Core.TesterManifest`: the first line of a tester manifest, `founderizer-windows-tester-1`, and the line of
+`tester-key.pub` as the constant `KeyLine` (`Founderizer.Core.csproj` makes it from the file when the build is made).
+
+The build checks the kind by the built bytes (T1's test 2). `read-constants.cs` (a .NET file-based program, which the
+release SDK runs) reads `BuildKind.Tester`, `FirstRunSwitch.Welcome` and `Proofs.On` from `Founderizer.App.dll`, and
+the build stops when one is not what its command line asked; `builds.json` says the three as the built file says them.
+No file of a signed build, and not its setup, holds the tester's first line or key, in UTF-8 or UTF-16, and its launcher
+holds no BouncyCastle. A tester build's `Founderizer.Core.dll` holds both, with the key of `tester-key.pub`, and none of
+our own files or its setup has a signature. No build starts while a variable whose name starts with `Founderizer` (with
+no regard to case, so the proofs' `FOUNDERIZER_UPDATE_*` too) or one named `DefineConstants` is set for the machine, the
+user or the build's process. What a tester setup and its update check (`Setup.Run` and `Updater` under `TESTER`) is the
+next part of T1, after U6a: until then a tester setup installs nothing, because its own file has no signature.
+
+## The SDK and the lock files
+
+- **One exact SDK on each release machine:** the one of `global.json` in this folder (10.0.404, with no roll forward;
+  its .NET runtime, 10.0.15, is the one that each self-contained build carries). `build-release.ps1` runs every
+  `dotnet` command in this folder, so the muxer takes that SDK or none. It stops when the SDK is not installed, when
+  its runtime is before 10.0.14 (GHSA-p3jp-9v83-76w9), or when its runtime is not `FounderizerReleaseRuntime` of
+  `../Directory.Build.props`. A new release SDK changes both lines and the lock files in one commit, and
+  `vm/setup/install-dotnet.ps1 -Version <SDK>` installs it.
+- **This Mac's tests are not a release.** They run with the Mac's own .NET 10 SDK, under `../global.json` (any 10.0
+  SDK) or none, and restore without locked mode.
+- **One locked restore before the publishes** (`dotnet restore --locked-mode --force` of the app and the launcher,
+  with all of their projects): a lock file that does not match its project, or a package whose hash is not the one of
+  its lock file, stops the build. The publishes then restore nothing (`--no-restore`): a publish's own restore gives
+  its one runtime (`-r`) to every project of the graph, and the libraries' lock files name none, so each project
+  declares its runtimes itself (the app, the launcher and `Founderizer.Install`: `win-arm64;win-x64`). `--force`, so
+  that NuGet reads each lock file again also in a folder that an earlier build restored (no "no-op" restore).
+- **The lock files are the same on each SDK.** The SDK adds its own package, Microsoft.NET.ILLink.Tasks, to each
+  project that it trims or checks for trimming, at the version of its own runtime, and a lock file names it.
+  `../Directory.Build.props` gives every SDK the release SDK's version of it (`FounderizerReleaseRuntime`). So a
+  restore on this Mac, which has another SDK, changes no lock file, and a lock file that it writes for a new package
+  is the release machine's too.
+
 ## The install: `Founderizer.Install`, `Founderizer.Launcher`
 
 ```

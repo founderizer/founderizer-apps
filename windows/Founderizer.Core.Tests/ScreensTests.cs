@@ -349,6 +349,35 @@ public sealed class ScreensTests
         Assert.AreEqual("Theo is at its usage limit until 16:12.", Screens.Task(Limited(), 12, Now, Utc)!.LimitWords);
         Boxes(snapshot, "theo", "web");
         Assert.IsNull(Screens.Task(Limited(), 12, Now, Utc)!.LimitWords, "a Shell-off agent's check is the owner's, and comes first");
+        // A hub that says who checks it decides alone (owner API 1.324; the owner, 23 November 2026: "this sohuld be
+        // automatically reattempted or reviewed by the agents!"): the held, Shell-off and ended tasks' checks are their
+        // requesters' now, and only the one that no agent can check asks the owner. A reading with no checker, or from
+        // a hub that does not serve outcome_checks (an older one, or one that went back to an older release and still
+        // sends the column), keeps the rule above.
+        static JsonObject Checked(long id, long task, string checker) { var o = Unknown(id, task); o["checker"] = checker; return o; }
+        Boxes(snapshot, "theo", "shell", "web");
+        snapshot["outcomes"] = new JsonArray(Checked(1, 11, "manager"), Checked(2, 12, ""), Checked(3, 13, "manager"),
+                                             Checked(4, 14, ""), Checked(5, 22, "owner"));
+        var rolledBack = Screens.Needs(SampleFleet.State(SampleFleet.Decode(snapshot), Now), null, null, Now, Utc);
+        CollectionAssert.AreEqual(new[] { "need-2", "need-1", "task-22", "task-13", "task-11" },
+                                  rolledBack.Cards.Select(c => c.Key).ToArray(), "no outcome_checks: the app's own rule");
+        snapshot["ui_features"]!.AsArray().Add((JsonNode?)TaskOutcome.RoutedFeature);
+        var routed = SampleFleet.State(SampleFleet.Decode(snapshot), Now);
+        var asked = Screens.Needs(routed, null, null, Now, Utc);
+        CollectionAssert.AreEqual(new[] { "need-2", "need-1", "task-22" }, asked.Cards.Select(c => c.Key).ToArray());
+        Assert.AreEqual((3, 3), (asked.OpenCount, Screens.Pane(routed, Page.Tasks, Now, Utc).NeedsCount));
+        var held = new[] { new TaskHold(1, 11, "pause", "stopped", 1) };
+        Assert.IsFalse(new TaskOutcome(1, 11, 1, "Send the note", "send", "unknown", Checker: "manager").WaitsOnOwner(held, false, false, true));
+        Assert.IsTrue(new TaskOutcome(1, 11, 1, "Send the note", "send", "unknown", Checker: "owner").WaitsOnOwner([], false, false, true));
+        Assert.IsTrue(new TaskOutcome(1, 11, 1, "Send the note", "send", "unknown", Checker: "manager").WaitsOnOwner(held, false, false),
+                      "a hub that does not serve outcome_checks keeps the rule of the app");
+        Assert.IsTrue(new TaskOutcome(1, 11, 1, "Send the note", "send", "unknown").WaitsOnOwner(held, false, false, true),
+                      "a row with no checker keeps the rule of the app");
+        // The task page's usage limit line gives way only to a check that is the owner's: one that the hub gave an
+        // agent leaves the line, also for an agent whose Shell box is off (the Mac's limitHolding).
+        Boxes(snapshot, "theo", "web");
+        page = page with { Outcomes = ValueList.Of(new[] { new TaskOutcome(2, 12, 1, "Send the note", "send", "unknown", Checker: "manager") }) };
+        Assert.IsNotNull(Screens.Task(Limited(), 12, Now, Utc)!.LimitWords, "the manager checks it: the limit line stays");
     }
 
     [TestMethod]

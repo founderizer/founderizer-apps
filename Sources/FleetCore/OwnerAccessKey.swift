@@ -145,10 +145,18 @@ public enum OwnerAccessKeychain {
         item.read(fleet: fleet).flatMap { OwnerAccessKey(seed: $0) }
     }
 
-    /// The key this Mac keeps for the fleet, made and kept now when it keeps none. It is read back before it is
-    /// returned, because a key that is not kept would be a line on the servers that no copy can use.
+    /// The key this Mac keeps for the fleet, made and kept now **only when the keychain says that none is there**
+    /// (`FleetKeychainItem.held`): a read that fails now throws and keeps the key, because a new one would no longer
+    /// match the key in the fleet's copies (the Door area's read of 24 November 2026; the sweep calls this each round).
+    /// It is read back before it is returned, because a key that is not kept would be a line on the servers that no
+    /// copy can use.
     public static func kept(fleet: String) throws -> OwnerAccessKey {
-        if let key = key(fleet: fleet) { return key }
+        let read = item.lookup(fleet: fleet)
+        switch item.held(read, decode: { OwnerAccessKey(seed: $0) }) {
+        case .value(let key): return key
+        case .notNow(let failure): throw failure
+        case .none: try item.mayMake(read)
+        }
         let key = try OwnerAccessKey.make()
         try keep(key, fleet: fleet)
         return key

@@ -18,4 +18,24 @@
     <!-- The marks' outlines as FleetMark draws them (Tests/FleetMarkTests/MarkVectorsTests.swift writes the file). -->
     <EmbeddedResource Include="../../vectors/agent-marks.json" LogicalName="agent-marks.json" />
   </ItemGroup>
+  <!-- A tester build only (Directory.Build.props, FounderizerTesterOn): the line of release/tester-key.pub becomes the
+       constant TesterManifest.KeyLine, so the file is the line's one copy and a signed build holds no tester key. -->
+  <Target Name="FounderizerTesterKey" BeforeTargets="BeforeCompile" Condition="'$(FounderizerTesterOn)' == 'true'">
+    <PropertyGroup>
+      <_TesterKeyFile>$(MSBuildThisFileDirectory)../release/tester-key.pub</_TesterKeyFile>
+      <_TesterKeySource>$(IntermediateOutputPath)TesterKey.g.cs</_TesterKeySource>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_TesterKeyFile)')" Text="A tester build needs release/tester-key.pub." />
+    <PropertyGroup>
+      <_TesterKeyLine>$([System.IO.File]::ReadAllText('$(_TesterKeyFile)').Trim())</_TesterKeyLine>
+    </PropertyGroup>
+    <Error Condition="'$([System.Text.RegularExpressions.Regex]::IsMatch(`$(_TesterKeyLine)`, `^[A-Za-z0-9+/]{43}=$`))' != 'True'"
+           Text="release/tester-key.pub does not hold one line of an Ed25519 public key in base64." />
+    <WriteLinesToFile File="$(_TesterKeySource)" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="// Made by Founderizer.Core.csproj from release/tester-key.pub, in a tester build only.;#if TESTER;namespace Founderizer.Core%3B;public static partial class TesterManifest;{;public const string KeyLine = &quot;$(_TesterKeyLine)&quot;%3B;};#endif" />
+    <ItemGroup>
+      <Compile Include="$(_TesterKeySource)" />
+      <FileWrites Include="$(_TesterKeySource)" />
+    </ItemGroup>
+  </Target>
 </Project>

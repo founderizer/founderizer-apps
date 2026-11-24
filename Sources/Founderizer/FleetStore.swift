@@ -565,9 +565,11 @@ final class FleetStore {
     }
     /// What the open take-over card does (`TakeOverScreen`): made and started with the card, stopped at its close.
     var takeOverScreen: TakeOverScreen?
-    /// The lane "Give on a card": the names that requests' words link, with the key of what they were made of
-    /// (`cardNames(for:)`), the same names by a chat's rules (`chatNames`), and the servers' symbols for its badges.
-    @ObservationIgnored var cardBook: (key: Int, book: CardNames, chat: ChatNames, symbols: [String: String])?
+    /// The lane "Give on a card": the names that requests' words link, with the key of what they were made of, by the
+    /// repositories of a card's own Give, and by none for every other card (`cardNames(for:)`); the same names by a
+    /// chat's rules (`chatNames`), and the servers' symbols for its badges. New names drop the books of every Give.
+    @ObservationIgnored var cardBook: (key: Int, cards: [[String]: CardNames], chat: ChatNames,
+                                       symbols: [String: String])?
     /// build plan 04, S6: the hub's servers, read for a take-over's card, whose readings name a Linux agent's
     /// screen-sharing port (`readTakeOverServers`).
     var takeOverServers: [ServerEntry]?
@@ -968,7 +970,11 @@ final class FleetStore {
         var hubCreated: Double?
         /// Another read on upload can find a replaced or restored file under this request id.
         var previewRead: UUID?
-        enum CodingKeys: String, CodingKey { case requestID, name, mime, size, attachmentID, failure, hubCreated }
+        /// **A skill that he gives the agent** (owner feature `message_skills`; `SkillPackage`): its name, which the chip
+        /// shows with the bolt in place of the ZIP's name. nil for every other file, and for one that a version before it
+        /// kept.
+        var skill: String?
+        enum CodingKeys: String, CodingKey { case requestID, name, mime, size, attachmentID, failure, hubCreated, skill }
         var id: UUID { requestID }
         var isOnHub: Bool { attachmentID != nil }
     }
@@ -982,6 +988,15 @@ final class FleetStore {
     var supportsAttachments: Bool { state?.ui_features?.contains("attachments") == true }
     /// The hub takes Word, Excel and PowerPoint files from the owner too (owner feature `office_files`, UI-API.md 1.251).
     var supportsOfficeFiles: Bool { state?.ui_features?.contains("office_files") == true }
+    /// **The composer takes a skill that he gives** (owner feature `message_skills`): a chat's box, on a hub that lists
+    /// the feature (the owner's "Yes, as drawn" of 22 November 2026 names the chat box). Elsewhere, and until the hub
+    /// lists it, a skill's ZIP is a file and a folder is a type that the hub does not take, as before.
+    func takesSkills(_ composer: String) -> Bool {
+        state?.ui_features?.contains(SkillPackage.feature) == true && composer.hasPrefix("agent:")
+    }
+    /// The skill's name of a staged file, while its composer takes skills: its chip shows the bolt and this name, and
+    /// the message gives it. nil for a file that goes as a file.
+    func skillName(of file: StagedFile, in composer: String) -> String? { takesSkills(composer) ? file.skill : nil }
     /// The composer of one chat, or of one open request of Needs you.
     static func stageKey(agent: String) -> String { "agent:\(agent)" }
     static func stageKey(need: Int) -> String { "need:\(need)" }
@@ -1064,14 +1079,18 @@ final class FleetStore {
     }
     func stagedFiles(for composer: String) -> [StagedFile] { staged[composer] ?? [] }
     func readyFiles(for composer: String) -> [Int] { stagedFiles(for: composer).compactMap(\.attachmentID) }
-    func filesAreWaiting(for composer: String) -> Bool { stagedFiles(for: composer).contains { !$0.isOnHub } }
+    /// A file that is not on the hub, or a skill whose gift the hub refused (`skillRefused`): its chip says why, and
+    /// Send waits until he takes it out.
+    func filesAreWaiting(for composer: String) -> Bool {
+        stagedFiles(for: composer).contains { !$0.isOnHub || $0.failure != nil }
+    }
     func composerOf(_ file: StagedFile) -> String? {
         staged.first { $0.value.contains(where: { $0.requestID == file.requestID }) }?.key
     }
 
     /// The owner picked a file. The bytes are written beside the Outbox **before** anything is sent, then the file
     /// goes up with its own number; the message that carries it names only that number.
-    func stage(_ data: Data, name: String, mime: String, for composer: String) async {
+    func stage(_ data: Data, name: String, mime: String, for composer: String, skill: String? = nil) async {
         guard storageError == nil else { return }
         guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
             fileErrors[composer] = atMostFiles(composer)
@@ -1096,7 +1115,7 @@ final class FleetStore {
             return
         }
         let file = StagedFile(requestID: UUID(), name: MessageAttachment.safeName(name, mime: mime), mime: mime,
-                              size: data.count)
+                              size: data.count, skill: skill)
         do {
             try FileManager.default.createDirectory(at: stagedDirectory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
@@ -1110,8 +1129,18 @@ final class FleetStore {
         await upload(file, for: composer)
     }
 
-    /// One file from a place on this Mac: a picture becomes the bytes that travel well, another file goes as it is.
+    /// One file from a place on this Mac: a picture becomes the bytes that travel well, another file goes as it is. **A
+    /// skill's folder or ZIP, in a box that takes skills, is a skill** (`takesSkills`, `SkillPackage`): the folder
+    /// becomes one ZIP first; any other folder gets the words of a type that the hub does not take, as before.
     func stage(contentsOf url: URL, for composer: String) async {
+        if takesSkills(composer) {
+            let opened = url.startAccessingSecurityScopedResource()
+            defer { if opened { url.stopAccessingSecurityScopedResource() } }
+            if SkillPackage.isSkillFolder(url) {
+                await stageSkill(folder: url, for: composer)
+                return
+            }
+        }
         guard let mime = MessageAttachment.mime(forName: url.lastPathComponent, office: supportsOfficeFiles) else {
             fileErrors[composer] = MessageAttachment.typeWords(office: supportsOfficeFiles)
             return
@@ -1129,7 +1158,34 @@ final class FleetStore {
             // A picture that could not be made small enough would not reach a session with no shell as it is.
             fileErrors[composer] = String(l10n: "That file did not open.")
         } else {
-            await stage(data, name: url.lastPathComponent, mime: mime, for: composer)
+            // a ZIP whose SKILL.md stands at its root or under its one top folder is a skill (`SkillPackage.isSkill`)
+            let skill = mime == "application/zip" && takesSkills(composer)
+                ? SkillPackage.name(inZip: data, fileName: url.lastPathComponent) : nil
+            await stage(data, name: url.lastPathComponent, mime: mime, for: composer, skill: skill)
+        }
+    }
+
+    /// **A skill's folder becomes one ZIP, staged as a skill** (`SkillPackage.zip`), off the main thread: its copy and
+    /// the Mac's ZIP of it read the disk. Its name is its `SKILL.md`'s, else the folder's. Plain files of more than a
+    /// file's limit get the words of a file too large, and a folder that the Mac does not read or zip the words of a
+    /// file that did not open.
+    private func stageSkill(folder: URL, for composer: String) async {
+        guard storageError == nil else { return }
+        guard stagedFiles(for: composer).count < MessageAttachment.perMessage else {
+            fileErrors[composer] = atMostFiles(composer)
+            return
+        }
+        let made = await Task.detached(priority: .userInitiated) { () -> Result<(Data, String), SkillPackage.FolderRefusal> in
+            do { return .success((try SkillPackage.zip(folder: folder, atMost: MessageAttachment.sizeLimit),
+                                  SkillPackage.name(ofFolder: folder))) }
+            catch { return .failure(error as? SkillPackage.FolderRefusal ?? .unreadable) }
+        }.value
+        switch made {
+        case .success(let (data, name)):
+            await stage(data, name: folder.resolvingSymlinksInPath().lastPathComponent + ".zip", mime: "application/zip",
+                        for: composer, skill: name)
+        case .failure(.tooLarge): fileErrors[composer] = AttachmentError.tooLarge.errorDescription
+        case .failure(.unreadable): fileErrors[composer] = String(l10n: "That file did not open.")
         }
     }
 
@@ -1219,6 +1275,20 @@ final class FleetStore {
         }
         if staged[composer]?.isEmpty == true { staged[composer] = nil }
         keepStaged()
+    }
+
+    /// **The hub refused the gift of a skill** (`refused_gift`, owner API 1.304: the number of its ZIP; what the skill
+    /// holds, such as a link, no SKILL.md or a login, or what its agent cannot take): that skill's chip says so, as a
+    /// failed file's chip does, and Send waits until he takes it out (`filesAreWaiting`). The request is refused as any
+    /// message is, with the hub's words. **A 409 or a 5xx leaves the chip as it is**: it can follow a gift that landed,
+    /// or a hub that was busy, and the same skill sent again is given from its same bytes.
+    private func skillRefused(_ request: PendingRequest, _ refusal: HubRefusal) {
+        guard let gift = refusal.refusedGift, request.givenFiles.contains(gift), refusal.status < 500,
+              refusal.status != 409 else { return }
+        let box = Self.stageKey(of: request)
+        for file in stagedFiles(for: box) where file.attachmentID == gift {
+            change(file, in: box) { $0.failure = refusal.words }
+        }
     }
 
     private func change(_ file: StagedFile, in composer: String, _ edit: (inout StagedFile) -> Void) {
@@ -2643,8 +2713,16 @@ final class FleetStore {
         let recipient = needID.flatMap { id in state?.needs.first { $0.id == id }?.by } ?? chatAgent
         let composer = needID.map { Self.stageKey(need: $0) } ?? Self.stageKey(agent: chatAgent)
         // A file that went up an hour ago may be another file under its number by now: it goes up again first.
-        guard let files = await freshFiles(for: composer) else { return }
-        await sendText(text, needID: needID, recipient: recipient, files: files)
+        guard let ready = await freshFiles(for: composer) else { return }
+        let (files, gifts) = outgoing(ready, of: composer)
+        await sendText(text, needID: needID, recipient: recipient, files: files, gifts: gifts)
+    }
+
+    /// **The files of a composer as a message carries them**: a skill that he gives, in a box that takes skills, goes
+    /// in `skills` (`MessageSkill.give`) and never also in `attachments`; every other file is a file.
+    func outgoing(_ ready: [Int], of composer: String) -> (files: [Int], gifts: [Int]) {
+        let gifts = Set(stagedFiles(for: composer).filter { skillName(of: $0, in: composer) != nil }.compactMap(\.attachmentID))
+        return (ready.filter { !gifts.contains($0) }, ready.filter(gifts.contains))
     }
 
     /// A message of the owner's that the app writes for him: the line that names a secret he saved from this chat, its
@@ -2812,13 +2890,16 @@ final class FleetStore {
     }
 
     private func sendText(_ value: String, needID: Int? = nil, recipient: String, replaces: String? = nil,
-                          files: [Int] = [], about: MessagePlace? = nil) async {
+                          files: [Int] = [], gifts: [Int] = [], about: MessagePlace? = nil) async {
         guard canWrite, let state else { return }
         guard needID != nil || canChat(with: recipient) else { return }
         guard files.isEmpty || supportsAttachments else { return }
+        // A skill goes only in a message, to a hub that takes it (`outgoing`).
+        guard gifts.isEmpty || needID == nil && replaces == nil && state.ui_features?.contains(SkillPackage.feature) == true
+        else { return }
         let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
         // A message carries text, or files, or both. Without a file it must carry text, as the hub asks.
-        guard !text.isEmpty || !files.isEmpty, text.count <= 16_000 else { return }
+        guard !text.isEmpty || !files.isEmpty || !gifts.isEmpty, text.count <= 16_000 else { return }
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return }
         // `about` only on a hub that takes it: an older hub refuses a field that it does not know.
         let about = state.ui_features?.contains("message_about") == true ? about : nil
@@ -2828,7 +2909,7 @@ final class FleetStore {
         let request = PendingRequest(hub: hub, database: state.db, client: installation, needID: needID,
                                      recipient: needID == nil && supportsDirectChat ? recipient : nil,
                                      replacesRequestID: replaces, attachments: files, about: about, mentions: mentions,
-                                     text: text)
+                                     skills: gifts.isEmpty ? nil : gifts.map { .give($0) }, text: text)
         do {
             try outbox.save(request)
             pending = request
@@ -2865,7 +2946,8 @@ final class FleetStore {
         guard canRetry, let pending else { return }
         // A request with files that waited longer than that is not sent again as it is: a read first finishes it if
         // the hub took it after all; else it stands refused with Discard, and a new Send takes its files up again.
-        if !pending.attachments.isEmpty, Date().timeIntervalSince(pending.createdAt) > Self.retryKeepsFilesFor {
+        if !(pending.attachments + pending.givenFiles).isEmpty,
+           Date().timeIntervalSince(pending.createdAt) > Self.retryKeepsFilesFor {
             await refresh()
             guard var late = self.pending, late.requestID == pending.requestID, late.refusal == nil else { return }
             let line = String(l10n: "Its files waited too long. Discard it and send it again: its files go up again first.")
@@ -3014,8 +3096,17 @@ final class FleetStore {
         } catch { storageError = error.localizedDescription }
     }
 
-    /// `rebased` is true for the one send that follows a stale-base 409, so it is never tried twice.
-    private func transmit(_ request: PendingRequest, rebased: Bool = false) async {
+    /// **How often a message sends its gift again, and after how long**: a 409, 500, 502 or 503 of a gift
+    /// (`refused_gift`, owner API 1.304) can follow a commit that landed, or a hub that was busy checking another file,
+    /// and the same request again (its id, its words, its skills) is given from the same bytes and written once. After
+    /// the last try the request stands as any message does: refused, with Discard and the hub's words, or with Try
+    /// again; its skill stays in the box. A count, so a refusal that lasts (the agent's Shell box is off) ends.
+    static let giftTries = 3
+    static var giftPause: Duration = .seconds(2)
+
+    /// `rebased` is true for the one send that follows a stale-base 409, so it is never tried twice. `giftTry`: the
+    /// sends of the same request that came before this one, after a gift's 409 or 5xx (`giftTries`).
+    private func transmit(_ request: PendingRequest, rebased: Bool = false, giftTry: Int = 0) async {
         sending = true
         sendError = nil
         defer { sending = false }
@@ -3030,7 +3121,17 @@ final class FleetStore {
                 await transmit(next, rebased: true)
                 return
             }
-            if case HubError.refusal(let refused) = error, refused.status == 422 {
+            if case HubError.refusal(let refused) = error, let gift = refused.refusedGift,
+               request.givenFiles.contains(gift), [409, 500, 502, 503].contains(refused.status), giftTry + 1 < Self.giftTries {
+                try? await Task.sleep(for: Self.giftPause * (giftTry + 1))
+                guard pending?.requestID == request.requestID, pending?.refusal == nil else { return }
+                await transmit(request, rebased: rebased, giftTry: giftTry + 1)
+                return
+            }
+            // A gift that the hub refused (`refused_gift`, owner API 1.304) is about the skill, never about login text in
+            // his words: it is refused as any message is, and its chip says so too (`skillRefused`).
+            if case HubError.refusal(let refused) = error, refused.refusedGift != nil { skillRefused(request, refused) }
+            if case HubError.refusal(let refused) = error, refused.status == 422, refused.refusedGift == nil {
                 secretRefusals += 1
                 draft = ""
                 answers = [:]
@@ -3099,7 +3200,7 @@ final class FleetStore {
         } else if request.needID == nil {
             let agent = request.recipient ?? "manager"
             if draft(for: agent).trimmingCharacters(in: .whitespacesAndNewlines) == request.text { setDraft("", for: agent) }
-            clearStaged(Self.stageKey(agent: agent), sent: request.attachments)
+            clearStaged(Self.stageKey(agent: agent), sent: request.attachments + request.givenFiles)
         } else if let id = request.needID {
             if answers[String(id)]?.trimmingCharacters(in: .whitespacesAndNewlines) == request.text {
                 answers[String(id)] = nil

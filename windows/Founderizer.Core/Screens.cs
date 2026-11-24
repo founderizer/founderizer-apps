@@ -998,7 +998,8 @@ public static partial class Screens
         // Resume checks every unknown outcome: the hub refuses a plain resume while one is unknown (the Mac's
         // TaskHoldControls). The usage limit stands back only for a check that is the owner's (the Mac's limitHolding).
         var unknown = page.Outcomes.Any(o => o.State == "unknown");
-        var ownerChecks = page.Outcomes.Any(o => o.WaitsOnOwner(page.Holds, task.IsTerminal, Activity.ShellOff(fleet, task.Owner)));
+        var ownerChecks = page.Outcomes.Any(o => o.WaitsOnOwner(page.Holds, task.IsTerminal, Activity.ShellOff(fleet, task.Owner),
+                                                                fleet?.Offers(TaskOutcome.RoutedFeature) == true));
         ControlsModel? controls = null;
         if (s.Offers("task_controls") && !task.IsTerminal)
         {

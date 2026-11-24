@@ -101,6 +101,10 @@ struct HeldKey: Equatable {
     let hold: KeyHold
 }
 
+/// What the box of a key's question holds, which its words name: a message (the chat's box, a request's answer, Needs
+/// clarification, a task's guidance, feedback, a correction), or a rule of an agent's profile (`RuleEditor`).
+enum KeyHoldText { case message, rule }
+
 /// The question of the guard, over the box that the owner writes in: save it in the vault instead, or go on.
 struct KeyHoldBanner: View {
     let hold: KeyHold
@@ -109,6 +113,8 @@ struct KeyHoldBanner: View {
     /// A second agent that gets a copy of the words: the agent that gave a task gets a copy of each guidance of it
     /// (the owner, 22 November 2026, "Name both" to the words of a guidance's question). Nil: only `agent` gets them.
     var copyTo: String? = nil
+    /// **What the box holds** (`KeyHoldText`): a rule is no message, so its question says "rule" (22 November 2026).
+    var holds = KeyHoldText.message
     /// **A narrow place** (a request card in its own window, `NeedWindows`): the two buttons stand on a line of their
     /// own under the words, at the right. On one line there, the buttons took the width and the words stood as a column
     /// of one or two letters to a line (a guest's check, 21 November 2026). A chat and a chat's card keep one line.
@@ -143,10 +149,16 @@ struct KeyHoldBanner: View {
 
     private var words: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(hold == .paste ? "That looks like a key, so it was not pasted." : "This message holds what looks like a key.")
+            Group {
+                if hold == .paste { Text("That looks like a key, so it was not pasted.") }
+                else if holds == .rule { Text("This rule holds what looks like a key.") }
+                else { Text("This message holds what looks like a key.") }
+            }
                 .font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
             Group {
-                if let copyTo, copyTo != agent {
+                if holds == .rule {
+                    Text("In a rule, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
+                } else if let copyTo, copyTo != agent {
                     Text("In a guidance, \(agent.agentLabel) and \(copyTo.agentLabel) and their transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
                 } else {
                     Text("In a message, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")

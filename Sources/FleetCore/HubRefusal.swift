@@ -55,12 +55,17 @@ public struct HubRefusal: Sendable, Equatable, Codable {
     public let code: String?
     /// The values inside the words, by name, as the hub wrote them.
     public let names: [String: RefusalName]
+    /// **The file of a skill whose gift the hub refused** (`refused_gift`, owner API 1.304): the number of its ZIP, on
+    /// whose chip the words stand. nil for every other refusal.
+    public let refusedGift: Int?
 
-    public init(status: Int, hubWords: String, code: String? = nil, names: [String: RefusalName] = [:]) {
+    public init(status: Int, hubWords: String, code: String? = nil, names: [String: RefusalName] = [:],
+                refusedGift: Int? = nil) {
         self.status = status
         self.hubWords = hubWords
         self.code = code
         self.names = names
+        self.refusedGift = refusedGift
     }
 
     /// A refusal that an older version of the app kept on disk had no `code` and no `names`; only these two may be
@@ -71,6 +76,7 @@ public struct HubRefusal: Sendable, Equatable, Codable {
         hubWords = try record.decode(String.self, forKey: .hubWords)
         code = try record.decodeIfPresent(String.self, forKey: .code)
         names = try record.decodeIfPresent([String: RefusalName].self, forKey: .names) ?? [:]
+        refusedGift = try? record.decodeIfPresent(Int.self, forKey: .refusedGift)
     }
 
     /// What the owner reads: the app's own words for the code, in the language of the device (`RefusalWords`), else the
@@ -105,7 +111,8 @@ public struct HubRefusal: Sendable, Equatable, Codable {
         let sent = try? JSONDecoder().decode(Sent.self, from: body)
         let said = (sent?.error ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return HubRefusal(status: status, hubWords: said.isEmpty ? HubError.unexplained : String(said.prefix(500)),
-                          code: sent?.code.flatMap { isCode($0) ? $0 : nil }, names: sent?.names ?? [:])
+                          code: sent?.code.flatMap { isCode($0) ? $0 : nil }, names: sent?.names ?? [:],
+                          refusedGift: sent?.refusedGift)
     }
 
     /// A code or a name's key: small letters, digits and `_`, 2 to 40 characters for a code (UI-API.md 1.181), and
@@ -117,14 +124,15 @@ public struct HubRefusal: Sendable, Equatable, Codable {
     /// The most that the hub writes into one name, and how many names an answer may carry here.
     static let nameMost = 200, namesMost = 16
 
-    /// The three fields that the app reads of a refusal's body, each of them apart: a field of another kind is nil,
-    /// never an error.
+    /// The fields that the app reads of a refusal's body, each of them apart: a field of another kind is nil, never an
+    /// error.
     private struct Sent: Decodable {
         let error: String?
         let code: String?
         let names: [String: RefusalName]
+        let refusedGift: Int?
 
-        private enum Keys: String, CodingKey { case error, code, names }
+        private enum Keys: String, CodingKey { case error, code, names, refusedGift = "refused_gift" }
 
         /// A name of one value that does not decode, so that its neighbours still do.
         private struct Lossy: Decodable {
@@ -136,6 +144,7 @@ public struct HubRefusal: Sendable, Equatable, Codable {
             let body = try decoder.container(keyedBy: Keys.self)
             error = try? body.decode(String.self, forKey: .error)
             code = try? body.decode(String.self, forKey: .code)
+            refusedGift = try? body.decode(Int.self, forKey: .refusedGift)
             var kept: [String: RefusalName] = [:]
             for (key, value) in (try? body.decode([String: Lossy].self, forKey: .names)) ?? [:] {
                 guard kept.count < HubRefusal.namesMost, HubRefusal.isCode(key, least: 1), let name = value.name else { continue }

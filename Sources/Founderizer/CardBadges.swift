@@ -190,6 +190,13 @@ enum CardBadgeIcon: Hashable {
     case github
     /// The mark of Google Drive or Gmail, in its own colours.
     case service(GoogleService)
+    /// **A skill that the owner gave an agent** (owner feature `message_skills`): the bolt (`skillSymbol`) in the link's
+    /// colour, not the closed book of a knowledge file. The badge of a gift in his message (`SkillBadge`) and the chip of
+    /// a skill in the box show it; no name of a card's words is a skill (`of(_:servers:)`).
+    case skill
+
+    /// The SF Symbol of a skill's mark (`skill`).
+    static let skillSymbol = "bolt"
 
     /// A server's kind (a Mac or a server rack, `ServerEntry.symbol`), a repository's GitHub, and a page's own mark: the
     /// symbol of its section in Settings, of its row in the sidebar, or the mark of its app on the Apps page.
@@ -219,7 +226,7 @@ enum CardBadgeIcon: Hashable {
     var isMark: Bool {
         switch self {
         case .github, .service: true
-        case .glyph, .symbol: false
+        case .glyph, .symbol, .skill: false
         }
     }
 }
@@ -296,6 +303,7 @@ private struct CardBadges: ViewModifier {
         case .glyph(let name)?:
             look[name].map { .agent($0, absent: presences[name] == .offline || presences[name] == .unknown) }
         case .symbol(let name)?: .symbol(name)
+        case .skill?: .symbol(CardBadgeIcon.skillSymbol)
         case .github?, .service?: .mark
         case nil: nil
         }
@@ -309,7 +317,7 @@ private struct CardBadges: ViewModifier {
         switch icon {
         case .github: GitHubMark(size: side).foregroundStyle(FleetStyle.link)
         case .service(let service): ServiceMark(service: service, size: side)
-        case .glyph, .symbol: EmptyView()
+        case .glyph, .symbol, .skill: EmptyView()
         }
     }
 }

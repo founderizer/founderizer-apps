@@ -71,6 +71,21 @@ struct MobileReadTests {
         #expect(try snapshot(agents: [agentFields(["chat_undelivered": false])]).agents.first?.chat_undelivered == false)
     }
 
+    @Test("A check that the hub gave an agent asks the owner nothing in the chat either (owner API 1.324)")
+    func aRoutedCheckIsNoAskInTheChat() throws {
+        // A held task, whose unknown outcome the hub gave the manager: the chat's Asked row reads the reading's
+        // features, as Needs you does; a hub that does not serve outcome_checks keeps the app's own rule.
+        let held: [String: Any] = ["id": 1, "task": 7, "kind": "stop", "state": "stopped", "attempt": 1]
+        let row: [String: Any] = ["id": 5, "task": 7, "attempt": 1, "title": "Send the note", "kind": "send",
+                                  "state": "unknown", "checker": "manager"]
+        let task = try #require(try head().fleetTask)
+        let cases: [([String], Bool)] = [([TaskOutcome.routedFeature], false), ([], true)]
+        for (features, asks) in cases {
+            let read = try snapshot(agents: [agentFields()], ["holds": [held], "outcomes": [row], "ui_features": features])
+            #expect(MobileStore.askReading(read, tasks: [task], messages: []).outcomeUnknown(7) == asks)
+        }
+    }
+
     @Test("A reading without a window is unknown, never nought percent")
     func noWindowNoPercent() throws {
         let read = try snapshot(agents: [agentFields(["usage": []])])

@@ -33,7 +33,7 @@ struct ActivityTests {
     }
 
     private func hub(_ tasks: [[String: Any]], holds: [[String: Any]] = [], limited: [String] = [], outcomes: [[String: Any]] = [],
-                     needs: [[String: Any]] = [], shell: [String] = []) throws -> HubState {
+                     needs: [[String: Any]] = [], shell: [String] = [], features: [String] = []) throws -> HubState {
         let agents: [[String: Any]] = ["manager", "vps", "studio"].map { name in
             var agent: [String: Any] = ["name": name, "role": name == "manager" ? "manager" : "worker", "runtime": "codex",
                                         "can": shell.contains(name) ? ["shell"] : []]
@@ -44,7 +44,8 @@ struct ActivityTests {
         }
         return try HubState.decode(JSONSerialization.data(withJSONObject: [
             "schema_version": 1, "db": "test-db", "time": Self.now, "agents": agents, "tasks": tasks, "holds": holds,
-            "outcomes": outcomes, "notes": [], "needs": needs, "permissions": [], "messages": [], "reports": []]))
+            "outcomes": outcomes, "notes": [], "needs": needs, "permissions": [], "messages": [], "reports": [],
+            "ui_features": features]))
     }
 
     private func ids(_ board: [ActivityColumn: [FleetTask]], _ column: ActivityColumn) -> [Int] { board[column, default: []].map(\.id) }
@@ -286,20 +287,43 @@ struct ActivityTests {
         let needs: [[String: Any]] = [
             ["id": 1, "title": "Need 1", "why": "", "todo": "", "raised": Self.now - 300, "by": "manager", "answered": NSNull()],
             ["id": 2, "title": "Need 2", "why": "", "todo": "", "raised": Self.now - 60, "by": "manager", "answered": Self.now - 10]]
-        let state = try hub([
+        let tasks = [
             task(1, "canceled", started: start, last: start),                   // stopped, with an unknown send
             task(2, "canceled", started: start, last: start),                   // its outcome is recorded
             task(3, "submitted"),                                               // a stop that was not confirmed
             task(4, "working", started: start, last: start),                    // ordinary work
             task(5, "submitted", owner: "studio"),                              // its worker's next session checks it
             task(6, "working"),                                                 // its worker's Shell box is off
-        ], holds: holds, outcomes: outcomes, needs: needs, shell: ["studio"])
+        ]
+        let state = try hub(tasks, holds: holds, outcomes: outcomes, needs: needs, shell: ["studio"])
         // One open request, and the three tasks that only he can move; the answered request and the rest do not count,
         // nor the outcome that task 5's agent checks before anything else (`TaskOutcome.waitsOnOwner`).
         #expect(state.needsYouCount == 4)
         #expect(state.ownerTasks.map(\.id) == [6, 3, 1])
         #expect(state.ownerWaits[5] == nil && !state.outcomeUnknown(5))
         #expect(state.outcomeUnknown(1) && state.outcomeUnknown(6) && state.outcomeUnknown(99))   // 99: not in the reading
+        // A hub that says who checks each one decides alone (owner API 1.324): the Shell-off task 6 and the task 99 that
+        // this reading lacks are their requesters' checks now, task 5 is its own agent's, and only task 1 is the
+        // owner's, beside the stop of task 3. A row with no checker (an older hub), or a reading of a hub that does not
+        // serve outcome_checks, keeps the rule above.
+        let checkers = [1: "owner", 5: "", 6: "manager", 99: "manager"]
+        let checked = outcomes.map { row -> [String: Any] in
+            guard let task = row["task"] as? Int, let checker = checkers[task] else { return row }
+            return row.merging(["checker": checker]) { _, new in new }
+        }
+        let routed = try hub(tasks, holds: holds, outcomes: checked, needs: needs, shell: ["studio"],
+                             features: [TaskOutcome.routedFeature])
+        #expect(routed.needsYouCount == 3)
+        #expect(routed.ownerTasks.map(\.id) == [3, 1])
+        #expect(routed.outcomeUnknown(1) && !routed.outcomeUnknown(5) && !routed.outcomeUnknown(6) && !routed.outcomeUnknown(99))
+        #expect(try hub(tasks, holds: holds, outcomes: checked, needs: needs, shell: ["studio"]).needsYouCount == 4)
+        // Each row by its own rule: a second row of task 1 that the manager still checks (a pass up moved one row) is
+        // no row of the owner's beside the first.
+        let split = checked + [["id": 6, "task": 1, "attempt": 1, "title": "Post", "kind": "post", "state": "unknown",
+                                "checker": "manager"]]
+        let both = try hub(tasks, holds: holds, outcomes: split, needs: needs, shell: ["studio"],
+                           features: [TaskOutcome.routedFeature])
+        #expect(both.ownerOutcomes.map(\.id) == [1] && both.needsYouCount == 3)
     }
 
     @Test func nothingNeedsTheOwnerWhenNoRequestIsOpenAndEveryOutcomeIsKnown() throws {

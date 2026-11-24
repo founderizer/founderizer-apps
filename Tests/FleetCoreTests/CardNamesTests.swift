@@ -6,14 +6,21 @@ import Testing
 // start of its role or its name with a capital; a repository; a server; a page of the app. A plain word that is no
 // name stays words: a link that opens the wrong agent, or Founderizer's page for another product's, is worse than none.
 
-private let book = CardNames(
-    agents: [("nova", "Customer Support Lead"), ("atlas", "Customer Developer"), ("manager", "Fleet Manager"),
-             ("kai", nil), ("studio", nil), ("rex", "Head of Growth"), ("ana", "Designer"), ("bo", "Designer")],
-    repositories: ["acme/web", "acme/shop-api", "other/shop-api", "acme/docs-site", "acme/acme.com", "acme/.github"],
-    servers: ["app-1", "hub"])
+private let book = card(given: [])
 
-private func names(_ text: String) -> [String: CardNames.Target] {
-    Dictionary(book.find(in: text).map { (String(text[$0.range]), $0.target) }, uniquingKeysWith: { first, _ in first })
+/// The book of a card whose own Give names the repositories `given`; none: the one book of every other card.
+private func card(given: [String]) -> CardNames {
+    CardNames(
+        agents: [("nova", "Customer Support Lead"), ("atlas", "Customer Developer"), ("manager", "Fleet Manager"),
+                 ("kai", nil), ("studio", nil), ("rex", "Head of Growth"), ("ana", "Designer"), ("bo", "Designer")],
+        repositories: ["acme/web", "acme/shop-api", "other/shop-api", "acme/docs-site", "acme/acme.com",
+                       "acme/.github"],
+        servers: ["app-1", "hub"], given: given)
+}
+
+private func names(_ text: String, given: [String] = []) -> [String: CardNames.Target] {
+    Dictionary(card(given: given).find(in: text).map { (String(text[$0.range]), $0.target) },
+               uniquingKeysWith: { first, _ in first })
 }
 
 @Test func anAgentIsItsRoleTheUniqueStartOfItsRoleOrItsNameWithACapital() {
@@ -43,6 +50,52 @@ private func names(_ text: String) -> [String: CardNames.Target] {
     #expect(names("Read acme.com and the .github folder.").isEmpty)
 }
 
+/// **On the card whose own Give names a repository, its name alone is a badge in any form** (the owner, 23 November
+/// 2026: "Yes: a name that the card's Give names is a badge"). The bugs that this catches: a name of letters only stays
+/// words on the card that gives it; it is a badge on every card, so a common word of another card opens a repository
+/// ("web", "docs"); one of two repositories of one name opens for the other.
+@Test func onTheCardOfItsOwnGiveARepositoryIsItsNameAloneInAnyForm() {
+    let words = "Push it to web. Web is old, and shop-api too."
+    #expect(names(words, given: ["acme/shop-api", "acme/web"]) ==
+            ["web": .repository("acme/web"), "Web": .repository("acme/web"),
+             // the one of two fleet repositories of this name that the Give names
+             "shop-api": .repository("acme/shop-api")])
+    // the same words with no Give, and on a card whose Give names another repository
+    #expect(names(words).isEmpty)
+    #expect(names(words, given: ["acme/docs-site"]).isEmpty)
+    // two repositories of one Give with one name: only owner/name says which
+    #expect(names(words + " Read other/web.", given: ["acme/shop-api", "acme/web", "other/shop-api", "other/web"]) ==
+            ["other/web": .repository("other/web")])
+}
+
+/// **A name alone that the card's Give names is no badge where it is part of another name** (the bug that this catches:
+/// "Visual Studio" with a badge of the repository acme/studio): beside a word with a capital in capitals of its own,
+/// inside a longer name or an address, and a folder's name (".github"). An agent of the same name stays the agent.
+@Test func aNameThatTheCardsGiveNamesIsNoBadgeInAnotherName() {
+    let given = ["acme/studio", "acme/web", "acme/.github"]
+    #expect(names("Open Visual Studio and the Web Inspector in the .github folder.", given: given).isEmpty)
+    #expect(names("Read web.example, web-2, my/web and https://example.com/web.", given: given).isEmpty)
+    #expect(names("Then ask Studio to read studio.", given: given) ==
+            ["Studio": .agent("studio"), "studio": .repository("acme/studio")])
+}
+
+/// **A Give's short name hides no secret of the same words** (a review of 23 November 2026). The bug that this catches:
+/// on a card whose Give names x/stripe, the login `Stripe` in inline code is a copy chip, not its badge, and "stripe"
+/// in words opens GitHub.
+@Test func aGivesShortNameHidesNoSecretOfTheSameWords() {
+    let book = CardNames(agents: [], secrets: [(name: "Stripe", key: false)], given: ["acme/stripe"])
+    let text = AttributedString("Then rotate ") + coded("Stripe") + AttributedString(" for stripe.")
+    #expect(book.pieces(text).compactMap(\.badge) == [.secret("Stripe", key: false)])
+}
+
+/// **A Give's short name hides no page of the app of the same words** (a review of 23 November 2026). The bug that this
+/// catches: on a card whose Give names x/resources, "Resources" opens GitHub, not the page of who may use what, and
+/// the card loses Open <page>.
+@Test func aGivesShortNameHidesNoPageOfTheSameWords() {
+    let book = CardNames(agents: [], given: ["acme/resources"])
+    #expect(book.pages(inMarkdown: "In Founderizer, open Resources and give it resources.") == ["settings/apps"])
+}
+
 @Test func aServerIsANameWithADigitOrAHyphen() {
     #expect(names("Restart app-1 on the hub, not app-10.") == ["app-1": .server("app-1")])
 }
@@ -68,13 +121,13 @@ private func names(_ text: String) -> [String: CardNames.Target] {
 
 @Test func aNameInCodeOrInALinkStaysWordsAndATargetComesBackFromItsLink() throws {
     var text = AttributedString("Nova reads ")
-    var code = AttributedString("acme/web")
+    var code = AttributedString("app-1")
     code.inlinePresentationIntent = .code
     var linked = AttributedString("app-1")
     linked.link = URL(string: "https://example.com/")
     text += code + AttributedString(" on ") + linked + AttributedString(" and acme/web.")
     let pieces = book.pieces(text)
-    #expect(pieces.map { String($0.words.characters) } == ["Nova", " reads acme/web on app-1 and ", "acme/web", "."])
+    #expect(pieces.map { String($0.words.characters) } == ["Nova", " reads app-1 on app-1 and ", "acme/web", "."])
     #expect(pieces.map(\.badge) == [.agent("nova"), nil, .repository("acme/web"), nil])
     // the link of the words' own stays theirs
     #expect(pieces[1].words.runs.contains { $0.link == URL(string: "https://example.com/") })
@@ -103,6 +156,26 @@ private func names(_ text: String) -> [String: CardNames.Target] {
     let badge = try #require(pieces.first { $0.badge == .knowledge("knowledge/owner/prices-2026.md") })
     #expect(badge.words.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.code) != true })
     #expect(CardNames.Target(url: try #require(badge.words.link)) == .knowledge("knowledge/owner/prices-2026.md"))
+}
+
+/// **A repository's owner/name is its badge on a card also as the whole of an inline code** (the owner, 23 November
+/// 2026, of "the whole code being owner/name of a repository of your fleet": "The repository's badge"), its words as
+/// written and its press the page on GitHub. Code around it, a name alone, also one that the card's Give names, an
+/// owner/name that the book does not hold, and code in a link's words ("1: it stays a link") stay as they are. The bugs
+/// that this catches: the name stays code, or a command that holds the name is cut into a badge.
+@Test func aRepositoryIsItsBadgeAsTheWholeOfAnInlineCode() throws {
+    var linked = coded("acme/web")
+    linked.link = URL(string: "https://example.com/")
+    var text = AttributedString("Push ") + coded("Acme/Web")
+    let others = ["git clone acme/web", "acme/web ", "acme/other", "docs-site", "web"]
+    for other in others.map(coded) + [linked] { text += AttributedString(", not ") + other }
+    let pieces = card(given: ["acme/web"]).pieces(text)
+    #expect(pieces.map(\.badge) == [nil, .repository("acme/web"), nil])
+    #expect(pieces.map { String($0.words.characters) }.joined() == String(text.characters))
+    let badge = try #require(pieces.first { $0.badge != nil }).words
+    #expect(String(badge.characters) == "Acme/Web")
+    #expect(badge.link == URL(string: "https://github.com/acme/web"))
+    #expect(badge.runs.allSatisfy { $0.inlinePresentationIntent?.contains(.code) != true })
 }
 
 /// A card draws each name as a badge (the owner, 20 November 2026): every word of the request stays, once and in its
@@ -165,6 +238,9 @@ private func coded(_ words: String) -> AttributedString {
     code.inlinePresentationIntent = .code
     #expect(chat.words(AttributedString("Leo")).badges.map(\.target) == [.agent("leo")])
     #expect(chat.words(code).badges.isEmpty)
+    // a repository in inline code, which is a card's badge, stays the chat's code as it is
+    #expect(chat.words(coded("acme/web")).text == coded("acme/web"))
+    #expect(chat.words(coded("acme/web")).badges.isEmpty)
     // a secret of the fleet's, with its kind for its mark
     #expect(badges("Leo put the new value in EXAMPLE_API_KEY and Backup2.") ==
             [.agent("leo"), nil, .secret("EXAMPLE_API_KEY", key: true), nil, .secret("Backup2", key: false), nil])

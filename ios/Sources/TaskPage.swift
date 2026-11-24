@@ -176,7 +176,8 @@ struct TaskPage: View {
     @ViewBuilder private func stopped(_ page: MobileTaskPage) -> some View {
         let holds = page.holds.filter { $0.state != "released" }
         let outcomes = page.outcomes.filter {
-            $0.waitsOnOwner(holds: page.holds, taskEnded: page.task.isTerminal, shellOff: store.shellOff(page.task.owner))
+            $0.waitsOnOwner(holds: page.holds, taskEnded: page.task.isTerminal, shellOff: store.shellOff(page.task.owner),
+                            routed: store.routesOutcomes)
         }
         if !holds.isEmpty || !outcomes.isEmpty {
             Section {

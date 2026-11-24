@@ -10550,6 +10550,16 @@
         }
       }
     },
+    "In a rule, %@ and its transcripts would have it. Saved as a secret, it goes straight into the vault, and %@ gets only its name." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En una regla, %@ y sus transcripciones lo tendrían. Guardado como secreto, va directo a la bóveda y %@ solo recibe su nombre."
+          }
+        }
+      }
+    },
     "In hand" : {
       "localizations" : {
         "es" : {
@@ -25340,16 +25350,6 @@
         }
       }
     },
-    "This phone is not on your private network. Turn on Tailscale on this phone, with your Mac's account." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este teléfono no está conectado a tu red privada. Activa Tailscale en este teléfono con la misma cuenta que usas para Tailscale en tu Mac."
-          }
-        }
-      }
-    },
     "This phone's address" : {
       "localizations" : {
         "es" : {
@@ -25476,6 +25476,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este rol ya no existe"
+          }
+        }
+      }
+    },
+    "This rule holds what looks like a key." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta regla contiene algo que parece una clave."
           }
         }
       }
@@ -27320,16 +27330,6 @@
         }
       }
     },
-    "What it wants" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Qué quiere"
-          }
-        }
-      }
-    },
     "What should %@ know about %@?" : {
       "localizations" : {
         "es" : {
@@ -27566,16 +27566,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quién puede darlo"
-          }
-        }
-      }
-    },
-    "Why" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Por qué"
           }
         }
       }
@@ -28576,6 +28566,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tu hub no respondió."
+          }
+        }
+      }
+    },
+    "Your hub did not answer. Check that Tailscale is on on this phone." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu hub no ha respondido. Comprueba que Tailscale esté activado en este teléfono."
           }
         }
       }

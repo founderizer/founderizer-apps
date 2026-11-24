@@ -68,7 +68,9 @@ struct AttachFilesButton: View {
 }
 
 /// The files that wait in one composer: a picture shows itself, another file its kind. Each says when it is going up
-/// or did not go, and the x takes it out again.
+/// or did not go, and the x takes it out again. **A skill that he gives shows the bolt and the skill's name** in place of
+/// the file's mark and its ZIP's name (owner feature `message_skills`; the owner's "Yes, as drawn" of 22 November 2026):
+/// its upload is a file's, and the hub's refusal of its gift shows as a failed file's words do.
 struct StagedFilesStrip: View {
     @Bindable var store: FleetStore
     let composer: String
@@ -77,7 +79,8 @@ struct StagedFilesStrip: View {
     var sending: [Int]?
 
     private var files: [FleetStore.StagedFile] {
-        let onItsWay = store.pending?.attachments ?? []
+        // a skill's ZIP that a message gives is on its way too (`PendingRequest.givenFiles`)
+        let onItsWay = (store.pending?.attachments ?? []) + (store.pending?.givenFiles ?? [])
         return store.stagedFiles(for: composer).filter { file in
             guard let id = file.attachmentID else { return sending == nil }
             return sending.map { $0.contains(id) } ?? !onItsWay.contains(id)
@@ -94,22 +97,24 @@ struct StagedFilesStrip: View {
     }
 
     private func chip(_ file: FleetStore.StagedFile) -> some View {
-        HStack(spacing: 8) {
+        let name = store.skillName(of: file, in: composer) ?? file.name
+        return HStack(spacing: 8) {
             picture(file)
             VStack(alignment: .leading, spacing: 1) {
-                Text(file.name).font(ChatStyle.detail).foregroundStyle(FleetStyle.text)
+                Text(name).font(ChatStyle.detail).foregroundStyle(FleetStyle.text)
                     .lineLimit(1).truncationMode(.middle)
                 Text(words(file)).font(ChatStyle.detail)
                     .foregroundStyle(file.failure == nil ? FleetStyle.muted : .orange)
             }
             if sending == nil {
-                if file.failure != nil {
+                // a file on the hub goes up no more: a skill whose gift the hub refused is taken out with the x
+                if file.failure != nil, !file.isOnHub {
                     IconButton(symbol: "arrow.clockwise", words: String(l10n: "Send this file up again"), size: 10,
                                side: IconMetrics.small, tint: FleetStyle.accent) {
                         Task { await store.upload(file, for: composer) }
                     }
                 }
-                IconButton(symbol: "xmark", words: String(l10n: "Take \(file.name) out"), size: 9.5,
+                IconButton(symbol: "xmark", words: String(l10n: "Take \(name) out"), size: 9.5,
                            side: IconMetrics.small) {
                     store.removeStaged(file, for: composer)
                 }
@@ -141,7 +146,7 @@ struct StagedFilesStrip: View {
                 }
             }
         } else {
-            Image(systemName: "doc")
+            Image(systemName: store.skillName(of: file, in: composer) != nil ? CardBadgeIcon.skillSymbol : "doc")
                 .font(IconMetrics.symbol(13)).foregroundStyle(FleetStyle.muted).frame(width: 26, height: 26)
         }
     }

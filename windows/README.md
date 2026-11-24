@@ -796,7 +796,9 @@ How the window draws the library's first run, for the window pieces after it (U2
 
 ## Build and test
 
-You need the .NET 10 SDK (`dotnet --version` says 10.0.x; `global.json` takes any 10.0 SDK).
+You need the .NET 10 SDK (`dotnet --version` says 10.0.x; `global.json` takes any 10.0 SDK). These runs are not a
+release: a release builds with one exact SDK and restores in locked mode (`release/README.md`, "The SDK and the lock
+files").
 
 ```bash
 dotnet test app/windows/Founderizer.Core.Tests/Founderizer.Core.Tests.csproj
@@ -895,6 +897,9 @@ process at a time.
   the read of a program's output (1849) and the read of a field's bytes in each message (1848); the tests of
   `Founderizer.Remote`, the 30-minute run included, pass with them.
 - The tests take MSTest 4.5.1 and Microsoft.NET.Test.Sdk 18.11.0, with their own lock file.
+- The lock files are the same on each .NET 10 SDK: the SDK's own package Microsoft.NET.ILLink.Tasks is at the release
+  SDK's version on every SDK (`FounderizerReleaseRuntime` in `Directory.Build.props`), so a restore on this Mac changes
+  none, and a lock file that it writes for a new package is the release's too (`release/README.md`).
 - `nuget.config` names nuget.org alone, so no source of a machine's own setup is asked.
 - The self-check has no lock file of its own: its one package is the library's, and a lock file there would change
   with each machine's AOT compiler package.

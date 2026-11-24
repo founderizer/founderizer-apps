@@ -609,7 +609,15 @@ final class CentralVaultModel {
             }
             guard let reading = try await VaultClient().reading(hub: hub, database: database) else { throw Stop(String(l10n: "This hub has no central vault.")) }
             guard let fleet = reading.fleetID else { throw Stop(String(l10n: "The hub did not say which fleet this is.")) }
-            let key = try OwnerKeychain.key(fleet: fleet) ?? OwnerKeychain.make(fleet: fleet)
+            // A new owner key only where the keychain says that none is there: a read that fails now (a locked keychain,
+            // an enclave that refuses its own key for a moment) stops here and keeps the key, so no passing error gives
+            // the hub a new identity (`OwnerKeychain.Lookup`).
+            let key: any OwnerKey
+            switch OwnerKeychain.lookup(fleet: fleet) {
+            case .key(let held): key = held
+            case .none: key = try OwnerKeychain.make(fleet: fleet)
+            case .notNow(let failure): throw Stop(String(l10n: "The keychain refused the key (\(Int(failure.status)))."))
+            }
             guard let program = CentralVaultRemote.install(ownerKey: key.publicKey, keepOwner: own) else {
                 throw Stop(String(l10n: "Founderizer cannot write the install for this owner key."))
             }
