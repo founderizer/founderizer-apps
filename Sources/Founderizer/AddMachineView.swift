@@ -97,12 +97,12 @@ struct AddServerView: View {
     @State private var vps = FleetVPSModel()
     @State private var net = FleetNetworkModel()
     /// **The VPS that a provider makes goes on while other pages show**, as the install does: it is the install's first
-    /// minutes, a second press waits for it, and `opened()` puts the wizard back on it.
-    @MainActor private static let cloudModel = FleetCloudModel()
-    private var cloud: FleetCloudModel { Self.cloudModel }
+    /// minutes, a second press waits for it, and `opened()` puts the wizard back on it. The model is the engine's
+    /// (`AddServerEngine.cloud`).
+    private var cloud: FleetCloudModel { AddServerEngine.cloud }
     /// A provider makes a server for this wizard now, also behind another page: nothing may cover that work as if the
     /// setup stood still (`FleetStore.welcomeCovers`).
-    @MainActor static var builds: Bool { cloudModel.stage == .making || cloudModel.stage == .joining }
+    @MainActor static var builds: Bool { AddServerEngine.builds }
     /// **What the provider's list needs to know of a server that the fleet holds already** (`CloudExisting.reuse`): the
     /// devices of this Mac's own network, and the fleet's servers whose install this Mac saw end. Both are read when
     /// the list opens.
@@ -636,17 +636,10 @@ struct AddServerView: View {
     /// **The fleet's servers whose install this Mac saw end**, by name in lower case: the address that the install
     /// reached is the address that the hub has for the server now (`InstallEnds`). A new server that took the name of a
     /// removed one has another address, and is not one of them.
-    private var finished: Set<String> {
-        Set((list?.servers ?? []).filter { $0.address != nil && ended[$0.name.lowercased()] == $0.address }
-            .map { $0.name.lowercased() })
-    }
+    private var finished: Set<String> { AddServerEngine.finished(list, ended: ended) }
 
     /// The servers of the account's list that this Mac made for this hub, by name in lower case (`MadeServers.holds`).
-    private var made: Set<String> {
-        // Never the fleet's own VPS, which a first run keeps in the same record since "Start again".
-        let hubs = MadeServers.hubsOwn(hub: store.hub, builds: BuildRecords.shared.all())
-        return Set(cloud.existing.filter { MadeServers.holds($0, in: madeKept) && !hubs.contains($0.id) }.map { $0.name.lowercased() })
-    }
+    private var made: Set<String> { AddServerEngine.made(cloud.existing, kept: madeKept, hub: store.hub) }
 
     /// **What a row may say of a server that Founderizer made and that the hub's list does not have by its name**
     /// (`CloudExisting.unfit`): only while the hub answers, from its own list, from a hub that names its servers as
@@ -706,58 +699,31 @@ struct AddServerView: View {
     /// It is the page's own task (`makeAsked`): a page that closed while the hub was asked makes nothing. The server is
     /// made only when the list still shows what was pressed: the same provider, the same offer, and "New server".
     private func makeServer() async {
-        guard !asksHub, chooses, store.state != nil, let provider = cloud.provider, let offer = cloud.offer,
+        guard !asksHub, chooses, store.state != nil, cloud.provider != nil, cloud.offer != nil,
               cloud.chosen == nil else { return }
         asksHub = true
         defer { asksHub = false }
-        cloud.stop(nil)
-        let hadList = list != nil, listing = cloud.listing
-        // A hub that took the owner's own write since this page's state has a new generation: one more read of the
-        // state, then the same question.
-        for attempt in 0..<2 {
-            guard let database = store.state?.db else { return }
-            do {
-                list = try await HubClient().servers(hub: store.hub, database: database)
-                break
-            } catch let error as HubError where error.conflict && attempt == 0 {
-                await store.refresh()
-            } catch {
-                if !Task.isCancelled { cloud.stop(HubReach.words(error, hub: store.hub).says) }
-                return
-            }
-        }
-        guard !Task.isCancelled, chooses, cloud.listing == listing, cloud.provider == provider, cloud.offer == offer,
-              cloud.chosen == nil else { return }
-        // The hub's list came only now, and it shows a server that the fleet can take again: that row is chosen, and
-        // the press is his again.
-        if !hadList, let firstToReuse {
+        let hadList = list != nil
+        // The engine's press (`AddServerEngine.press`): the hub first, and then this one server, or nothing.
+        await store.addServer.press(heard: { list = $0 }, goesOn: {
+            guard chooses else { return false }
+            // The hub's list came only now, and it shows a server that the fleet can take again: that row is chosen,
+            // and the press is his again.
+            guard !hadList, let firstToReuse else { return true }
             cloud.chosen = firstToReuse; suggested = true
-            return
-        }
-        let fleet = store.hub
-        cloud.makeNew(for: fleet, made: { name, id in MadeServers.note(name, id: id, hub: fleet) }, then: installs())
-    }
-
-    /// What the build does once the new server is on the private network: its install, as the check's Install starts
-    /// it. The build takes minutes, so a fleet that this Mac went to meanwhile is sent no server of this one.
-    private func installs() -> (InstallTarget) -> Void {
-        let fleet = store.hub
-        return { target in if store.hub == fleet { startInstall(target) } }
+            return false
+        }, then: { target in startInstall(target) })
     }
 
     /// The install of a server that the check proved or that a provider made: its address, user, port and key, and the
     /// password of its `sudo` when that asks for one.
     private func startInstall(_ target: InstallTarget, sudo: PasswordOnce.Password? = nil) {
-        // A hub from before `server_names` takes the server's name, which no page asks for now: the one it suggests.
-        if asksName, nameProblem != nil { model.name = Servers.suggestedName(taken: taken) }
-        model.use(target, sudo: sudo)
-        // The server of the list that "Use this server" took, when the install goes to its address.
-        model.provenServer = reusedServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil }
-        let ran = model.running
-        model.installMachine(store: store)
-        // The install page is the install: a start that the model refused (no hub to ask for a line) stays here. Only
-        // a start that this press began names its agent (`forAgent`).
-        if model.running, !ran { model.forAgent = installFor }
+        // The engine's install (`AddServerEngine.install`): a hub from before `server_names` takes a name that the
+        // fleet does not have, and only a start that this press began names its agent (`forAgent`). The server of the
+        // list that "Use this server" took, when the install goes to its address.
+        store.addServer.install(target, sudo: sudo, taken: taken, forAgent: installFor,
+                                proven: reusedServer.flatMap { $0.address == target.host ? ($0.provider, $0.id) : nil })
+        // The install page is the install: a start that the model refused (no hub to ask for a line) stays here.
         if model.running { page = .install }
     }
 
@@ -1104,7 +1070,6 @@ struct AddServerView: View {
     /// as a form half filled in; a build that stopped is cleared the same way.
     private func opened() {
         fromAddAgent = placing == nil && store.history.back.last == .addAgent
-        if cloud.onState == nil { cloud.onState = SetupChannel.reports(to: store, \.addServerBuild) }
         if model.running { page = .install; return }
         if cloud.stage != .token, let provider = cloud.provider { page = .token(provider); return }
         cloud.cancel()

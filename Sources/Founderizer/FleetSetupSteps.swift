@@ -219,9 +219,10 @@ final class FleetCloudModel {
     /// The page shows the account's servers, so each read of this choice reads them too (`open`); false for the
     /// manager's own server on "Your fleet", also in the read after a build's stop.
     private(set) var lists = true
-    /// **Who hears of each change of `stage`, `stopped`, `use` and `provider`**: the page that owns this model sets it
-    /// once, and the store keeps the facts for `setup_diagnosis` (`SetupChannel.reports`), also while the page is
-    /// closed. One change of the page calls it more than once; the last call is the settled one.
+    /// **Who hears of each change of `stage`, `stopped`, `use` and `provider`**: the owner of this model sets it once
+    /// (the first run's page, or `AddServerEngine`), and the store keeps the facts for `setup_diagnosis`
+    /// (`SetupChannel.reports`), also while the page is closed. One change of the page calls it more than once; the last
+    /// call is the settled one.
     @ObservationIgnored var onState: ((Stage, Stage?, CloudServerUse, CloudProvider?) -> Void)?
     private func tell() { onState?(stage, stopped, use, provider) }
     /// "Servers in another project?": the next token replaces the one this Mac holds for Hetzner.
@@ -236,6 +237,20 @@ final class FleetCloudModel {
     /// that is read next offers the next free server, of any size that fits, also when it costs more.
     private var taken: Set<String> = []
     private var work: Task<Void, Never>?
+    /// **What a list's read, and a build up to its wait for the new server, ask outside this app**: the provider, this
+    /// Mac's own SSH key, the new server's join key, and the private network as this Mac sees it. A test gives stand-ins
+    /// for these. Not behind it, so no test may come there: a pasted token and the look for a held one (`sendToken`,
+    /// `holds`), and, from five minutes into that wait on and at its end, the private network's own list (this Mac's
+    /// keychain and Tailscale's API) and the read of the network after it.
+    struct Outside: Sendable {
+        var servers: @Sendable (CloudProvider) -> CloudServers = { CloudServers(provider: $0) }
+        var publicKey: @Sendable () async throws -> String = { try await AppSSHKey.make() }
+        var joinKey: @Sendable (String) async throws -> String = { try await CloudServers.joinKey(for: $0) }
+        var network: @Sendable () async -> String? = { await MacNetwork.status() }
+    }
+    @ObservationIgnored private let outside: Outside
+
+    init(outside: Outside = Outside()) { self.outside = outside }
 
     /// **A list that could not be read is read again by itself**, a minute apart, at most this many times: a
     /// provider's free servers come and go by the minute (Hetzner, 5 November 2026: none free at 15:52, free again at
@@ -309,7 +324,7 @@ final class FleetCloudModel {
     /// gone, and the model is the next try's. It wrote the failure of a request that Back itself had ended, which
     /// the next page showed as its own line, and which `stopped` gave the app's own program as a stop.
     private func read(_ provider: CloudProvider, use: CloudServerUse, lists: Bool = true) async {
-        let servers = CloudServers(provider: provider)
+        let servers = outside.servers(provider)
         for round in 0...Self.readsAgain {
             if round > 0 { try? await Task.sleep(for: Self.readAgainAfter) }
             guard !Task.isCancelled else { return }
@@ -420,22 +435,22 @@ final class FleetCloudModel {
         var stoppedBy: Error?
         func keep() { if let kept { BuildRecords.shared.write(kept) } }
         do {
-            let name = FleetOnTailscale.freeName(in: await MacNetwork.status() ?? "{}",
+            let name = FleetOnTailscale.freeName(in: await outside.network() ?? "{}",
                                                  also: BuildRecord.namesInUse(BuildRecords.shared.all()))
-            let publicKey = try await AppSSHKey.make()
-            let authKey = try await CloudServers.joinKey(for: name)
+            let publicKey = try await outside.publicKey()
+            let authKey = try await outside.joinKey(name)
             // Before the call: a call that fails can leave the server at its provider (`CloudError.leftBehind`).
             made?(name, nil)
             kept = BuildRecord(provider: provider, use: use, hub: hub?.absoluteString, name: name)
             keep()
-            let server = try await CloudServers(provider: provider).createServer(name: name, use: use, publicKey: publicKey,
-                                                                                  authKey: authKey, offer: offer)
+            let server = try await outside.servers(provider).createServer(name: name, use: use, publicKey: publicKey,
+                                                                          authKey: authKey, offer: offer)
             made?(name, server.id)
             kept?.made(id: server.id, type: server.type, monthlyPrice: server.monthlyPrice, currency: server.currency)
             keep()
             stage = .joining
             reached = .joining
-            let joinEnd = try await CloudServers.joined(name, since: Date(), status: { await MacNetwork.status() },
+            let joinEnd = try await CloudServers.joined(name, since: Date(), status: outside.network,
                                                         listed: { try? await TailscaleFleetKey().joined(hostname: name,
                                                                                                         since: started) })
             try Task.checkCancellation()            // Back on the way back to this actor: no install, no line

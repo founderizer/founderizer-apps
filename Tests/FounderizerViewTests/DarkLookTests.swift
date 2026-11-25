@@ -85,6 +85,7 @@ import Testing
             "FleetMenu.swift: FleetMenuPanel",          // every list and right-click menu (`FleetMenu`)
             "FormRows.swift: ModalPanel",               // the card over the window (`fleetModal`)
             "NeedWindow.swift: NeedPanel",              // a request's own window (`NeedWindows`)
+            "NeedWindow.swift: NeedBadgePanel",         // the Undo badge that a request's own window becomes
         ])
         // The windows that SwiftUI makes: each scene's root view takes the dark scheme, which sets its window's look.
         var scenes: [String] = []

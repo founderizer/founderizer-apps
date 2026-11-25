@@ -38,6 +38,19 @@ import SwiftUI
 /// the card, never while his answer is only on its way, and when the request is gone; a failed save keeps it
 /// (`NeedWindowEnd`). When the app quits, it goes with it; when the main
 /// window closes, it stays.
+///
+/// **His answer in it closes it at once, as the badge of that answer** (the owner, 23 November 2026: "When I reply to a
+/// card, it should do the animation and close immediately ... a small floating badge on the side that says Undo", and
+/// his answer F22-2 (a) to its picture): while his answer waits its 5 seconds (`AnswerHolds`, place `.window`), the
+/// card window shrinks into a capsule window "✓ <answer>  Undo" at its top-right corner, over 0.25 s, ease-out, and
+/// that capsule floats as the card window does (`Shown.becomeBadge`). Its Undo grows it back into the card, as it was,
+/// with its top-right corner where the capsule stands and inside the screen, and the card takes the keys again. The
+/// capsule takes the keys only where the card had them: ⌘Z takes the answer back there, and VoiceOver hears the answer
+/// when the card becomes it. When the hold ends (5 seconds, his next answer anywhere, a quit), the capsule fades out
+/// over 0.12 s and the window closes, before the hub has the answer, as a card in a chat folds with it: a send that
+/// does not go leaves the request open on Needs you, with the line of what did not go under the main window's page
+/// (`PendingBar`). Under Reduce Motion each change comes in one frame. A key card is never held, so it never becomes a
+/// badge.
 @MainActor enum NeedWindows {
     /// One request of one hub and hub generation: a request of another hub with the same number is another request.
     struct Key: Hashable {
@@ -62,7 +75,25 @@ import SwiftUI
     /// Where he left a card's window last, and its width: kept on this Mac (`AppDefaults.store`).
     static let placeKey = "needWindowPlace", widthKey = "needWindowWidth"
 
-    private static var shown: [Key: Shown] = [:]
+    fileprivate static var shown: [Key: Shown] = [:]
+
+    /// **The room that a card's window opens and fits in**, in place of its screen's visible frame: a test gives one off
+    /// every screen, so that no window of a test stands on his screen, and the card's window stays in it
+    /// (`NeedPanel.constrainFrameRect`). Nil: the screen's.
+    static var room: NSRect?
+
+    /// The visible room of the screen that `frame` stands on, or the test's room.
+    fileprivate static func visibleRoom(around frame: NSRect, screen: NSScreen?) -> NSRect {
+        room ?? (screen ?? NSScreen.screens.first { $0.frame.intersects(frame) } ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+    }
+
+    /// The window that the card of `need` stands in now: its own, or the capsule window of his held answer that it
+    /// became (`Shown.becomeBadge`). A test reads it.
+    static func window(of need: Int) -> NSWindow? {
+        guard let open = shown.first(where: { $0.key.id == need })?.value else { return nil }
+        return open.badgePanel ?? open.panel
+    }
 
     /// **A card's window is open: the app does not install a build by itself now** (`AppUpdateModel.tick`). An
     /// automatic install starts the app again once he has been away from it for two minutes, and he is away from it
@@ -79,9 +110,12 @@ import SwiftUI
             return
         }
         let link = NeedWindowLink(key: key, store: store)
-        let panel = NeedPanel(contentRect: frame(), styleMask: [.titled, .closable, .resizable, .fullSizeContentView,
-                                                                .nonactivatingPanel],
+        let place = frame()
+        let panel = NeedPanel(contentRect: place, styleMask: [.titled, .closable, .resizable, .fullSizeContentView,
+                                                              .nonactivatingPanel],
                               backing: .buffered, defer: false)
+        // in a test's room off every screen: AppKit made the window on a screen
+        if room != nil { panel.setFrame(place, display: false) }
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
@@ -134,6 +168,8 @@ import SwiftUI
         guard let open = shown[key], !open.closing, let store = open.link.store else { return }
         guard NeedWindowEnd.closes(reading: key.reading(in: store), runs: store.needRuns[key.id]?.busy == true,
                                    keySave: open.link.keySave) else { return }
+        // as the badge of his answer: the badge fades out, and the window closes then
+        if open.badgePanel != nil { open.badgeWent(still: FleetMotion.reduced); return }
         open.closing = true
         DispatchQueue.main.async { open.panel.close() }
     }
@@ -141,8 +177,12 @@ import SwiftUI
     /// The window closed, by his press or by itself.
     fileprivate static func closed(_ key: Key) {
         guard let open = shown.removeValue(forKey: key) else { return }
+        // the card's own frame, also when the window closes as the badge of his answer (its hold ended, or the request
+        // went meanwhile)
+        let frame = open.cardPlace ?? open.panel.frame
+        open.dropBadge()
         if let watch = open.quitWatch { NotificationCenter.default.removeObserver(watch) }
-        keep(open.panel.frame)
+        keep(frame)
         // The card's views go after the event that closed the window, whose views stay until it is done.
         DispatchQueue.main.async { withExtendedLifetime(open) { open.panel.contentView = nil } }
     }
@@ -162,9 +202,10 @@ import SwiftUI
         let keptScreen = kept.flatMap { point in
             NSScreen.screens.first { $0.visibleFrame.insetBy(dx: -1, dy: -1).contains(NSPoint(x: point.x + 1, y: point.y - 1)) }
         }
-        let place = keptScreen == nil ? nil : kept
+        let place = keptScreen == nil || Self.room != nil ? nil : kept
         let main = NSApp.windows.first { $0.identifier?.rawValue == SetupChannel.fleetWindow }
-        let room = (keptScreen ?? main?.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let room = Self.room ?? (keptScreen ?? main?.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let keptWidth = defaults.double(forKey: widthKey)
         let width = min(max(keptWidth > 0 ? CGFloat(keptWidth) : Self.width, least.width), room.width - margin * 2)
         var left = place.map { CGFloat($0.x) } ?? room.maxX - margin - width
@@ -179,7 +220,7 @@ import SwiftUI
     }
 
     /// One open window: its panel, its link with the card, and how it fits the card.
-    @MainActor private final class Shown: NSObject, NSWindowDelegate {
+    @MainActor fileprivate final class Shown: NSObject, NSWindowDelegate {
         let key: Key
         let panel: NeedPanel
         let link: NeedWindowLink
@@ -197,6 +238,12 @@ import SwiftUI
         private var placing = false
         /// It is on the screen (`show`).
         private var onScreen = false
+        /// **The capsule window that this window became while his answer in it waits** (`becomeBadge`), and the card's
+        /// frame before it, which Undo gives back.
+        private var badge: NeedBadgePanel?
+        private var cardFrame: NSRect?
+        private let motion = PanelMotion()
+        private let badgeFade = WindowFade()
 
         init(key: Key, panel: NeedPanel, link: NeedWindowLink) {
             self.key = key
@@ -208,9 +255,8 @@ import SwiftUI
         /// screen's visible height less a margin, and not under the screen's visible bottom.
         func fit(_ height: CGFloat) {
             cardHeight = height
-            guard !ownHeight, !panel.inLiveResize else { return }
-            let screen = panel.screen ?? NSScreen.screens.first { $0.frame.intersects(panel.frame) } ?? NSScreen.main
-            let room = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+            guard !ownHeight, !panel.inLiveResize, badge == nil, !motion.runs else { return }
+            let room = NeedWindows.visibleRoom(around: panel.frame, screen: panel.screen)
             let target = min(max(height.rounded(.up), NeedWindows.least.height), room.height - NeedWindows.margin * 2)
             var frame = panel.frame
             guard abs(frame.height - target) > 0.5 else { return }
@@ -238,18 +284,173 @@ import SwiftUI
             if panel.firstResponder !== panel { _ = panel.makeFirstResponder(nil) }
         }
 
-        /// His press of the card's icon again: the window comes to the front, or comes as it is ready (`show`).
+        /// His press of the card's icon again: the window comes to the front, or comes as it is ready (`show`); as the
+        /// badge of his answer, the badge does.
         func front() {
+            if let badge { badge.orderFront(nil); return }
             if onScreen { panel.makeKeyAndOrderFront(nil) }
         }
 
+        /// **His answer in this window waits: the window becomes its badge** (F22-2 (a)). The card window shrinks into a
+        /// capsule window at its top-right corner, over 0.25 s, ease-out, and fades as the capsule comes; then the card
+        /// window stands hidden behind it, as it was, for Undo. A new look of the same answer changes only the capsule's
+        /// words. `still`: Reduce Motion, all in one frame.
+        func becomeBadge(_ look: AnswerBadge.Look, need: OwnerNeed, store: FleetStore, still: Bool) {
+            guard !closing, onScreen else { return }
+            let host = NeedBadgeHosting(rootView: AnswerBadgeCapsule(look: look, title: need.shownTitle) {
+                AnswerHolds.shared.undo(need, store: store)
+            }
+                .frame(maxWidth: panel.frame.width, alignment: .trailing)
+                .font(FleetStyle.body).tint(FleetStyle.accent).preferredColorScheme(.dark))
+            let size = host.fittingSize
+            if let badge {
+                let top = badge.frame.maxY, right = badge.frame.maxX
+                badge.contentView = host
+                badge.setFrame(NSRect(x: right - size.width, y: top - size.height, width: size.width, height: size.height),
+                               display: true)
+                return
+            }
+            let card = panel.frame
+            let hadKeys = panel.isKeyWindow
+            cardFrame = card
+            let target = NSRect(x: card.maxX - size.width, y: card.maxY - size.height, width: size.width, height: size.height)
+            let badge = NeedBadgePanel(contentRect: target, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
+                                       defer: false)
+            badge.isFloatingPanel = true
+            badge.level = .floating
+            badge.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            badge.hidesOnDeactivate = false
+            badge.isReleasedWhenClosed = false
+            badge.isExcludedFromWindowsMenu = true
+            badge.isMovableByWindowBackground = true
+            badge.isOpaque = false
+            badge.backgroundColor = .clear
+            badge.hasShadow = true
+            badge.appearance = NSAppearance(named: .darkAqua)
+            badge.title = need.shownTitle
+            badge.identifier = NSUserInterfaceItemIdentifier("need-window-badge-\(key.id)")
+            badge.contentView = host
+            badge.takesKeys = hadKeys
+            self.badge = badge
+            // **Edit › Undo (⌘Z) takes it back while the badge has the keys**, as the sidebar's badge does for an
+            // answer on a page; Tab reaches its Undo with the keyboard's full access
+            badge.undoManager?.registerUndo(withTarget: self) { _ in
+                MainActor.assumeIsolated { AnswerHolds.shared.undo(need, store: store) }
+            }
+            // VoiceOver's focus was on what he pressed, which went: it hears his answer
+            let words = look.words == String(l10n: "Answered") ? look.words : String(l10n: "Answered: \(look.words)")
+            AccessibilityNotification.Announcement(words).post()
+            let show = { [weak badge] in
+                guard let badge else { return }
+                if hadKeys { badge.makeKeyAndOrderFront(nil) } else { badge.orderFront(nil) }
+            }
+            if still {
+                motion.stop()
+                panel.orderOut(nil)
+                badge.alphaValue = 1
+                show()
+                return
+            }
+            badge.alphaValue = 0
+            show()
+            badgeFade.run(badge, to: 1, over: 0.25)
+            placing = true
+            motion.run(panel, to: target, alpha: 0, over: 0.25) { [weak self] in
+                guard let self else { return }
+                self.panel.orderOut(nil)
+                self.panel.alphaValue = 1
+                self.placing = false
+            }
+        }
+
+        /// **The card's frame with its top-right corner where the badge stands** (he may have moved the badge), inside
+        /// the visible room of the badge's screen; nil while the window is no badge.
+        var cardPlace: NSRect? {
+            guard let badge, let card = cardFrame else { return nil }
+            let room = NeedWindows.visibleRoom(around: badge.frame, screen: badge.screen)
+            var frame = NSRect(x: badge.frame.maxX - card.width, y: badge.frame.maxY - card.height, width: card.width,
+                               height: min(card.height, room.height))
+            frame.origin.x = min(max(frame.minX, room.minX), room.maxX - frame.width)
+            frame.origin.y = min(max(frame.minY, room.minY), room.maxY - frame.height)
+            return frame
+        }
+
+        /// **Undo of his answer: the badge grows back into the card**, as it was, with its top-right corner where the
+        /// badge stands and inside the screen (`cardPlace`), over 0.25 s, and the card takes the keys, also after
+        /// VoiceOver's action, which gives the badge none. `still`: in one frame. Not while the window closes.
+        func becomeCard(still: Bool) {
+            guard !closing, let badge, let frame = cardPlace else { return }
+            badge.undoManager?.removeAllActions(withTarget: self)
+            self.badge = nil
+            cardFrame = nil
+            motion.stop()
+            badgeFade.stop()
+            placing = true
+            // the capsule goes at once, and the card grows from its place (a fade of its own would race the next badge's)
+            let from = badge.frame
+            badge.orderOut(nil)
+            badge.close()
+            if still {
+                panel.setFrame(frame, display: true)
+                panel.alphaValue = 1
+                panel.makeKeyAndOrderFront(nil)
+                placing = false
+                NeedWindows.keep(panel.frame)
+                if let cardHeight { fit(cardHeight) }
+                return
+            }
+            panel.setFrame(from, display: false)
+            panel.alphaValue = 0.3
+            panel.makeKeyAndOrderFront(nil)
+            motion.run(panel, to: frame, alpha: 1, over: 0.25) { [weak self] in
+                guard let self else { return }
+                self.placing = false
+                NeedWindows.keep(self.panel.frame)
+                if let height = self.cardHeight { self.fit(height) }
+            }
+        }
+
+        /// **His answer went** (its hold ended: 5 seconds, his next answer, a quit), **or the request went meanwhile**
+        /// (`NeedWindows.check`): the badge fades out over 0.12 s, and the window closes then, with the card's own
+        /// frame kept for the next window (`closed`). `still`: at once, and the close after the change of the window's
+        /// own view that asked it, as `check` closes.
+        func badgeWent(still: Bool) {
+            guard let badge, !closing else { return }
+            closing = true
+            badge.undoManager?.removeAllActions(withTarget: self)
+            if still {
+                badge.orderOut(nil)
+                DispatchQueue.main.async { self.panel.close() }
+                return
+            }
+            badgeFade.run(badge, to: 0, over: FleetMotion.cardOut) { [weak self] in
+                badge.orderOut(nil)
+                self?.panel.close()
+            }
+        }
+
+        /// The window goes: its badge with it.
+        func dropBadge() {
+            motion.stop()
+            badgeFade.stop()
+            badge?.undoManager?.removeAllActions(withTarget: self)
+            badge?.orderOut(nil)
+            badge?.close()
+            badge = nil
+        }
+
+        /// The window shows as the badge of his answer now (a test reads it).
+        var badgePanel: NSPanel? { badge }
+
         func windowWillClose(_ notification: Notification) {
-            // an answer that waits with Undo goes at once: the window of its Undo closed (`AnswerHolds`)
-            AnswerHolds.shared.release(key.id)
+            // an answer given in this window and that waits with Undo goes at once: the window of its Undo closed
+            // (`AnswerHolds`); an answer of the same request given on a page keeps its own badge and its hold
+            if AnswerHolds.shared.held[key.id]?.place == .window { AnswerHolds.shared.release(key.id) }
             NeedWindows.closed(key)
         }
 
         func windowDidMove(_ notification: Notification) {
+            guard badge == nil else { return }
             if !placing, panel.isVisible, !closing { NeedWindows.keep(panel.frame) }
         }
 
@@ -283,6 +484,12 @@ private final class NeedPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) {}
+
+    /// **A test's room off every screen keeps the window** (`NeedWindows.room`): AppKit moves a titled window that it
+    /// orders in or moves off every screen onto a screen, so the card's window of a view test stood on his screen.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        NeedWindows.room == nil ? super.constrainFrameRect(frameRect, to: screen) : frameRect
+    }
 
     /// This window's own Enable of secure input is on, and owes its one Disable.
     private var secureInput = false
@@ -404,6 +611,14 @@ private final class NeedHosting: NSHostingView<NeedWindowRoot> {
     func stepAside() { NeedWindows.stepAside(key) }
     func comeBack() { NeedWindows.comeBack(key) }
 
+    /// **His answer in this window waits, went or was taken back** (`NeedWindowCard`): the window becomes its badge,
+    /// closes, or becomes the card again (F22-2 (a)).
+    func badge(_ look: AnswerBadge.Look, need: OwnerNeed, store: FleetStore, still: Bool) {
+        NeedWindows.shown[key]?.becomeBadge(look, need: need, store: store, still: still)
+    }
+    func answerWent(still: Bool) { NeedWindows.shown[key]?.badgeWent(still: still) }
+    func answerBack(still: Bool) { NeedWindows.shown[key]?.becomeCard(still: still) }
+
     /// The main window comes to the front with the app, also once he closed it: after a press in the card that opens a
     /// page of the app there. The card's window stays over it.
     func showMainWindow() {
@@ -467,11 +682,22 @@ private struct NeedWindowCard: View {
     let fit: (CGFloat) -> Void
     let titled: (String) -> Void
     @Environment(\.viewZoom) private var zoom
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// **His answer in this window**: it waits (the window is its badge), it went, or it is none.
+    private enum Answer: Equatable {
+        case nothing, waits(AnswerBadge.Look), went
+    }
 
     var body: some View {
         let need = link.key.reading(in: store)
         // what the window's rule reads of the store (`NeedWindowEnd`): the request gone, replaced or answered, and its run
         let ends = [need == nil, need?.replaced_by != nil, need?.isOpen == true, store.needRuns[link.key.id]?.busy == true]
+        // his answer given in this window (`AnswerHolds.Place.window`), held or now on its way out of the hold
+        let held = need.flatMap { AnswerHolds.shared.held($0, in: store) }.flatMap { $0.place == .window ? $0 : nil }
+        let leaving = need.flatMap { AnswerHolds.shared.leaving($0, in: store) }.flatMap { $0.place == .window ? $0 : nil }
+        let answer: Answer = held.map { Answer.waits(AnswerBadge.Look($0.shown)) }
+            ?? (leaving != nil ? Answer.went : Answer.nothing)
         ScrollView {
             if let need {
                 NeedRequestCard(store: store, need: need)
@@ -484,6 +710,78 @@ private struct NeedWindowCard: View {
         .windowButtonsCentred(inBand: FleetSpace.lights * zoom)
         .onChange(of: ends, initial: true) { _, _ in NeedWindows.check(link.key) }
         .onChange(of: need?.shownTitle, initial: true) { _, title in if let title { titled(title) } }
+        // the window becomes the badge of his answer, goes with it, or comes back as the card (F22-2 (a))
+        .onChange(of: answer, initial: true) { before, now in
+            switch now {
+            case .waits(let look):
+                guard let need else { return }
+                link.badge(look, need: need, store: store, still: reduceMotion)
+            case .went:
+                // the hold ended: the badge goes, and the window with it; a send that does not go leaves the request
+                // open on Needs you, with its line under the main window's page
+                link.answerWent(still: reduceMotion)
+            case .nothing:
+                // his Undo: the card comes back (a request that went meanwhile closes by the window's rule)
+                if case .waits = before, need?.isOpen == true { link.answerBack(still: reduceMotion) }
+            }
+        }
+    }
+}
+
+/// **The capsule window of a card window's held answer** (`NeedWindows.Shown.becomeBadge`): it floats as the card
+/// window does; it takes the keys only where the card had them (`takesKeys`), never the main window, so that ⌘Z and
+/// Tab reach its Undo there, and a drag of it while another app is in front leaves that app the keys; its first click
+/// acts at once (`NeedBadgeHosting`), and Esc does not close it, as it does not close the card's window.
+private final class NeedBadgePanel: NSPanel {
+    var takesKeys = false
+    override var canBecomeKey: Bool { takesKeys }
+    override var canBecomeMain: Bool { false }
+    override func cancelOperation(_ sender: Any?) {}
+}
+
+/// The capsule's views: a first click acts at once, as in the card window (`NeedHosting`).
+private final class NeedBadgeHosting<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+/// **A window's frame and alpha from where they stand to an end, over a time, ease-out** (the card window that becomes
+/// a badge, and back): its own clock, 120 times a second, as `WindowFade` sets an alpha. A new run takes the place of the
+/// one before it; a run whose owner is gone ends its own timer.
+@MainActor private final class PanelMotion {
+    private var timer: Timer?
+    private var step: (() -> Void)?
+    var runs: Bool { timer != nil }
+
+    func run(_ window: NSWindow, to end: NSRect, alpha: CGFloat, over seconds: Double,
+             then done: @escaping @MainActor () -> Void = {}) {
+        stop()
+        let start = window.frame, from = window.alphaValue, began = CACurrentMediaTime()
+        step = { [weak self, weak window] in
+            guard let self else { return }
+            guard let window else { self.stop(); return }
+            let passed = min(1, (CACurrentMediaTime() - began) / max(seconds, 0.001))
+            let eased = 1 - (1 - passed) * (1 - passed)
+            func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * eased }
+            window.setFrame(NSRect(x: mix(start.minX, end.minX), y: mix(start.minY, end.minY),
+                                   width: mix(start.width, end.width), height: mix(start.height, end.height)), display: true)
+            window.alphaValue = mix(from, alpha)
+            if passed >= 1 {
+                self.stop()
+                done()
+            }
+        }
+        let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { [weak self] timer in
+            guard self != nil else { timer.invalidate(); return }
+            MainActor.assumeIsolated { self?.step?() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        step = nil
     }
 }
 

@@ -135,6 +135,13 @@ struct NeedAnswerBox: View {
     /// it in its parts, and the step on Needs you over its answers itself (`NeedStep.answers`), where it stays when he
     /// answers.
     private var talk: [NeedMessage] { need.isOpen && !onStep ? need.shownTalk(features: store.state?.ui_features) : [] }
+    /// **The card stands on a page of the main window** (a chat; `cardOnPage`): with the step of Needs you, the place of
+    /// a held answer is the page that shows (`AnswerHolds.Place`); in the card's own window, that window, which becomes
+    /// the badge of it (`NeedWindows`); else a card that is on neither (the job's detail card).
+    @Environment(\.cardOnPage) private var cardOnPage
+    private var holdPlace: AnswerHolds.Place {
+        onStep || cardOnPage ? .page(store.destination.page) : cardWindow != nil ? .window : .card
+    }
     /// The guard's own key for the field of Needs clarification, beside the answer's (`guardKey`).
     private var clarifyGuardKey: String { "need-clarify-\(need.id)" }
     private var clarifyWords: String { clarifyText.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -705,7 +712,7 @@ extension NeedAnswerBox {
         let store = store, id = need.id, hub = store.hub
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id,
                                    text: text.wrappedValue)
-        AnswerHolds.shared.hold(need, store: store, shown: shown) {
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown) {
             // **It waits while the hub cannot take it**, as a press does (review): another answer can be on its way
             // when the wait ends, and a send then went nowhere
             guard await store.writable(), store.hub == hub, store.state?.db == database else { return }
@@ -713,14 +720,25 @@ extension NeedAnswerBox {
         }
     }
 
-    /// **His press of an option waits 5 seconds, with Undo on the folded card** (`AnswerHolds`), and then goes as a
-    /// press went before: through `AnswerWaits`, with the signature of a door's call and the grant of a Give.
+    /// **His press of an option waits 5 seconds, with Undo** (`AnswerHolds`: the badge of the page, or the folded card's
+    /// line in the card's own window), and then goes as a press went before: through `AnswerWaits`, with the signature
+    /// of a door's call and the grant of a Give.
+    ///
+    /// **A press that opens a page or a flow on this Mac goes at once, with no wait and no badge**: the first option of an
+    /// item for his phone opens Settings › Servers, and of a GitHub App item starts that app's flow (`FleetStore.answer`).
+    /// Held, the page changed by itself 5 seconds after the card had completed (F12, A1). As his next answer, it sends
+    /// the answer that waited before it.
     private func holdOption(_ index: Int) {
         guard need.choices.indices.contains(index), let database = store.state?.db else { return }
         let store = store, need = need
+        if index == 0, need.add_device == 1 || need.github_app != nil {
+            AnswerHolds.shared.releaseAll()
+            AnswerWaits.shared.press(need, choice: index, store: store)
+            return
+        }
         let shown = PendingRequest(hub: store.hub, database: database, client: store.installation, needID: need.id,
                                    choice: index, text: need.choices[index])
-        AnswerHolds.shared.hold(need, store: store, shown: shown) {
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown) {
             await AnswerWaits.shared.press(need, choice: index, store: store)?.value
         }
     }
@@ -732,7 +750,7 @@ extension NeedAnswerBox {
         let store = store, need = need, hub = store.hub
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: need.id,
                                    choices: ticked, text: ticked.map { need.choices[$0] }.joined(separator: "; "))
-        AnswerHolds.shared.hold(need, store: store, shown: shown, ticked: Set(ticked)) {
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown, ticked: Set(ticked)) {
             // it waits while the hub cannot take it, as a press does (`holdOption`)
             guard await store.writable(), store.hub == hub, store.state?.db == database else { return }
             await store.answer(need, choices: ticked)
@@ -754,7 +772,7 @@ extension NeedAnswerBox {
         answered?(false, tops[index] ?? 0)
         let store = store, id = need.id, hub = store.hub, composer = composer
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id, text: reply)
-        AnswerHolds.shared.hold(need, store: store, shown: shown) { @MainActor in
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown) { @MainActor in
             // The store's own pace for a write that waits for it (`FleetStore.writable`), and a file of the box that
             // still goes up: the reply carries the box's files.
             while !store.canWrite || composer.map({ Self.uploading(in: $0, store: store) }) == true {
@@ -1151,9 +1169,15 @@ struct NeedRequestCard: View {
     private var onItsWay: PendingRequest? {
         holding?.shown ?? store.answerOnItsWay(to: need, kept: sent) ?? AnswerHolds.shared.leaving(need, in: store)?.shown
     }
-    /// **His answer waits 5 seconds, with Undo** (`AnswerHolds`): the card stands folded as with an answer on its way,
-    /// and Undo stands where its mark will stand.
+    /// **His answer waits 5 seconds, with Undo** (`AnswerHolds`): the card stands folded as with an answer on its way.
     private var holding: AnswerHolds.Held? { AnswerHolds.shared.held(need, in: store) }
+    /// **The card stands on a page of the main window** (a chat; `cardOnPage`): his held answer completes on it, with its
+    /// check and no Undo on its line, and its Undo is the badge's at the bottom of the page (`AnswerBadge`; the owner's
+    /// F12, 22 November 2026). The card's own window and the job's detail card keep Undo where the mark will stand
+    /// (`undoOnLine`): his yes of 21 November 2026, where the badge would say the same words twice or stand under a dimmed
+    /// page.
+    @Environment(\.cardOnPage) private var onPage
+    private var undoOnLine: Bool { holding != nil && !onPage }
     /// The task that his answer let go on, where the reading has it (owner feature `need_marks`).
     private var answeredTask: FleetTask? { need.task.flatMap { id in store.state?.tasks.first { $0.id == id } } }
     /// **The turning mark, the orange mark and the gray mark of his pause open the task** (his "Both (Recommended)",
@@ -1370,7 +1394,7 @@ struct NeedRequestCard: View {
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         // owner feature need_marks: what came of his answer, in the check's place (`AnsweredMarkView`)
-                        if !inWords && holding == nil {
+                        if !inWords && !undoOnLine {
                             AnsweredMarkView(mark: onItsWay == nil ? need.answeredMark(in: store.state) : nil,
                                              moves: store.marksMove, names: names,
                                              opens: markOpensTask ? { openTask() } : nil)
@@ -1386,11 +1410,12 @@ struct NeedRequestCard: View {
         }
     }
 
-    /// **The end of the folded card's answer line**: Undo while his answer waits (his "Yes, 5 seconds": "Undo at the end
-    /// of its answer line", with no words beside it and no count), else Pause while the task works. Each is its own
-    /// press inside the folded card's, which opens nothing.
+    /// **The end of the folded card's answer line**: Undo while his answer waits, in the card's own window and the job's
+    /// detail card (`undoOnLine`; his "Yes, 5 seconds": "Undo at the end of its answer line", with no words beside it
+    /// and no count), else Pause while the task works. Each is its own press inside the folded card's, which opens
+    /// nothing. VoiceOver's action Undo stays on the folded card wherever it stands.
     @ViewBuilder private var lineEnd: some View {
-        if holding != nil {
+        if undoOnLine {
             Spacer(minLength: 8)
             Button("Undo") { undo() }
                 .buttonStyle(.plain).font(FormMetrics.detail.weight(.medium)).foregroundStyle(FleetStyle.link)

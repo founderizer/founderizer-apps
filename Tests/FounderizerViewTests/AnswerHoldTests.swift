@@ -1,6 +1,7 @@
 import AppKit
 import FleetCore
 import Testing
+import Vision
 @testable import Founderizer
 
 /// **His answer waits 5 seconds on its card, with Undo, and Pause stands on the card while its task works** (the
@@ -26,34 +27,66 @@ import Testing
          "answered": NSNull()].merging(extra) { _, new in new }
     }
 
+    /// **No answer of a test stays held after it**, also when it stops halfway: one held answer for the whole app, so
+    /// a held answer of an earlier test would go at the next test's press, to a hub that no longer answers.
+    @MainActor private static func leaveNothingHeld(_ store: FleetStore) {
+        for need in store.state?.needs ?? [] { AnswerHolds.shared.undo(need, store: store) }
+    }
+
     /// A store of the app that reads `hub`, after the hub's first answer: it can write.
     @MainActor private static func store(on hub: LoopbackHub, _ state: Data) throws -> FleetStore {
         _ = ViewHost.store(try HubState.decode(state))         // the test's own defaults and folder
         AppDefaults.store.set(hub.address, forKey: "hubAddress")
         let store = FleetStore()
+        try noneLeft(store)
         Task { await store.refresh() }
         ViewHost.turn(10) { store.canWrite }
         return store
     }
 
+    /// **No earlier test left a request in this store's outbox**: the test folder lives for the whole test process
+    /// (`ViewHost`), and only the end of a test's window removes its outbox (`ViewHost.close`). A request left there
+    /// blocks this store's writes (`FleetStore.canWrite`) and draws its line of what was not sent under the page, so a
+    /// test fails as the leak that it is, with its words, and not later as a send that never came. The outbox goes
+    /// before the test fails: this test makes no window whose end would remove it, and each later test starts clean.
+    @MainActor private static func noneLeft(_ store: FleetStore) throws {
+        guard let left = store.pending else { return }
+        try? FileManager.default.removeItem(at: AppFolders.support.appendingPathComponent("Founderizer"))
+        throw ViewHost.Missing(description: "an earlier test left its request in the outbox: request "
+            + "\(left.needID.map(String.init) ?? "none"), \(left.refusal == nil ? "not refused" : "refused")")
+    }
+
     struct Waits: Sendable {
         let heldAtPress: Bool
+        let heldAgain: Bool
+        /// Where the second click went, in the option's frame: the failure says it.
+        let click: String
+        let onlyBadge: Bool
         let sentBeforeUndo: Bool
         let openAgain: Bool
         let waited: Double?
         let choice: Bool
+        let once: Bool
+        let badgeGone: Bool
     }
 
-    /// In a chat: a press of an option folds the card with Undo, and nothing reaches the hub; Undo opens the card with
-    /// its options; a press that is not taken back reaches the hub once the wait is over, never before.
+    /// **In a chat his answer completes on its card, and the badge at the bottom of the page has Undo** (the owner's F12,
+    /// 22 November 2026): a press of an option folds the card with his answer and no Undo on its line, "Undo" stands in
+    /// the badge only, and nothing reaches the hub; the badge's Undo opens the card with its options; a press that is not
+    /// taken back reaches the hub once, when the wait is over and never before, and the badge goes. Bug: Undo on the
+    /// card's line beside the badge, or a badge whose Undo does not take the answer back.
     @Test func anAnswerWaitsAndUndoOpensTheCardAgain() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Waits in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
             let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(51, ["options": ["Friday", "Monday"]])]))
             defer { hub.stop() }
             let holds = AnswerHolds.shared
             holds.wait = .seconds(60)
             defer { holds.wait = .seconds(5) }
             let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
             store.destination = .agent("manager")
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }
@@ -63,68 +96,235 @@ import Testing
             }
             ViewHost.atOnce(ViewHost.click(monday, in: window))
             let held = holds.held[51] != nil
-            guard let undo = try ViewHost.middle(of: String(l10n: "Undo"), in: window) else {
-                throw ViewHost.Missing(description: "the folded card has no Undo")
+            // the badge has come up to its place (0.18 s): "Undo" stands in it, and nowhere else
+            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            ViewHost.turn(0.5)
+            guard let badge = Self.badge(in: window) else {
+                throw ViewHost.Missing(description: "the page has no badge of the held answer")
             }
-            ViewHost.atOnce(ViewHost.click(undo, in: window))
+            let undoes = try Self.everywhere(String(l10n: "Undo"), in: window)
+            let onlyBadge = !undoes.isEmpty && undoes.allSatisfy { badge.frame.insetBy(dx: -2, dy: -2).contains($0) }
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
             let sentBeforeUndo = !posts().isEmpty
             ViewHost.turn(5) { holds.held[51] == nil }
             let friday = try ViewHost.middle(of: "Friday", in: window, seconds: 5)
             let open = holds.held[51] == nil && friday != nil
-            // a press that he does not take back
+            // a press that he does not take back, once the stand-in hub's reading has come again (the store writes
+            // within 12 s of an answer) and the option takes a click where it is drawn, the same in two reads: after
+            // Undo the card grows back and the chat moves to keep its end in sight
             holds.wait = .milliseconds(800)
+            let read = store.lastSuccess
             Task { await store.refresh() }
-            ViewHost.turn(10) { store.canWrite }
-            guard let again = try ViewHost.middle(of: "Monday", in: window) else {
-                throw ViewHost.Missing(description: "the card did not open again with Monday")
+            var reach = Reach(why: "not read"), before = Reach(why: "not read")
+            ViewHost.turn(20) {
+                guard store.lastSuccess != read, store.canWrite else { return false }
+                before = reach
+                reach = Self.reachable("Monday", option: "need-option-51-1", in: window)
+                return reach.settled(after: before)
+            }
+            guard let again = reach.point else {
+                throw ViewHost.Missing(description: "Monday takes no click: \(reach.why); read again "
+                    + "\(store.lastSuccess != read), writes \(store.canWrite)")
             }
             let pressed = Date()
             ViewHost.atOnce(ViewHost.click(again, in: window))
-            ViewHost.turn(15) { !posts().isEmpty }
+            let heldAgain = holds.held[51] != nil, click = reach.why
+            // the stand-in hub is read again, as the app reads its hub: the store writes within 12 s of an answer
+            Task { await store.refresh() }
+            ViewHost.turn(20) { !posts().isEmpty }
             let post = posts().first
-            return Waits(heldAtPress: held, sentBeforeUndo: sentBeforeUndo, openAgain: open,
+            ViewHost.turn(5) { Self.badge(in: window) == nil }
+            // the store has ended its send (the stand-in hub refuses it): the window's end removes the outbox after
+            // the refusal is saved there; a send that does not end fails this test
+            guard ViewHost.turn(10, until: { !store.sending }) else {
+                throw ViewHost.Missing(description: "the store's send did not end in 10 s")
+            }
+            return Waits(heldAtPress: held, heldAgain: heldAgain, click: click, onlyBadge: onlyBadge,
+                         sentBeforeUndo: sentBeforeUndo, openAgain: open,
                          waited: post.map { $0.at.timeIntervalSince(pressed) },
-                         choice: post?.body.contains(#""choice":1"#) == true)
+                         choice: post?.body.contains(#""choice":1"#) == true, once: posts().count == 1,
+                         badgeGone: Self.badge(in: window) == nil)
         }
         #expect(seen.heldAtPress && !seen.sentBeforeUndo, "the press waits, and nothing reaches the hub")
-        #expect(seen.openAgain, "Undo opens the card with its options")
+        #expect(seen.onlyBadge, "Undo stands in the badge, and not on the card's line")
+        #expect(seen.openAgain, "the badge's Undo opens the card with its options")
+        #expect(seen.heldAgain, "his second press waits too (its click: \(seen.click))")
         #expect((seen.waited ?? 0) >= 0.8, "the answer reaches the hub only once the wait is over")
-        #expect(seen.choice, "and it is the option that he pressed")
+        #expect(seen.choice && seen.once, "and it is the option that he pressed, once")
+        #expect(seen.badgeGone, "the badge goes with the wait")
         #expect(screen.stayedHis)
     }
 
-    /// On Needs you: his key 2 and Return answer the request at hand, which stays at hand with Undo while his answer
-    /// waits (his "Yes, Undo there too"); Undo brings its options back.
-    @Test func onNeedsYouTheAnsweredRequestStaysWithUndo() async throws {
-        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (held: Bool, open: Bool) in
-            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(55, ["options": ["Friday", "Monday"]])]))
+    struct Leaves: Sendable {
+        let next: Bool
+        let lane: Bool
+        let count: Bool
+        let label: String?
+        let actions: [String]
+        let words: Bool
+        let sent: Bool
+        let back: Bool
+        let countBack: Bool
+    }
+
+    /// **On Needs you an answered request leaves at once, and the badge's Undo brings it back at hand** (the owner's F12,
+    /// 22 November 2026: "complete it immediately and show like a badge at the bottom of the page that shows what has
+    /// been chosen"): his key 2 and Return answer the request at hand; inside two seconds the next request is at hand, the
+    /// answered one has no card in the lane, the sidebar's count is one less, the badge says his answer with Undo (to
+    /// VoiceOver too: one element and its action), and nothing reached the hub. A click on the badge's Undo gives the
+    /// request back at hand with its options, and the count back. Bug: the request stays at hand for the 5 seconds, or an
+    /// Undo that brings back a request that is in no lane.
+    @Test func onNeedsYouAnAnsweredRequestLeavesAndTheBadgeBringsItBack() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Leaves in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [
+                Self.need(55, ["options": ["Friday", "Monday"]]),
+                Self.need(56, ["title": "Choose the colour of the site", "options": ["Dark", "Orange"]])]))
             defer { hub.stop() }
             let holds = AnswerHolds.shared
             holds.wait = .seconds(60)
             defer { holds.wait = .seconds(5) }
             let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
             store.destination = .needs
             store.selectedNeed = 55
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            let posts = { hub.requests.filter { $0.method == "POST" } }
+            guard try ViewHost.middle(of: "Monday", in: window) != nil else {
+                throw ViewHost.Missing(description: "the step's option Monday is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.keys("2\r", in: window))
+            ViewHost.turn(5) { holds.held[55] != nil }
+            // inside two seconds: the moment in which his answer settles (0.78 s) is over, and the next one is at hand
+            let next = ViewHost.turn(2) { store.selectedNeed == 56 }
+            ViewHost.turn(0.5)
+            let lane = Self.element("need-card-55", in: window) == nil && Self.element("need-card-56", in: window) != nil
+            let count = Self.reads("nav-needs", in: window).value == String(l10n: "1 item needs you")
+            let label = Self.reads("answer-badge", in: window).label
+            let actions = Self.actions("answer-badge", in: window)
+            guard let badge = Self.badge(in: window) else {
+                throw ViewHost.Missing(description: "the page has no badge of the held answer")
+            }
+            // the request at hand is the next one: his answer's words stand in the badge
+            let words = try ViewHost.middle(of: "Monday", in: window, seconds: 3)
+                .map { badge.frame.insetBy(dx: -2, dy: -2).contains($0) } ?? false
+            let sent = !posts().isEmpty
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
+            ViewHost.turn(5) { holds.held[55] == nil }
+            let friday = try ViewHost.middle(of: "Friday", in: window, seconds: 5)
+            let back = holds.held[55] == nil && store.selectedNeed == 55 && friday != nil && posts().isEmpty
+            let two = String(l10n: "\(2) items need you")
+            ViewHost.turn(2) { Self.reads("nav-needs", in: window).value == two }
+            return Leaves(next: next, lane: lane, count: count, label: label, actions: actions, words: words, sent: sent,
+                          back: back, countBack: Self.reads("nav-needs", in: window).value == two)
+        }
+        #expect(seen.next && seen.lane, "the next request is at hand inside two seconds, and the answered one left the lane")
+        #expect(seen.count, "the sidebar's count is one less while the answer waits")
+        #expect(seen.words && !seen.sent, "the badge says his answer, and nothing reached the hub")
+        #expect(seen.label == "Choose the day of the move, answered: Monday" && seen.actions == ["Undo"],
+                "VoiceOver reads the badge as one element with its action Undo")
+        #expect(seen.back, "the badge's Undo brings the request back at hand with its options, and sends nothing")
+        #expect(seen.countBack, "and the count back")
+        #expect(screen.stayedHis)
+    }
+
+    /// **Edit › Undo takes his held answer back** (F12): on Needs you, with no field in use, the system's Undo (the
+    /// action of Edit › Undo, ⌘Z, through the window) while the badge stands takes the answer back, and the request is at
+    /// hand again with its options, with nothing sent. Bug: ⌘Z that does nothing while the badge says Undo.
+    @Test func editUndoTakesTheHeldAnswerBack() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (held: Bool, undone: Bool, back: Bool, sent: Bool) in
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(65, ["options": ["Friday", "Monday"]])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            store.destination = .needs
+            store.selectedNeed = 65
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }
             guard try ViewHost.middle(of: "Monday", in: window) != nil else {
                 throw ViewHost.Missing(description: "the step's option Monday is not drawn")
             }
             ViewHost.atOnce(ViewHost.keys("2\r", in: window))
-            ViewHost.turn(5) { holds.held[55] != nil }
-            // past the moment in which an answer settles at hand (under a second): the held one is still there
-            ViewHost.turn(2)
-            guard let undo = try ViewHost.middle(of: String(l10n: "Undo"), in: window, seconds: 3) else {
-                throw ViewHost.Missing(description: "the answered request has no Undo on Needs you")
-            }
-            let held = holds.held[55] != nil
-            ViewHost.atOnce(ViewHost.click(undo, in: window))
-            ViewHost.turn(5) { holds.held[55] == nil }
+            let held = ViewHost.turn(5) { holds.held[65] != nil }
+            ViewHost.turn(1)
+            // the action of Edit › Undo, up the responder chain of the window that has the keys (the app of a test is
+            // never active, so it has no key window of its own to send it to)
+            let undone = (window.firstResponder ?? window).tryToPerform(Selector(("undo:")), with: nil)
+            ViewHost.turn(5) { holds.held[65] == nil }
             let friday = try ViewHost.middle(of: "Friday", in: window, seconds: 5)
-            return (held, holds.held[55] == nil && friday != nil && store.selectedNeed == 55)
+            return (held, undone, holds.held[65] == nil && store.selectedNeed == 65 && friday != nil,
+                    hub.requests.contains { $0.method == "POST" })
         }
-        #expect(seen.held, "the key's answer waits, at hand with Undo")
-        #expect(seen.open, "Undo brings the request back at hand with its options")
+        #expect(seen.held, "the key's answer waits")
+        #expect(seen.undone && seen.back, "Edit › Undo brings the request back at hand with its options")
+        #expect(!seen.sent, "nothing reached the hub")
+        #expect(screen.stayedHis)
+    }
+
+    /// **The badge says what he chose, as the folded card's line does** (F12; his rule of 14 November 2026): the ticked
+    /// options joined with "; ", with a check; then the words that he wrote on the next request, with no check. Bug: a
+    /// check before his own words.
+    @Test func theBadgeSaysWhatHeChose() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (ticked: String?, tickedCheck: Bool?, written: String?, writtenCheck: Bool?) in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [
+                Self.need(58, ["title": "Choose the colours of the site", "options": ["Dark", "Orange", "Blue"], "multi": true]),
+                Self.need(59, ["title": "Name the new page"])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            store.destination = .needs
+            store.selectedNeed = 58
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            guard try ViewHost.middle(of: "Orange", in: window) != nil else {
+                throw ViewHost.Missing(description: "the step's options are not drawn")
+            }
+            // keys 1 and 3 tick two options, and Return sends them
+            let keys: [(String, UInt16)] = [("1", 18), ("3", 20), ("\r", 36)]
+            ViewHost.atOnce(keys.flatMap { character, code in
+                [NSEvent.EventType.keyDown, .keyUp].compactMap { type in
+                    NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+                                     timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                     context: nil, characters: character, charactersIgnoringModifiers: character,
+                                     isARepeat: false, keyCode: code)
+                }
+            })
+            ViewHost.turn(5) { holds.held[58] != nil }
+            ViewHost.turn(0.5)
+            let ticked = Self.reads("answer-badge", in: window).label
+            let tickedCheck = holds.held[58].map { AnswerBadge.Look($0.shown).check }
+            // his own words on the next request
+            store.selectedNeed = 59
+            guard let field = try ViewHost.middle(of: String(l10n: "Your answer"), in: window) else {
+                throw ViewHost.Missing(description: "the box of the next request is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.click(field, in: window))
+            ViewHost.turn(1) { ViewHost.fieldWords(in: window) != nil }
+            ViewHost.atOnce(ViewHost.keys("hello\r", in: window))
+            ViewHost.turn(5) { holds.held[59] != nil }
+            ViewHost.turn(0.5)
+            let written = Self.reads("answer-badge", in: window).label
+            let writtenCheck = holds.held[59].map { AnswerBadge.Look($0.shown).check }
+            // nothing stays held after the test
+            if let need = store.state?.needs.first(where: { $0.id == 59 }) { holds.undo(need, store: store) }
+            return (ticked, tickedCheck, written, writtenCheck)
+        }
+        #expect(seen.ticked == "Choose the colours of the site, answered: Dark; Blue" && seen.tickedCheck == true,
+                "the ticked options, joined with \"; \", with a check")
+        #expect(seen.written == "Name the new page, answered: hello" && seen.writtenCheck == false,
+                "his own words, with no check")
         #expect(screen.stayedHis)
     }
 
@@ -144,6 +344,7 @@ import Testing
             let holds = AnswerHolds.shared
             defer { holds.wait = .seconds(5) }
             let store = try Self.store(on: hub, reading)
+            defer { Self.leaveNothingHeld(store) }
             store.destination = .needs
             store.selectedNeed = 56
             let window = ViewHost.window(store)
@@ -176,6 +377,11 @@ import Testing
             store.discardRefused()
             Task { await store.refresh() }
             ViewHost.turn(10) { !posts().isEmpty }
+            // the store has ended its send (the stand-in hub refuses it): the window's end removes the outbox after
+            // the refusal is saved there, and no later test reads it; a send that does not end fails this test
+            guard ViewHost.turn(10, until: { !store.sending }) else {
+                throw ViewHost.Missing(description: "the store's send did not end in 10 s")
+            }
             return (blocked, held, before, posts().first?.body.contains(#""choices":[0,2]"#) == true)
         }
         #expect(seen.held, "keys 1, 3 and Return hold the two ticked options")
@@ -185,15 +391,19 @@ import Testing
         #expect(screen.stayedHis)
     }
 
-    /// His words go into the box, Return holds them, and Undo puts them back in the box, with nothing sent.
+    /// His words go into the box, Return holds them, and the badge's Undo puts them back in the box, with nothing sent.
     @Test func undoPutsHisWordsBackInTheBox() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (box: String, sent: Bool) in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
             let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(52)]))
             defer { hub.stop() }
             let holds = AnswerHolds.shared
             holds.wait = .seconds(60)
             defer { holds.wait = .seconds(5) }
             let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
             store.destination = .agent("manager")
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }
@@ -204,10 +414,12 @@ import Testing
             ViewHost.turn(1) { ViewHost.fieldWords(in: window) != nil }
             ViewHost.atOnce(ViewHost.keys("hello\r", in: window))
             ViewHost.turn(5) { holds.held[52] != nil }
-            guard let undo = try ViewHost.middle(of: String(l10n: "Undo"), in: window) else {
-                throw ViewHost.Missing(description: "the folded card has no Undo")
+            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            ViewHost.turn(0.5)
+            guard let badge = Self.badge(in: window) else {
+                throw ViewHost.Missing(description: "the page has no badge of the held answer")
             }
-            ViewHost.atOnce(ViewHost.click(undo, in: window))
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
             // the card opens (its own replies stand again, which only the open card has), with his words in its box
             let shows = try ViewHost.middle(of: String(l10n: "Tell me more"), in: window, seconds: 5) != nil
             let need = try #require(store.state?.needs.first)
@@ -229,12 +441,16 @@ import Testing
     /// answer.
     @Test func aReplyHePressesNeverStandsInHisBox() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Reply in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
             let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(53)]))
             defer { hub.stop() }
             let holds = AnswerHolds.shared
             holds.wait = .seconds(60)
             defer { holds.wait = .seconds(5) }
             let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
             store.destination = .agent("manager")
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }
@@ -247,10 +463,12 @@ import Testing
             ViewHost.atOnce(ViewHost.click(done, in: window))
             ViewHost.turn(5) { holds.held[53] != nil }
             seen.boxWhileHeld = store.answers["53"]
-            guard let undo = try ViewHost.middle(of: String(l10n: "Undo"), in: window) else {
-                throw ViewHost.Missing(description: "the folded card has no Undo")
+            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            ViewHost.turn(0.5)
+            guard let badge = Self.badge(in: window) else {
+                throw ViewHost.Missing(description: "the held reply has no badge")
             }
-            ViewHost.atOnce(ViewHost.click(undo, in: window))
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
             seen.sentBeforeUndo = !posts().isEmpty
             ViewHost.turn(5) { holds.held[53] == nil }
             seen.boxAfterUndo = store.answers["53"]
@@ -317,6 +535,7 @@ import Testing
             AppDefaults.store.set(try JSONEncoder().encode([FleetStore.stageKey(need: 55): [waiting]]),
                                   forKey: "stagedFiles")
             let store = FleetStore()
+            try Self.noneLeft(store)
             Task { await store.refresh() }
             ViewHost.turn(10) { store.canWrite }
             store.destination = .agent("manager")
@@ -335,26 +554,416 @@ import Testing
         #expect(screen.stayedHis)
     }
 
-    /// A quit sends what waits: the app ends once the held answer went, and at once when nothing waits.
+    /// **A quit sends what waits, and after two answers nothing stays unsent**: his second answer sends the first at
+    /// once, so one answer waits (one held answer for the whole app); the app ends once that one went, and at once when
+    /// nothing waits. Bug: two held answers, and the one outbox request takes only the first at the quit.
     @Test func aQuitSendsTheAnswerThatWaits() async throws {
-        @MainActor final class Flags { var went = false, replied = false }
-        let (seen, _) = try await ViewHost.onMainLoop { () -> (now: Bool, later: Bool, went: Bool, replied: Bool) in
-            let store = ViewHost.store(try ViewHost.reading(needs: [Self.need(53, ["options": ["Friday", "Monday"]])],
+        @MainActor final class Flags { var first = false, went = false, replied = false }
+        let (seen, _) = try await ViewHost.onMainLoop { () -> (now: Bool, first: Bool, one: Bool, later: Bool, went: Bool, replied: Bool) in
+            let store = ViewHost.store(try ViewHost.reading(needs: [Self.need(53, ["options": ["Friday", "Monday"]]),
+                                                                    Self.need(57, ["options": ["Dark", "Orange"]])],
                                                             features: []))
-            let need = try #require(store.state?.needs.first)
+            try Self.noneLeft(store)
+            let needs = try #require(store.state?.needs)
             let holds = AnswerHolds()
             holds.wait = .seconds(60)
             let flags = Flags()
             let now = FleetAppDelegate.ends(after: holds) { flags.replied = true } == .terminateNow
-            let shown = PendingRequest(hub: store.hub, database: store.state?.db ?? "", client: store.installation,
-                                       needID: 53, choice: 1, text: "Monday")
-            holds.hold(need, store: store, shown: shown) { flags.went = true }
+            let shown = { (need: Int, text: String) in
+                PendingRequest(hub: store.hub, database: store.state?.db ?? "", client: store.installation,
+                               needID: need, choice: 1, text: text)
+            }
+            holds.hold(needs[0], store: store, shown: shown(53, "Monday")) { flags.first = true }
+            holds.hold(needs[1], store: store, shown: shown(57, "Orange")) { flags.went = true }
+            ViewHost.turn(5) { flags.first }
+            let one = flags.first && !flags.went && Set(holds.held.keys) == [57]
             let later = FleetAppDelegate.ends(after: holds) { flags.replied = true } == .terminateLater
             ViewHost.turn(5) { flags.replied }
-            return (now, later, flags.went, flags.replied)
+            return (now, flags.first, one, later, flags.went, flags.replied)
         }
         #expect(seen.now, "nothing waits: the app ends at once")
+        #expect(seen.first && seen.one, "his second answer sent the first at once, and only the second waits")
         #expect(seen.later && seen.went && seen.replied, "the held answer goes, and then the app ends")
+    }
+
+    /// **His next answer sends the one before it at once** (one held answer for the whole app; F12): on Needs you he
+    /// answers one request and then the next inside the wait; the stand-in hub has the first answer long before the wait
+    /// of the second ends, only the second is held, and the badge says the second. Bug: two held answers, and a quit
+    /// sends only one.
+    @Test func aSecondAnswerSendsTheFirstAtOnce() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (first: Bool, held: Bool, second: Bool, badge: String?) in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [
+                Self.need(66, ["options": ["Friday", "Monday"]]),
+                Self.need(67, ["title": "Choose the colour of the site", "options": ["Dark", "Orange"]])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            store.destination = .needs
+            store.selectedNeed = 66
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            let posts = { (id: Int) in hub.requests.filter { $0.method == "POST" && $0.path == "/ui/needs/\(id)" } }
+            guard try ViewHost.middle(of: "Monday", in: window) != nil else {
+                throw ViewHost.Missing(description: "the option Monday of the first request is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.keys("2\r", in: window))
+            ViewHost.turn(5) { holds.held[66] != nil }
+            store.selectedNeed = 67
+            guard try ViewHost.middle(of: "Orange", in: window) != nil else {
+                throw ViewHost.Missing(description: "the option Orange of the second request is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.keys("2\r", in: window))
+            // the stand-in hub is read again, as the app reads its hub: the store writes within 12 s of an answer
+            Task { await store.refresh() }
+            ViewHost.turn(5) { holds.held[67] != nil }
+            // far inside the second wait (60 s): the first answer reached the hub
+            let first = ViewHost.turn(5) { !posts(66).isEmpty }
+            let held = Set(holds.held.keys) == [67]
+            let second = !posts(67).isEmpty
+            ViewHost.turn(0.5)
+            let badge = Self.reads("answer-badge", in: window).label
+            // nothing stays held after the test
+            if let need = store.state?.needs.first(where: { $0.id == 67 }) { holds.undo(need, store: store) }
+            // the store has ended the first answer's send (the stand-in hub refuses it): the window's end removes the
+            // outbox after the refusal is saved there; a send that does not end fails this test
+            guard ViewHost.turn(10, until: { !store.sending }) else {
+                throw ViewHost.Missing(description: "the store's send did not end in 10 s")
+            }
+            return (first, held, second, badge)
+        }
+        #expect(seen.first, "the first answer went at once when he gave the second")
+        #expect(seen.held && !seen.second, "only the second answer waits, and nothing of it reached the hub")
+        #expect(seen.badge == "Choose the colour of the site, answered: Orange", "the badge says the second answer")
+        #expect(screen.stayedHis)
+    }
+
+    struct Sidebar: Sendable {
+        let kept: Bool
+        let inSidebar: Bool
+        let windowClosed: Bool
+        let back: Bool
+        let sentBeforeClose: Bool
+        let closed: Bool
+    }
+
+    /// **A held answer keeps its 5 seconds on every page, its badge stands at the foot of the sidebar, and its Undo
+    /// brings the card back** (the owner's F22-1 (a), 23 November 2026, as Apple Mail's Undo Send): he answers on Needs
+    /// you and opens Tasks inside the wait; the answer still waits, nothing reached the hub, and the badge stands in the
+    /// sidebar; the request's own window, opened and closed meanwhile, leaves it as it is; its Undo opens Needs you
+    /// with the request at hand and its options. **The close of the main window still sends a held answer at once.**
+    /// Bugs: a page change that sends the answer, the close of the request's own window that sends the answer held on
+    /// the page, or an Undo that changes nothing on the screen.
+    @Test func aPageChangeKeepsTheHeldAnswerAndItsUndoBringsTheCardBack() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Sidebar in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(57, ["options": ["Friday", "Monday"]])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            store.destination = .needs
+            store.selectedNeed = 57
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            let posts = { hub.requests.filter { $0.method == "POST" && $0.path == "/ui/needs/57" } }
+            guard try ViewHost.middle(of: "Monday", in: window) != nil else {
+                throw ViewHost.Missing(description: "the option Monday is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.keys("2\r", in: window))
+            ViewHost.turn(5) { holds.held[57] != nil }
+            // he opens Tasks inside the wait (60 s)
+            store.destination = .activity
+            ViewHost.turn(2)
+            let kept = holds.held[57] != nil && posts().isEmpty
+            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            guard let badge = Self.badge(in: window) else {
+                throw ViewHost.Missing(description: "no badge of the held answer on Tasks")
+            }
+            // the sidebar is the window's first 320 points (`FleetStyle.sidebarWidth`)
+            let inSidebar = badge.frame.minX >= 0 && badge.frame.maxX <= FleetStyle.sidebarWidth
+            // he opens the request's own window and closes it: the answer held on the page still waits, with its badge
+            NeedWindows.room = NSRect(x: -40000, y: -40000, width: 1440, height: 900)
+            defer { NeedWindows.room = nil }
+            defer { NSApp.windows.first { $0.identifier?.rawValue == "need-window-57" }?.close() }
+            let need = try #require(store.state?.needs.first { $0.id == 57 })
+            NeedWindows.open(store: store, need: need)
+            let opened = ViewHost.turn(5) { NeedWindows.window(of: 57)?.isVisible == true }
+            Task { await store.refresh() }
+            NeedWindows.window(of: 57)?.close()
+            ViewHost.turn(2) { !posts().isEmpty }
+            let windowClosed = opened && NeedWindows.window(of: 57) == nil && holds.held[57] != nil && posts().isEmpty
+                && Self.badge(in: window) != nil
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
+            ViewHost.turn(5) { holds.held[57] == nil && store.destination == .needs }
+            let friday = try ViewHost.middle(of: "Friday", in: window, seconds: 5)
+            let back = holds.held[57] == nil && store.destination == .needs && store.selectedNeed == 57 && friday != nil
+            // he answers again, and the main window closes inside the wait
+            guard let monday = try ViewHost.middle(of: "Monday", in: window) else {
+                throw ViewHost.Missing(description: "the option Monday is not drawn again")
+            }
+            ViewHost.atOnce(ViewHost.click(monday, in: window))
+            guard ViewHost.turn(5, until: { holds.held[57] != nil }) else {
+                throw ViewHost.Missing(description: "the second answer is not held")
+            }
+            let sentBeforeClose = !posts().isEmpty
+            // the stand-in hub is read again, as the app reads its hub: the store writes within 12 s of an answer
+            Task { await store.refresh() }
+            window.close()
+            let closed = ViewHost.turn(5) { posts().count == 1 } && holds.held[57] == nil
+            // the store has ended its send (the stand-in hub refuses it): the window's end removes the outbox after
+            // the refusal is saved there, and no later test reads it; a send that does not end fails this test
+            guard ViewHost.turn(10, until: { !store.sending }) else {
+                throw ViewHost.Missing(description: "the store's send did not end in 10 s")
+            }
+            return Sidebar(kept: kept, inSidebar: inSidebar, windowClosed: windowClosed, back: back,
+                           sentBeforeClose: sentBeforeClose, closed: closed)
+        }
+        #expect(seen.kept, "the answer still waits on Tasks, and nothing reached the hub")
+        #expect(seen.inSidebar, "its badge stands in the sidebar")
+        #expect(seen.windowClosed, "the close of the request's own window sends nothing, and the badge stays")
+        #expect(seen.back, "the badge's Undo opens Needs you with the request at hand and its options")
+        #expect(!seen.sentBeforeClose && seen.closed, "the close of the main window sends the held answer at once")
+        #expect(screen.stayedHis)
+    }
+
+    /// **The badge's Undo of an answer given in a chat opens that chat with its card** (F22-1 (a)): he answers on a card
+    /// in the manager's chat and opens Needs you; the badge's Undo takes him back to that chat, where the card stands
+    /// open with its options, and nothing reached the hub. Bug: an Undo whose card stays out of his sight.
+    @Test func undoOfAChatAnswerFromAnotherPageOpensItsChat() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (held: Bool, chat: Bool, open: Bool, sent: Bool) in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(68, ["options": ["Friday", "Monday"]])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            store.destination = .agent("manager")
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            guard let monday = try ViewHost.middle(of: "Monday", in: window) else {
+                throw ViewHost.Missing(description: "the card's option Monday is not drawn")
+            }
+            ViewHost.atOnce(ViewHost.click(monday, in: window))
+            let held = ViewHost.turn(5) { holds.held[68] != nil }
+            store.destination = .needs
+            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            ViewHost.turn(0.5)
+            guard let badge = Self.badge(in: window) else {
+                throw ViewHost.Missing(description: "no badge of the held answer on Needs you")
+            }
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
+            let chat = ViewHost.turn(5) { store.destination == .agent("manager") && holds.held[68] == nil }
+            let open = try ViewHost.middle(of: "Friday", in: window, seconds: 5) != nil
+            return (held, chat, open, hub.requests.contains { $0.method == "POST" })
+        }
+        #expect(seen.held, "the press in the chat waits")
+        #expect(seen.chat, "the badge's Undo opens the manager's chat")
+        #expect(seen.open && !seen.sent, "its card stands open with its options, and nothing reached the hub")
+        #expect(screen.stayedHis)
+    }
+
+    struct WindowBadge: Sendable {
+        let held: Bool
+        let small: Bool
+        let sentEarly: Bool
+        let back: Bool
+        let inSight: Bool
+        /// The card's frame after Undo, and the room's: the failure says them.
+        let place: String
+        let onScreen: Bool
+        /// The seconds until its options are drawn after Undo, or nil.
+        let options: Double?
+        let keys: Bool
+        let goneBeforeHub: Bool
+        let refused: Bool
+        let noCapsule: Bool
+    }
+
+    /// **The card's own window becomes the badge of his answer, and its Undo gives the card back** (the owner's F22-2
+    /// (a), 23 November 2026: "close immediately ... a small floating badge"): a press in the card's window makes it,
+    /// inside one second, a window one line high with the badge and its Undo, the card out of sight, and nothing
+    /// reaches the hub; Undo gives back the card in sight and on the screen with its options, also after he dragged the
+    /// badge to a corner, and so does Edit › Undo (⌘Z) in the badge's window; when the wait of an answer that he does
+    /// not take back ends, the badge goes, and the window with it, before the hub has the answer (the picture of his
+    /// F22-2 (a): the badge goes after 5 seconds); the hub refuses it, and the request stays open with the refusal,
+    /// which the main window shows under its page. Bugs: a card's window that stands whole until the hub has the
+    /// answer; a card that comes back out of sight or off the screen; a badge whose Undo needs the mouse; a badge that
+    /// stays after its wait, over every app, with an Undo that does nothing.
+    @Test func theCardsWindowBecomesTheBadgeAndItsUndoGivesTheCardBack() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 120) { () -> WindowBadge in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [Self.need(69, ["options": ["Friday", "Monday"]])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            // no main window here, whose end removes it (`ViewHost.close`): the refused answer in the outbox, which the
+            // next test's store would read as its own unsent request, and write nothing
+            defer { try? FileManager.default.removeItem(at: AppFolders.support.appendingPathComponent("Founderizer")) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            // the card's window opens in a room off every screen, never on his screen
+            let room = NSRect(x: -40000, y: -40000, width: 1440, height: 900)
+            NeedWindows.room = room
+            defer { NeedWindows.room = nil }
+            let need = try #require(store.state?.needs.first { $0.id == 69 })
+            NeedWindows.open(store: store, need: need)
+            defer { NSApp.windows.first { $0.identifier?.rawValue == "need-window-69" }?.close() }
+            let posts = { hub.requests.filter { $0.method == "POST" && $0.path == "/ui/needs/69" } }
+            ViewHost.turn(5) { NeedWindows.window(of: 69)?.isVisible == true }
+            guard let card = NeedWindows.window(of: 69), let monday = try ViewHost.middle(of: "Monday", in: card) else {
+                throw ViewHost.Missing(description: "the card's window has no option Monday")
+            }
+            ViewHost.atOnce(ViewHost.click(monday, in: card))
+            let held = ViewHost.turn(5) { holds.held[69] != nil }
+            // inside one second the window is the badge: one line high, with its Undo, and the card is out of sight
+            ViewHost.turn(1) { (NeedWindows.window(of: 69)?.frame.height ?? .infinity) < 60 }
+            ViewHost.turn(0.4)
+            guard let small = NeedWindows.window(of: 69), let badge = Self.badge(in: small) else {
+                throw ViewHost.Missing(description: "the card's window did not become the badge")
+            }
+            let oneLine = small.frame.height < 60 && small !== card && small.isVisible && !card.isVisible
+            let sentEarly = !posts().isEmpty
+            // he drags the badge to the bottom-left corner, and its Undo: the card comes back in sight and inside the
+            // screen's room, with its options
+            small.setFrameOrigin(NSPoint(x: room.minX + 8, y: room.minY + 8))
+            ViewHost.atOnce(ViewHost.click(badge.undo, in: small))
+            ViewHost.turn(5) { holds.held[69] == nil && (NeedWindows.window(of: 69)?.frame.height ?? 0) > 200 }
+            ViewHost.turn(0.5)
+            guard let again = NeedWindows.window(of: 69) else {
+                throw ViewHost.Missing(description: "no card's window after Undo")
+            }
+            let back = holds.held[69] == nil && again === card && again.frame.height > 200
+            let inSight = again.isVisible
+            let place = "card \(again.frame), room \(room)"
+            let onScreen = room.insetBy(dx: -1, dy: -1).contains(again.frame)
+            let undone = Date()
+            let options = try ViewHost.middle(of: "Friday", in: again, seconds: 20)
+                .map { _ in -undone.timeIntervalSinceNow }
+            // he answers again, and Edit › Undo (⌘Z) in the badge's window takes it back, with no mouse
+            guard let mondayKeys = try ViewHost.middle(of: "Monday", in: again) else {
+                throw ViewHost.Missing(description: "the card did not come back with Monday")
+            }
+            ViewHost.atOnce(ViewHost.click(mondayKeys, in: again))
+            ViewHost.turn(5) { holds.held[69] != nil && NeedWindows.window(of: 69) !== card }
+            ViewHost.turn(0.4)
+            let keyed = NeedWindows.window(of: 69)
+            if let keyed, keyed !== card {
+                _ = (keyed.firstResponder ?? keyed).tryToPerform(Selector(("undo:")), with: nil)
+            }
+            let undoneByKeys = ViewHost.turn(5) { holds.held[69] == nil && card.isVisible && card.frame.height > 200 }
+            let keys = keyed != nil && keyed !== card && undoneByKeys
+            ViewHost.turn(0.5)
+            // a press that he does not take back: when its wait ends the badge goes, and the window with it, while the
+            // hub has not answered (it holds its answer until the test has read the window, and then refuses it); the
+            // request stays open, with the refusal
+            let read = DispatchSemaphore(value: 0)
+            defer { read.signal() }             // a test that stops halfway leaves no answer held
+            hub.answer("POST", "/ui/needs/69") { _ in
+                _ = read.wait(timeout: .now() + 20)
+                return (404, Data(#"{"error":"not here"}"#.utf8))
+            }
+            holds.wait = .milliseconds(800)
+            guard let mondayAgain = try ViewHost.middle(of: "Monday", in: again) else {
+                throw ViewHost.Missing(description: "the card did not come back with Monday")
+            }
+            ViewHost.atOnce(ViewHost.click(mondayAgain, in: again))
+            // the stand-in hub is read again, as the app reads its hub: the store writes within 12 s of an answer
+            Task { await store.refresh() }
+            let gone = ViewHost.turn(10) { !posts().isEmpty && NeedWindows.window(of: 69) == nil }
+            let goneBeforeHub = gone && store.sending && store.pending?.refusal == nil
+            read.signal()
+            let refused = ViewHost.turn(10) { store.pending?.refusal != nil && !store.sending }
+                && store.openNeeds.contains { $0.id == 69 }
+            let noCapsule = !NSApp.windows.contains {
+                $0.identifier?.rawValue.hasPrefix("need-window") == true && $0.isVisible
+            }
+            return WindowBadge(held: held, small: oneLine, sentEarly: sentEarly, back: back, inSight: inSight,
+                               place: place, onScreen: onScreen, options: options, keys: keys,
+                               goneBeforeHub: goneBeforeHub, refused: refused, noCapsule: noCapsule)
+        }
+        #expect(seen.held && seen.small, "a press in the card's window makes the window the badge, one line high")
+        #expect(!seen.sentEarly, "nothing reached the hub during the wait")
+        #expect(seen.back, "the badge's Undo gives back the card, whole")
+        #expect(seen.inSight, "in sight")
+        #expect(seen.onScreen, "inside the screen, after he dragged the badge to its corner: \(seen.place)")
+        #expect((seen.options ?? .infinity) < 5, "with its options, inside 5 seconds")
+        #expect(seen.keys, "Edit › Undo (⌘Z) in the badge's window gives back the card")
+        #expect(seen.goneBeforeHub, "when the wait ends the badge goes, with the window, before the hub has the answer")
+        #expect(seen.refused, "a refused answer leaves the request open, with the refusal")
+        #expect(seen.noCapsule, "and no badge with an Undo stays")
+        #expect(screen.stayedHis)
+    }
+
+    /// **The option that opens Add device goes at once and is not held** (F12, A1): the first option of an item for his
+    /// phone reaches the hub at once and opens Settings › Servers in the frame of his press. Bug: the app changes the page
+    /// by itself 5 seconds after the card completed.
+    @Test func theOptionThatOpensAddDeviceGoesAtOnce() async throws {
+        let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (held: Bool, sent: Bool, page: Bool) in
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            let hub = try LoopbackHub(state: Self.reading(needs: [
+                Self.need(60, ["title": "Add the new phone", "options": ["Add it", "Not now"], "add_device": 1])]))
+            defer { hub.stop() }
+            let holds = AnswerHolds.shared
+            holds.wait = .seconds(60)
+            defer { holds.wait = .seconds(5) }
+            let store = try Self.store(on: hub, Self.reading(needs: []))
+            defer { Self.leaveNothingHeld(store) }
+            store.destination = .needs
+            store.selectedNeed = 60
+            let window = ViewHost.window(store)
+            defer { ViewHost.close(window) }
+            // the option takes a click where it is drawn, and the store can write (the stand-in hub's reading came)
+            var reach = Reach(why: "not read")
+            guard ViewHost.turn(20, until: {
+                reach = Self.reachable("Add it", option: "need-option-60-0", in: window)
+                return reach.point != nil && store.canWrite
+            }) else {
+                throw ViewHost.Missing(description: "Add it takes no press: \(reach.why), writes \(store.canWrite)")
+            }
+            // key 1 marks the first option, and Return presses it
+            let keys: [(String, UInt16)] = [("1", 18), ("\r", 36)]
+            ViewHost.atOnce(keys.flatMap { character, code in
+                [NSEvent.EventType.keyDown, .keyUp].compactMap { type in
+                    NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [],
+                                     timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                     context: nil, characters: character, charactersIgnoringModifiers: character,
+                                     isARepeat: false, keyCode: code)
+                }
+            })
+            let held = holds.held[60] != nil
+            // the stand-in hub is read again, as the app reads its hub: the store writes within 12 s of an answer
+            Task { await store.refresh() }
+            // the test's hold is 60 s: a send inside 20 s went with no hold
+            let sent = ViewHost.turn(20) { hub.requests.contains { $0.method == "POST" && $0.path == "/ui/needs/60" } }
+            // the store has ended its send (the stand-in hub refuses it): the window's end removes the outbox after
+            // the refusal is saved there, and no later test reads it; a send that does not end fails this test
+            guard ViewHost.turn(10, until: { !store.sending }) else {
+                throw ViewHost.Missing(description: "the store's send did not end in 10 s")
+            }
+            return (held || holds.held[60] != nil, sent, store.destination == .settings(.servers))
+        }
+        #expect(!seen.held, "the press is not held")
+        #expect(seen.sent && seen.page, "it reaches the hub at once, and Settings › Servers opens")
+        #expect(screen.stayedHis)
     }
 
     struct Pauses: Sendable {
@@ -423,24 +1032,111 @@ import Testing
         #expect(screen.stayedHis)
     }
 
-    /// The VoiceOver actions of the element with this identifier in the window, by the accessibility tree: SwiftUI
-    /// makes its elements once the app says that an assistive app reads it (`JobCardPressTests`).
-    @MainActor private static func customActions(_ identifier: String, in window: NSWindow) -> [NSAccessibilityCustomAction] {
+    /// The element with this identifier in the window, by the accessibility tree: SwiftUI makes its elements once the
+    /// app says that an assistive app reads it (`JobCardPressTests`).
+    @MainActor private static func element(_ identifier: String, in window: NSWindow) -> NSObject? {
         var queue: [NSObject] = window.contentView.map { [$0] } ?? []
         while !queue.isEmpty {
             let object = queue.removeFirst()
             if object.responds(to: NSSelectorFromString("accessibilityIdentifier")),
                object.perform(NSSelectorFromString("accessibilityIdentifier"))?.takeUnretainedValue() as? String == identifier {
-                guard object.responds(to: NSSelectorFromString("accessibilityCustomActions")) else { return [] }
-                return object.perform(NSSelectorFromString("accessibilityCustomActions"))?.takeUnretainedValue()
-                    as? [NSAccessibilityCustomAction] ?? []
+                return object
             }
             if object.responds(to: NSSelectorFromString("accessibilityChildren")),
                let kids = object.perform(NSSelectorFromString("accessibilityChildren"))?.takeUnretainedValue() as? [Any] {
                 queue += kids.compactMap { $0 as? NSObject }
             }
         }
-        return []
+        return nil
+    }
+
+    /// The VoiceOver actions of the element with this identifier in the window.
+    @MainActor private static func customActions(_ identifier: String, in window: NSWindow) -> [NSAccessibilityCustomAction] {
+        guard let object = element(identifier, in: window),
+              object.responds(to: NSSelectorFromString("accessibilityCustomActions")) else { return [] }
+        return object.perform(NSSelectorFromString("accessibilityCustomActions"))?.takeUnretainedValue()
+            as? [NSAccessibilityCustomAction] ?? []
+    }
+
+    /// What VoiceOver reads of the element with this identifier: its label and its value. By the selectors, as
+    /// `customActions`: SwiftUI's elements answer them, and a cast to the protocol finds none.
+    @MainActor private static func reads(_ identifier: String, in window: NSWindow) -> (label: String?, value: String?) {
+        guard let object = element(identifier, in: window) else { return (nil, nil) }
+        func read(_ name: String) -> String? {
+            guard object.responds(to: NSSelectorFromString(name)) else { return nil }
+            return object.perform(NSSelectorFromString(name))?.takeUnretainedValue() as? String
+        }
+        return (read("accessibilityLabel"), read("accessibilityValue"))
+    }
+
+    /// **The badge of the held answer** (`AnswerBadge`): its frame in the window's points, by the accessibility tree,
+    /// and the middle of its Undo, 26 points in from its trailing edge (12 of the capsule's room and half of the word):
+    /// a click on the badge's own frame, not on words that the text reader finds in a line with a mark (`ViewHost`).
+    @MainActor private static func badge(in window: NSWindow) -> (frame: NSRect, undo: NSPoint)? {
+        guard let object = element("answer-badge", in: window),
+              object.responds(to: NSSelectorFromString("accessibilityFrame")),
+              let screen = (object.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue else { return nil }
+        let frame = window.convertFromScreen(screen)
+        guard frame.width > 0 else { return nil }
+        return (frame, NSPoint(x: frame.maxX - 26, y: frame.midY))
+    }
+
+    /// **The point where a click reaches this option now**: the middle of its words where the window draws them
+    /// (`ViewHost.middle`), inside the option's own frame by the accessibility tree, while the option is enabled; else
+    /// nil, and what is missing, for the failure's words. In a motion of the page the drawing and the frame that takes
+    /// the click are not at the same place, so a test that clicks where it reads waits for the two to agree; the same
+    /// words drawn elsewhere (a badge, a line of a request that was not sent) are not the option's.
+    @MainActor private static func reachable(_ words: String, option identifier: String, in window: NSWindow) -> Reach {
+        guard let object = element(identifier, in: window) else { return Reach(why: "no element \(identifier)") }
+        guard object.responds(to: NSSelectorFromString("accessibilityFrame")),
+              let screen = (object.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue else {
+            return Reach(why: "no frame of \(identifier)")
+        }
+        let enabled = object.responds(to: NSSelectorFromString("isAccessibilityEnabled"))
+            ? (object.value(forKey: "accessibilityEnabled") as? Bool ?? true) : true
+        let frame = window.convertFromScreen(screen)
+        guard enabled else { return Reach(frame: frame, why: "\(identifier) not enabled") }
+        guard let point = try? ViewHost.middle(of: words, in: window, seconds: 0) else {
+            return Reach(frame: frame, why: "\(words) not drawn; its frame \(frame)")
+        }
+        guard frame.insetBy(dx: -2, dy: -2).contains(point) else {
+            return Reach(frame: frame, why: "\(words) drawn at \(point), its frame \(frame)")
+        }
+        return Reach(point: point, frame: frame, why: "\(point) in its frame \(frame)")
+    }
+
+    /// What `reachable` read: the point of a click, or what is missing.
+    struct Reach {
+        var point: NSPoint?
+        var frame: NSRect?
+        var why: String
+        /// The same point and frame as `other`: the page stands still under the option.
+        func settled(after other: Reach) -> Bool {
+            guard let point, let frame, let before = other.point, let then = other.frame else { return false }
+            return abs(point.x - before.x) < 1 && abs(point.y - before.y) < 1 && frame.equalTo(then)
+        }
+    }
+
+    /// **Each place where the window draws these words**, by the Mac's text recognition, as `ViewHost.middle` finds the
+    /// first: a test that says that words stand only in one place reads them all.
+    @MainActor private static func everywhere(_ words: String, in window: NSWindow) throws -> [NSPoint] {
+        guard let view = window.contentView else { return [] }
+        view.layoutSubtreeIfNeeded()
+        view.display()
+        guard let picture = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return [] }
+        view.cacheDisplay(in: view.bounds, to: picture)
+        guard let image = picture.cgImage else { return [] }
+        let reading = VNRecognizeTextRequest()
+        reading.recognitionLevel = .accurate
+        reading.recognitionLanguages = ["en-US"]
+        reading.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: image).perform([reading])
+        return (reading.results ?? []).compactMap { line in
+            guard let text = line.topCandidates(1).first,
+                  let range = text.string.range(of: words, options: [.caseInsensitive, .diacriticInsensitive]),
+                  let box = try? text.boundingBox(for: range)?.boundingBox else { return nil }
+            return NSPoint(x: box.midX * view.bounds.width, y: box.midY * view.bounds.height)
+        }
     }
 
     @MainActor private static func actions(_ identifier: String, in window: NSWindow) -> [String] {

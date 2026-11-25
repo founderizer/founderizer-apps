@@ -87,10 +87,10 @@ struct NeedsBoard: View {
         let needs = state?.needs ?? []
         let now = state?.time ?? Date().timeIntervalSince1970
         let onWay = Dictionary(needs.compactMap { need in onItsWay(need).map { (need.id, $0) } }) { first, _ in first }
-        // A request whose answer settles is still in the lane, at hand, until its moment ends (`hold`).
-        // An answer that waits with Undo keeps its request at hand for its 5 seconds (his "Yes, Undo there too")
-        let waiting = Set(needs.filter { AnswerHolds.shared.held($0, in: store) != nil }.map(\.id))
-        let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys).union(waiting),
+        // A request whose answer settles is still in the lane, at hand, until its moment ends (`hold`). **An answer that
+        // waits with Undo leaves as an answer on its way does** (`onItsWay`; the owner's F12, 22 November 2026): its
+        // Undo is the badge's at the bottom of the page (`AnswerBadge`).
+        let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys),
                              now: now)
         let open = lane.open.map(\.id)
         // The request at hand, by the one rule of this pass and of what `settle` writes back: the item that replaced the
@@ -153,6 +153,16 @@ struct NeedsBoard: View {
                 endedAtHand = need
             }
         }
+        // **His Undo** (the badge's, or Edit › Undo): the request is his again, and it comes to hand (the Undo chose it)
+        // with none of the marks of its leave (`AnswerHolds.undone`). The request that ended at hand gives its place
+        // only to an answer held here: an Undo in a card's own window or a chat leaves the page as it is.
+        .onChange(of: AnswerHolds.shared.undone) { _, undone in
+            guard let undone else { return }
+            settling.remove(undone.need)
+            took.remove(undone.need)
+            his.remove(undone.need)
+            if undone.place == .page(Destination.needs.page) { endedAtHand = nil }
+        }
         // Another hub, or another generation of this one: its requests have their own numbers, and nothing that the
         // page kept by a number is theirs.
         .onChange(of: "\(store.hub.absoluteString) \(state?.db ?? "")") { _, _ in
@@ -187,7 +197,7 @@ struct NeedsBoard: View {
 
     /// His answer to `need` on its way: an answer that waits with Undo (`AnswerHolds`), as the store says it
     /// (`WordsOnTheirWay`), else the one that the hub confirmed, on this hub and generation, while the reading still has
-    /// the request open. A held answer leaves the page as one on its way does, and its Undo is on its card in the chat.
+    /// the request open. A held answer leaves the page as one on its way does, and its Undo is the badge's.
     private func onItsWay(_ need: OwnerNeed) -> PendingRequest? {
         if let held = AnswerHolds.shared.held(need, in: store) { return held.shown }
         if let request = store.answerOnItsWay(to: need, kept: sent[need.id]) { return request }
@@ -231,13 +241,25 @@ struct NeedsBoard: View {
             // ended in another way.
             if !his.contains(chosen), let left = needs.first(where: { $0.id == end }), !left.isOpen, !left.asksForSecret {
                 endedAtHand = end
-            } else if let next, let title = needs.first(where: { $0.id == next })?.shownTitle {
-                // VoiceOver's focus was on what he pressed, which left: it hears what stands there now.
-                AccessibilityNotification.Announcement(title).post()
+            } else {
+                // VoiceOver's focus was on what he pressed, which left: it hears his answer that the app holds (the
+                // badge says it) and what stands there now, in one announcement.
+                let heard = [heldAnswer(chosen, in: needs), next.flatMap { id in needs.first { $0.id == id }?.shownTitle }]
+                    .compactMap { $0 }
+                if !heard.isEmpty { AccessibilityNotification.Announcement(heard.joined(separator: "\n")).post() }
             }
         }
         order = lane
         choose(next)
+    }
+
+    /// "Answered: <words>" of his answer to `id` that the app holds (`AnswerHolds`), as the badge says it; nil for none.
+    private func heldAnswer(_ id: Int, in needs: [OwnerNeed]) -> String? {
+        guard let need = needs.first(where: { $0.id == id }), let held = AnswerHolds.shared.held(need, in: store) else {
+            return nil
+        }
+        let words = held.shown.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return words.isEmpty ? String(l10n: "Answered") : String(l10n: "Answered: \(words)")
     }
 
     /// A click on a request's card puts it at hand.
@@ -864,7 +886,6 @@ private struct NeedStep: View {
                 NeedAnswered(store: store, need: need, names: names,
                              words: NeedRunAnswer.of(need, onItsWay: onItsWay)?.words ?? onItsWay?.text,
                              inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles,
-                             waits: AnswerHolds.shared.held(need, in: store) != nil,
                              symbol: NeedRunAnswer.of(need, onItsWay: onItsWay)?.symbol ?? "checkmark")
                     // His answer moves up from where he gave it, as the other answers go.
                     .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: answerTop)), removal: .opacity))
@@ -917,11 +938,9 @@ private struct NeedAnswered: View {
     let words: String?
     /// He answered in his own words: no check stands before them, and none draws itself.
     var inWords = false
-    /// He answered a moment ago, here: the check draws itself, white, and then goes quiet (`NeedsBoard.hold`).
+    /// He answered a moment ago, here: the check draws itself, white, and then goes quiet (`NeedsBoard.hold`). An answer
+    /// that the app holds draws it too: its Undo is the badge's (`AnswerBadge`; the owner's F12, 22 November 2026).
     var draws = false
-    /// **His answer waits 5 seconds, with Undo at the end of its line and no check** (`AnswerHolds`; his "Yes, Undo
-    /// there too", 21 November 2026): the request stays at hand meanwhile, then leaves as before.
-    var waits = false
     /// The mark before his answer: a check, or a cross for a command that he ran and that ended with another exit
     /// status than 0 (owner feature `need_run`).
     var symbol = "checkmark"
@@ -951,7 +970,7 @@ private struct NeedAnswered: View {
         let typed = HisAnswer.typed(need, answer, inWords: inWords)
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if !inWords && !waits { check }
+                if !inWords { check }
                 if answer.isEmpty {
                     Text("Answered").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text)
                 } else {
@@ -963,16 +982,6 @@ private struct NeedAnswered: View {
                         .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).tint(FleetStyle.link)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                         .cardBadges()
-                }
-                if waits {
-                    Spacer(minLength: 8)
-                    Button("Undo") {
-                        AnswerHolds.shared.undo(need, store: store)
-                        store.selectedNeed = need.id
-                    }
-                    .buttonStyle(.plain).font(SetupMetrics.textFont.weight(.medium)).foregroundStyle(FleetStyle.link)
-                    .pointerStyle(.link)
-                    .accessibilityIdentifier("need-undo-\(need.id)")
                 }
             }
             // the table's words, also for an answer of files alone, which says "Answered" once; his answer as the

@@ -21,8 +21,10 @@ enum FleetMotion {
     static let number = Animation.easeOut(duration: 0.25)
     /// "Latest": the chat to its end.
     static let latest = Animation.easeOut(duration: 0.25)
-    /// His own message, up from the composer.
+    /// His own message, up from the composer; and the badge of his held answer, up to its place (`AnswerBadge`).
     static let sent = Animation.easeOut(duration: 0.18)
+    /// The words of the badge of his held answer, which his next answer changes in place.
+    static let badgeWords = Animation.easeOut(duration: 0.15)
     /// The card over the page: its window's fade in and out, and the card's own growth to its size.
     static let cardIn = 0.15, cardOut = 0.12, cardGrows = Animation.easeOut(duration: 0.18)
     /// A menu's window: its fade in and out.
@@ -313,5 +315,13 @@ extension AnyTransition {
     /// 2026): an agent's reply fades in (`ReplyArrival`), and his own words stood there in one frame.
     static var sentMessage: AnyTransition {
         .asymmetric(insertion: .offset(y: 8).combined(with: .opacity).animation(FleetMotion.sent), removal: .identity)
+    }
+
+    /// **The badge of his held answer comes up 8 points and fades in over 0.18 s, as his own message does, and fades out
+    /// over 0.12 s, as the card over the page does** (`AnswerBadge`; the owner's "slightly animated nicely", 22 November
+    /// 2026).
+    static var answerBadge: AnyTransition {
+        .asymmetric(insertion: .offset(y: 8).combined(with: .opacity).animation(FleetMotion.sent),
+                    removal: .opacity.animation(.easeOut(duration: FleetMotion.cardOut)))
     }
 }

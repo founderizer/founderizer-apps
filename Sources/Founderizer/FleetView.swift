@@ -462,7 +462,13 @@ struct FleetView: View {
                 .padding(.top, 10)
             // **From where the rows' marks begin to where their counts end** (the margins of 30 October 2026, row 30):
             // it began 4 pt before the one and ended 4 pt after the other.
-            Rule().padding(.horizontal, 10).padding(.vertical, 8)
+            VStack(alignment: .leading, spacing: 0) {
+                Rule().padding(.horizontal, 10).padding(.vertical, 8)
+                // **The badge of his held answer**, on every page, under the line and over the Update banner and Settings
+                // (`AnswerBadge`; the owner's F22-1 (a), 23 November 2026, as Apple Mail's Undo Send). One element with the
+                // line, so that the sidebar's rows do not move while no answer waits.
+                AnswerBadge(store: store, width: CGFloat(sidebarWidth))
+            }
             // **Update** while a release of the fleet or a build of this Mac waits for his press, and while his press goes
             // on (`UpdateBanner`, `FleetStore.updateShows`): a click opens the window that asks (`UpdateDialog`), and it
             // leaves when the update is taken.
@@ -489,7 +495,7 @@ struct FleetView: View {
         // once, Needs you with them. With no kept reading, the agents' rows came at once and then slid down 34 pt while
         // Needs you faded in.
         .animation(listedAgents.isEmpty || reduceMotion ? nil : .easeOut(duration: 0.2),
-                   value: (store.state?.needsYouCount ?? 0) > 0)
+                   value: needsWaiting > 0)
         // **The selected row's fill moves to the row that he opens, over 0.18 s** (the owner's yes of 17 November 2026):
         // it stood on the new row in one frame. One fill for each group of rows, behind them (`selectionFill`).
         .animation(reduceMotion ? nil : FleetMotion.selection, value: selectedRow)
@@ -614,7 +620,7 @@ struct FleetView: View {
     /// **It stays while its page is open**, selected and with no count, after his last answer, and goes when he opens
     /// another page (fix round 2): the row went while the page stayed, and no row said where he was.
     @ViewBuilder private var needsRow: some View {
-        let waiting = store.state?.needsYouCount ?? 0
+        let waiting = needsWaiting
         let words = waiting == 0 ? String(l10n: "Nothing needs you") : waiting == 1 ? String(l10n: "1 item needs you") : String(l10n: "\(waiting) items need you")
         if waiting > 0 || store.destination == .needs {
             SidebarRow(String(l10n: "Needs you"), selected: store.destination == .needs) { store.destination = .needs } mark: {
@@ -625,6 +631,15 @@ struct FleetView: View {
             .accessibilityIdentifier("nav-needs")
             .accessibilityValue(words)
         }
+    }
+
+    /// **What needs him, less the requests whose answer he gave and the app holds or sends now** (`AnswerHolds`; F12, 22
+    /// November 2026): the request left Needs you at his press, so the row's count is one less from then, and back after
+    /// Undo. The hub's count goes down only once it has the answer.
+    private var needsWaiting: Int {
+        let holds = AnswerHolds.shared
+        let answering = store.openNeeds.filter { holds.held($0, in: store) != nil || holds.leaving($0, in: store) != nil }
+        return max(0, (store.state?.needsYouCount ?? 0) - answering.count)
     }
 
     /// **Tasks**, the board that was Activity (the iPhone's word for it), selected on its board (T-32), so every page has

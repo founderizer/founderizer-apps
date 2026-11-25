@@ -243,6 +243,10 @@ final class FleetStore {
         return model
     }
 
+    /// **The rules of Add server's press** (`AddServerEngine`), out of the page. One for the app's one store, made when
+    /// the link attaches the store, so that the build's stage reaches `setup_diagnosis` from then on.
+    @ObservationIgnored lazy var addServer = AddServerEngine(store: self)
+
     /// **A hub's install stays the install at the address it claimed** (the proof run of 5 November 2026). The claim
     /// moves this store to the new hub, where no install was kept, so the first run read an empty one there: "Your
     /// server" again, and it never went on. The install is kept under that address before the store goes to it, so no

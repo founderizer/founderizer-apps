@@ -332,6 +332,7 @@ final class SetupChannel {
     /// The store that the answers come from: the app's own, at its start.
     func attach(_ store: FleetStore) {
         self.store = store
+        _ = store.addServer
         AppFront.ownerHandled = { [weak store] act in store?.ownerHandled(act) }
         AppFront.pageChange = { [weak store] in store?.shown.change ?? 0 }
         AppFront.watch()
@@ -832,8 +833,8 @@ final class SetupChannel {
                                 unjoinedBuild: unjoined.flatMap { ReachFacts.seconds(from: $0, to: now) })
     }
 
-    /// **What a page's build model tells the store** (`FleetCloudModel.onState`): the page sets it with one line, the
-    /// first run's window view for its model and Add server once for its model that lives while the page is closed.
+    /// **What a build model tells the store** (`FleetCloudModel.onState`), set with one line: by the first run's window
+    /// view for its model, and by `AddServerEngine` for Add server's model, which lives while the page is closed.
     /// Each closure keeps its own model's last facts, so that a kept stop is that model's own, and the store's value
     /// follows `ReachFacts.kept`: an idle model does not replace another model's build that runs. The store is
     /// written only when its value changes.

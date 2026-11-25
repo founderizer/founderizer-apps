@@ -415,6 +415,9 @@ struct ManagerView: View {
     private func requestCard(_ need: OwnerNeed, ask: Ask?, together: Bool) -> some View {
         NeedRequestCard(store: store, need: need,
                         ask: ask.map { ChatAskRow($0, agent: agent, state: store.state) })
+            // the card stands on the chat's page: an answer held here keeps its wait on every page, and the badge's
+            // Undo brings him back to this chat (`AnswerHolds.Place`)
+            .environment(\.cardOnPage, true)
             .padding(.bottom, Self.footer - (together ? Self.entrySpacing - 8 : 0))
             .wordsSelectable(in: selection, row: "need-\(need.id)").id("need-\(need.id)")
     }
