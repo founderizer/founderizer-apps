@@ -299,12 +299,15 @@ import Testing
     /// (`CentralVaultPins.refusal`), so an update pins any key that it prints. No other test runs these steps, which
     /// need the owner's Keychain and a hub. The trust step and the first run's seed give the Mac server pin's guard the
     /// node's Tailscale OS from that same read (`MacVaultPin`, VAULT.md limit 10). Bug: the guard gets no OS, so a hub
-    /// that calls a Mac Linux takes the guard away; the seed opens an SSH session before it asks the guard.
+    /// that calls a Mac Linux takes the guard away; the seed opens an SSH session before it asks the guard. The key
+    /// swap's step (`keySwapStep`) and the gate's step (`keySwapGate`) on the hub's own row take `hubTarget` too (the
+    /// Vault area's read of the gate piece, 23 November 2026, MUST 1): bug, the hub's record and a first label alone
+    /// choose the machine where the owner's root session runs `configure`.
     @Test func eachRootReadOfTheCentralVaultTakesHubTarget() throws {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Founderizer/CentralVaultSection.swift")
         let source = try String(contentsOf: file, encoding: .utf8)
-        for name in ["installed", "keySwapCentral"] {
+        for name in ["installed", "keySwapCentral", "keySwapGate"] {
             let start = try #require(source.range(of: "private func \(name)("), "\(name) is gone")
             let end = try #require(source.range(of: "\n    }\n", range: start.upperBound..<source.endIndex))
             let body = source[start.lowerBound..<end.lowerBound]
@@ -315,6 +318,16 @@ import Testing
                 #expect(body.contains("CentralVaultPins.refusal(") && body.contains("setUp: !own)"), "the pin's compare")
             }
         }
+        // the key swap's step: the hub's own row by `hubTarget`, each joined server by its own connection
+        let step = try #require(source.range(of: "private func keySwapStep("), "keySwapStep is gone")
+        let stepEnd = try #require(source.range(of: "\n    }\n", range: step.upperBound..<source.endIndex))
+        #expect(source[step.lowerBound..<stepEnd.lowerBound].contains(
+            "if row.hub {\n                target = try await hubTarget(row.name, database: database, record: reading?.hub?.reach)"))
+        // and the round runs the gate's step after a keys step that reached the hub's own row (R3-S5)
+        let round = try #require(source.range(of: "private func keySwapRound("), "keySwapRound is gone")
+        let roundEnd = try #require(source.range(of: "\n    }\n", range: round.upperBound..<source.endIndex))
+        #expect(source[round.lowerBound..<roundEnd.lowerBound].contains(
+            "if step.gate, keys != nil { await keySwapGate(row, database: database) }"))
         // the trust step takes its connection and its Mac rule from `trustTarget` (R2-M1, R2-S3)
         let trust = try #require(source.range(of: "private func trust("), "trust is gone")
         let end = try #require(source.range(of: "\n    }\n", range: trust.upperBound..<source.endIndex))

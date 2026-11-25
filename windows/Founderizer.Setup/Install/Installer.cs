@@ -218,10 +218,11 @@ public sealed class Installer
         new(plan, authKey, sudoPassword, (code, uri, cancel) => Claim.SendAsync(http, box, uri, code, cancel),
             (hub, cancel) => Claim.ReadHubAsync(http, box, hub, cancel), firstRun: firstRun, policy: policy);
 
-    /// <summary>A plan with no claim (a join, a check, a restart, an update), run over <paramref name="remote"/>.</summary>
+    /// <summary>A plan with no claim (a join, a check, a restart, an update), run over <paramref name="remote"/>.
+    /// <paramref name="authKey"/>: the key of a keyed plan's network step, the one that the plan was made with.</summary>
     public static Task<VerifyChecklist> RunAsync(InstallPlan plan, IRemote remote, Action<InstallProgress> progress,
-                                                 CancellationToken cancel) =>
-        new Installer(plan).RunAsync(remote, progress, cancel);
+                                                 CancellationToken cancel, string? authKey = null) =>
+        new Installer(plan, authKey).RunAsync(remote, progress, cancel);
 
     /// <summary>**Runs the whole install** and answers with the server's own checklist. <paramref name="report"/> is
     /// called for each step as it starts and as it ends.</summary>
@@ -289,6 +290,9 @@ public sealed class Installer
             }
             case StepAction.SendAuthKey send:
             {
+                // An installer made without the plan's key would send an empty key, and the server would not reach the
+                // private network (the first run's join did so): it stops here, as the claim step stops with no claim.
+                if (authKey.Length == 0) throw new InvalidOperationException("this installer was given no key, and its plan sends one");
                 var key = Encoding.UTF8.GetBytes(authKey);
                 try { return await SshAsync(remote, send.Program, step.Title, key, AuthKeyLimit, cancel); }
                 finally { CryptographicOperations.ZeroMemory(key); }

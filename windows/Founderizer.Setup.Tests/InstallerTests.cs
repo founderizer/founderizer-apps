@@ -247,6 +247,31 @@ public sealed class InstallerTests
         Assert.IsTrue(shown.Any(line => line.Contains("got (not shown)", StringComparison.Ordinal)));
     }
 
+    /// <summary>**A keyed plan sends the key that its installer was given, also by the static run, and an installer given
+    /// none stops at the key step with nothing sent** (the first run's join of 24 November 2026 made its installer without
+    /// the plan's key: the server got an empty key and never reached the private network). The bugs: the static run, or
+    /// another path, that drops the key again; an empty key on the server's input in place of a stop.</summary>
+    [TestMethod]
+    public async Task A_keyed_plan_sends_the_installers_key_and_an_installer_with_none_sends_nothing()
+    {
+        var join = InstallPlan.Join(Server, $"curl -fsS http://100.64.0.1:8765/join | FLEET_JOIN={JoinCode} sh", JoinCode, AuthKey);
+        // The join's line fails, so each run ends after its key step, with no clock to wait on. The remote's own copy of
+        // each input is read: the installer zeroes the key's bytes once the call ends.
+        StandInRemote Stopping() => Answering(first: call => call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal) ? StandInRemote.Said("stopped", 1) : null);
+        static string[] Keys(StandInRemote remote) => remote.Calls.Select((c, i) => (c, i))
+            .Where(x => x.c.Program.Contains("cat > /root/fleet-authkey", StringComparison.Ordinal))
+            .Select(x => Encoding.UTF8.GetString(remote.Inputs[x.i] ?? [])).ToArray();
+
+        var keyed = Stopping();
+        await Assert.ThrowsExactlyAsync<InstallError>(() => Installer.RunAsync(join, keyed, _ => { }, CancellationToken.None, AuthKey));
+        CollectionAssert.AreEqual(new[] { AuthKey }, Keys(keyed), "the static run sends the key that it was given");
+
+        var none = Stopping();
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => Installer.RunAsync(join, none, _ => { }, CancellationToken.None));
+        Assert.AreEqual(0, Keys(none).Length, "no empty key goes");
+        Assert.IsFalse(none.Calls.Any(c => c.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)), "the join stops at its key step");
+    }
+
     /// <summary>**A hub that serves this PC already needs no claim**: an install made again after its claim waits for no
     /// code (the installer makes none), and a hub that refused two reads after the installer said so stops the install
     /// with the PC's words, not after its whole time.</summary>

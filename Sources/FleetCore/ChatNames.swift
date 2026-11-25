@@ -23,7 +23,11 @@ import Synchronization
 /// beside its own name is no second badge** (the owner, 21 November 2026, of a card that drew an agent's name and its
 /// role as two badges: "it should be the same, right? or show it only once!"): in "Nova (Customer Support Lead)",
 /// "Nova, Customer Support Lead" or "Nova - Customer Support Lead", and with the two the other way round, the name is
-/// the badge and the role stays words. The words stay as written, every one in its order.
+/// the badge and the role stays words. The words stay as written, every one in its order, but for **a badge of an
+/// agent's whole role, which draws the agent's name with its role beside it** (`RoleNames`; the owner, 23 November 2026:
+/// "We should ALWAYS use the name", and "The name with the role in grey"): "I asked Marketing" draws "I asked Wren ·
+/// Marketing", and "@Marketing" draws "@Wren · Marketing". The owner's own words stay as he wrote them
+/// (`RoleNames.Written`).
 public struct ChatNames: Equatable, Sendable {
     /// The card's book of the same names.
     private let book: CardNames
@@ -33,6 +37,8 @@ public struct ChatNames: Equatable, Sendable {
     private let oneWord: Set<String>
     /// Each agent's name with a capital, by its name.
     private let named: [String: String]
+    /// Each agent's role, by its name (`AgentNames.roles`): the label and the role that a badge of its whole role draws.
+    private let roles: [String: String]
     /// **The words of each text that this book read** (`words(_:)`): a chat draws its rows again at each reading of the
     /// hub, and it found every name of every block again at each (a review of 21 November 2026: 1,000 reads for 500
     /// blocks). A new book reads anew, unless it holds the same names (`FleetStore.chatNames`); one of many thousand
@@ -46,7 +52,7 @@ public struct ChatNames: Equatable, Sendable {
     /// Two books are equal when they are one, or when they hold the same names: what they read is no part of them.
     public static func == (lhs: ChatNames, rhs: ChatNames) -> Bool {
         lhs.read === rhs.read || (lhs.book == rhs.book && lhs.agentWords == rhs.agentWords && lhs.written == rhs.written
-                                  && lhs.named == rhs.named && lhs.oneWord == rhs.oneWord)
+                                  && lhs.named == rhs.named && lhs.oneWord == rhs.oneWord && lhs.roles == rhs.roles)
     }
     /// The servers and the repositories as they are written: a repository's owner/name and its name alone.
     private let written: Set<String>
@@ -64,12 +70,14 @@ public struct ChatNames: Equatable, Sendable {
         oneWord = Set(agents.compactMap(\.role).filter { !$0.contains(" ") })
             .subtracting(agents.map { $0.name.capitalized })
         named = Dictionary(agents.map { ($0.name, $0.name.capitalized) }, uniquingKeysWith: { first, _ in first })
+        roles = AgentNames.roles(agents.map { (name: $0.name, title: $0.role) })
         written = Set(servers + repositories + repositories.compactMap { $0.split(separator: "/").last.map(String.init) })
     }
 
     /// **`text` in pieces, each name that it shows by the chat's rules a piece of its own with its link**, which a chat
-    /// draws as a badge with its icon. The pieces hold every character of `text` once, in its order; a name that the
-    /// card's rules find and the chat's do not stays words, with no link.
+    /// draws as a badge with its icon. The pieces hold every character of `text` once, in its order, but a badge of an
+    /// agent's whole role, which holds the agent's label and its role (`RoleNames.named`); a name that the card's rules
+    /// find and the chat's do not stays words, with no link.
     ///
     /// **@ tags** (owner feature `agent_tags`; his "Yes, as drawn": "in a sent message the tag is the chat's agent
     /// badge"): words that carry `AgentTags.Tagged` are a tag of his message, which is its agent's badge over the whole
@@ -122,7 +130,8 @@ public struct ChatNames: Equatable, Sendable {
             let start = text.characters.distance(from: text.startIndex, to: range.lowerBound)
             return (start..<start + text.characters.distance(from: range.lowerBound, to: range.upperBound), agent)
         }
-        return tags.isEmpty ? pieces : tagged(pieces, tags: tags, in: text)
+        // an agent's whole role in an agent's words draws the agent's label
+        return RoleNames.named(tags.isEmpty ? pieces : tagged(pieces, tags: tags, in: text), roles: roles)
     }
 
     /// **The pieces with each tag of his message as its own**: its agent's badge where the book knows the agent, else
@@ -225,7 +234,7 @@ public struct ChatNames: Equatable, Sendable {
     /// The nearest character before a word, past spaces, on its line (`line`, the words of the line before it) is a
     /// letter: "asked Marketing", "to Sales". The text's or a line's start, punctuation, a quote, a bracket, a colon, a
     /// digit, an emoji or an arrow before it is no word.
-    private static func followsAWord(_ line: String) -> Bool {
+    static func followsAWord(_ line: String) -> Bool {
         line.last(where: { !$0.isWhitespace })?.isLetter == true
     }
 
@@ -249,8 +258,9 @@ private extension CardNames.Target {
     }
 }
 
-/// **One block of a chat's message as the chat draws it** (`ChatNames.words`): its words exactly as the message holds
-/// them, which a copy of them holds too, and where each name's badge stands in them. A name keeps the room of its icon
+/// **One block of a chat's message as the chat draws it** (`ChatNames.words`): its words as the message holds them, but
+/// a badge of an agent's whole role, which holds the agent's label and its role (`RoleNames`), and where each name's
+/// badge stands in them. A copy of them holds them as they show. A name keeps the room of its icon
 /// on the character before it (a kern, which a copy does not hold). **A name that begins the words keeps it in the
 /// words' own leading space** (`leads`), as the owner's drawing shows a glyph on each name ("ok but use always the
 /// agent badges and icons!!"): a no-break space there went into every copy ("\u{00A0}mini-2 restarts", a review of 21
@@ -285,7 +295,7 @@ public struct ChatWords: Equatable, Sendable {
         public let endAfter: Bool
     }
 
-    /// The words as written, each name with its link (`CardNames.Target.url`).
+    /// The words as they show, each name with its link (`CardNames.Target.url`).
     public let text: AttributedString
     public let badges: [Badge]
 

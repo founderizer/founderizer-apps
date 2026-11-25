@@ -68,6 +68,23 @@ struct KeySwapPlanTests {
         #expect(KeySwapPlan.next(rows, facts: KeySwapFacts(central: Self.central, removed: ["gone-1"], now: Self.now)) == nil)
     }
 
+    /// **The hub's own server with its server service gets the key swap's steps, and the gate's step after the keys
+    /// step** (the reads of the areas "Vault, keys and access", MUST 2, and "Door and security", M2, of 23 November
+    /// 2026): until then a hub that took agents later had no key swap there, its broker no owner key and no fleet, so it
+    /// handed no login over, and no outgoing gate. With no server service it gets no step; a joined server gets no gate
+    /// step, as it got its gate at its join; and the gate's step runs only where root never wrote the gate's file.
+    @Test func theHubsOwnServerWithItsServiceGetsItsStepsAndTheGate() {
+        let own = Self.row("main-box", hub: true)
+        #expect(KeySwapPlan.wanted(own, central: true) == KeySwapWanted(switchTo: .on, waitsForTheOwner: false))
+        #expect(KeySwapPlan.next([own], facts: KeySwapFacts(central: Self.central, now: Self.now))
+                == KeySwapStep(server: "main-box", keys: [Self.keyA], fleet: Self.fleet, then: .on, gate: true))
+        #expect(KeySwapPlan.next([Self.row("box")], facts: KeySwapFacts(central: Self.central, now: Self.now))?.gate == false)
+        #expect(KeySwapPlan.wanted(Self.row("main-box", joined: false, hub: true), central: true) == nil)
+        // only where the gate's configuration was never written: root's `--egress off` keeps it (R3-S4)
+        #expect(KeySwapRemote.gate == "test -e /etc/founderizer-egress/egress.json || "
+                + "python3 -I /usr/local/lib/fleet-vault/vault.py configure --egress on")
+    }
+
     // MARK: the order and the events
 
     @Test func theRollOutBeginsWithNoAgentThenFewestThenByName() {

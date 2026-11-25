@@ -10,7 +10,8 @@ Later on 14 November 2026 the owner replaced the word "flota" with "equipo" ("in
 must be Equipo probably"): this page has the new words, and so has the app's table. To "redo the Spanish App Store
 screenshots?" he said "Yes, redo them", and the four of `screenshots/es/` were made again the same day. App Store
 Connect's 1.2 pages, its screenshots and the 1.2 build still say "flota" ("Gestor de la flota"), until the next
-version takes this page and these screenshots.
+version takes this page and these screenshots. Version 1.5 took this page's description on 24 November 2026, so the store's Spanish
+description says "equipo" since then.
 
 ## Name (30)
 
@@ -31,11 +32,11 @@ Founderizer es tu propio equipo de agentes de IA. Funciona en un servidor tuyo, 
 que ya pagas, y te pregunta cuando una decisión es tuya. Esta app pone ese equipo en tu iPhone.
 
 Chats
-Cada agente te escribe en su propio chat, con el nombre de su rol: Gestor del equipo, Atención al cliente,
-Desarrollador o los roles que des a tu equipo. Escribe a un agente como escribes a una persona.
+Cada agente te escribe en su propio chat, con su nombre y su rol al lado. Escribe a un agente como escribes a una
+persona.
 
-Te necesita
-Lo que te necesita espera en un solo lugar, con una insignia hasta que respondas. Cuando un agente da opciones, un
+Por atender
+Lo que tienes por atender espera en un solo lugar, con una insignia hasta que respondas. Cuando un agente da opciones, un
 toque responde.
 
 Tareas
@@ -54,6 +55,31 @@ Necesitas Founderizer en un Mac. Añade este teléfono desde la app del Mac: Aju
 ## Keywords (100)
 
 asistente,automatización,aprobaciones,tareas,equipo,negocio,operaciones,atención al cliente,DevOps
+
+## What's new in 1.5 (4000)
+
+The same words on the pages of Spain and Mexico (the owner's "submit 1.5", 24 November 2026, 18:40 UTC; the area App
+shell and look chose the words under his rule of 23 November 2026, "agent can decide").
+
+• Cada agente aparece con su nombre y su rol al lado.
+• En Por atender, cada solicitud es una tarjeta breve con su pregunta y sus opciones. Tócala para abrirla.
+• Una tarjeta dice quién pregunta, qué pregunta y qué puedes tocar. El resto está en Detalles, y un script en Script.
+• Cuando una solicitud te deja elegir varias opciones, marca cada una y toca Enviar.
+• Una respuesta en camino muestra un círculo que gira y luego una marca de verificación. Si tu hub no responde, la app la vuelve a enviar por sí sola.
+• Las palabras que parecen una clave esperan en su campo, también cuando compartes algo con un agente: toca Conservarlo para enviarlas tal como están.
+• Una opción que solo tu Mac puede iniciar aparece en gris en el teléfono.
+• Añadir este teléfono es más fiable, y la app te dice qué hacer: apuntar la cámara a la imagen de tu Mac o comprobar que Tailscale esté activado en este teléfono.
+
+## What's new in 1.5, English (4000)
+
+• Each agent shows by its name, with its role beside it.
+• On Needs you, each request is a short card with its question and its options. Tap it to open it.
+• A card says who asks, what they ask and what you can press. The rest is behind Details, and a script behind Script.
+• When a request lets you pick more than one option, tick each one, then tap Send.
+• An answer on its way shows a turning ring, then a check. If your hub does not reply, the app sends it again by itself.
+• Words that look like a key wait in their box, also when you share to an agent: tap Keep it to send them as they are.
+• An option that only your Mac can start is grey on the phone.
+• Adding this phone is more reliable, and the app tells you what to do: point the camera at the picture on your Mac, or check that Tailscale is on on this phone.
 
 ## What's new in 1.4 (4000)
 

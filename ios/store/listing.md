@@ -23,8 +23,8 @@ Founderizer is your own team of AI agents. It works on a server you own, with th
 already pay for, and asks you when a decision is yours. This app puts that team on your iPhone.
 
 Chats
-Each agent writes to you in its own chat, named by its role: Fleet Manager, Customer Support, Developer, or the roles
-that you give your team. Write to an agent as you write to a person.
+Each agent writes to you in its own chat, by its name, with its role beside it. Write to an agent as you write to a
+person.
 
 Needs you
 What needs you waits in one place, with a badge until you answer it. When an agent gives options, one tap answers.

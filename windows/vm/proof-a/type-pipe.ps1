@@ -5,7 +5,9 @@
 # other end: it is in no command line, no file and no log.
 #
 # It types only while the focus is on that field of Founderizer's window: before the first key it reads UI Automation's
-# focused element, and before each key the window in front; at the first change it stops. After the keys it reads the
+# focused element, and before each key the window in front; at the first change it stops. One key can still reach a
+# window that comes to the front between that check and the key: the typer fails closed (its words say fewer keys than
+# the value, and secret.sh keeps the mark and logs where the focus is). After the keys it reads the
 # focused element again and the field's length (never its words): Enter goes only when the focus is still on that field
 # of Founderizer.App and the field holds every character (only a password box gives no length: "unknown"; an element
 # with no value gives "none"). It writes to -State only
@@ -40,6 +42,22 @@ public static class FzKeys {
     public static uint FrontProcess() { uint pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; }
 }
 '@
+# type-task.ps1 reads -State while this writes it. Each state goes to a new file first, which then takes the state
+# file's place in one step (File.Replace; File.Move for the first one): a read sees a whole state, never a part of one.
+# A step that meets a read is tried again. File.Replace takes no backup: [NullString]::Value, because PowerShell passes
+# $null to a string parameter as "", which File.Replace refuses ("The path is not of a legal form", the run of
+# 23 November 2026).
+function Say([string]$text) {
+    $new = "$State.new"
+    for ($i = 0; ; $i++) {
+        try {
+            [System.IO.File]::WriteAllText($new, $text)
+            if ([System.IO.File]::Exists($State)) { [System.IO.File]::Replace($new, $State, [NullString]::Value) }
+            else { [System.IO.File]::Move($new, $State) }
+            return
+        } catch { if ($i -ge 40) { throw }; Start-Sleep -Milliseconds 50 }
+    }
+}
 function ProgramOf([int]$id) { try { (Get-Process -Id $id).ProcessName } catch { 'unknown' } }
 function Front { ProgramOf ([int][FzKeys]::FrontProcess()) }
 # The focused element as "<program>/<automation id>", and its length (never its words): "unknown" for a password box,
@@ -67,7 +85,7 @@ foreach ($who in $me, $admins) {
 }
 $server = New-Object System.IO.Pipes.NamedPipeServerStream($Pipe, 'In', 1, 'Byte', 'Asynchronous', 1024, 1024, $security)
 try {
-    Set-Content -Path $State -Value 'listening'
+    Say 'listening'
     $wait = $server.BeginWaitForConnection($null, $null)
     if (-not $wait.AsyncWaitHandle.WaitOne([TimeSpan]::FromMinutes(5))) { throw 'no line in 5 minutes' }
     $server.EndWaitForConnection($wait)
@@ -78,7 +96,7 @@ try {
     $before = Focus
     if ($before.where -ne $expected) {
         $line = $null
-        Set-Content -Path $State -Value "refused: the focus is on $($before.where), not on $expected"
+        Say "refused: the focus is on $($before.where), not on $expected"
         return
     }
     $typed = 0
@@ -90,7 +108,7 @@ try {
     }
     $line = $null
     if ($typed -lt $count) {
-        Set-Content -Path $State -Value "typed $typed of $count; front $front"
+        Say "typed $typed of $count; front $front"
         return
     }
     $after = Focus
@@ -102,9 +120,9 @@ try {
     } else {
         $said = "typed $count of $count; focus $($after.where); length $($after.length)"
     }
-    Set-Content -Path $State -Value $said
+    Say $said
 } catch {
-    Set-Content -Path $State -Value "failed: $($_.Exception.Message)"
+    Say "failed: $($_.Exception.Message)"
 } finally {
     $server.Dispose()
 }

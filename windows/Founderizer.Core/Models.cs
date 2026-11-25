@@ -307,7 +307,8 @@ public sealed record OwnerNeed(
     [property: JsonPropertyName("give")] JsonElement? RawGive = null,
     IReadOnlyList<MessageAttachment>? Pictures = null,
     bool? Clarify = null,
-    IReadOnlyList<NeedMessage>? Talk = null)
+    IReadOnlyList<NeedMessage>? Talk = null,
+    bool? Team = null)
 {
     [JsonIgnore] public bool IsOpen => Answered is null && Answer is null;
 
@@ -330,6 +331,19 @@ public sealed record OwnerNeed(
     [JsonIgnore] public bool AnsweredWithKeyOrWords =>
         AsksForSecret && !IsOpen && Secret is { } secret && (secret.Saved is not null || secret.Clarified);
     [JsonIgnore] public bool AsksForSecret => Kind == "secret";
+
+    /// <summary>**Its first option starts a step that only the Mac's press starts** (FleetCore's
+    /// `OwnerNeed.firstOptionStartsOnTheMac`, which the iPhone's `MobileStore.startsOnTheMac` holds to): an item of two
+    /// options or more, which is no team yes, no full access and no give (FleetCore's `onlyOnAComputer`), whose first
+    /// option makes a GitHub App in the account that `github_app` names (owner feature `door_setup`: GitHub's manifest
+    /// flow, GitHubManifestFlow), or opens the Add device picture (`add_device` 1, owner feature `recovery_copy`). This
+    /// app starts neither, and a press here answered the item with choice 0: the hub closed it, and nothing started. So
+    /// the option stands, and no route of this app sends it; the other options and his own words still go.</summary>
+    [JsonIgnore] public bool FirstOptionOnTheMac =>
+        Choices.Count >= 2 && Team != true && DoorHost is not { Length: > 0 } && !Gives && (GithubApp is { Length: > 0 } || AddDevice == 1);
+
+    /// <summary>Option <paramref name="choice"/> is one that only the Mac's press starts (<see cref="FirstOptionOnTheMac"/>).</summary>
+    public bool OnlyOnTheMac(long choice) => choice == 0 && FirstOptionOnTheMac;
     [JsonIgnore] public bool TakesFiles => Conversation is null && !AsksForSecret;
 
     /// <summary>The task of the item stands on the front of its card, under the reason (OwnerNeed.taskInFront, Founderizer

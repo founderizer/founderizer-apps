@@ -1,0 +1,830 @@
+{
+  "about" : "FleetCore's ServerBrowser: the rows that assign gives for a server's reading (current) and the wanted users, and the table's text that table gives for rows, uids, the broker's uid and the worker user's uid (null: no table), and whether workerFits takes a reading's worker user (its name and uid, with the uids of the reading's users and the broker's uid). A DevTools port is of 9300 to 9399 and a screen port of 5910 to 5999.",
+  "assign" : [
+    {
+      "current" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-a"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-b"
+        },
+        {
+          "devtools" : 9302,
+          "screen" : 5912,
+          "user" : "fleet-c"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-a"
+        },
+        {
+          "devtools" : 9302,
+          "screen" : 5912,
+          "user" : "fleet-c"
+        },
+        {
+          "devtools" : 9303,
+          "screen" : 5913,
+          "user" : "fleet-d"
+        }
+      ],
+      "wanted" : [
+        "fleet-c",
+        "fleet-d",
+        "fleet-a"
+      ],
+      "what" : "a row that stays keeps its ports, the rows of the others go, and a new user takes the lowest ports that no row had"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 22,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        },
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "wanted" : [
+        "fleet-alpha",
+        "fleet-beta"
+      ],
+      "what" : "a DevTools port outside 9300-9399 is no row: its user takes free ports"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 9300,
+          "screen" : 22,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        }
+      ],
+      "wanted" : [
+        "fleet-alpha",
+        "fleet-beta"
+      ],
+      "what" : "a screen port outside 5910-5999 is no row, and holds no port"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9300,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        }
+      ],
+      "wanted" : [
+        "fleet-alpha",
+        "fleet-beta"
+      ],
+      "what" : "a DevTools port that an earlier row holds is no row"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5910,
+          "user" : "fleet-beta"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        }
+      ],
+      "wanted" : [
+        "fleet-alpha",
+        "fleet-beta"
+      ],
+      "what" : "a screen port that an earlier row holds is no row"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-beta"
+        }
+      ],
+      "wanted" : [
+        "fleet-alpha",
+        "fleet-beta"
+      ],
+      "what" : "a user that an earlier row names is no row"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 9399,
+          "screen" : 5999,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9399,
+          "screen" : 5999,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "wanted" : [
+        "fleet-alpha"
+      ],
+      "what" : "the ranges' own ends stay"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 9400,
+          "screen" : 5911,
+          "user" : "fleet-a"
+        },
+        {
+          "devtools" : 9299,
+          "screen" : 5912,
+          "user" : "fleet-b"
+        },
+        {
+          "devtools" : 9302,
+          "screen" : 6000,
+          "user" : "fleet-c"
+        },
+        {
+          "devtools" : 9303,
+          "screen" : 5909,
+          "user" : "fleet-d"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-a"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-b"
+        },
+        {
+          "devtools" : 9302,
+          "screen" : 5912,
+          "user" : "fleet-c"
+        },
+        {
+          "devtools" : 9303,
+          "screen" : 5913,
+          "user" : "fleet-d"
+        }
+      ],
+      "wanted" : [
+        "fleet-a",
+        "fleet-b",
+        "fleet-c",
+        "fleet-d"
+      ],
+      "what" : "the ports just past the ranges are no rows"
+    },
+    {
+      "current" : [
+        {
+          "devtools" : 0,
+          "screen" : 5910,
+          "user" : "fleet-a"
+        },
+        {
+          "devtools" : -1,
+          "screen" : 5911,
+          "user" : "fleet-b"
+        },
+        {
+          "devtools" : 65558,
+          "screen" : 5912,
+          "user" : "fleet-c"
+        },
+        {
+          "devtools" : 74836,
+          "screen" : 5913,
+          "user" : "fleet-d"
+        },
+        {
+          "devtools" : 9304,
+          "screen" : 65558,
+          "user" : "fleet-e"
+        },
+        {
+          "devtools" : 9305,
+          "screen" : 71446,
+          "user" : "fleet-f"
+        },
+        {
+          "devtools" : 9306,
+          "screen" : 0,
+          "user" : "fleet-g"
+        },
+        {
+          "devtools" : 9307,
+          "screen" : -1,
+          "user" : "fleet-h"
+        }
+      ],
+      "rows" : [
+        {
+          "devtools" : 9300,
+          "screen" : 5910,
+          "user" : "fleet-a"
+        },
+        {
+          "devtools" : 9301,
+          "screen" : 5911,
+          "user" : "fleet-b"
+        },
+        {
+          "devtools" : 9302,
+          "screen" : 5912,
+          "user" : "fleet-c"
+        },
+        {
+          "devtools" : 9303,
+          "screen" : 5913,
+          "user" : "fleet-d"
+        },
+        {
+          "devtools" : 9304,
+          "screen" : 5914,
+          "user" : "fleet-e"
+        },
+        {
+          "devtools" : 9305,
+          "screen" : 5915,
+          "user" : "fleet-f"
+        },
+        {
+          "devtools" : 9306,
+          "screen" : 5916,
+          "user" : "fleet-g"
+        },
+        {
+          "devtools" : 9307,
+          "screen" : 5917,
+          "user" : "fleet-h"
+        }
+      ],
+      "wanted" : [
+        "fleet-a",
+        "fleet-b",
+        "fleet-c",
+        "fleet-d",
+        "fleet-e",
+        "fleet-f",
+        "fleet-g",
+        "fleet-h"
+      ],
+      "what" : "a port that is no TCP port, or that a 16-bit number reads as 22, 9300 or 5910, is no row"
+    }
+  ],
+  "made_by" : "app/Tests/FleetCoreTests/ServerBrowserVectorsTests.swift",
+  "table" : [
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9312,
+          "screen" : 5912,
+          "user" : "fleet-beta"
+        }
+      ],
+      "table" : "# Founderizer writes this table whole from /etc/fleet-browser/ports (plan 04, D11).\ntable inet fleet_browser\ndelete table inet fleet_browser\ntable inet fleet_browser {\n\tchain out {\n\t\ttype filter hook output priority 0; policy accept;\n\t\toifname \"lo\" tcp dport 9311 meta skuid != { 0, 1001, 1002 } reject with tcp reset\n\t\toifname \"lo\" tcp dport 5911 meta skuid != { 0, 1000 } reject with tcp reset\n\t\toifname \"lo\" tcp sport { 9311, 5911 } meta skuid != 1002 drop\n\t\toifname \"lo\" tcp dport { 9311, 5911 } accept\n\t\toifname \"lo\" tcp dport 9312 meta skuid != { 0, 1001, 1003 } reject with tcp reset\n\t\toifname \"lo\" tcp dport 5912 meta skuid != { 0, 1000 } reject with tcp reset\n\t\toifname \"lo\" tcp sport { 9312, 5912 } meta skuid != 1003 drop\n\t\toifname \"lo\" tcp dport { 9312, 5912 } accept\n\t\toifname \"lo\" tcp flags & (syn | ack) == syn tcp dport { 5910-5999, 9300-9399 } reject with tcp reset\n\t}\n}\n",
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "the contract's table of two rows",
+      "worker" : 1000
+    },
+    {
+      "broker" : null,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9312,
+          "screen" : 5912,
+          "user" : "fleet-beta"
+        }
+      ],
+      "table" : "# Founderizer writes this table whole from /etc/fleet-browser/ports (plan 04, D11).\ntable inet fleet_browser\ndelete table inet fleet_browser\ntable inet fleet_browser {\n\tchain out {\n\t\ttype filter hook output priority 0; policy accept;\n\t\toifname \"lo\" tcp dport 9311 meta skuid != { 0, 1002 } reject with tcp reset\n\t\toifname \"lo\" tcp dport 5911 meta skuid != { 0, 1000 } reject with tcp reset\n\t\toifname \"lo\" tcp sport { 9311, 5911 } meta skuid != 1002 drop\n\t\toifname \"lo\" tcp dport { 9311, 5911 } accept\n\t\toifname \"lo\" tcp dport 9312 meta skuid != { 0, 1003 } reject with tcp reset\n\t\toifname \"lo\" tcp dport 5912 meta skuid != { 0, 1000 } reject with tcp reset\n\t\toifname \"lo\" tcp sport { 9312, 5912 } meta skuid != 1003 drop\n\t\toifname \"lo\" tcp dport { 9312, 5912 } accept\n\t\toifname \"lo\" tcp flags & (syn | ack) == syn tcp dport { 5910-5999, 9300-9399 } reject with tcp reset\n\t}\n}\n",
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "no broker",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+
+      ],
+      "table" : "# Founderizer writes this table whole from /etc/fleet-browser/ports (plan 04, D11).\ntable inet fleet_browser\ndelete table inet fleet_browser\ntable inet fleet_browser {\n\tchain out {\n\t\ttype filter hook output priority 0; policy accept;\n\t\toifname \"lo\" tcp flags & (syn | ack) == syn tcp dport { 5910-5999, 9300-9399 } reject with tcp reset\n\t}\n}\n",
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "no row: every port of both ranges closed",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9312,
+          "screen" : 5912,
+          "user" : "fleet-beta"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002
+      },
+      "what" : "a row whose user has no uid",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 22,
+          "screen" : 5912,
+          "user" : "fleet-beta"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a DevTools port outside 9300-9399",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        },
+        {
+          "devtools" : 9312,
+          "screen" : 22,
+          "user" : "fleet-beta"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a screen port outside 5910-5999",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9400,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a DevTools port just past its range",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 5909,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a screen port just past its range",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 0,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a DevTools port 0",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : -1,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a DevTools port -1",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 65558,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a DevTools port that a 16-bit number reads as 22",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 74836,
+          "screen" : 5911,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a DevTools port that a 16-bit number reads as 9300",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 0,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a screen port 0",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : -1,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a screen port -1",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 65558,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a screen port that a 16-bit number reads as 22",
+      "worker" : 1000
+    },
+    {
+      "broker" : 1001,
+      "rows" : [
+        {
+          "devtools" : 9311,
+          "screen" : 71446,
+          "user" : "fleet-alpha"
+        }
+      ],
+      "table" : null,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "what" : "a screen port that a 16-bit number reads as 5910",
+      "worker" : 1000
+    }
+  ],
+  "worker" : [
+    {
+      "broker" : 1001,
+      "fits" : true,
+      "uid" : 1000,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the server service's own user"
+    },
+    {
+      "broker" : 1001,
+      "fits" : true,
+      "uid" : 1000,
+      "uids" : {
+        "fleet" : 1000,
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the service's own user, as which an agent runs too"
+    },
+    {
+      "broker" : 1001,
+      "fits" : true,
+      "uid" : 999,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the service's own user with a system uid, there before the join"
+    },
+    {
+      "broker" : null,
+      "fits" : true,
+      "uid" : 65536,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the service's own user with a uid that a 16-bit number reads as 0, and no broker"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1000,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "ubuntu",
+      "what" : "a cloud image's login user"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1500,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "admin",
+      "what" : "another account"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1003,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet-beta",
+      "what" : "an agent's user"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1001,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet-vault",
+      "what" : "the broker's user"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1500,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet-other",
+      "what" : "a name of an agent's form with a uid of its own"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1000,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "Fleet",
+      "what" : "the service's name in capitals"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "daemon",
+      "what" : "a system user"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 0,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "root",
+      "what" : "root"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 0,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the service's own user with uid 0"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1001,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the service's own user with the broker's uid"
+    },
+    {
+      "broker" : 1001,
+      "fits" : false,
+      "uid" : 1002,
+      "uids" : {
+        "fleet-alpha" : 1002,
+        "fleet-beta" : 1003
+      },
+      "user" : "fleet",
+      "what" : "the service's own user with an agent's uid"
+    }
+  ]
+}

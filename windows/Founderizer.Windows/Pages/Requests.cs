@@ -340,7 +340,8 @@ internal sealed class AnswerParts
         {
             int choice = i;
             string label = model.Labels[i];
-            var row = Row(label, model.Kind == OptionsKind.Ticks, model.SendingWords, drawsPictures);
+            // an option that only the Mac's press starts stands with its words, grey and off (OptionsModel.OnlyOnTheMac)
+            var row = Row(label, model.Kind == OptionsKind.Ticks, model.SendingWords, drawsPictures, off: model.OnlyOnTheMac.Contains(i));
             Watch(row);
             row.Click += (_, _) =>
             {
@@ -436,9 +437,9 @@ internal sealed class AnswerParts
         return grid;
     }
 
-    private Button Row(string label, bool tick, string sendingWords, bool underPicture = false)
+    private Button Row(string label, bool tick, string sendingWords, bool underPicture = false, bool off = false)
     {
-        var words = Look.Words(label, step ? 15 : 14, 20);
+        var words = Look.Words(label, step ? 15 : 14, 20, off ? Look.Muted : null);
         var square = new Border
         {
             Width = 16,
@@ -482,6 +483,8 @@ internal sealed class AnswerParts
                 MinHeight = step ? 44 : 0,
                 Child = line,
             },
+            // not enabled, also for an assistive app: a press would answer the card and start nothing
+            IsEnabled = !off,
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
         return button;

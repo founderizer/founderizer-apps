@@ -88,7 +88,7 @@ public struct FleetManifest: Decodable, Sendable, Equatable {
 
     /// What this manifest has to be before the app will show it as a copy of a fleet. It is deliberately a little
     /// stricter than nothing and a long way short of the hub's own reading: this check is how the app avoids
-    /// sending 256 MiB of something that was never a copy, not how a restore is made safe.
+    /// sending a large file that was never a copy, not how a restore is made safe.
     public func check() throws {
         guard format == Self.format1 else { throw RestoreError.otherFormat(format) }
         guard made_at.isFinite, made_at > 0, agents.count <= 1000,
@@ -350,6 +350,29 @@ public enum RestoreConflict: Sendable, Equatable {
     }
 }
 
+/// **A refusal of `POST /ui/restore` that the hub gives before it writes anything** (the hub-side second reader's note
+/// for the Mac, round 3, 22 November 2026). The app read each refusal but a 409 as a copy that may have landed: it
+/// watched the generation for 240 seconds, and then said "lost", for a copy that the hub had refused with its own
+/// words (piece 3's point: "This copy needs at least 1.2 GB there"). The hub gives these only from the head of the
+/// request or from its check of the copy, before the configuration is committed and before the records have their
+/// name: 400 (the headers), 403 (not the owner's computer, or copies turned off), 404 (no such route), 413 (a body
+/// too large, from a server in between), 422 (a copy that is not one, or not of a fleet this hub can run) and 507
+/// (`restore_no_room`). On the first send of an id, no one of them comes after a restore that landed. A resend of an
+/// id whose outcome is not known (Send it again, after a wait that gave up) can meet one after its first send staged
+/// the copy: the hub checks the room at the head, before it replays the first answer, and the staged records take
+/// that room (the second reader's R5-1, 22 November 2026). So `RestoreModel` reads these as part of that wait there.
+/// A 409 is its own question (`RestoreConflict`), and every other answer (a 5xx, a lost connection) can come after
+/// the records were staged, so the generation decides those.
+public enum RestoreRefusal {
+    public static let beforeAnyWrite: Set<Int> = [400, 403, 404, 413, 422, 507]
+
+    /// What the hub said, for a refusal before anything was written; nil for every other error.
+    public static func wroteNothing(_ error: Error) -> String? {
+        guard case HubError.refusal(let refusal) = error, beforeAnyWrite.contains(refusal.status) else { return nil }
+        return HubError.said(error) ?? HubError.refusal(refusal).errorDescription
+    }
+}
+
 // MARK: - waiting for it to land
 
 /// The wait after a restore is accepted: the hub stages the records, restarts itself, and the start that follows
@@ -386,9 +409,11 @@ public struct RestoreWatch: Sendable, Equatable {
     /// How long a restart may take before the app stops calling it a restart. A hub restart is seconds; this is
     /// long enough for a slow machine and short enough that he is not left watching a spinner.
     public static let patience: Double = 240
+    /// This watch's own `patience`: a test's is short.
+    public let waitsAtMost: Double
 
-    public init(before: String, restarts: Bool) {
-        self.before = before; self.restarts = restarts
+    public init(before: String, restarts: Bool, waitsAtMost: Double = RestoreWatch.patience) {
+        self.before = before; self.restarts = restarts; self.waitsAtMost = waitsAtMost
     }
 
     public func read(_ look: Look, waited: Double) -> Stand {
@@ -396,7 +421,7 @@ public struct RestoreWatch: Sendable, Equatable {
         // the machine took about it.
         if case .answered(let now) = look, now != before, !now.isEmpty { return .landed(now) }
         if !restarts { return .staged }
-        return waited > Self.patience ? .lost : .restarting
+        return waited > waitsAtMost ? .lost : .restarting
     }
 }
 
@@ -404,7 +429,7 @@ public struct RestoreWatch: Sendable, Equatable {
 
 /// One member of a zip, by name, without reading the zip into memory.
 ///
-/// A copy is up to 256 MiB and `fleet.json` is a few hundred bytes at the end of it, so this seeks: the end of
+/// A copy has no limit of size and `fleet.json` is a few hundred bytes of it, so this seeks: the end of
 /// central directory, then the entry, then its own bytes. It reads the central directory and one member and
 /// nothing else, and it refuses a member larger than the caller allows.
 ///
@@ -617,7 +642,6 @@ enum ZipArchive {
 public enum RestoreError: LocalizedError, Sendable, Equatable {
     case notACopy
     case otherFormat(Int)
-    case tooLarge
     case empty
     case cannotRead(String)
     /// The hub answered 409 and its generation had not moved, so this hub already holds a fleet's work.
@@ -628,7 +652,6 @@ public enum RestoreError: LocalizedError, Sendable, Equatable {
         case .notACopy: String(l10n: "That file is not a copy of a fleet. Choose the zip your hub gave you.")
         case .otherFormat(let format):
             String(l10n: "That copy is format \(format) and this app reads format \(FleetManifest.format1).")
-        case .tooLarge: String(l10n: "A copy is at most 256 MiB. Put this one back on the hub server itself.")
         case .empty: String(l10n: "That file is empty.")
         case .cannotRead(let reason): String(l10n: "That copy could not be read: \(reason)")
         case .holdsWork(let said): said
@@ -655,7 +678,6 @@ public struct ChosenCopy: Sendable, Equatable {
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)??.int64Value
         guard let size else { throw RestoreError.cannotRead(String(l10n: "this Mac cannot read that file.")) }
         guard size > 0 else { throw RestoreError.empty }
-        guard size <= FleetCopy.sizeLimit else { throw RestoreError.tooLarge }
         let manifest: FleetManifest
         do {
             let found = try ZipArchive.member(FleetManifest.manifestMember, in: file, limit: 1 << 20)
@@ -667,7 +689,8 @@ public struct ChosenCopy: Sendable, Equatable {
         }
         try manifest.check()
         // Every member the manifest lists has to be in the zip. The hub checks each one's digest as well; this is
-        // only so that a copy that was cut short is refused here instead of after 256 MiB went over the network.
+        // only so that a copy that was cut short is refused here instead of after the whole of it went over the
+        // network.
         let carried = Set((try? ZipArchive.names(in: file)) ?? [])
         guard manifest.files.keys.allSatisfy(carried.contains) else { throw RestoreError.notACopy }
         return ChosenCopy(file: file, bytes: size, manifest: manifest)
@@ -699,7 +722,7 @@ public struct RestoreReceipt: Decodable, Sendable, Equatable {
 extension HubClient {
     /// `POST /ui/restore`: the copy goes back.
     ///
-    /// The file is streamed from disk, so a 256 MiB copy never stands in this app's memory. The request id is the
+    /// The file is streamed from disk, so a copy of any size never stands in this app's memory. The request id is the
     /// caller's and must stay the same across a retry of the same send: the hub replays the first answer for the
     /// same id with the same copy, which is what makes a retry after a lost connection safe. **A send with a
     /// different `replace` is a different command to the hub**, so changing it needs a new id.
@@ -717,10 +740,11 @@ extension HubClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(client, forHTTPHeaderField: "X-Fleet-Client")
         request.setValue(requestID.uuidString.lowercased(), forHTTPHeaderField: "X-Fleet-Request-Id")
-        // A copy takes as long as it takes to go up, as `takeCopy` lets it take as long as it takes to come down.
+        // A copy takes as long as it takes to go up, as `takeCopy` lets it take as long as it takes to come down: no
+        // limit for the whole (the system's own default of seven days), because no clock may end a transfer that moves,
+        // and a wait for the answer that covers the hub's unpacking and check of a large copy.
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 900
+        configuration.timeoutIntervalForRequest = 600
         let transfer = URLSession(configuration: configuration)
         defer { transfer.finishTasksAndInvalidate() }
         let (data, response) = try await transfer.upload(for: OwnerMacKey.authorized(request), fromFile: file)

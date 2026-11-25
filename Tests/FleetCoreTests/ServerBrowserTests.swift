@@ -70,6 +70,11 @@ struct ServerBrowserTests {
         #expect(ServerBrowser.table(rows, uids: uids, broker: nil, worker: 1000)?
                     .contains("\t\toifname \"lo\" tcp dport 9311 meta skuid != { 0, 1002 } reject with tcp reset\n") == true)
         #expect(ServerBrowser.table(rows, uids: ["fleet-alpha": 1002], broker: 1001, worker: 1000) == nil)
+        // A port outside its range makes no table either, beside a good row too: no caller gets a rule for port 22.
+        for (devtools, screen) in [(22, 5912), (9312, 22), (9400, 5912), (9299, 5912), (9312, 6000), (9312, 5909)] {
+            let bad = [rows[0], Ports(user: "fleet-beta", devtools: devtools, screen: screen)]
+            #expect(ServerBrowser.table(bad, uids: uids, broker: 1001, worker: 1000) == nil, "\(devtools) \(screen)")
+        }
     }
 
     /// A row that stays keeps its place and its ports, and a new agent takes ports that no row had, so that a port
@@ -82,6 +87,70 @@ struct ServerBrowserTests {
                 == [current[0], current[2], Ports(user: "fleet-d", devtools: 9303, screen: 5913)])
         let full = (0..<90).map { Ports(user: "fleet-a\($0)", devtools: 9300 + $0, screen: 5910 + $0) }
         #expect(ServerBrowser.assign(full, wanted: full.map(\.user) + ["fleet-new"]) == full)
+    }
+
+    /// The hub relays the server's reading, so a broken-in hub can read any port for an agent. A row with a DevTools
+    /// port outside 9300-9399 or a screen port outside 5910-5999, or with a port or a user that an earlier row has, is
+    /// no row (the same ranges and the same once-only rule as `lifecycle.browser_port_rows`), and its user gets free
+    /// ports in range as a new user does: a reading of port 22 for an agent never makes the step write rules for port 22.
+    @Test func aReadingsRowOutsideTheRangesGetsPortsInRange() throws {
+        let both = ["fleet-alpha", "fleet-beta"], alpha = Ports(user: "fleet-alpha", devtools: 9300, screen: 5910)
+        let beta = Ports(user: "fleet-beta", devtools: 9301, screen: 5911)
+        #expect(ServerBrowser.assign([Ports(user: "fleet-alpha", devtools: 22, screen: 5910), beta], wanted: both)
+                == [beta, alpha])
+        #expect(ServerBrowser.assign([Ports(user: "fleet-alpha", devtools: 9300, screen: 22)], wanted: both)
+                == [alpha, beta])
+        // A port that an earlier row holds (a DevTools port, a screen port), and a user that an earlier row names.
+        #expect(ServerBrowser.assign([alpha, Ports(user: "fleet-beta", devtools: 9300, screen: 5911)], wanted: both)
+                == [alpha, beta])
+        #expect(ServerBrowser.assign([alpha, Ports(user: "fleet-beta", devtools: 9301, screen: 5910)], wanted: both)
+                == [alpha, beta])
+        #expect(ServerBrowser.assign([alpha, Ports(user: "fleet-alpha", devtools: 9301, screen: 5911)], wanted: both)
+                == [alpha, beta])
+        // The ranges' own ends stay, and the ports just past them go.
+        let ends = Ports(user: "fleet-alpha", devtools: 9399, screen: 5999)
+        #expect(ServerBrowser.assign([ends], wanted: ["fleet-alpha"]) == [ends])
+        for (devtools, screen) in [(9400, 5910), (9299, 5910), (9300, 6000), (9300, 5909)] {
+            #expect(ServerBrowser.assign([Ports(user: "fleet-alpha", devtools: devtools, screen: screen)],
+                                         wanted: ["fleet-alpha"]) == [alpha], "\(devtools) \(screen)")
+        }
+        // A whole round: the server's reading says port 22 for alpha, and the want puts alpha on ports in range.
+        let reading = try server(ports: [["user": "fleet-alpha", "devtools": 22, "screen": 5910]], added: true)
+        guard case .install(let want)? = work(reading, [try agent("alpha")]) else {
+            Issue.record("a reading of port 22 puts nothing in place"); return
+        }
+        #expect(want.rows == [alpha] && !want.table.contains(" 22 "), "\(want.table)")
+    }
+
+    /// The reading names the worker user too, whose uid the table lets open every agent's screen port and which gets
+    /// the live proof's folder. Only the service's own user (`fleet`, from `join.sh`) gets a want: never a cloud image's
+    /// login user, another account, an agent's user or the broker's, and never `fleet` with uid 0, the broker's uid or
+    /// an agent's uid. A `fleet` user that was there before the join with a system uid gets one, and so does a server
+    /// where an agent runs as the service's own user.
+    @Test func theWorkerUserIsTheServicesOwnUser() throws {
+        let uids = ["fleet-alpha": 1002, "fleet-beta": 1003]
+        #expect(ServerBrowser.workerFits("fleet", uid: 1000, uids: uids, broker: 1001))
+        #expect(ServerBrowser.workerFits("fleet", uid: 999, uids: uids.merging(["fleet": 999]) { a, _ in a },
+                                         broker: nil))
+        for (user, uid) in [("ubuntu", 1000), ("admin", 1500), ("fleet-beta", 1003), ("fleet-vault", 1001),
+                            ("fleet-beta", 1500), ("Fleet", 1000), ("fleet ", 1000), ("daemon", 1), ("root", 0),
+                            ("fleet", 0), ("fleet", 1001), ("fleet", 1002)] {
+            #expect(!ServerBrowser.workerFits(user, uid: uid, uids: uids, broker: 1001), "\(user) \(uid)")
+        }
+        let agents = [try agent("alpha")]
+        guard case .install = work(try server(), agents) else { Issue.record("the service's own user gets no want"); return }
+        guard case .install = work(try server(workerID: 999), agents) else {
+            Issue.record("a fleet user with a system uid gets no want"); return
+        }
+        for (user, uid) in [("ubuntu", 1000), ("fleet-beta", 1003), ("fleet-vault", 1001), ("fleet", 1002)] {
+            #expect(work(try server(worker: user, workerID: uid), agents) == nil, "\(user) \(uid)")
+        }
+        // An agent that runs as the service's own user, beside one with a user of its own: the parts still come.
+        let shared: [String: Any] = ["alpha": ["user": "fleet", "uid": 1000], "beta": ["user": "fleet-beta", "uid": 1003]]
+        guard case .install(let want)? = work(try server(users: shared), [try agent("alpha"), try agent("beta")]) else {
+            Issue.record("an agent of the service's own user keeps the others' parts out"); return
+        }
+        #expect(want.worker == "fleet" && want.workerID == 1000 && want.rows.map(\.user) == ["fleet-beta"])
     }
 
     // MARK: what a round does
@@ -105,13 +174,14 @@ struct ServerBrowserTests {
                         missing: [String] = ServerBrowser.packages, unit: String? = "inactive", added: Bool = false,
                         broker: Int? = 1001, job: String? = nil, hub: Bool = false, source: String = "server",
                         reportedAt: Double = time - 60, users: [String: Any]? = nil, browser: Bool = true,
-                        kept: Bool? = nil, chrome: String? = nil) throws -> ServerEntry {
+                        kept: Bool? = nil, chrome: String? = nil, worker: String = "fleet",
+                        workerID: Int = 1000) throws -> ServerEntry {
         var parts: [String: Any] = ["state": state as Any, "missing": missing, "files": files, "unit": unit as Any,
-                                    "ports": ports, "added": added, "worker": 1000, "chrome": chrome as Any]
+                                    "ports": ports, "added": added, "worker": workerID, "chrome": chrome as Any]
         if let broker { parts["broker"] = broker }
         if let kept { parts["proof_kept"] = kept }
         var reading: [String: Any] = ["source": source, "os": ["name": "Ubuntu 24.04"], "runtimes": [:],
-                                      "reported_at": reportedAt, "stale": false, "user": "fleet",
+                                      "reported_at": reportedAt, "stale": false, "user": worker,
                                       "agents": users ?? ["alpha": ["user": "fleet-alpha", "uid": 1002],
                                                           "beta": ["user": "fleet-beta", "uid": 1003]]]
         if browser { reading["browser"] = parts }
@@ -306,7 +376,8 @@ struct ServerBrowserTests {
     /// `status` (Chrome brings `libnss3`, which nothing needs once Chrome is gone), `id` reads `users` (and says root
     /// where the mark `as-root` is), `systemd-run` runs the step at once in the shell of the test, and each command goes
     /// into `ran`. A mark makes a stand-in behave as a server can: `apt-busy`, `install-breaks` (dpkg fails after it
-    /// unpacked the packages), `drop-alpha` (fleet-alpha is deleted while the packages come), `lock-busy`, `xvfb-needed`
+    /// unpacked the packages), `drop-alpha` (fleet-alpha is deleted while the packages come), `gamma-takes-1000` (an
+    /// agent user with the worker user's uid 1000 comes while the packages come), `lock-busy`, `xvfb-needed`
     /// (a package of the server's own needs xvfb), `ffmpeg-needs-xvfb`, `sim-silent` (apt's simulation says nothing)
     /// and `dpkg-fails` (dpkg cannot list its packages, once); `held` lists the packages on hold, `half` the ones that
     /// dpkg left half configured.
@@ -389,6 +460,7 @@ struct ServerBrowserTests {
                     sort -u '\(here)/status' -o '\(here)/status'
                     [ ! -e '\(here)/drop-alpha' ] || grep -v '^fleet-alpha ' '\(here)/users' > '\(here)/users.new'
                     [ ! -e '\(here)/drop-alpha' ] || mv '\(here)/users.new' '\(here)/users'
+                    [ ! -e '\(here)/gamma-takes-1000' ] || echo 'fleet-gamma 1000' >> '\(here)/users'
                     [ ! -e '\(here)/install-breaks' ] || { echo 'E: Sub-process /usr/bin/dpkg returned an error code (1)'; exit 100; };;
                   purge|remove) for p; do case "$p" in -*) ;; *)
                     if [ -n "$s" ]; then echo "$( [ "$c" = purge ] && echo Purg || echo Remv ) $p [1.0]"
@@ -577,6 +649,92 @@ struct ServerBrowserTests {
         #expect(!changed.exists(ServerBrowser.policyPath) && !changed.exists(ServerBrowser.keyPath))
         try changed.mark("step-runs")
         #expect(try changed.run(.install(want)).hasSuffix("founderizer-browser running \(want.digest) users-changed\n"))
+    }
+
+    /// The step holds the ports and the table to the ranges again on the server, as a second guard beside `assign` and
+    /// `table` (a Mac's bug, or a port of this step to another app): a ports line with a port outside its range, a port
+    /// or a user given twice, or the broker's user, and a table that names another port in a `dport` or a `sport`, stop
+    /// the step with `ports-refused` before it writes a part, installs a package or runs `nft`. The same server then
+    /// takes a want whose ports are in range.
+    @Test(arguments: ["/bin/sh", "/bin/dash"]) func theStepRefusesAPortOutsideTheRanges(shell: String) throws {
+        let server = try Root(shell: shell)
+        defer { server.remove() }
+        try server.mark("as-root")
+        let good = want(), alpha = Ports(user: "fleet-alpha", devtools: 9300, screen: 5910)
+        func bad(_ rows: [Ports], table: String? = nil) -> ServerBrowser.Want {
+            ServerBrowser.Want(rows: rows, table: table ?? good.table,
+                               uids: ["fleet-alpha": 1002, "fleet-beta": 1003, "fleet-vault": 1001]
+                                   .filter { user, _ in rows.contains { $0.user == user } },
+                               broker: 1001, worker: "fleet", workerID: 1000)
+        }
+        func swapped(_ old: String, _ new: String) -> String {
+            #expect(good.table.contains(old), "\(old)")
+            return good.table.replacingOccurrences(of: old, with: new)
+        }
+        let wants = [bad([Ports(user: "fleet-alpha", devtools: 22, screen: 5910)]),
+                     bad([Ports(user: "fleet-alpha", devtools: 9300, screen: 22)]),
+                     bad([Ports(user: "fleet-alpha", devtools: 9400, screen: 5910)]),
+                     bad([Ports(user: "fleet-alpha", devtools: 9300, screen: 5909)]),
+                     bad([alpha, Ports(user: "fleet-beta", devtools: 9300, screen: 5911)]),
+                     bad([alpha, Ports(user: "fleet-beta", devtools: 9301, screen: 5910)]),
+                     bad([alpha, Ports(user: "fleet-alpha", devtools: 9301, screen: 5911)]),
+                     bad([Ports(user: "fleet-vault", devtools: 9300, screen: 5910)]),
+                     bad([alpha], table: swapped("tcp dport 9300 meta", "tcp dport 22 meta")),
+                     bad([alpha], table: swapped("tcp sport { 9300, 5910 }", "tcp sport { 9300, 22 }")),
+                     bad([alpha], table: swapped("{ 5910-5999, 9300-9399 }", "{ 5910-9399 }")),
+                     bad([alpha], table: swapped("tcp dport 5910 meta", "tcp dport ssh meta"))]
+        for want in wants {
+            _ = try server.run(.install(want))
+            #expect(server.result == "\(want.digest) ports-refused\n", "\(want.rows) \(server.result ?? "none")")
+        }
+        for path in Self.partPaths + ["/etc/fleet-browser", "/var/lib/fleet-browser/proof"] {
+            #expect(!server.exists(path), "\(path)")
+        }
+        #expect(!server.ran.contains { $0.hasPrefix("nft") || $0.hasPrefix("apt-get") || $0.hasPrefix("chown")
+                                       || ($0.hasPrefix("systemctl") && !$0.contains("is-active")) }, "\(server.ran)")
+        _ = try server.run(.install(good))
+        #expect(server.result == "\(good.digest) ok\n" && server.text(ServerBrowser.portsPath) == "fleet-alpha 9300 5910\n")
+    }
+
+    /// The step holds the worker user to `workerFits` again, from the server's own users: another account, an agent's
+    /// user, the broker, and `fleet` with uid 0, the broker's uid or an agent's uid stop it with `worker-refused` before
+    /// it writes a part, installs a package or runs `nft`. A `fleet` user with a system uid then passes. An agent user
+    /// that takes the worker's uid while the packages come stops it under the lock, before the ports and the table.
+    @Test(arguments: ["/bin/sh", "/bin/dash"]) func theStepRefusesAWorkerThatIsNotTheServicesUser(shell: String) throws {
+        let server = try Root(shell: shell)
+        defer { server.remove() }
+        try server.mark("as-root")
+        try server.put("users", "fleet 1000\nfleet-vault 1001\nfleet-alpha 1002\nfleet-beta 1003\nubuntu 1004\n"
+                       + "root 0\n")
+        let good = want()
+        func worker(_ user: String, _ uid: Int) -> ServerBrowser.Want {
+            ServerBrowser.Want(rows: good.rows, table: good.table, uids: good.uids, broker: good.broker, worker: user,
+                               workerID: uid)
+        }
+        for (user, uid) in [("ubuntu", 1004), ("fleet-beta", 1003), ("fleet-vault", 1001), ("root", 0), ("fleet", 0),
+                            ("fleet", 1001), ("fleet", 1002)] {
+            let bad = worker(user, uid)
+            _ = try server.run(.install(bad))
+            #expect(server.result == "\(bad.digest) worker-refused\n", "\(user) \(uid) \(server.result ?? "none")")
+        }
+        for path in Self.partPaths + ["/etc/fleet-browser", "/var/lib/fleet-browser/proof"] {
+            #expect(!server.exists(path), "\(path)")
+        }
+        #expect(!server.ran.contains { $0.hasPrefix("nft") || $0.hasPrefix("apt-get") || $0.hasPrefix("chown")
+                                       || ($0.hasPrefix("systemctl") && !$0.contains("is-active")) }, "\(server.ran)")
+        try server.put("users", "fleet 999\nfleet-vault 1001\nfleet-alpha 1002\n")
+        let system = worker("fleet", 999)
+        _ = try server.run(.install(system))
+        #expect(server.result == "\(system.digest) ok\n" && server.text(ServerBrowser.portsPath) == "fleet-alpha 9300 5910\n")
+        // The check under the lock: fleet-gamma comes with the worker's uid after the first check.
+        let taken = try Root(shell: shell)
+        defer { taken.remove() }
+        try taken.mark("as-root")
+        try taken.mark("gamma-takes-1000")
+        _ = try taken.run(.install(good))
+        #expect(taken.result == "\(good.digest) worker-refused\n" && taken.record?.contains("requested xvfb\n") == true
+                && !taken.exists(ServerBrowser.portsPath) && !taken.exists(ServerBrowser.tablePath), "\(taken.ran)")
+        #expect(!taken.ran.contains { $0.hasPrefix("nft") || $0.contains("fleet-browser-ports") })
     }
 
     /// The untick of the last box, in the contract's order: the table's unit and the table go before any package (so

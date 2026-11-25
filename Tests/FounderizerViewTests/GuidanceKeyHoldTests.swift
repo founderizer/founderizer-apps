@@ -65,15 +65,12 @@ struct GuidanceKeyHoldTests {
         return store
     }
 
-    /// The element of this identifier in the card over the window, or nil while the card does not show it.
-    @MainActor private static func element(_ identifier: String, in window: NSWindow) -> NSObject? {
+    /// The first element of the card over the window that `matches`, as an assistive app walks it, or nil.
+    @MainActor private static func find(in window: NSWindow, _ matches: (NSObject) -> Bool) -> NSObject? {
         var queue: [NSObject] = window.childWindows?.filter(\.isVisible).compactMap(\.contentView) ?? []
         while !queue.isEmpty {
             let object = queue.removeFirst()
-            let named = NSSelectorFromString("accessibilityIdentifier")
-            if object.responds(to: named), object.perform(named)?.takeUnretainedValue() as? String == identifier {
-                return object
-            }
+            if matches(object) { return object }
             let children = NSSelectorFromString("accessibilityChildren")
             if object.responds(to: children), let kids = object.perform(children)?.takeUnretainedValue() as? [Any] {
                 queue += kids.compactMap { $0 as? NSObject }
@@ -82,8 +79,25 @@ struct GuidanceKeyHoldTests {
         return nil
     }
 
+    /// An element's text attribute (`accessibilityIdentifier`, `accessibilityLabel`, `accessibilityValue`), or nil.
+    @MainActor private static func attribute(_ name: String, of object: NSObject) -> String? {
+        let selector = NSSelectorFromString(name)
+        guard object.responds(to: selector) else { return nil }
+        return object.perform(selector)?.takeUnretainedValue() as? String
+    }
+
+    /// The element of this identifier in the card over the window, or nil while the card does not show it.
+    @MainActor private static func element(_ identifier: String, in window: NSWindow) -> NSObject? {
+        find(in: window) { attribute("accessibilityIdentifier", of: $0) == identifier }
+    }
+
+    /// The card shows these words as one text of their own, exactly.
+    @MainActor private static func shows(_ words: String, in window: NSWindow) -> Bool {
+        find(in: window) { attribute("accessibilityLabel", of: $0) == words || attribute("accessibilityValue", of: $0) == words } != nil
+    }
+
     struct Seen: Sendable {
-        var boxShown = false, askedOnWords = false, bannerShown = false, endedWithoutKey = false
+        var boxShown = false, askedOnWords = false, bannerShown = false, messageWords = false, endedWithoutKey = false
         var heldOnSend = false, sent = true, namesBoth = false
     }
 
@@ -108,6 +122,7 @@ struct GuidanceKeyHoldTests {
             store.guidanceDrafts[box] = "Use this key: " + Self.keyText
             seen.askedOnWords = ViewHost.turn(10) { store.heldKey == mine }
             seen.bannerShown = ViewHost.turn(10) { Self.element("key-hold", in: window) != nil }
+            seen.messageWords = ViewHost.turn(10) { Self.shows("This message holds what looks like a key.", in: window) }
             // the agent that gave the task gets a copy of each guidance, so the question names it too (the owner's
             // "Name both" of 22 November 2026): "In a guidance, Studio and Lead and their transcripts would have it."
             if let card = window.childWindows?.first(where: \.isVisible) {
@@ -131,6 +146,7 @@ struct GuidanceKeyHoldTests {
         #expect(seen.boxShown, "the working task's card shows its guidance box")
         #expect(seen.askedOnWords, "words with a key get the box's question")
         #expect(seen.bannerShown, "the question shows over the box")
+        #expect(seen.messageWords, "in the words of a message, as in the chat")
         #expect(seen.namesBoth, "and it names the task's agent and the agent that gets the guidance's copy")
         #expect(seen.endedWithoutKey, "words with no key end the question")
         #expect(seen.heldOnSend, "Send holds a key also when the box asked nothing")

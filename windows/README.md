@@ -567,8 +567,9 @@ names stay.
 - **The installer**: `Installer.For(plan, hubClient, box, authKey, sudoPassword, firstRun, policy)`, or `new
   Installer(plan, authKey, sudoPassword, claim, readHub, clock, verifyPause, firstRun, policy)`; `firstRun` and
   `policy` choose the words of a failure once, for each step's detail and its error's line alike; then `RunAsync(IRemote, Action<InstallProgress>, CancellationToken)` gives the
-  server's `VerifyChecklist`, or throws an `InstallError`. `Installer.RunAsync(plan, remote, progress, cancel)` runs a
-  plan with no claim. `Reached` is where the install reaches the server (its private address after the network step),
+  server's `VerifyChecklist`, or throws an `InstallError`. `Installer.RunAsync(plan, remote, progress, cancel, authKey)`
+  runs a plan with no claim. A keyed plan's network step sends the installer's `authKey`, so each installer of such a
+  plan takes the key that the plan was made with; one made with none stops at that step and sends nothing. `Reached` is where the install reaches the server (its private address after the network step),
   `ClaimedHub` the hub that the claim step claimed (`http://100.x.y.z:8765/`), which the first run then gives
   `OwnerStore.ConnectOwnerAsync`. Every call logs in with the app's own key under `HostKeyRule.TakeNew` (the Mac's
   `accept-new`), with the Mac's time limit of its step (`RemoteCall.Limit`: the check 120 s, a program 1800 s, the join

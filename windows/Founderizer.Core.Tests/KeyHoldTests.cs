@@ -168,7 +168,8 @@ public sealed class KeyHoldTests
         await using var store = await Store();
         store.SetDraft("wren", "the key is " + Key);
         var composer = Screens.Chat(store.State, "wren", Clock, Utc).Composer;
-        Assert.AreEqual(("This message holds what looks like a key.", "In a message, Customer Support and its transcripts would have it.",
+        // the agent as the apps name it (AgentBook.Label, FleetCore's agentLabel): "Wren", by its name since F16
+        Assert.AreEqual(("This message holds what looks like a key.", $"In a message, {store.State.Names.Label("wren")} and its transcripts would have it.",
                          "Keep it", false),
                         (composer.KeyHold?.Words, composer.KeyHold?.Line, composer.KeyHold?.KeepWords, composer.CanSend));
         Assert.IsNull(await store.SendMessageAsync("wren"));

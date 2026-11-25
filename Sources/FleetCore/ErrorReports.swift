@@ -51,7 +51,8 @@ public enum FirstRunReports {
     /// The answer that no hub took yet: `send` or `none`.
     public static let waitingKey = "firstRunErrorReportsWaiting"
     /// The time of the owner's last press on a card, in seconds since 1970: the start of the installs that a report may
-    /// carry once a hub took his "Send" (`ErrorReportsDay.pressedOn`).
+    /// carry once a hub took his "Send" (`ErrorReportsDay.pressedOn`), and of those of a report with no hub (F5 piece
+    /// 4), also when a "Don't send" and a new "Send" came between two passes of the sender.
     static let pressedKey = "firstRunErrorReportsPressed"
 
     /// The card that the owner chose last on this Mac: true to send, false not to, nil before the first answer.
@@ -146,8 +147,9 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
     static let systemPattern = #"\A[A-Za-z]{1,16}( [0-9]{1,4}(\.[0-9]{1,4}){0,3})?\z"#
     static let uuidPattern = #"\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z"#
 
-    /// The fleet's sixteen hex characters (`Entitlement.fleet`), as Report a problem names it.
-    public let fleet: String
+    /// The fleet's sixteen hex characters (`Entitlement.fleet`), as Report a problem names it. nil only in the report
+    /// of an install that stopped before this Mac has a hub (`noHub`): no fleet exists yet.
+    public let fleet: String?
     /// Always "mac": the hub sends its own reports.
     public let from: String
     /// This app's version as `AppVersion.running` names it: "0.1.285 (286)" (`version(of:)`).
@@ -170,6 +172,25 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
         self.version = version
         self.system = system.flatMap { Self.matches($0, Self.systemPattern) ? $0 : nil }
         self.crashes = crashes
+        self.app = app
+    }
+
+    /// **The report of an install that stopped before this Mac has a hub** (the F5 analysis of 22 November 2026, piece
+    /// 4): no fleet's id, because no fleet exists yet, no crash, and the day whose hub's reach is `no_hub` with at least
+    /// one install. Our site takes a report with no fleet only so (`from` "mac", `app`, no `crashes`), and keeps it in
+    /// no row that is by fleet. nil for a version outside the contract, a day of another reach, or a day with no install.
+    public static func noHub(version: String?, system: String?, app: AppHealth) -> ErrorReport? {
+        guard let version, matches(version, versionPattern), app.hub.reach == AppHealth.noHubReach, !app.installs.isEmpty
+        else { return nil }
+        return ErrorReport(noFleet: version, system: system, app: app)
+    }
+
+    private init(noFleet version: String, system: String?, app: AppHealth) {
+        fleet = nil
+        from = "mac"
+        self.version = version
+        self.system = system.flatMap { Self.matches($0, Self.systemPattern) ? $0 : nil }
+        crashes = []
         self.app = app
     }
 
@@ -200,10 +221,11 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey { case fleet, from, version, system, crashes, app }
 
     /// **An optional key of the report is left out, never `null`**: the site refuses a null key at the top, so a report
-    /// with no system has no `system`, a day with no crash has no `crashes`, and a report of crashes has no `app`.
+    /// with no system has no `system`, a day with no crash has no `crashes`, a report of crashes has no `app`, and the
+    /// report of an install with no hub (`noHub`) has no `fleet`.
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(fleet, forKey: .fleet)
+        if let fleet { try values.encode(fleet, forKey: .fleet) }
         try values.encode(from, forKey: .from)
         try values.encode(version, forKey: .version)
         if let system { try values.encode(system, forKey: .system) }
@@ -333,6 +355,20 @@ public enum ErrorReportError: Error, Equatable, Sendable {
         case ErrorReportError.tooLarge: false
         default: true
         }
+    }
+
+    /// **How long the Mac's day waits after a send that did not go** (the hub's rule, `errorreports.send`, with piece 3
+    /// of F5): an hour after an answer that may change soon (`keeps`: no answer, a 429, a 5xx) and after a redirect
+    /// that may end (302, 303, 307); a day after every other answer (a redirect that stays, 301 or 308, and every 4xx
+    /// but 429, a 400 too, and a report too large), which the same report would only meet again. Each is a wait before
+    /// the next try, never an end. The validator's finding 4.1 of piece 4: before this rule, such an answer to an early
+    /// report held nothing, and the same install's stop asked for a new send at each pass of the loop.
+    public static func dayWait(after error: Error) -> TimeInterval {
+        if keeps(error) { return ErrorReportsDay.retry }
+        if case ErrorReportError.refused(let status) = error, [302, 303, 307].contains(status) {
+            return ErrorReportsDay.retry
+        }
+        return ErrorReportsDay.day
     }
 }
 
@@ -562,8 +598,17 @@ public struct AppHealth: Encodable, Equatable, Sendable {
                                       "cannot_replace", "other"]
     public static let reaches = ["none", "invalid_address", "refused_this_mac", "not_a_hub", "hub_error", "refused",
                                  "unreadable", "timed_out", "no_connection", "host_not_found", "no_network",
-                                 "blocked_by_app", "not_secure", "other"]
+                                 "blocked_by_app", "not_secure", "no_hub", "other"]
+    /// **The reach of a Mac that no hub answered yet** (piece 4): the report of an install that stopped before a hub
+    /// exists (`ErrorReport.noHub`). No read of the app gives it (`ReachFacts.ReadKind` has no such kind).
+    public static let noHubReach = "no_hub"
     public static let installKinds = ["hub", "server", "mac", "other"]
+    /// **The step that an install stopped at** (`ReachFacts.InstallStepName`, the ids of the two plans and a Mac's
+    /// order), `none` for a stop before its first step, and `other`: what a diagnosis of the stop needs (the owner's note
+    /// of 22 November 2026 to the picture of a stopped install: "it should report immediately and automatically! and try
+    /// to auto diagnose"). A fixed name, never a line of a server.
+    public static let installSteps = ["none", "read", "network", "code", "plan", "start", "wait_claim", "claim",
+                                      "wait_ready", "verify", "join", "order", "other"]
     public static let installStops = ["none", "cannot_start", "installer_stopped", "server_unreached", "login_refused",
                                       "step_failed", "hub_not_ours", "not_root", "timed_out", "no_claim_code",
                                       "no_checklist", "check_stopped", "needs_sudo_password", "needs_ssh_password",
@@ -670,17 +715,20 @@ public struct AppHealth: Encodable, Equatable, Sendable {
         }
     }
 
-    /// **Installs of one kind that stopped so**: how many, and the first and the last time, in whole seconds.
+    /// **Installs of one kind that stopped so, at one step**: how many, and the first and the last time, in whole
+    /// seconds. Our site takes an entry with no `step` too (the Macs of W17 send none), and this Mac always sends it.
     public struct Install: Encodable, Equatable, Sendable {
         public let kind: String
+        public let step: String
         public let stop: String
         public let cause: String
         public let count: Int
         public let first: Int
         public let last: Int
 
-        public init(kind: String, stop: String, cause: String, count: Int, first: Int, last: Int) {
+        public init(kind: String, step: String = "none", stop: String, cause: String, count: Int, first: Int, last: Int) {
             self.kind = AppHealth.word(kind, in: AppHealth.installKinds)
+            self.step = AppHealth.word(step, in: AppHealth.installSteps)
             self.stop = AppHealth.word(stop, in: AppHealth.installStops)
             self.cause = AppHealth.stopsWithCause.contains(self.stop) ? AppHealth.word(cause, in: AppHealth.installCauses)
                 : "none"
@@ -816,39 +864,42 @@ public struct AppHealth: Encodable, Equatable, Sendable {
         }
     }
 
-    /// **The installs that stopped after `since`**: one entry for each kind, stop and cause, with how many and the
-    /// first and the last time; the `mostInstalls` that stopped last.
+    /// **The installs that stopped after `since`**: one entry for each kind, step, stop and cause, with how many and
+    /// the first and the last time; the `mostInstalls` that stopped last.
     public static func installs(_ stops: [InstallStop], since: Date) -> [Install] {
-        struct Key: Hashable { let kind, stop, cause: String }
+        struct Key: Hashable { let kind, step, stop, cause: String }
         var found: [Key: (count: Int, first: Int, last: Int)] = [:]
         for stop in stops where stop.at > since {
             let seconds = stop.at.timeIntervalSince1970
             guard seconds.isFinite, Double(ErrorReport.times.lowerBound) <= seconds,
                   seconds <= Double(ErrorReport.times.upperBound) else { continue }
             let at = Int(seconds)
-            let entry = Install(kind: stop.kind, stop: stop.stop, cause: stop.cause, count: 1, first: at, last: at)
-            let key = Key(kind: entry.kind, stop: entry.stop, cause: entry.cause)
+            let entry = Install(kind: stop.kind, step: stop.step, stop: stop.stop, cause: stop.cause, count: 1, first: at,
+                                last: at)
+            let key = Key(kind: entry.kind, step: entry.step, stop: entry.stop, cause: entry.cause)
             let before = found[key]
             found[key] = (min((before?.count ?? 0) + 1, ErrorReport.maxCount), min(before?.first ?? at, at),
                           max(before?.last ?? at, at))
         }
-        return found.map { Install(kind: $0.key.kind, stop: $0.key.stop, cause: $0.key.cause, count: $0.value.count,
-                                   first: $0.value.first, last: $0.value.last) }
-            .sorted { ($0.last, $0.kind, $0.stop, $0.cause) > ($1.last, $1.kind, $1.stop, $1.cause) }
+        return found.map { Install(kind: $0.key.kind, step: $0.key.step, stop: $0.key.stop, cause: $0.key.cause,
+                                   count: $0.value.count, first: $0.value.first, last: $0.value.last) }
+            .sorted { ($0.last, $0.kind, $0.step, $0.stop, $0.cause) > ($1.last, $1.kind, $1.step, $1.stop, $1.cause) }
             .prefix(mostInstalls).map { $0 }
     }
 }
 
 /// **One install that stopped**, by the fixed names of the app's records (`InstallRecord`): its kind as the contract
-/// names it ("server" for a join), its stop, its cause, and when it stopped.
+/// names it ("server" for a join), the step that it stopped at, its stop, its cause, and when it stopped.
 public struct InstallStop: Equatable, Sendable {
     public let kind: String
+    public let step: String
     public let stop: String
     public let cause: String
     public let at: Date
 
-    public init(kind: String, stop: String, cause: String, at: Date) {
+    public init(kind: String, step: String = "none", stop: String, cause: String, at: Date) {
         self.kind = kind
+        self.step = step
         self.stop = stop
         self.cause = cause
         self.at = at
@@ -857,8 +908,9 @@ public struct InstallStop: Equatable, Sendable {
 
 #if os(macOS)
 extension InstallStop {
-    /// The stops in the app's kept records: a record that stopped, with its fixed names and its end. Never its hub, its
-    /// host, its server's name, its id or its line (`says`).
+    /// The stops in the app's kept records: a record that stopped, with its fixed names and its end, and the step that
+    /// it stopped at as `setup_diagnosis` names it (`ReachFacts.installStep`). Never its hub, its host, its server's
+    /// name, its id or its line (`says`).
     public static func of(_ records: [InstallRecord]) -> [InstallStop] {
         records.compactMap { record in
             guard record.outcome == .stopped, let stop = record.stop, let ended = record.ended else { return nil }
@@ -867,7 +919,9 @@ extension InstallStop {
             case .join: "server"
             case .mac: "mac"
             }
-            return InstallStop(kind: kind, stop: stop.rawValue, cause: record.cause?.rawValue ?? "none", at: ended)
+            let step = record.stoppedAt.map { ReachFacts.installStep($0.rawValue).rawValue } ?? "none"
+            return InstallStop(kind: kind, step: step, stop: stop.rawValue, cause: record.cause?.rawValue ?? "none",
+                               at: ended)
         }
     }
 }
@@ -980,6 +1034,13 @@ public struct AppUpdateTries: Codable, Equatable, Sendable {
 /// **The block comes to our site first.** When our site answers 400 to a report with the day, the same report goes
 /// again at once without it when it has crashes, and the day waits a day (`deliver`), so a site that does not take
 /// the block yet costs no crash. The day's times are in the app's defaults: no work, no name and no key.
+///
+/// **An install that stops asks for the day at once** (the F5 analysis of 22 November 2026, piece 4, and the owner's
+/// note of that day to the picture of a stopped install: "it should report immediately and automatically!"): a stop
+/// that no report of our site took yet makes the day go at the next pass, as an early report (`next`), at most
+/// `earlyMost` in a day, as the hub's; each one that goes starts the day again. **Before a hub exists**, only while the
+/// owner's "Send" of the first run waits for a hub (`FirstRunReports.waiting`), and no hub answered this Mac
+/// (`noHubYet`), that stop goes in a report with no fleet's id (`ErrorReport.noHub`, `ErrorReportsSending`).
 public enum ErrorReportsDay {
     /// Between two days' reports, and the wait of the block after our site refused it.
     public static let day: TimeInterval = 86_400
@@ -992,6 +1053,8 @@ public enum ErrorReportsDay {
     public static let patience: TimeInterval = 15 * 60
     /// While the hub answers, the switch is read at least this often, so that its last answer is new when the hub goes.
     public static let look: TimeInterval = 3_600
+    /// The early reports in a `day` that an install that stopped may ask for, as the hub's (`errorreports.EARLY_MOST`).
+    public static let earlyMost = 4
     static let answerKey = "errorReportsAnswer"
     static let stateKey = "errorReportsDay"
 
@@ -1011,6 +1074,12 @@ public enum ErrorReportsDay {
         public let since: Double?
     }
 
+    /// Why a report goes now: the day is due, or an install that stopped asks for it early.
+    public enum Due: Sendable {
+        case day
+        case early
+    }
+
     /// What the hub said of the switch now: on (with its releases reading, when the sender has one), off (a hub that
     /// does not offer the switch is off too), or nothing.
     public enum Switch: Sendable {
@@ -1020,13 +1089,73 @@ public enum ErrorReportsDay {
     }
 
     /// The day's times: the last day that went (or that our site refused for good), the next try after a failed one,
-    /// the end of the block's wait, the last report with the block that our site took, and the hub's last answer.
+    /// the end of the block's wait, the last report with the block that our site took, the hub's last answer, the early
+    /// reports that went, and what came of the last reports that carried an install that stopped.
     struct State: Codable, Equatable {
         var sent: Double?
         var retry: Double?
         var hold: Double?
         var taken: Double?
         var hub: Double?
+        var earlies: [Double]?
+        /// The last report that carried installs, whatever came of it, and the last ones that our site took
+        /// (`keptTaken`).
+        var installs: InstallsSent?
+        var installsTaken: [InstallsSent]?
+    }
+
+    /// **One report that carried installs that stopped**: each entry that it carried (its kind, step, stop and cause,
+    /// and its first and last time in whole seconds), the time of its send (its stamp), and what came of it.
+    struct InstallsSent: Codable, Equatable {
+        enum Outcome: String, Codable { case sent, waiting, refused }
+        struct Entry: Codable, Equatable {
+            var kind, step, stop, cause: String
+            var first, last: Int
+        }
+        var entries: [Entry]
+        var at: Double
+        var outcome: Outcome
+
+        init(_ installs: [AppHealth.Install], at: Double, outcome: Outcome) {
+            entries = installs.map { Entry(kind: $0.kind, step: $0.step, stop: $0.stop, cause: $0.cause, first: $0.first,
+                                           last: $0.last) }
+            self.at = at
+            self.outcome = outcome
+        }
+
+        /// **The report carried this stop** (the second reader's M1 of piece 4): an entry of its kind, step, stop and
+        /// cause, by the words that an entry has, whose first and last time hold it. A stop that no block carried (one
+        /// while the switch was off, one before the owner's "Send", one that the cut to `AppHealth.mostInstalls` left
+        /// out) is in none, also when it is older than the newest stop of a block.
+        func carried(_ stop: InstallStop) -> Bool {
+            let seconds = stop.at.timeIntervalSince1970
+            guard seconds.isFinite, Double(ErrorReport.times.lowerBound) <= seconds,
+                  seconds <= Double(ErrorReport.times.upperBound) else { return false }
+            let at = Int(seconds)
+            let entry = AppHealth.Install(kind: stop.kind, step: stop.step, stop: stop.stop, cause: stop.cause, count: 1,
+                                          first: at, last: at)
+            return entries.contains {
+                $0.kind == entry.kind && $0.step == entry.step && $0.stop == entry.stop && $0.cause == entry.cause
+                    && $0.first <= at && at <= $0.last
+            }
+        }
+    }
+
+    /// **The entries of the reports with installs that our site took, that `installReport` reads**: as many as the app
+    /// keeps install records (`KeptRecords` keeps 40), so that a stop of each record that the page can show reads
+    /// `sent` for as long as its record is kept (the second reader's R2-N1). Each stop is in one entry of one report, so
+    /// 40 entries hold the 40 newest stops at the least. The newest report stays whole.
+    static let takenEntriesKept = 40
+
+    /// The reports that our site took, newest first, cut to `takenEntriesKept` entries in all.
+    static func keptTaken(_ reports: [InstallsSent]) -> [InstallsSent] {
+        var kept: [InstallsSent] = [], entries = 0
+        for report in reports {
+            guard kept.isEmpty || entries + report.entries.count <= takenEntriesKept else { break }
+            kept.append(report)
+            entries += report.entries.count
+        }
+        return kept
     }
 
     static func state(in defaults: UserDefaults) -> State {
@@ -1115,9 +1244,56 @@ public enum ErrorReportsDay {
     /// not wait after a refusal.
     public static func due(now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) -> Bool {
         let state = state(in: defaults), at = now.timeIntervalSince1970
-        if let retry = valid(state.retry, now: now), at < retry { return false }
-        if let hold = valid(state.hold, now: now), at < hold { return false }
+        if waits(state, now: now) { return false }
         return valid(state.sent, now: now).map { at - $0 >= day } ?? true
+    }
+
+    /// A failed try waits for `retry`, or the block waits after a refusal.
+    static func waits(_ state: State, now: Date) -> Bool {
+        let at = now.timeIntervalSince1970
+        if let retry = valid(state.retry, now: now), at < retry { return true }
+        if let hold = valid(state.hold, now: now), at < hold { return true }
+        return false
+    }
+
+    /// The early reports that went in the last `day`. One up to a `day` ahead of the clock stays counted, so that a
+    /// clock that went back gives no more early reports (the hub's rule, `error_report_earlies`).
+    static func earlies(_ state: State, now: Date) -> [Double] {
+        let at = now.timeIntervalSince1970
+        return (state.earlies ?? []).filter { $0.isFinite && at - $0 < day && $0 - at <= day }
+    }
+
+    /// **An early report may go now**: no failed try and no block wait, and fewer than `earlyMost` went in a `day`.
+    public static func mayGoEarly(now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) -> Bool {
+        let state = state(in: defaults)
+        return !waits(state, now: now) && earlies(state, now: now).count < earlyMost
+    }
+
+    /// **An install stopped that no report of our site took yet**: one of `stops` that ended after the installs' start
+    /// (`installsSince`), and after `floor` when there is one, at most a `day` ahead of the clock.
+    public static func asks(_ stops: [InstallStop], after floor: Date? = nil, now: Date = Date(),
+                            in defaults: UserDefaults = AppDefaults.store) -> Bool {
+        let since = max(installsSince(now: now, in: defaults), floor ?? .distantPast)
+        return stops.contains { $0.at > since && $0.at.timeIntervalSince(now) <= day }
+    }
+
+    /// **Why a report goes now, or nil**: the day when it is due; else an early report when an install stopped that no
+    /// report took yet (`asks`) and one may go (`mayGoEarly`). `stops` is read only when the day is not due.
+    public static func next(stops: () -> [InstallStop], after floor: Date? = nil, now: Date = Date(),
+                            in defaults: UserDefaults = AppDefaults.store) -> Due? {
+        if due(now: now, in: defaults) { return .day }
+        guard mayGoEarly(now: now, in: defaults), asks(stops(), after: floor, now: now, in: defaults) else { return nil }
+        return .early
+    }
+
+    /// **No hub answered this Mac yet**: no answer of a hub is kept, and no answer of a switch from a hub. An answer
+    /// "off" with no hub is the owner's own: a first-run "Don't send" (`FirstRunReports.choose`), which a later "Send"
+    /// of the first run replaces (the second reader's M2 of piece 4), or a switch-off of this Mac. A kept answer that
+    /// does not read counts as a hub's. "Start again" and a connect to another hub forget both (`forget`), so a Mac that
+    /// left its fleet is as one that never had one.
+    public static func noHubYet(in defaults: UserDefaults = AppDefaults.store) -> Bool {
+        guard state(in: defaults).hub == nil else { return false }
+        return defaults.object(forKey: answerKey) == nil || lastAnswer(in: defaults).map { $0.hub == nil } == true
     }
 
     /// While the hub answers: the switch's last answer is `look` old or more, so the sender reads it again.
@@ -1176,12 +1352,12 @@ public enum ErrorReportsDay {
         lastAnswer(in: defaults).flatMap { $0.send ? min($0.since ?? $0.at, now.timeIntervalSince1970) : nil }
     }
 
-    /// **The answer that the day goes on while the hub at `hub` does not answer**: the day is due, the hub has been
-    /// silent for `patience` or more of time awake (`silentFor`, on the uptime), and `take(.noAnswer)` gives an answer
-    /// of that hub.
-    public static func lastAnswer(hub: String, silentFor: TimeInterval?, now: Date = Date(),
+    /// **The answer that the day goes on while the hub at `hub` does not answer**: the day is due, or an early report
+    /// may go for an install that stopped (`early`, which `next` gave), the hub has been silent for `patience` or more of
+    /// time awake (`silentFor`, on the uptime), and `take(.noAnswer)` gives an answer of that hub.
+    public static func lastAnswer(hub: String, silentFor: TimeInterval?, now: Date = Date(), early: Bool = false,
                                   in defaults: UserDefaults = AppDefaults.store) -> Answer? {
-        guard let silentFor, silentFor >= patience, due(now: now, in: defaults) else { return nil }
+        guard let silentFor, silentFor >= patience, early || due(now: now, in: defaults) else { return nil }
         return take(.noAnswer, hub: hub, now: now, in: defaults)
     }
 
@@ -1205,22 +1381,27 @@ public enum ErrorReportsDay {
     /// waits a `day`, and the same report goes again at once without it when it carries crashes, while the switch is
     /// still on (`stillOn`): a day alone goes no more, so no empty report goes. A report with the block that our site
     /// took moves the start of the next day's installs (`installsSince`); one that went without it moves nothing. For
-    /// the day's report (`day`): a send that may go again (`ErrorReportError.keeps`) tries again after `retry`; any
-    /// other end, a 200 too, is the day's. It gives the error of the last send, or nil for a 200, for the crashes that
-    /// the report carried (`ErrorReport.settle`).
+    /// the day's report (`day`): a 200 is the day's; a send that did not go waits `ErrorReportError.dayWait`: an hour
+    /// is a `retry`, and a day is the day's and holds every report, the early ones too, for that day, as a 400 does, so
+    /// that no answer of our site makes an install's stop ask again at the next pass (the validator's finding 4.1). An
+    /// early report (`early`) that went counts in the day's `earlyMost`. What came
+    /// of a block with installs is kept for the page of an install that stopped (`installReport`). It gives the error of
+    /// the last send, or nil for a 200, for the crashes that the report carried (`ErrorReport.settle`).
     @discardableResult
-    public static func deliver(_ report: ErrorReport, day isDay: Bool, at stamp: Date = Date(),
+    public static func deliver(_ report: ErrorReport, day isDay: Bool, early: Bool = false, at stamp: Date = Date(),
                                in defaults: UserDefaults = AppDefaults.store,
                                isolation: isolated (any Actor)? = #isolation, stillOn: () -> Bool = { true },
                                send: (ErrorReport) async throws -> Void) async -> Error? {
         var report = report
         var failure: Error?
         let at = stamp.timeIntervalSince1970
+        let carried = report.app.flatMap { $0.installs.isEmpty ? nil : $0.installs }
         while true {
             do { try await send(report); failure = nil } catch { failure = error }
             guard report.app != nil, case .refused(400)? = failure as? ErrorReportError else { break }
             var state = state(in: defaults)
             state.hold = at + day
+            if let carried { state.installs = InstallsSent(carried, at: at, outcome: .refused) }
             save(state, in: defaults)
             guard stillOn() else { return failure }
             guard !report.crashes.isEmpty else { break }
@@ -1228,17 +1409,75 @@ public enum ErrorReportsDay {
         }
         var state = state(in: defaults)
         if failure == nil, report.app != nil { state.taken = at }
+        if let carried, report.app != nil {
+            // The block was in the last send: what came of it is what came of its installs.
+            let outcome: InstallsSent.Outcome = failure.map {
+                ErrorReportError.dayWait(after: $0) < day ? .waiting : .refused
+            } ?? .sent
+            let sent = InstallsSent(carried, at: at, outcome: outcome)
+            state.installs = sent
+            if outcome == .sent { state.installsTaken = keptTaken([sent] + (state.installsTaken ?? [])) }
+        }
+        if early, failure == nil {
+            state.earlies = earlies(state, now: stamp) + [at]
+        }
         if isDay {
-            if let failure, ErrorReportError.keeps(failure) {
-                state.retry = at + retry
+            let wait = failure.map(ErrorReportError.dayWait(after:))
+            if let wait, wait < day {
+                state.retry = at + wait
             } else {
                 state.sent = at
                 state.retry = nil
+                if let wait { state.hold = max(valid(state.hold, now: stamp) ?? 0, at + wait) }
             }
         }
         save(state, in: defaults)
         return failure
     }
+
+    /// **What came of the report of the install that stopped so** (the page of an install that stopped reads it, with
+    /// `InstallStop.of` of its record; the F5 analysis, piece 4): `sent` with the time of the send when a report that our
+    /// site took carried it (an entry of its kind, step, stop and cause whose times hold it), for as long as the app keeps
+    /// its record (`takenEntriesKept`); `refused` when our site refused the last report that carried it (an answer of
+    /// `ErrorReportError.dayWait` a day: it goes again a day later); `waiting` while it goes, or goes again, at a later
+    /// pass (no answer, a 5xx, a 429, a 302, 303 or 307, the day's early reports used, the switch not read yet), also a
+    /// stop of the first run after the owner's "Send", while that "Send" waits for the end of the first run; `notSent`
+    /// while nothing lets it go (the switch is off, a first-run "no" waits, no answer of the owner at all), for a stop
+    /// from before the run of answers "on" (`installsSince`) or from before the owner's latest "Send", and for a stop
+    /// that the reports left out. A report that our site took stays `sent` after a switch-off. **`waiting` is not sure**
+    /// for a stop in the seconds between a press of "Send" and the sender's next pass, for a stop of a first run that
+    /// never ends, and for a build whose version has no form of the contract, which sends nothing.
+    public static func installReport(of stop: InstallStop, now: Date = Date(),
+                                     in defaults: UserDefaults = AppDefaults.store) -> InstallReportState {
+        let state = state(in: defaults)
+        if let taken = (state.installsTaken ?? []).first(where: { valid($0.at, now: now) != nil && $0.carried(stop) }) {
+            return .sent(Date(timeIntervalSince1970: taken.at))
+        }
+        let firstRun = FirstRunReports.waiting(in: defaults)
+        // The owner's "Send" of the first run lets each stop after his latest press go: in a report with no hub while no
+        // hub answered this Mac, and once his hub took the "Send", in the fleet's report, from that press on
+        // (`pressedOn`, the second reader's R2-M1). Else the switch's kept answer decides, with its run (`installsSince`).
+        let press = FirstRunReports.pressed(in: defaults).flatMap { valid($0.timeIntervalSince1970, now: now) }
+        let firstRunSend = firstRun == true && press.map { stop.at.timeIntervalSince1970 > $0 } != false
+        let consent = firstRunSend || (firstRun != false && lastAnswer(in: defaults)?.send == true)
+        guard consent, stop.at > installsSince(now: now, in: defaults) else { return .notSent }
+        if let last = state.installs, last.carried(stop), last.outcome == .refused { return .refused }
+        return .waiting
+    }
+}
+
+/// **What came of the report of an install that stopped** (`ErrorReportsDay.installReport`), for the page of that
+/// install, which shows no word of it unless the owner approved that word.
+public enum InstallReportState: Equatable, Sendable {
+    /// Our site took the report that carried it (a 200), at this time of this Mac: the send's own time.
+    case sent(Date)
+    /// It goes, or goes again, at a later pass: no answer, a 5xx, a 429, a 302, 303 or 307, or the day's early reports
+    /// are used.
+    case waiting
+    /// Nothing lets it go: the switch is off, a first-run "no" waits, or the owner gave no answer at all.
+    case notSent
+    /// Our site refused the last report that carried it (a 4xx but 429, a 301 or 308): it goes again a day later.
+    case refused
 }
 
 #if os(macOS)
@@ -1263,7 +1502,15 @@ public enum ErrorReportsDay {
 /// answers, the day goes only after a new read of the switch says on, never on the kept answer; a switch that did not
 /// answer moves the day by `ErrorReportsDay.retry`; a switch that read off is read again only at the hourly look
 /// (`ErrorReportsDay.look`). When the hub does not answer, the day goes on the switch's last answer (Q5). No day goes
-/// while the owner's answer of the first run's page, "no", waits for a hub (`FirstRunReports.waiting`).
+/// while the owner's answer of the first run's page, "no", waits for a hub (`FirstRunReports.waiting`), and no crash
+/// goes on the hub's "on" then either: they wait in memory, and the hub is asked again a minute later.
+///
+/// **An install that stops makes the day go at the next pass** (`ErrorReportsDay.next`, at most four early reports a
+/// day). **Before a hub exists** (the F5 analysis of 22 November 2026, piece 4): while the owner's "Send" of the first
+/// run's page waits for a hub and no hub answered this Mac (`ErrorReportsDay.noHubYet`), an install that stopped after
+/// this sender saw that "Send" goes in one report with no fleet's id (`ErrorReport.noHub`), to our own site, with the
+/// reach `no_hub`, and never a crash. "Don't send", no answer, Back to the welcome page and a new start of the app end
+/// that wait (`FirstRunReports`), and with it every such report; both are read again just before the send.
 ///
 /// It works under the hood, from the store's own loop (`tick`), and only while something waits: a crash, the day, or
 /// the look at the switch. A crash that came before the hub answered waits in memory; the disk holds none that the hub
@@ -1353,6 +1600,9 @@ public enum ErrorReportsDay {
     private var silentSince: TimeInterval?
     /// The line that this build's version has no form of the contract is written once in a start.
     private var saidVersion = false
+    /// **Since when this sender saw the owner's "Send" of a first run** that no hub took yet, in memory only: no install
+    /// that stopped before it goes in a report with no hub, and a new start of the app sees it anew. nil while none waits.
+    private var yesSince: Date?
 
     /// - Parameters: `file`, the kept file of the crashes; `version` and `system`, this build's (`ErrorReport.version`,
     ///   `ErrorReport.runningSystem`); `remember`, the note of the build that runs (`CrashSubscriber.remember`), called
@@ -1391,12 +1641,15 @@ public enum ErrorReportsDay {
         let now = self.now()
         ErrorReportsDay.noteHub(answered: tick.answered, in: defaults)
         silentSince = tick.database != nil ? nil : silentSince ?? uptime()
+        let firstRun = FirstRunReports.waiting(in: defaults)
+        yesSince = firstRun == true ? yesSince ?? now : nil
         if onDisk == nil {
             onDisk = ErrorReport.kept(file)
             if onDisk?.isEmpty == true { ErrorReport.forget(file) }   // a file that holds no crash is no file
         }
-        // The day: due, and no "no" of the owner's first run waits for a hub.
-        let day = ErrorReportsDay.due(now: now, in: defaults) && FirstRunReports.waiting(in: defaults) != false
+        // The day: due, or an install that stopped asks for it early; and no "no" of the owner's first run waits for a hub.
+        let due = firstRun == false ? nil : ErrorReportsDay.next(stops: { calls.sources().stops }, now: now, in: defaults)
+        let day = due != nil
         // The kept file goes with the next report (new crashes, the day), or an hour after its last try.
         let retryDisk = diskTriedAt.map { now.timeIntervalSince($0) >= ErrorReportsDay.retry || now < $0 } ?? true
         let disk = retryDisk || !fresh.isEmpty || day ? onDisk ?? [] : []
@@ -1410,17 +1663,28 @@ public enum ErrorReportsDay {
         let switchOff = ErrorReportsDay.lastAnswer(in: defaults)?.send == false
         guard !working, notBefore.map({ now >= $0 }) ?? true else { return nil }
         guard tick.database != nil else {
+            // No hub answered this Mac yet, and the owner's "Send" of this first run waits for one: only the report of
+            // an install that stopped after that "Send" goes, with no fleet's id (piece 4).
+            if let seen = yesSince, ErrorReportsDay.noHubYet(in: defaults) {
+                let yes = Self.latestSend(seen, now: now, in: defaults)
+                let stops = calls.sources().stops
+                guard ErrorReportsDay.asks(stops, after: yes, now: now, in: defaults),
+                      let due = ErrorReportsDay.next(stops: { stops }, after: yes, now: now, in: defaults)
+                else { return nil }
+                return run { await self.withNoHub(since: yes, early: due == .early, calls: calls) }
+            }
             // The hub does not answer: only the day goes, on the switch's last answer of this hub (Q5).
-            guard day, let answer = ErrorReportsDay.lastAnswer(hub: tick.hub, silentFor: silentSince.map { uptime() - $0 },
-                                                                now: now, in: defaults) else { return nil }
-            return run { await self.dayOnLastAnswer(answer, reach: tick.reach, calls: calls) }
+            guard let due, let answer = ErrorReportsDay.lastAnswer(hub: tick.hub, silentFor: silentSince.map { uptime() - $0 },
+                                                                   now: now, early: due == .early, in: defaults)
+            else { return nil }
+            return run { await self.dayOnLastAnswer(answer, reach: tick.reach, early: due == .early, calls: calls) }
         }
         guard !fresh.isEmpty || !disk.isEmpty || look || switchLook || (day && !switchOff) else { return nil }
         let batch = fresh
         if disk.isEmpty && batch.isEmpty { lastLook = now }
         lastSwitchLook = now
         fresh = []
-        return run { await self.attempt(batch, disk: disk, hub: tick.hub, offered: tick.offered, day: day, calls: calls) }
+        return run { await self.attempt(batch, disk: disk, hub: tick.hub, offered: tick.offered, day: due, calls: calls) }
     }
 
     private func run(_ body: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
@@ -1432,9 +1696,11 @@ public enum ErrorReportsDay {
     }
 
     /// The hub answers: the switch is read now, and only its answer lets anything go.
-    private func attempt(_ batch: [ErrorReport.Crash], disk: [ErrorReport.Crash], hub: String, offered: Bool, day: Bool,
-                         calls: Calls) async {
+    private func attempt(_ batch: [ErrorReport.Crash], disk: [ErrorReport.Crash], hub: String, offered: Bool,
+                         day due: ErrorReportsDay.Due?, calls: Calls) async {
         let offsAtStart = offs
+        var day = due != nil
+        let early = due == .early
         guard offered else { return off() }         // a hub with no switch: it is off
         let on: Bool
         do { on = try await calls.readSwitch() } catch {
@@ -1452,25 +1718,36 @@ public enum ErrorReportsDay {
         var read: ReleaseState?
         if crashes || day { read = await calls.readReleases() }
         guard offs == offsAtStart else { return }
-        // The kept answer has the fleet's id and channel of the hub's releases: its own read, or the store's reading.
         // While the owner's "no" of a first run waits for this hub, also one that he gave during these reads, the hub's
-        // "on" is kept as no answer and no day goes.
+        // "on" is kept as no answer, and nothing goes on it (the validator's finding 1 of pieces 1 and 5): no day, and
+        // no crash. With no run, no crash goes and the kept file goes, as at `off()` (main's crash floor): the crashes
+        // of this attempt are dropped, not put back (the second reader's R4-N1), and the kept file is removed, whether
+        // this attempt carried it or not (the F5 validator's N4). The "no" keeps the switch's answer "off", so the next
+        // "on" starts a new run after each of them, and the crash floor would cut them anyway. Kept, they only made the
+        // hub be read: the crashes in memory each minute of the wait, the kept file at each pass of the loop (R5-M1)
+        // and then at its minute's look. With nothing in memory and no file, no pass reads the hub for them.
+        if FirstRunReports.waiting(in: defaults) == false {
+            onDisk = []
+            ErrorReport.forget(file)
+            return
+        }
+        // The kept answer has the fleet's id and channel of the hub's releases: its own read, or the store's reading.
         let known = read ?? calls.storeReleases()
-        let firstRunNo = FirstRunReports.waiting(in: defaults) == false
-        let day = day && !firstRunNo
-        if !firstRunNo { ErrorReportsDay.take(.on(known), hub: hub, now: now(), in: defaults) }
+        ErrorReportsDay.take(.on(known), hub: hub, now: now(), in: defaults)
         // **A crash goes only when it came after the start of the switch's run of "on"** (the crashes' floor, as the
         // installs' one), a new one and a kept one alike: one from while the switch was off, from before his first "on"
         // or from an earlier run (kept under another hub, or before a first-run "Don't send", "Start again", or by a
         // build before this floor) is dropped, never written to the disk, and the kept file loses it at once. With no
-        // run (a first-run "no" waits, so no "on" is kept), no crash goes and the kept file goes, as at `off()`. Inside
-        // one run its start only moves earlier (`take(.on)`, `pressedOn`), so each crash kept in this run stays (the
-        // second reader's C1). The time compared is the crash's first time, the begin of the payload that carried it
-        // (MetricKit's `timeStampBegin`; its last time is the payload's end), so it fails closed when the begin is at
-        // or before the crash: a payload that begins before the "on" and ends after it does not go. **Open** (the
-        // validator's C.2): the times of a real payload of this app are not known. A live check got none (MetricKit
-        // refused an ad-hoc signed test bundle in a temporary folder, and this Mac's "Share with app developers" is
-        // off). So a payload with one time that the system wrote after the "on", for a crash before it, still passes.
+        // run, no crash goes and the kept file goes, as at `off()`; a first-run "no" that waits ends the attempt above,
+        // before this, and its crashes and the kept file go there, as at `off()`. Inside one run its start only moves
+        // earlier (`take(.on)`, `pressedOn`), so each crash kept in this run
+        // stays (the second reader's C1). The time compared is the crash's first time, the begin of the payload that
+        // carried it (MetricKit's `timeStampBegin`; its last time is the payload's end), so it fails closed when the
+        // begin is at or before the crash: a payload that begins before the "on" and ends after it does not go.
+        // **Open** (the validator's C.2): the times of a real payload of this app are not known. A live check got none
+        // (MetricKit refused an ad-hoc signed test bundle in a temporary folder, and this Mac's "Share with app
+        // developers" is off). So a payload with one time that the system wrote after the "on", for a crash before it,
+        // still passes.
         //
         // **A known limit** (C-N2): a crash of the first run after the owner's "Send" is dropped when the sender reads
         // the hub's default "off" before the hub took that "Send" (`off()` empties what waits). The installs have
@@ -1490,6 +1767,9 @@ public enum ErrorReportsDay {
             onDisk = ErrorReport.kept(file)
         }
         crashes = !(inRun.isEmpty && keptInRun.isEmpty)
+        // An early report goes only for a stop that this run of answers "on" lets go (`installsSince`): a stop of while
+        // the switch was off asked for it before the read, and asks for none now.
+        if early, !ErrorReportsDay.asks(calls.sources().stops, now: now(), in: defaults) { day = false }
         guard crashes || day else { return }   // only a look at the switch: the file was tried at this start
         let stamp = now()
         // The hub answered the switch now: its reach is "none" in this day, whatever an earlier read gave.
@@ -1500,7 +1780,9 @@ public enum ErrorReportsDay {
         var dayWent = false
         if crashes, let read {
             if let report = made(fleet: read.entitlement.fleet, crashes: keptInRun + inRun, app: app) {
-                failure = await ErrorReportsDay.deliver(report, day: day, at: stamp, in: defaults, stillOn: stillOn) {
+                // A report of crashes alone uses none of the day's early reports (the second reader's R2-N4).
+                failure = await ErrorReportsDay.deliver(report, day: day, early: early && day, at: stamp, in: defaults,
+                                                        stillOn: stillOn) {
                     try await calls.send($0, read.channel)
                 }
                 dayWent = day
@@ -1509,7 +1791,7 @@ public enum ErrorReportsDay {
         if day, !dayWent, offs == offsAtStart {
             // The day alone: on the hub's releases of this attempt, or the store's reading of this generation.
             if let known, let report = made(fleet: known.entitlement.fleet, crashes: [], app: app) {
-                await ErrorReportsDay.deliver(report, day: true, at: stamp, in: defaults, stillOn: stillOn) {
+                await ErrorReportsDay.deliver(report, day: true, early: early, at: stamp, in: defaults, stillOn: stillOn) {
                     try await calls.send($0, known.channel)
                 }
             } else {
@@ -1524,23 +1806,61 @@ public enum ErrorReportsDay {
 
     /// **The day while the hub does not answer** (Q5): on `answer`, to its channel, with the reach of the hub's last
     /// failed read.
-    private func dayOnLastAnswer(_ answer: ErrorReportsDay.Answer, reach: ReachFacts.ReadKind, calls: Calls) async {
+    private func dayOnLastAnswer(_ answer: ErrorReportsDay.Answer, reach: ReachFacts.ReadKind, early: Bool,
+                                 calls: Calls) async {
         let stamp = now(), offsAtStart = offs
         guard let report = made(fleet: answer.fleet, crashes: [],
                                 app: health(releases: answer.releases, reach: reach, at: stamp, calls: calls)) else {
             return ErrorReportsDay.tryAgain(at: stamp, in: defaults)
         }
-        await ErrorReportsDay.deliver(report, day: true, at: stamp, in: defaults, stillOn: { self.offs == offsAtStart }) {
+        await ErrorReportsDay.deliver(report, day: true, early: early, at: stamp, in: defaults,
+                                      stillOn: { self.offs == offsAtStart }) {
             try await calls.send($0, answer.channel)
         }
     }
 
-    /// A report of this build, or nil; a version that has no form of the contract is said once in a start.
-    private func made(fleet: String?, crashes: [ErrorReport.Crash], app: AppHealth?) -> ErrorReport? {
+    /// **The start of the stops that a report with no hub carries**: the first pass that saw the owner's "Send" waiting
+    /// (`seen`), and his latest press of a card when it is later (a "Don't send" and a new "Send" between two passes),
+    /// never after `now`. A press kept while the clock was more than a day ahead counts as none.
+    static func latestSend(_ seen: Date, now: Date, in defaults: UserDefaults) -> Date {
+        let pressed = FirstRunReports.pressed(in: defaults).flatMap { ErrorReportsDay.valid($0.timeIntervalSince1970, now: now) }
+        return max(seen, pressed.map { Date(timeIntervalSince1970: min($0, now.timeIntervalSince1970)) } ?? seen)
+    }
+
+    /// **The report of an install that stopped before a hub exists** (piece 4): to our own site (no channel: no hub
+    /// named one), with no fleet's id and no crash, the reach `no_hub`, and only the installs that stopped after the
+    /// owner's latest "Send" (`since`, `latestSend`). The "Send" that waits, and that no hub answered this Mac, are read
+    /// again just before the send, and so is the time of his latest press.
+    private func withNoHub(since seen: Date, early: Bool, calls: Calls) async {
+        let stamp = now(), offsAtStart = offs
+        let stillYes = {
+            self.offs == offsAtStart && FirstRunReports.waiting(in: self.defaults) == true
+                && ErrorReportsDay.noHubYet(in: self.defaults)
+        }
+        guard stillYes() else { return }
+        let sources = calls.sources()
+        let since = max(ErrorReportsDay.installsSince(now: stamp, in: defaults), Self.latestSend(seen, now: stamp, in: defaults))
+        let app = AppHealth(
+            update: AppHealth.update(sources.update, tries: AppUpdateTries.kept(in: defaults), running: sources.running,
+                                     now: stamp),
+            hub: AppHealth.Hub(reach: AppHealth.noHubReach, hours: 0, runs: nil, newest: nil, missing: 0),
+            installs: AppHealth.installs(sources.stops, since: since))
+        guard let report = made(fleet: nil, crashes: [], app: app, noHub: true) else {
+            return ErrorReportsDay.tryAgain(at: stamp, in: defaults)
+        }
+        await ErrorReportsDay.deliver(report, day: true, early: early, at: stamp, in: defaults, stillOn: stillYes) {
+            try await calls.send($0, nil)
+        }
+    }
+
+    /// A report of this build, or nil; a version that has no form of the contract is said once in a start. `noHub`:
+    /// the report of an install with no hub (`ErrorReport.noHub`), with no fleet's id.
+    private func made(fleet: String?, crashes: [ErrorReport.Crash], app: AppHealth?, noHub: Bool = false) -> ErrorReport? {
         if version.map({ !ErrorReport.matches($0, ErrorReport.versionPattern) }) ?? true, !saidVersion {
             saidVersion = true
             Self.log.error("No error report goes: the version of this build has no form that our site takes.")
         }
+        if noHub { return app.flatMap { ErrorReport.noHub(version: version, system: system, app: $0) } }
         return ErrorReport(fleet: fleet, version: version, system: system, crashes: crashes, app: app)
     }
 

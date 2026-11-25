@@ -18,13 +18,45 @@ enum CardBadgeText {
     /// The room after its name, in the words' size.
     static let end: CGFloat = 0.36
 
+    /// **A card's long reason, folded to its first lines** (Needs you's step and a chat's card): its names are read
+    /// with its line breaks, as the open card reads them, and its words are drawn on one line, so a role at a line's
+    /// start keeps its words folded as it does open (S3 of the validation of F23 N1: "We asked\nMarketing spend rose.").
+    static func reason(_ why: String, names: CardNames?, size: CGFloat,
+                       roles: [String: String] = AgentNames.shared.roles) -> Text {
+        text(MessageBlock.inline(why), names: names, size: size, oneLine: true, roles: roles)
+    }
+
+    /// The pieces that `text` draws (`CardNames.pieces`, then `CardJoin.join`). **His own typed words keep a
+    /// repository in inline code as code** (`RoleNames.Written`): its badge from a code is for the agent's words (the
+    /// owner's "The repository's badge" of F9, of what an agent writes; the validation of F9, 24 November 2026), and his
+    /// bubble in a chat keeps his code too (`ChatNames`).
+    static func pieces(_ text: AttributedString, names: CardNames?, oneLine: Bool = false,
+                       roles: [String: String] = AgentNames.shared.roles) -> [CardNames.Piece] {
+        let his = text.runs[RoleNames.Written.self].contains { $0.0 == true }
+        return names.map { CardJoin.join($0.pieces(text, codedRepositories: !his), roles: roles, oneLine: oneLine) } ?? []
+    }
+
+    /// `text` with each line break a space.
+    private static func spaced(_ text: AttributedString) -> AttributedString {
+        var words = text
+        // from the end, so that each place before it stays where it was
+        for index in words.characters.indices.filter({ words.characters[$0].isNewline }).reversed() {
+            words.characters.replaceSubrange(index...index, with: " ")
+        }
+        return words
+    }
+
     /// The words of `text` with each name that `names` finds as a badge, a name and its role beside it as one
     /// (`CardJoin`), each link of its own a piece with its mark (`LinkRun`, which `linkPresses` gives the hand), and
     /// the rest as it is. `size` is the size of the words' font. `values`: each value of a request's words, which the
     /// agent put in inline code, is a piece with its mark too, which `cardValues` draws as a chip (`CardValueText`). A
-    /// text with no name, no link and no such value is the one `Text` that it was.
-    static func text(_ text: AttributedString, names: CardNames?, size: CGFloat, values: Bool = false) -> Text {
-        let pieces = names.map { CardJoin.join($0.pieces(text)) } ?? []
+    /// text with no name, no link and no such value is the one `Text` that it was. `oneLine`: the names are read with
+    /// the words' line breaks, and the words are drawn on one line (`CardJoin.join`). `roles`: each agent's role, by
+    /// its name, the hub's newest reading's by default.
+    static func text(_ text: AttributedString, names: CardNames?, size: CGFloat, values: Bool = false,
+                     oneLine: Bool = false, roles: [String: String] = AgentNames.shared.roles) -> Text {
+        let pieces = Self.pieces(text, names: names, oneLine: oneLine, roles: roles)
+        let text = oneLine ? Self.spaced(text) : text
         let chips = values && (names == nil ? [text] : pieces.filter { $0.badge == nil }.map(\.words))
             .contains { !CardValues.runs(in: $0).isEmpty }
         guard chips || pieces.contains(where: { $0.badge != nil }) || LinkRun.has(text) else { return Text(text) }
@@ -49,7 +81,11 @@ enum CardBadgeText {
             var room = AttributedString("\u{00A0}")
             room.link = target.url
             room.swiftUI.kern = size * slot
-            var name = piece.words
+            // the role beside an agent's name is grey, as in a chat's badge ("Wren · Marketing"; `mutedRole`), and no
+            // part of the name's link, as in the picture of his answer F23-1 (b) and in a chat's badge: the link is the
+            // name, and the badge's press is its own (`cardBadges`), so the role keeps the press
+            var name = piece.words.mutedRole()
+            for (mark, range) in name.runs[RoleNames.RolePart.self] where mark == true { name[range].link = nil }
             if let last = name.characters.indices.last { name[last..<name.endIndex].swiftUI.kern = size * end }
             drawn.append(Text(room).customAttribute(CardBadge(index: index, icon: true, target: target)))
             drawn.append(Text(name).customAttribute(CardBadge(index: index, icon: false, target: target)))

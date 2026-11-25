@@ -28,6 +28,11 @@ final class FleetCopyKeeper {
     /// The name of the folder he chose, for the screens. The folder itself is behind a bookmark.
     private(set) var folderName: String?
     private(set) var busy = false
+    /// The copies of the hub that the app shows that stayed in his folder after its last copy that this Mac kept, weighed
+    /// (the Where row's sizes), or nil before the first one of that hub and after a change of folder.
+    private(set) var kept: CopyFolder.Kept?
+    /// The hub (its address) whose copy time and sizes the schedule and `kept` are, or nil before the app knows one.
+    @ObservationIgnored private var hub: String?
     /// When the folder was last resolved from its bookmark.
     @ObservationIgnored private var folderReadAt: Date?
     /// This start tried to make the default folder (`takeTheDefaultFolder`), with or without a result.
@@ -46,12 +51,9 @@ final class FleetCopyKeeper {
         // default applies to. A switch he turned off stays off through every start.
         let decided = defaults.object(forKey: "copyAutomatic") as? Bool
         let every = CopyEvery(rawValue: defaults.string(forKey: "copyEvery") ?? "") ?? .day
-        let kept = defaults.object(forKey: "copyKeptAt") as? Double
-        let failedAt = defaults.object(forKey: "copyFailedAt") as? Double
-        schedule = CopySchedule(on: CopyDefault.on(decided: decided), every: every, hasFolder: false,
-                                keptAt: kept.map { Date(timeIntervalSince1970: $0) },
-                                failedAt: failedAt.map { Date(timeIntervalSince1970: $0) },
-                                failure: defaults.string(forKey: "copyFailure"))
+        schedule = CopySchedule(on: CopyDefault.on(decided: decided), every: every, hasFolder: false)
+        CopyKept.adoptOlder(in: defaults)
+        if let hub = defaults.string(forKey: "hubAddress") { show(hub: hub) }
         readFolder()
     }
 
@@ -175,8 +177,12 @@ final class FleetCopyKeeper {
             return
         }
         defaults.set(bookmark, forKey: "copyFolder")
-        // A folder he just chose makes a failure about the old one meaningless, so it goes with it.
+        // A folder he just chose makes a failure about the old one meaningless, so it goes with it, and so do the sizes
+        // of the copies in the old one: the new folder's are read at its first copy. For every hub.
+        CopyKept.clearFailures(in: defaults)
         clearFailure()
+        kept = nil
+        CopyKept.forgetSizes(in: defaults)
         readFolder()
     }
 
@@ -201,7 +207,10 @@ final class FleetCopyKeeper {
     func setOn(_ on: Bool) {
         schedule.on = on
         defaults.set(on, forKey: "copyAutomatic")
-        if on { clearFailure() }
+        if on {             // a switch turned on starts again for every hub: no old failure holds a copy back
+            CopyKept.clearFailures(in: defaults)
+            clearFailure()
+        }
         readFolder()
     }
 
@@ -212,8 +221,34 @@ final class FleetCopyKeeper {
 
     // ---------------------------------------------------------------- keeping one
 
+    /// The last copy time, the sizes and the failure of the hub that the app shows now (`CopyKept`): that hub's own, never
+    /// another hub's, so a new fleet's first copy does not wait a day and its page does not say another hub's copies.
+    private func show(hub: String) {
+        guard CopyKept.key(hub) != CopyKept.key(self.hub ?? "") else { return }
+        self.hub = hub
+        schedule.keptAt = CopyKept.keptAt(hub: hub, in: defaults)
+        kept = CopyKept.sizes(hub: hub, in: defaults)
+        let failure = CopyKept.failure(hub: hub, in: defaults)
+        schedule.failure = failure?.words
+        schedule.failedAt = failure?.at
+    }
+
+    /// The records of this address are another fleet's now (a server rebuilt or restored there): the app forgets what it
+    /// keeps of the fleet before it (`CopyKept`). The first copy of the new one is due at once.
+    private func generation(_ database: String, hub: String) {
+        guard let known = CopyKept.database(hub: hub, in: defaults), known != database else { return }
+        CopyKept.forget(hub: hub, in: defaults)
+        guard CopyKept.key(hub) == CopyKept.key(self.hub ?? "") else { return }
+        schedule.keptAt = nil
+        schedule.failure = nil
+        schedule.failedAt = nil
+        kept = nil
+    }
+
     /// Called from the fleet's own poll. It does nothing at all until a copy is due, which is two dates compared.
     func tick(store: FleetStore, now: Date = Date()) async {
+        show(hub: store.hub.absoluteString)
+        if let database = store.state?.db { generation(database, hub: store.hub.absoluteString) }
         guard !busy, schedule.on, store.isFresh, store.state?.db != nil else { return }
         // The first copy of a fleet that was never given a folder: the default one is made now, and not before. This
         // tick ends here, and the one after the folder is there keeps the copy.
@@ -237,54 +272,96 @@ final class FleetCopyKeeper {
     /// takes and for the same reason: a copy he does not hold must never clear the warning.
     private func keepOne(store: FleetStore, now: Date) async {
         guard let database = store.state?.db, let folder else { return }
+        // The hub of this copy, read once: another hub that the app meets while the copy arrives is not its hub, also
+        // not for the confirm. The same for the folder: he can choose another one while the copy arrives.
+        let hub = store.hub
         busy = true
         defer { busy = false }
         let client = HubClient()
         var taken: FleetCopy?
         defer { taken.map { try? FileManager.default.removeItem(at: $0.file.deletingLastPathComponent()) } }
         do {
-            let copy = try await client.takeCopy(hub: store.hub, database: database)
+            let copy = try await client.takeCopy(hub: hub, database: database)
             taken = copy
             let kept = folder.appendingPathComponent(copy.suggestedName)
             try? FileManager.default.removeItem(at: kept)
             // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`).
             try FileManager.default.moveItem(at: OwnerAccess.withKey(copy.file) ?? copy.file, to: kept)
-            try await client.confirmCopy(hub: store.hub, database: database, client: store.installation,
+            try await client.confirmCopy(hub: hub, database: database, client: store.installation,
                                          sha256: copy.sha256, bytes: copy.bytes)
-            prune(in: folder, fleet: CopyFolder.fleet(of: copy.suggestedName))
-            schedule.keptAt = now
-            defaults.set(now.timeIntervalSince1970, forKey: "copyKeptAt")
-            clearFailure()
+            let found = prune(in: folder, fleet: CopyFolder.fleet(of: copy.suggestedName))
+            // When it was kept, not when it began: a Save copy that failed while this copy arrived ends here
+            // (`CopySchedule.warning`; the second reader's R2-3).
+            let keptAt = Date(), address = hub.absoluteString
+            CopyKept.keep(at: keptAt, hub: address, database: database, in: defaults)
+            // The folder that he chose while the copy arrived has no size of the copies of the old one (R15-3).
+            let sameFolder = self.folder?.standardizedFileURL.path == folder.standardizedFileURL.path
+            CopyKept.keep(sizes: sameFolder ? found : nil, hub: address, in: defaults)
+            if CopyKept.key(address) == CopyKept.key(self.hub ?? "") {
+                schedule.keptAt = keptAt
+                self.kept = sameFolder ? found : nil
+            }
+            clearFailure(hub: address)
         } catch {
-            fail((error as? LocalizedError)?.errorDescription ?? error.localizedDescription, at: now)
+            // Now, not when the copy began: a copy that takes long and fails waits an hour from the failure (R15-6).
+            fail((error as? LocalizedError)?.errorDescription ?? error.localizedDescription, hub: hub.absoluteString)
         }
     }
 
     /// The newest `keeps` of this fleet's copies stay, its older ones go — and only files of the hub's own naming
-    /// with this fleet's id, only in his folder. A copy whose name gives no fleet prunes the app's fallback names.
-    private func prune(in folder: URL, fleet: String?) {
+    /// with this fleet's id, only in his folder. A copy whose name gives no fleet prunes the app's fallback names. What
+    /// stays, weighed, from the same list and the same group (`CopyFolder.kept`): the folder is read for the sizes at
+    /// this moment and at no other, as for the prune itself.
+    private func prune(in folder: URL, fleet: String?) -> CopyFolder.Kept? {
         let manager = FileManager.default
         // Hidden files are listed too: an evicted iCloud copy is `.founderizer-….zip.icloud`, which is still
         // one of his copies and has to be counted as one (`CopyFolder.real`).
-        guard let found = try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey],
-                                                           options: []) else { return }
-        let dated = found.map { file -> (name: String, at: Date) in
-            let at = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-            return (file.lastPathComponent, at ?? .distantPast)
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        guard let found = try? manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
+                                                           options: []) else { return nil }
+        let dated = found.map { file -> (name: String, at: Date, bytes: Int64) in
+            let values = try? file.resourceValues(forKeys: Set(keys))
+            return (file.lastPathComponent, values?.contentModificationDate ?? .distantPast,
+                    Self.bytes(of: file, size: values?.fileSize))
         }
-        for name in CopyFolder.toDelete(dated, keeping: Self.keeps, fleet: fleet) {
+        for name in CopyFolder.toDelete(dated.map { (name: $0.name, at: $0.at) }, keeping: Self.keeps, fleet: fleet) {
             try? manager.removeItem(at: folder.appendingPathComponent(name))
         }
+        return CopyFolder.kept(dated, keeping: Self.keeps, fleet: fleet)
     }
 
-    private func fail(_ says: String, at: Date = Date()) {
-        schedule.failure = says
-        schedule.failedAt = at
+    /// The size of one copy: the file's own, and for a placeholder of iCloud (`.founderizer-….zip.icloud`) the size that
+    /// it records of the copy that iCloud holds.
+    nonisolated private static func bytes(of file: URL, size: Int?) -> Int64 {
+        if CopyFolder.real(file.lastPathComponent) != file.lastPathComponent,
+           let recorded = NSDictionary(contentsOf: file)?["NSURLFileSizeKey"] as? NSNumber {
+            return recorded.int64Value
+        }
+        return Int64(size ?? 0)
+    }
+
+    /// A failure of one hub's copy, or of the folder (which is the app's, so for the hub that it shows). The older
+    /// build's two values go too, for an older build that reads them.
+    private func fail(_ says: String, at: Date = Date(), hub failing: String? = nil) {
+        guard let address = failing ?? hub else {
+            schedule.failure = says
+            schedule.failedAt = at
+            return
+        }
+        CopyKept.keep(failure: says, at: at, hub: address, in: defaults)
+        if CopyKept.key(address) == CopyKept.key(hub ?? address) {
+            schedule.failure = says
+            schedule.failedAt = at
+        }
         defaults.set(says, forKey: "copyFailure")
         defaults.set(at.timeIntervalSince1970, forKey: "copyFailedAt")
     }
 
-    private func clearFailure() {
+    /// The failure of one hub ends (a copy of it was kept, or he turned the copies on): its own, never another hub's.
+    private func clearFailure(hub cleared: String? = nil) {
+        let address = cleared ?? hub
+        if let address { CopyKept.clearFailure(hub: address, in: defaults) }
+        if let address, CopyKept.key(address) != CopyKept.key(hub ?? address) { return }
         schedule.failure = nil
         schedule.failedAt = nil
         defaults.removeObject(forKey: "copyFailure")

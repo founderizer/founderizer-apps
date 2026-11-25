@@ -604,7 +604,7 @@ struct SecretEntryView: View {
     }
 
     /// **The same actions under a request at hand, in the middle** (`onStep`): Decline and Save in one row, Save the
-    /// step's one white button, and the quiet link Needs clarification under them; after a save, Try again and Done.
+    /// step's one white button, and the link Needs clarification under them; after a save, Try again and Done.
     /// Why the intake of a key page's key failed, once nothing runs (review M3).
     private var keyStepProblem: String? {
         guard preset.keyStep, !busy, case .saved(let progress) = phase else { return nil }
@@ -649,12 +649,13 @@ struct SecretEntryView: View {
                             .disabled(!canSave).accessibilityIdentifier("secret-save")
                     }
                 }
-                // **Needs clarification**, the quiet link under the row, and then the field in its place.
+                // **Needs clarification**, the link under the row in the violet of Details, with the hand
+                // (`StepClarifyLink`), and then the field in its place.
                 if clarifies {
                     if clarifying {
                         clarifyBox.frame(maxWidth: SetupMetrics.field)
                     } else {
-                        SetupLink(String(l10n: "Needs clarification")) { if !SecondClick.isNow { clarifying = true; cursorToWords = true } }
+                        StepClarifyLink { if !SecondClick.isNow { clarifying = true; cursorToWords = true } }
                             .disabled(busy || context == nil)
                             .help("Write to \(need?.by.agentLabel ?? String(l10n: "the agent")) about this request").accessibilityIdentifier("secret-clarify")
                     }

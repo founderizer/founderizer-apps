@@ -21,6 +21,7 @@ enum SampleFleetData {
      "kind": "message",
      "read_at": "@-520",
      "replaces": null,
+     "skills": [],
      "text": "Can we start the spring sale on Monday?",
      "ts": "@-540"
     },
@@ -257,7 +258,7 @@ enum SampleFleetData {
    "tasks_open": 3
   },
   "db": "sample",
-  "ended_mark": "82dc2db910034ac0",
+  "ended_mark": "cf2e85df644dc3c7",
   "holds": [],
   "manager_flag": null,
   "manager_warning": null,
@@ -268,6 +269,7 @@ enum SampleFleetData {
     "answered": null,
     "answered_by": null,
     "ask": null,
+    "awaits": null,
     "by": "manager",
     "chose": null,
     "chosen": null,
@@ -302,6 +304,7 @@ enum SampleFleetData {
     "run_output": null,
     "run_status": null,
     "secret": null,
+    "since": "@-2400",
     "takeover_task": null,
     "talk": [],
     "task": null,
@@ -310,6 +313,7 @@ enum SampleFleetData {
     "team_state": null,
     "title": "Refund an order from 45 days ago?",
     "todo": "Press one, or write what you want instead.",
+    "versions": [],
     "why": "A customer asks for a refund 15 days after the 30-day window."
    },
    {
@@ -318,6 +322,7 @@ enum SampleFleetData {
     "answered": null,
     "answered_by": null,
     "ask": null,
+    "awaits": null,
     "by": "manager",
     "chose": null,
     "chosen": null,
@@ -351,6 +356,7 @@ enum SampleFleetData {
     "run_output": null,
     "run_status": null,
     "secret": null,
+    "since": "@-1500",
     "takeover_task": null,
     "talk": [],
     "task": null,
@@ -359,6 +365,7 @@ enum SampleFleetData {
     "team_state": null,
     "title": "Send the spring sale email on Monday?",
     "todo": "Press one, or write what you want instead.",
+    "versions": [],
     "why": "Marketing finished the email. It goes to 4,800 subscribers."
    }
   ],
@@ -531,6 +538,7 @@ enum SampleFleetData {
    "thread_events",
    "task_controls",
    "limit_holds",
+   "outcome_checks",
    "liveness",
    "live_desktop",
    "machines",
@@ -590,6 +598,7 @@ enum SampleFleetData {
    "ended_blocks",
    "releases",
    "entitlement",
+   "teams_claim",
    "agent_signin",
    "github_app",
    "need_options",
@@ -652,6 +661,7 @@ enum SampleFleetData {
    "model_accounts",
    "need_run",
    "owner_profile",
+   "owner_app_language",
    "error_reports",
    "jobs",
    "need_give",
@@ -667,7 +677,10 @@ enum SampleFleetData {
    "message_about",
    "chat_waits_answers",
    "need_pictures",
-   "agent_tags"
+   "need_updates",
+   "agent_tags",
+   "chat_stop",
+   "message_skills"
   ]
  },
  "tasks": {
@@ -1119,6 +1132,7 @@ enum SampleFleetData {
      "kind": "message",
      "read_at": "@-520",
      "replaces": null,
+     "skills": [],
      "text": "¿Podemos empezar las rebajas de primavera el lunes?",
      "ts": "@-540"
     },
@@ -1355,7 +1369,7 @@ enum SampleFleetData {
    "tasks_open": 3
   },
   "db": "sample",
-  "ended_mark": "3f7ae631fb46cb45",
+  "ended_mark": "230180bbae6bf93d",
   "holds": [],
   "manager_flag": null,
   "manager_warning": null,
@@ -1366,6 +1380,7 @@ enum SampleFleetData {
     "answered": null,
     "answered_by": null,
     "ask": null,
+    "awaits": null,
     "by": "manager",
     "chose": null,
     "chosen": null,
@@ -1400,6 +1415,7 @@ enum SampleFleetData {
     "run_output": null,
     "run_status": null,
     "secret": null,
+    "since": "@-2400",
     "takeover_task": null,
     "talk": [],
     "task": null,
@@ -1408,6 +1424,7 @@ enum SampleFleetData {
     "team_state": null,
     "title": "¿Reembolsar un pedido de hace 45 días?",
     "todo": "Pulsa una opción o escribe lo que quieres.",
+    "versions": [],
     "why": "Un cliente pide un reembolso 15 días después del plazo de 30 días."
    },
    {
@@ -1416,6 +1433,7 @@ enum SampleFleetData {
     "answered": null,
     "answered_by": null,
     "ask": null,
+    "awaits": null,
     "by": "manager",
     "chose": null,
     "chosen": null,
@@ -1449,6 +1467,7 @@ enum SampleFleetData {
     "run_output": null,
     "run_status": null,
     "secret": null,
+    "since": "@-1500",
     "takeover_task": null,
     "talk": [],
     "task": null,
@@ -1457,6 +1476,7 @@ enum SampleFleetData {
     "team_state": null,
     "title": "¿Enviar el lunes el correo de las rebajas de primavera?",
     "todo": "Pulsa una opción o escribe lo que quieres.",
+    "versions": [],
     "why": "Marketing terminó el correo. Va a 4.800 suscriptores."
    }
   ],
@@ -1629,6 +1649,7 @@ enum SampleFleetData {
    "thread_events",
    "task_controls",
    "limit_holds",
+   "outcome_checks",
    "liveness",
    "live_desktop",
    "machines",
@@ -1688,6 +1709,7 @@ enum SampleFleetData {
    "ended_blocks",
    "releases",
    "entitlement",
+   "teams_claim",
    "agent_signin",
    "github_app",
    "need_options",
@@ -1750,6 +1772,7 @@ enum SampleFleetData {
    "model_accounts",
    "need_run",
    "owner_profile",
+   "owner_app_language",
    "error_reports",
    "jobs",
    "need_give",
@@ -1765,7 +1788,10 @@ enum SampleFleetData {
    "message_about",
    "chat_waits_answers",
    "need_pictures",
-   "agent_tags"
+   "need_updates",
+   "agent_tags",
+   "chat_stop",
+   "message_skills"
   ]
  },
  "tasks": {

@@ -720,9 +720,10 @@ struct FleetView: View {
         }.labelStyle(.titleAndIcon)
     }
 
-    /// **The generation is a version, not an identity.** Every write of the owner's that touches the configuration
-    /// — a secret, a grant, a profile — commits it and gives the fleet a new one, so a page keyed by it was built
-    /// again at the moment of his own save: he saw the screen blink, come back and blink again, and the third one
+    /// **The generation is a version, not an identity.** On 22 October 2026 every write of the owner's that touched
+    /// the configuration — a secret, a grant, a profile — gave the fleet a new one, so a page keyed by it was built
+    /// again at the moment of his own save. Today the hub gives a new one only at a restore and for new records
+    /// (hub.py's start), and the copies of the fleet depend on that (`CopyKept`). Then: he saw the screen blink, come back and blink again, and the third one
     /// took the app down, because a field still held the keyboard and SwiftUI's responder chain reached the view
     /// that had just gone (`swift_abortRetainUnowned`, 22 October 2026). Every `task(id:)` below still carries the
     /// generation, so the readings follow it; the views do not.

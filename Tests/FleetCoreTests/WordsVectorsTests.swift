@@ -77,6 +77,18 @@ struct WordsVectorsTests {
         "ops@example.com/x", "**see https://example.com/a**", "https://example.com/a.b?c. d",
     ]
 
+    /// A request's words where an agent is named by its whole role (`RoleNames.words` with the agents above, of whom two
+    /// hold "DevOps"): its label where the rule finds it, and the words as written where it does not.
+    static let named: [String] = [
+        "Add the key, so Marketing and Customer Support can count visits.", "I asked Marketing.",
+        "I read Orla's plan and the plan of Quality assurance.", "I read Marketing's plan.", "I read Marketing’s plan.",
+        "Marketing spend rose 10%.", "Done. Marketing spend rose.", "We asked\nMarketing spend rose.",
+        "Then ask the Fleet Manager first.", "Then ask DevOps first.", "Give Customer Support write",
+        "Wren is our Customer Support now.", "Wren is back. Please ask Customer Support.", "Then ask the Café helper first.",
+        "I asked Café helper first.", "I wrote to the Head of Marketing.", "Increase our Marketing budget.",
+        "Set the title to \"Customer Support\".", "I read Marketing' plan.",
+    ]
+
     /// Times of the hub (seconds) and the clock now: today, yesterday, this week, older, and ahead of the clock.
     static let now = 1_794_582_720.0        // 13 November 2026, 15:12 UTC
     static let times: [Double] = [now - 480, now - 15 * 3600, now - 16 * 3600, now - 86_400 - 3600, now - 3 * 86_400,
@@ -90,6 +102,7 @@ struct WordsVectorsTests {
     struct Time: Codable { let time: Double; let now: Double; let locale: String; let words: String }
     struct Age: Codable { let time: Double; let now: Double; let locale: String; let words: String }
     struct Match: Codable { let words: String; let names: [String] }
+    struct Named: Codable { let text: String; let words: String }
     struct Run: Codable, Equatable { let text: String; let bold: Bool; let italic: Bool; let struck: Bool; let code: Bool; let link: String? }
     struct Inline: Codable { let text: String; let runs: [Run] }
     struct Check: Codable { let requester: String; let accepted: Int?; let delivered: Double?; let words: String }
@@ -106,7 +119,7 @@ struct WordsVectorsTests {
     struct Document: Codable {
         let about: String; let made_by: String; let time_zone: String
         let names: [Name]; let texts: [Text]; let times: [Time]; let ages: [Age]; let matches: [Match]; let inline: [Inline]
-        let checks: [Check]; let waits: [Wait]; let ended: Ended
+        let checks: [Check]; let waits: [Wait]; let ended: Ended; let named: [Named]
     }
 
     /// The Ended lane's tasks: ended today, yesterday, 5, 20 and 60 days ago, in each end state, accepted or not, the
@@ -208,6 +221,10 @@ struct WordsVectorsTests {
                                 words: activityAge(now - age, now: now, calendar: calendar, locale: Locale(identifier: locale))))
             }
         }
+        let book = CardNames(agents: agents.map { (name: $0.0, role: $0.1) })
+        let named = Self.named.map {
+            Named(text: $0, words: String(RoleNames.words(AttributedString($0), names: book, roles: roles).characters))
+        }
         let matches = searches.map { words in
             Match(words: words, names: agents.map(\.0).filter { AgentNames.matches($0, words, roles: roles) })
         }
@@ -252,10 +269,11 @@ struct WordsVectorsTests {
                 + "MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and "
                 + "activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of "
                 + "MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and "
-                + "the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC.",
+                + "the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC, and a request's "
+                + "words where an agent is named by its whole role (RoleNames.words).",
             made_by: "app/Tests/FleetCoreTests/WordsVectorsTests.swift", time_zone: "UTC", names: names, texts: texts,
             times: times, ages: ages, matches: matches, inline: inline,
-            checks: checks, waits: waits, ended: try ended(calendar: calendar))
+            checks: checks, waits: waits, ended: try ended(calendar: calendar), named: named)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(document) + Data("\n".utf8)

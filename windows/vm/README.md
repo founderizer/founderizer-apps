@@ -173,7 +173,10 @@ who wants the VM in UTM can make a Windows VM there (Arm64, UEFI, TPM, NVMe, the
   pause away and puts the active hours back as they were. Neither restarts Windows: a restart also ends a Tailscale
   sign-in link that waits for the owner (the restart of 14 November did, and the VM needed a new link).
 - The display, the disk and the VM never sleep; no hibernation; no lock at wake.
-- UAC stays on. The desktop session runs as a normal user; an SSH session of an administrator is elevated.
+- UAC stays on. The desktop session runs as a normal user; an SSH session of an administrator is elevated. On the
+  Azure PC of proof A (the built-in Administrator with `FilterAdministratorToken` 1) a task of `vm.sh desktop` has the
+  full token, and a program that it starts directly runs elevated: proof A starts its programs there through explorer
+  ("Proof A: the rig").
 - The automatic sign-in reads its password from the LSA secret `DefaultPassword`, not from the registry.
 - `setup/build-window.ps1` puts its test certificate in the VM's trusted roots and trusted publishers.
 - The display scale is 200 % (`Win8DpiScaling`, `LogPixels` 192), as in the approved pictures.
@@ -458,11 +461,11 @@ its own hold rules and is used only to build. The tools write their files to `$H
 | `build-setup.sh` | holds the build VM (`vm.sh hold`), stops when a variable whose name starts with `Founderizer` is set there (`FounderizerProofsOn=true` turns the proofs' parts on in any build), builds this checkout's commit with a copy of `release/build-release.ps1` in which `-p:FounderizerWelcome` is `true` (the copy is in the build VM only), checks that `builds.json` says no proofs, that `Founderizer.App.dll` names no `GetEnvironmentVariable` and that the setup's signature is valid, and copies out the setup and the test certificate's public part |
 | `clean-pc.sh` | `base`: the clean PC's base VM with `vm.sh create` (no Tailscale, no developer tool; the checks of `check-clean.ps1`); `copy <name>`: an APFS copy of the stopped base (`cp -c`) on its own SSH port, the test certificate trusted (`trust-certificate.ps1`), the session's helpers copied in, the clean checks, `vm.sh hold`; `env`, `check`, `list`, `remove` |
 | `watch.sh` (`watch.ps1`, `watch-task.ps1`) | the window watcher in the copy's desktop session (a scheduled task under `conhost --headless`, so it has no window): each top-level window that becomes visible, with its class and its program, from Windows' own show events and a sweep every 100 ms; `stop` and `read` give the log and a summary that fails on a console (`ConsoleWindowClass`, Windows Terminal's window, or a console program) or on a window that could not be read |
-| `secret.sh` (`focus.ps1`; `type-pipe.ps1`, `type-task.ps1` on a PC with no QEMU keyboard) | the hidden prompt (from `add-test-pc.sh`): it types into the field that has the focus only when that field is an empty field of Founderizer's window (and, with `--field`, the one of that automation id); it reads the value with no echo and types it with `vm.sh type`, which also takes `_` and `#` now (Shift on the VM's US keyboard, for a sign-in code); after the keys, on every path, it reads the focus (the program and the element's automation id) and the field's length against the count of characters, and presses Enter only when the focus is still on that field of Founderizer.App and the field holds them all (only a password box may give no length; a field with no value is refused); it says whether the field is empty or gone after, and logs the field's name, never the value. From the keys until the field is empty or gone, the mark `value-on-screen` in the copy's folder makes `vm.sh picture` and `vm.sh screen` refuse (a token's field shows each character); when the keys did not all stay in the field, the mark stays whatever the field says, because some can have gone to another window or element; `logs/secret.log` names where the focus is and, apart from it, how many characters the field itself holds (read by its automation id; names and counts, no value). The way out, in that line and in the refusal of `vm.sh`, is both steps, never one of them: empty the field (`pictures/pick.ps1 -Field`) and close the window that took the keys with no save and no picture (in Founderizer's own window, which stays open until the claim: empty that element), then remove the mark. A password box shows no character, and `pick.ps1 -Field` may not empty one (it sets the value through UI Automation's ValuePattern, which a WinUI PasswordBox may not give): for a password box only the window step applies, and the log line and the refusal say so. Before `secret.sh` runs again for a password box that took a part of a value, the session empties the box (a click in it, Ctrl+A, Delete): a password box gives no length, so `secret.sh` takes it with the part in it, and the whole value goes after the part (that step then fails, with no leak). When the desktop or the taskbar took a key (`focus.ps1` names explorer), nothing is closed: a character there shows no text, and explorer is not ended. `vm.sh desktop` refuses `pictures/frames.ps1`, `notify.ps1` and `toastpress.ps1` while the mark is there too. A mark left behind on a failure or a Ctrl-C is the safe side: the session looks, empties, and removes it. On the Server PC at Azure the value goes on SSH's standard input to a named pipe of the desktop session, whose typer sends Windows' own key events into that field only: it reads UI Automation's focused element before the first key, the window in front before each key (it stops at the first change), and the focused element and the field's length again before Enter |
+| `secret.sh` (`focus.ps1`; `type-pipe.ps1`, `type-task.ps1` on a PC with no QEMU keyboard) | the hidden prompt (from `add-test-pc.sh`): it types into the field that has the focus only when that field is an empty field of Founderizer's window (and, with `--field`, the one of that automation id); it reads the value with no echo and types it with `vm.sh type`, which also takes `_` and `#` now (Shift on the VM's US keyboard, for a sign-in code); after the keys, on every path, it reads the focus (the program and the element's automation id) and the field's length against the count of characters, and presses Enter only when the focus is still on that field of Founderizer.App and the field holds them all (only a password box may give no length; a field with no value is refused); it says whether the field is empty or gone after, and logs the field's name, never the value. From the keys until the field is empty or gone, the mark `value-on-screen` in the copy's folder makes `vm.sh picture` and `vm.sh screen` refuse (a token's field shows each character); when the keys did not all stay in the field, the mark stays whatever the field says, because some can have gone to another window or element; `logs/secret.log` names where the focus is and, apart from it, how many characters the field itself holds (read by its automation id; names and counts, no value). The way out, in that line and in the refusal of `vm.sh`, is both steps, never one of them: empty the field (`pictures/pick.ps1 -Field`) and close the window that took the keys with no save and no picture (in Founderizer's own window, which stays open until the claim: empty that element), then remove the mark. A password box shows no character, and `pick.ps1 -Field` may not empty one (it sets the value through UI Automation's ValuePattern, which a WinUI PasswordBox may not give): for a password box only the window step applies, and the log line and the refusal say so. Before `secret.sh` runs again for a password box that took a part of a value, the session empties the box: a click in it (`vm.sh desktop '& C:\fz\setup\pick.ps1 -IdPrefix "<the box's automation id>"'`; `-Field` sets a value, which a PasswordBox may not take), a `focus.ps1` read that shows the box with the focus, then `vm.sh desktop '(New-Object -ComObject WScript.Shell).SendKeys("^a{DEL}")'` (`vm.sh keys` sends one key at a time, and the Azure PC has no QEMU keyboard). A password box gives no length, so `secret.sh` takes it with the part in it, and the whole value goes after the part (that step then fails, with no leak). When `focus.ps1` names explorer, the element decides: a type other than `ControlType.Edit` (the desktop's icon list, the taskbar) shows no text, so nothing is closed and explorer is not ended; an Edit of explorer (the address or search box of a File Explorer window) shows the typed text, so that window is closed: `vm.sh desktop 'foreach ($w in (New-Object -ComObject Shell.Application).Windows()) { $w.Quit() }'` closes each File Explorer window, and explorer itself (the desktop and the taskbar) goes on. `vm.sh desktop` refuses `pictures/frames.ps1`, `notify.ps1` and `toastpress.ps1` while the mark is there too. A mark left behind on a failure or a Ctrl-C is the safe side: the session looks, empties, and removes it. On the Server PC at Azure the value goes on SSH's standard input to a named pipe of the desktop session, whose typer sends Windows' own key events to that field: it reads UI Automation's focused element before the first key, the window in front before each key (it stops at the first change), and the focused element and the field's length again before Enter. It fails closed, never "no key reaches another window": one key can still reach a window that comes to the front between the check and the key, and then the keys did not all stay, the mark stays and the log names where the focus is |
 | `team.sh` (`team-read.ps1`, `team_compare.py`) | `read`: in the copy's desktop session, the PC's own key for the hub from the app's secret box (in memory only), `GET /ui/mobile`, `GET /ui/team` and `GET /ui/servers`, and a file with no key and no address: each agent's line, each machine with an agent, each server (the hub's or not, its placed agents, its SSH user and port), whether the hub's server takes agents, and the step of the fleet's servers. `compare`: that read against a reference, "but for the names". What stays outside, because no owner read gives it: each agent's start line, the goals, the hub's port, the servers' `kind` and `user` entries, and the addresses |
 | `team-reference.sh` | the reference, made with no owner in the agent-install rig of `~/dev/founderizer-plans/agent-install-test/rig` (Tart VMs on a Headscale test network). It is the Mac's install line for the same choices (the programs of `app/vectors/remote-install.json`, the Mac's own plans), and for "2 servers" this script's own join and move with the hub's owner routes (`POST /ui/servers/join`, the join line, `POST /ui/team/agents/juno/move` with Codex): what the Mac app sends there, but not a run of the Mac app. `one` (1 server, the manager on Codex) and `two`; `keep-one`, `keep-two`, `place-two` go on from a run that broke off. It keeps `team.json` and the hub's own reads of it (`GET /ui/team` and `GET /ui/servers`), and their compare must find no difference |
 | `bare-server.sh` | run 2's server for "Other VPS": a bare Ubuntu 24.04 server in the hcloud context `founderizer-test`, no SSH key, label `temporary=true`, root's password from a SHA-512 crypt hash that cloud-init sets; the password at a hidden prompt, then typed by `secret.sh` into the copy's password field; `delete` only a server with the labels of proof A |
-| `azure-pc-make.sh`, `azure-pc-delete.sh` (`azure-pc.json`, `azure-pc-setup.ps1`, `azure-pc-elevated.ps1`) | the x64 clean PC of run 2 at Azure: Windows Server 2025 Datacenter with Desktop Experience, licence included, `Standard_D2s_v6` (never an Arm "p" size), Trusted launch with a vTPM, SSH by key from this Mac's public address only, no RDP, no boot diagnostics; the host key comes back through Azure's run command and the first SSH checks it; `what-if` changes nothing; each resource made and removed is a line of `azure/record.log`; the delete also removes the deployments at the subscription and names each group that was not there before the make. Both take only the subscription of that name in the tenant that `FZ_AZURE_TENANT` names (below). `elevated <since>` lists the run's elevated starts (the new process's user is the event's `TargetUserName`, else its `SubjectUserName`), and `probe` is the run's first step there: one elevated start on purpose, which the list must hold; `elevated` refuses on a PC whose probe did not pass, and a list from before the probe holds the probe's own `whoami.exe` |
+| `azure-pc-make.sh`, `azure-pc-delete.sh` (`azure-pc.json`, `azure-pc-setup.ps1`, `azure-pc-elevated.ps1`) | the x64 clean PC of run 2 at Azure: Windows Server 2025 Datacenter with Desktop Experience, licence included, `Standard_D2s_v6` (never an Arm "p" size), Trusted launch with a vTPM, SSH by key from this Mac's public address only, no RDP, no boot diagnostics; the host key comes back through Azure's run command and the first SSH checks it; `what-if` changes nothing; each resource made and removed is a line of `azure/record.log`; the delete also removes the deployments at the subscription and names each group that was not there before the make. Both take only the subscription of that name in the tenant that `FZ_AZURE_TENANT` names (below). `elevated <since>` lists the run's elevated starts (the new process's user is the event's `TargetUserName`, else its `SubjectUserName`), each named: the probe's whoami.exe, a task of builder (on that PC the commands of `vm.sh desktop` and the typer have the full token, so they are in the list), or OTHER; `probe` is the run's first step there: one elevated start on purpose, asked from a limited process (`probe.cmd`, which explorer starts), which the list's line `probe=<n>` must count (a whoami.exe with the subject S-1-5-18, the target builder and `%%1937`; `probe --from-full-token` must stop); `elevated` refuses on a PC whose probe did not pass, and a list from before the probe holds the probe's own `whoami.exe` |
 | `team_standin.py`, `standin-key.ps1`, `standin-team.json` | the dry run's stand-in of the hub's three reads, and a key of the PC kept in the app's secret box as the app keeps one |
 | `vps-check.sh` (`vps-build.ps1`) | one "Other VPS" check with the SSH library that the app carries (`Renci.SshNet.dll`): the proofs' build with the welcome page from a commit (`--want 2026.0.1`), in a copy, against a test server in a container of the Remote tests' image on 127.0.0.1:58452 (root by password, systemd's mark, a `tailscale` that waits and fails) and `provider_standin.py`; "1 server", the stand-in's Tailscale token and the password through `secret.sh`, Other VPS, the server's read, and Install |
 | `primary-ips.sh` | before run 1: the primary IPs in use in the Hetzner projects of this Mac's hcloud contexts (each IP once) against the account's limit; read only |
@@ -475,7 +478,8 @@ FZ_VM_USER=<session> app/windows/vm/proof-a/clean-pc.sh copy run1
 export FZ_PROOF_A_COPY=run1; eval "$(app/windows/vm/proof-a/clean-pc.sh env run1)"   # vm.sh acts on the copy
 app/windows/vm/proof-a/watch.sh start
 app/windows/vm/vm.sh copy "$HOME/VMs/founderizer-windows-proof-a-files/build/<version>-<build>/Founderizer-Setup-<version>-arm64.exe" vm:C:/fz/proof-a/
-app/windows/vm/vm.sh desktop 'Start-Process C:\fz\proof-a\Founderizer-Setup-<version>-arm64.exe'
+app/windows/vm/vm.sh desktop 'Start-Process explorer.exe -ArgumentList "C:\fz\proof-a\Founderizer-Setup-<version>-arm64.exe"'   # a double-click
+app/windows/vm/vm.sh run '& C:\fz\proof-a\elevation.ps1 -Name Founderizer.App -Want 3'   # at the welcome page: "as wanted", else exit 1
 app/windows/vm/vm.sh desktop '& C:\fz\setup\ui.ps1 -Click "#first-run-set-up"'   # each page as a person presses it
 app/windows/vm/proof-a/secret.sh "Tailscale token" --field first-run-tailscale-key   # the owner, in his Terminal
 app/windows/vm/proof-a/team.sh read; app/windows/vm/proof-a/team.sh compare <reference> <read>
@@ -483,6 +487,15 @@ app/windows/vm/proof-a/watch.sh stop
 app/windows/vm/proof-a/clean-pc.sh remove run1
 ```
 
+- The setup and the app start through explorer, as a person's double-click (the setup then starts the app), never
+  with `vm.sh desktop 'Start-Process <program>'`: a command of `desktop` is a scheduled task, and on the Azure PC a task
+  has builder's full token, so a program that it starts directly runs elevated (elevation type 2), which no person's
+  start does (measured by the cloud tool's builder on Windows Server 2025, 23 November 2026). Through explorer it has
+  builder's limited token (type 3). A start of the app again (the window closed and opened during "Setting up") is the
+  launcher through explorer: `vm.sh desktop 'Start-Process explorer.exe -ArgumentList
+  "$env:LOCALAPPDATA\Programs\Founderizer\Founderizer.exe"'`. Explorer gives a program none of the command's
+  variables. `elevation.ps1` reads the type of each process of a program (a number, no words of a window); with
+  `-Want 3` it ends with exit 1 when a process of it has another type, or none runs.
 - The base VM is made once and never started again for a run: a copy is made from it while it is stopped.
 - The clean PC has 2 cores and 8 GB (`lib.sh`; the build VM keeps 6 and 16 GB), and its screen is 2880 x 1800 at
   200 % (`check-clean.ps1` checks it: at 1024 x 768 the app's window stayed black).
@@ -520,11 +533,19 @@ desktop). So `azure-pc-setup.ps1` lets an administrator's rise go on with no que
 0), and keeps UAC on (`EnableLUA` 1). Azure makes the admin user from the built-in Administrator (its SID ends in
 -500), whose Admin Approval Mode is off on Windows Server: with no limited token at all, nothing would start limited and
 no start would count as a rise. So the setup also sets `FilterAdministratorToken` 1 (its restart puts it in force), and
-the record says whether the user's SID ends in -500: the app and `vm.sh desktop` then keep their limited rights. The
-loss: an elevation that
-must not happen (for example, the x64 setup asking for one) passes unseen there. So the setup turns on Windows' audit of
-process creation, and `azure-pc-make.sh elevated <the run's start>` lists each start of the run with a full
-administrator's token, for the run's record. Its checks of proof A:
+the record says whether the user's SID ends in -500: builder's own desktop (explorer) and what it starts then have a
+limited token. A task of `vm.sh desktop` does not: there it has the full token, and a program that it starts directly
+runs elevated (elevation type 2; measured by the cloud tool's builder on Windows Server 2025, 23 November 2026). So
+proof A starts the setup and the app through explorer, and `elevation.ps1` reads the app's type (3, limited). The
+typer's task (`type-pipe.ps1`) has the full token there too; it only sends keys and reads the focus, which a higher
+token may do to a lower one. The loss: an elevation that must not happen (for example, the x64 setup asking for one)
+passes unseen there. So the setup turns on Windows' audit of process creation, and `azure-pc-make.sh elevated <the
+run's start>` lists each start of the run with a full administrator's token, for the run's record. Each line names
+what it is: the probe's whoami.exe; a task of builder (each command of `vm.sh desktop` and the typer are in the list
+on that PC, because a task has the full token there); or OTHER, an elevation that the run must explain (Tailscale's
+installer after Windows' question is one). Each start writes its new process id's kind again, so an id that Windows
+gives again to a new process loses its old kind: a setup or an app never inherits a task's name. A whoami.exe rise
+after the probe's time is OTHER. Its checks of proof A:
 
 | Proved on the Server PC | Stays with the ARM VM (Windows 11) |
 | --- | --- |
@@ -540,34 +561,58 @@ goes at once, as "When the PC's life does not go as planned" says below. Then, b
    an elevated session: that proves SSH's full token for the built-in Administrator with `FilterAdministratorToken` 1
    on Windows Server 2025. A stop after 10 minutes ("no SSH answer with a desktop session of builder") means no such
    token or no signed-in desktop; the PC costs until `azure-pc-delete.sh`.
-2. `azure-pc-make.sh probe`: it passes only when the list holds its elevated `whoami.exe` with `%%1937` under builder,
-   in `TargetUserName` or `SubjectUserName`: that proves the fields of event 4688 on Windows Server 2025.
-3. The watcher, the setup, and the pages to run 2's name page, as in run 1. There, the typer's stop once, with a test
-   value of 298 characters (about 10 s of keys) and Founderizer's window minimized by a timer during the keys. Windows
-   can refuse the front to a program that a scheduled task starts (more so while the typer sends keys), so a new
-   Notepad may not change the window in front; a minimize always does:
+2. `azure-pc-make.sh probe`: it asks for the rise from a limited process, as a person's program does: explorer starts
+   `probe.cmd`, which asks Windows for an elevated whoami.exe (a RunAs from a task's full token would start it at once,
+   with no rise). It passes only on the list's last line `probe=<n>` with n of 1 or more: a whoami.exe counts only
+   when its event has `SubjectUserSid` S-1-5-18 (Windows' own service that elevates), `TargetUserName` builder and
+   `%%1937`, and svchost.exe did not start it. The list prints these fields for each whoami.exe, counted or refused,
+   also when the probe stops. That proves the fields of event 4688 and a rise with no question on Windows Server 2025.
+   A console window shows while it runs. `probe --from-full-token` is the self-test, the rig's own proof that the probe
+   fails closed (probe.cmd from a task with builder's full token, whose whoami.exe is no rise). It exits 0 only when
+   the list ran, a whoami.exe was refused as no rise and the list says `probe=0`, and 1 in every other case (no list,
+   an SSH fault, or a rise that counted in its time); it never writes `elevated-probe`. Run it before the run's start
+   time: its cmd.exe, powershell.exe and whoami.exe are OTHER lines in any `elevated` list whose `since` is before it.
+   Both read the list from the PC's own clock, to the second, just before their step.
+3. The watcher, the setup through explorer (`elevation.ps1 -Want 3` passes for the app), and the pages to run 2's name
+   page, as in run 1. There, the typer's stop once, with a test
+   value of 598 characters (about 35 s of keys in the copy) and Notepad brought to the front by a timer during the
+   keys. Windows can refuse the front to a program that a scheduled task starts, so Notepad starts before the keys;
+   the timer presses Alt alone (a key of its own, which lets it give the front away) and then asks Windows to bring
+   Notepad to the front (`WScript.Shell`'s `AppActivate`). In the copy this stopped the typer at 63 of 598 (the run of
+   24 November 2026). A minimize from another program does not move the keyboard's focus: in the same run the field
+   kept it and took all 598 keys while the minimize ran. An Alt+Tab from `SendKeys` is not proved (secret.sh refused
+   before the keys both times, the focus being on Notepad). If `AppActivate` does not take the front, the lone Alt can
+   leave Founderizer's window in its access-key mode, and the next characters of the value can press one of its
+   controls: then the session reads the page (`ui.ps1`) and the focus before the way out, and the run's record says
+   what moved:
 
 ```
 export FZ_PROOF_A_COPY=azure; eval "$(app/windows/vm/proof-a/clean-pc.sh env azure)"
+app/windows/vm/vm.sh desktop 'Start-Process notepad.exe'                      # the window that takes the front
 app/windows/vm/vm.sh desktop '& C:\fz\setup\pick.ps1 -Field "Name"'          # the name field: empty, with the focus
-printf 'proofa-test-value-%s\n' "$(printf '0123456789%.0s' $(seq 28))" |
+app/windows/vm/vm.sh desktop '& C:\fz\proof-a\focus.ps1'                       # focus Founderizer.App first-run-name
+printf 'proofa-test-value-%s\n' "$(printf '0123456789%.0s' $(seq 58))" |
     app/windows/vm/proof-a/secret.sh "Test value" --field first-run-name --no-enter & typing=$!
 while kill -0 "$typing" 2>/dev/null &&
     ! app/windows/vm/vm.sh desktop '& C:\fz\proof-a\focus.ps1 -Id first-run-name' | grep -Eq 'length=[1-9]'; do :; done
-app/windows/vm/vm.sh desktop 'Add-Type -Namespace Fz -Name Win -MemberDefinition "[DllImport(`"user32.dll`")] public static extern bool ShowWindow(System.IntPtr h, int c);"; $h = (Get-Process Founderizer.App | Select-Object -First 1).MainWindowHandle; if ($h -eq 0) { "no window handle: nothing minimized" } else { [void][Fz.Win]::ShowWindow($h, 6); "shown with 6: $h" }'
-wait                                                       # the timer above: the window minimized during the keys
+app/windows/vm/vm.sh desktop '$s = New-Object -ComObject WScript.Shell; $n = Get-Process notepad | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; $s.SendKeys("%"); "AppActivate: " + $s.AppActivate($n.Id)'
+wait                                                       # the timer above: Notepad to the front during the keys
+app/windows/vm/vm.sh desktop '& C:\fz\proof-a\focus.ps1'                       # where the focus went
 tail -1 "$HOME/VMs/founderizer-windows-proof-a-files/logs/secret.log"
 ```
 
-   The stop is proved when the log says "the typer typed k of 298; front" and another program with k under 298, and
-   the field's own count apart from it; the mark stays and `vm.sh picture` refuses. The minimize's line says "shown
-   with 6" and the window's handle; "no window handle" means that nothing was minimized, and then the log proves
-   nothing about the stop. If the line said "shown with 6" and the log says that the field still holds characters
-   (all 298 stayed in it), the minimize came after the keys: empty the field and run it once more. Then the way out:
-   the same `vm.sh desktop` line with 9 (restore) in place of 6, `pick.ps1 -Field "Name"` (its click brings the window
-   to the front and empties the field), and, if `focus.ps1` names a window that took a key, that window closed with no
-   save (not explorer: when the desktop or the taskbar took a key, a character there shows no text, and nothing is
-   closed); `focus.ps1 -Id first-run-name` says `length=0`; the mark goes; run 2 goes on with its real name.
+   The stop is proved when the log says "the typer typed k of 598; front Notepad" with k under 598, and the field's
+   own count apart from it; the mark stays and `vm.sh picture` refuses. If `secret.sh` says that the focus is not on a
+   field of Founderizer (Notepad took the front after `pick.ps1`'s click), it typed nothing: run `pick.ps1` and the
+   lines from `secret.sh` again. If the log says that the field still holds characters (all 598 stayed in it): when
+   `focus.ps1` names Notepad, the timer came after the keys, so empty the field and run it once more; when it names
+   the field, Notepad did not take the front, and the run's record says that the stop stays unproved on Server. Then
+   the way out: Notepad closed with no save (`vm.sh run
+   'Get-Process notepad | Stop-Process -Force'`), `pick.ps1 -Field "Name"` (its click brings Founderizer's window to
+   the front and empties the field), and, if `focus.ps1` named another window that took a key, that window closed with
+   no save too (for explorer the element decides, as the `secret.sh` row says: the desktop or the taskbar, nothing; a
+   box of a File Explorer window, that window); `focus.ps1 -Id first-run-name` says `length=0`; the mark goes; run 2
+   goes on with its real name.
 
 The PC's life, all in the 2 hours: the make (not measured yet: Azure's deployment, its run command and one restart),
 this step (about 10 minutes: `probe` about 1, the stage about 5, a second try about 4), run 2 (items 9 to 12) and the
@@ -576,15 +621,20 @@ delete. The session writes the times of `create` and of the delete's end into th
 **When the PC's life does not go as planned** (his yes is one small VM for about 2 hours; the make's time is not
 measured):
 
+- `<subscription id>` below is the one that the tools read: `az account list --all --query "[?name=='Pay-As-You-Go'
+  && state=='Enabled' && tenantId=='$FZ_AZURE_TENANT'].id" -o tsv`. A message to the owner carries the real id,
+  filled in (never this file).
 - When the sitting stops, at any item: stop `create` if it runs (Ctrl-C), and wait until `az deployment sub list
-  --subscription <id> --query "[?starts_with(name,'proof-a-pc-')].properties.provisioningState"` shows no "Running"
-  (while the deployment runs, Azure can refuse the delete with a conflict); then run `azure-pc-delete.sh`.
+  --subscription <subscription id> --query "[?starts_with(name,'proof-a-pc-')].properties.provisioningState"` shows
+  each one as "Succeeded", "Failed" or "Canceled" (one can be "Accepted" before "Running", and while it runs Azure can
+  refuse the delete with a conflict); then run `azure-pc-delete.sh`.
 - When `azure-pc-delete.sh` does not end with "each resource of proof-a-pc-rg is gone" (or "no resource group
   proof-a-pc-rg" when nothing was made): it runs under `set -e`, so an `az resource delete` that fails stops it with
   az's own error and no "STILL THERE" line; its other faults end with "STILL THERE: <id>", "the group proof-a-pc-rg
   still exists" or a group that was not there before the make, and exit 1. Run it once more. If it fails again, tell
   the owner at once, through the coordinating session ("Windows app version"), that the PC still costs past his yes,
-  with `az group delete -n proof-a-pc-rg --subscription <id> --yes` or the group's page in the Azure portal.
+  with `az group delete -n proof-a-pc-rg --subscription <subscription id> --yes` or the group's page in the Azure
+  portal.
 - When the PC is still there 2 hours after `create` started: tell him so (through the coordinating session), and go on
   only with his word.
 
@@ -639,7 +689,7 @@ Ctrl-C is the safe side.
 | Check | Result |
 | --- | --- |
 | the focus left the field during the keys (a copy: Notepad open, Alt+Tab during the hidden prompt's keys, a test value; run at 18:40 UTC with round 4's `secret.sh`) | no Enter; the mark stayed and `vm.sh picture` refused; the log named Notepad as where the focus was (no value). The test value was whole in the app's field (52 of 52) and Notepad's text was empty: the Alt+Tab took effect after the last key |
-| one elevated start on purpose with the Azure PC's settings (in a copy: no question for an administrator, the audit of process creation on) | the list held `whoami.exe` and its `conhost.exe` (2 of 18 starts). On Windows 11 the event had `SubjectUserName` builder, `TargetUserName` "-" and `%%1937`: the user of this rise was in `SubjectUserName`, and the list takes either. Not run on Windows Server 2025 |
+| one elevated start on purpose with the Azure PC's settings (in a copy: no question for an administrator, the audit of process creation on) | the list held `whoami.exe` and its `conhost.exe` (2 of 18 starts). The event read then (`SubjectUserName` builder, `TargetUserName` "-", `%%1937`) was not the rise's: it is the shape of the elevated whoami.exe's `conhost.exe`, or of a start with a full token and no rise. The rise's own event has the PC's own account (`S-1-5-18`) as its subject and builder in `TargetUserName` (the run of 24 November, below). Not run on Windows Server 2025 |
 | `bare-server.sh make` with a stand-in `hcloud` | no server made: "nothing costs"; made, answer not read: the delete line; no server made, then no answer from Hetzner: "Hetzner did not say ... If it does, it costs until: bare-server.sh delete" (only Hetzner's own "not found" says "nothing costs") |
 | `team_compare.py` on two reads of round 1 (no servers part) | refused: "a read with no servers part ... read again" (before, two such reads gave 0 and exit 0) |
 
@@ -651,14 +701,72 @@ Ctrl-C is the safe side.
 | `vm.sh` with the mark in the folder | `picture`, `screen`, and `desktop` with `frames.ps1`, `notify.ps1` or `toastpress.ps1` refuse, and the refusal names the window that took the keys as a way out |
 | the field's length after the keys, the Azure typer (`type-pipe.ps1`), the PowerShell files (in the copy of the round-3 stage) | the QEMU path with the focus taken away: above. The typer's path (the copy with the mark "remote" for the time of the step): "typed 4 of 4, Enter", the page went on and the mark went. Each PowerShell file parses, and the C# of `type-pipe.ps1`, `watch.ps1` and `azure-pc-setup.ps1` compiles. The -500 account, `FilterAdministratorToken` and the gate of `elevated` run only on the Azure PC |
 
-**Round 5, after the read of `b70ab8b80` by Fable and two Opus readers** (no server, no Azure VM, no token):
+**Rounds 5 to 7, after the reads of `b70ab8b80`, `aacfe00ff` and `5cc45e9e3`** (no server, no Azure VM, no token; one
+run at 23:34 to 23:39 UTC on 22 November 2026, the code of `5cc45e9e3`):
 
 | Check | Result |
 | --- | --- |
 | `secret.sh`, `vm.sh` | `bash -n` |
-| `secret.sh` with a stand-in `vm.sh` (no VM): the focus on Notepad with the field whole; back on the field with 30 of 52; the field gone; a field with no value; a password box; after the keys no length and no password box; a password box with the focus on Notepad after the keys; the typer's stop at 30 of 52; the typer's Enter | not run yet: in the tests lock with the stage |
-| the log line when the focus leaves the field during the keys, and the parse of `focus.ps1` and `type-pipe.ps1` (a copy, as in round 3's (A)) | not run yet: the stage waits in the tests lock |
-| the trigger of the Azure PC's step (Founderizer's window minimized during the keys; its handle is not 0) and its way out, in the same copy through the typer | not run yet: the stage waits in the tests lock |
+| `secret.sh` with a stand-in `vm.sh` (no VM): the focus on Notepad with the field whole; back on the field with 30 of 52; the field gone; a field with no value; a password box; after the keys no length and no password box; a password box with the focus on Notepad after the keys; the typer's stop at 30 of 52; the typer's Enter | each as planned: "the focus is on notepad/15; the field first-run-name holds 52 of 52" with both steps of the way out; "holds 30 of 52"; "is gone"; refused before the value; a password box kept, Enter, the mark gone; no length and no password box: not kept, the mark stays; a password box with the keys elsewhere: "is a password box (no length; it shows no character)" and only the window step; "the typer typed 30 of 52; front notepad; the field first-run-name holds 30 of 52"; the typer's Enter: "the field is gone". `vm.sh picture` with the mark: refused, with both steps and the password box's one |
+| the log line when the focus leaves the field during the keys, and the parse of `focus.ps1` and `type-pipe.ps1` (a copy, as in round 3's (A)) | "the focus is on Notepad/; the field first-run-name holds 52 of 52" (round 4's line said "0 of 52" in the same case), both steps of the way out, the mark stays, `vm.sh picture` refused; by hand, the focus on Notepad's document and the field at 52; both files: 0 parse errors |
+| the trigger of the Azure PC's step (Founderizer's window minimized during the keys; its handle is not 0) and its way out, in the same copy through the typer | the handle: 327726 (not 0); "shown with 6: 327726", then "shown with 9: 327726", and `pick.ps1 -Field`'s click gave the field the focus again. The typer's stop is NOT proved: the typer's start failed before any key ("The process cannot access the file 'C:\fz\proof-a\keys.state' because it is being used by another process", from `type-task.ps1`'s read of the state file while `type-pipe.ps1` wrote it), so `secret.sh` said "The test computer's typer did not start. Nothing was typed", and the field stayed at 0 |
+| the README's route for a File Explorer window that took keys (`Shell.Application`'s windows, each one's `Quit()`) | File Explorer windows: 1, then 0; explorer processes: 2 (the desktop and the taskbar go on) |
+| the README's route to empty a box (`pick.ps1 -IdPrefix`'s click, `focus.ps1`, `SendKeys("^a{DEL}")`), on the name field with 3 test keys | the focus on first-run-name; the field at 3, then 0. Not run on a password box |
+
+**The typer's state file, after that run** (the fix: `type-pipe.ps1` puts each state in place in one step, a new file
+that takes the state file's place, and `type-task.ps1` tries a read again when it meets that step):
+
+| Check | Result |
+| --- | --- |
+| the parse of both files (23 November 2026, 12:44 UTC, `3b0babf49`) | 0 parse errors each |
+| the state file under load for 10 s, a writer job and a reader, the old way | the writer stopped: "The process cannot access the file ... because it is being used by another process" (the round-5 run's fault) |
+| the same, the new way of `3b0babf49` | the writer stopped at its first `File.Replace`: "The path is not of a legal form", because PowerShell passed `$null` as "" for the backup's name. So the typer's states after "listening" were lost: three times `secret.sh` said "The test computer did not take the keys (listening)", kept the mark, and took no picture (the safe side). Fixed: `[NullString]::Value` |
+| the Azure step's trigger, a minimize of Founderizer's window during the keys (two tries) | "shown with 6", and the field took all 298 keys, both times (with no times, this run could not say whether the minimize came during the keys; the run of 24 November did: below) |
+| the typer's path with Enter ("Juno") | the typer typed and pressed Enter (the page went on to the next one), and its last state was lost as above |
+| the state file under load after the fix (`[NullString]::Value`; 24 November 2026, 01:04 UTC, `e0ec7acc5`, a copy) | both files: 0 parse errors. The old way: the writer stopped ("being used by another process") and 28663 of 72799 reads failed. The new way: 2014 states written, the writer whole, 35924 reads with none failed and none a part of a state; with a reader that pauses 15 ms: 2653 states, 83 reads, none failed, none a part |
+| the Azure step's trigger: an Alt+Tab from `SendKeys` (298, then 598 characters) | not proved: both times `secret.sh` refused before the keys ("the focus is not on a field of Founderizer (Notepad, ...)"), because the new Notepad took the front after `pick.ps1`'s click; nothing was typed and the mark did not start. The README now checks the focus before the keys |
+| the trigger: Alt alone, then `AppActivate` of Notepad, from the desktop session (598 characters) | the typer stopped: "the typer typed 63 of 598; front Notepad; the field first-run-name holds 63 of 598"; the mark stayed and `vm.sh picture` refused; Notepad's text held 0 characters (no key went there). The way out: Notepad closed with no save, the field emptied (0). The README's trigger is this one |
+| a minimize of Founderizer's window from the desktop session, for the record (598 characters) | the minimize ran at 01:10:13 to 01:10:18 UTC and the keys went on to 01:10:49: the field kept the focus and took all 598 keys. The mark stayed (the field held characters); the way out emptied it |
+| the typer's path with Enter ("Juno"), after the fix | "the field is gone (the page moved on)": the page went on to the next one, and the mark went |
+
+**The explorer starts and the probe** (24 November 2026, 04:18 to 04:21 UTC, `fd6b67b58`, a copy of Windows 11 with
+the account of the base VM, not the -500 one; so a task of `vm.sh desktop` is limited here, and only the Azure PC
+shows the full token of a task):
+
+| Check | Result |
+| --- | --- |
+| `elevation.ps1`, `azure-pc-elevated.ps1` | 0 parse errors each |
+| the setup through explorer, as run 1 starts it | the welcome page; "Founderizer.App 8428: elevation type 3, limited" |
+| the launcher through explorer, after the app's window closed | "Founderizer.App 6080: elevation type 3, limited" |
+| `elevation.ps1` tells the types apart | Notepad from a task with the highest run level: "elevation type 2, full (elevated)"; Notepad through explorer: "elevation type 3, limited"; for the record, Notepad that a task of `vm.sh desktop` starts directly on this copy: type 3 |
+| with the Azure PC's settings, a full-token task runs whoami.exe directly | the list named both starts (conhost.exe from svchost.exe, whoami.exe from conhost.exe) "a task of builder": the probe's 0 |
+| the probe as `azure-pc-make.sh probe` asks it (`probe.cmd` through explorer) | "the probe's whoami.exe" for whoami.exe and its conhost.exe; OTHER 0. The rise's event: `SubjectUserName` the PC's own account (Windows' service that elevates), `TargetUserName` builder, `%%1937`, started by the powershell.exe of `probe.cmd`; a task's full-token start, and the elevated whoami.exe's own `conhost.exe`, had `SubjectUserName` builder and `TargetUserName` "-": that is no rise. The probe now counts only the rise's shape |
+
+**The probe's rule and the readers' points on `87700b085`** (24 November 2026, 10:17 to 10:24 UTC, `a57d0ebef`, a
+copy named `azure`, so that `azure-pc-make.sh probe` itself acted on it; the copy was deleted at the end):
+
+| Check | Result |
+| --- | --- |
+| the parse of `azure-pc-elevated.ps1`, `elevation.ps1`, `type-pipe.ps1`, `type-task.ps1` | 0 parse errors each |
+| the typer's state file under load with the new read (a missing file is read again) | the old way: the writer stopped, 29830 of 76027 reads failed; the new way: 2115 states, the writer whole, 5911 reads, none failed, none a part; paced: 2936 states, 12 reads, none failed, none a part |
+| `elevation.ps1 -Want`, Notepad through explorer | `-Want 3`: "as wanted", exit 0; `-Want 2`: "NOT as wanted: 1 of 1 processes of notepad have another type than 2", exit 1; a program with no process: exit 1 |
+| the setup through explorer, then the app with `-Want 3` | the welcome page; "Founderizer.App 7948: elevation type 3, limited", "as wanted", exit 0 |
+| the typer's path with Enter, with the new read | "the field is gone (the page moved on)"; the mark went |
+| `azure-pc-make.sh probe --from-full-token`, with the Azure PC's settings | it stopped (exit 1) and wrote no `elevated-probe`. "whoami.exe ...: refused: not a rise (SubjectUserSid" builder's own (S-1-5-21-...-1000), "TargetUserName -, TokenElevationType %%1937, started by ...powershell.exe)"; "probe=0". Its starts are OTHER: the task's action is cmd.exe, not the conhost.exe of the rig's tasks |
+| `azure-pc-make.sh probe` (`probe.cmd` through explorer), right after | it passed (exit 0) and wrote `elevated-probe`. "whoami.exe ...: counted: the probe's rise (SubjectUserSid S-1-5-18, TargetUserName builder, TokenElevationType %%1937, started by ...powershell.exe)"; the whoami.exe and its conhost.exe named "the probe's whoami.exe"; the refused one of the step before still listed and refused; "probe=1" |
+
+**The self-test and the list's order** (25 November 2026, 03:24 to 03:28 UTC, `0be0fa4e6`, a copy named `azure`;
+the copy was deleted at the end):
+
+| Check | Result |
+| --- | --- |
+| `azure-pc-elevated.ps1` | 0 parse errors |
+| the self-test (`probe --from-full-token`) | exit 0: "whoami.exe ...: refused: not a rise" (builder's own SID, `TargetUserName` "-"), "probe=0", "self-test passed"; no `elevated-probe`; its task gone after its end |
+| a real probe through explorer, right after | exit 0: "counted: the probe's rise (SubjectUserSid S-1-5-18, TargetUserName builder, TokenElevationType %%1937 ...)", "probe=1"; `elevated-probe` from the PC's clock |
+| a self-test right after the real probe | exit 0, "probe=0": the real probe's rise is before its `since` (the PC's clock, to the second) and is not in its list; `elevated-probe` the same |
+| a self-test with a rise in its own time (`probe.cmd` through explorer 4 s after it started) | exit 1: "self-test: a rise counted in its time, so it proves nothing"; the second read after the first whoami.exe saw the rise 10 s later |
+| a restart of the copy inside `since` | "Windows started 2026-11-25 03:27:37Z: the kinds of all process ids are emptied" (event 4608) |
+| the read order by `RecordId` | not run: a clock that steps back cannot be made cheaply in a copy; the list no longer sorts by time |
 
 ## Limits
 

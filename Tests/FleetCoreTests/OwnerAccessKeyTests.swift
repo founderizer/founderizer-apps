@@ -212,6 +212,51 @@ struct OwnerAccessKeyTests {
         #expect(try Data(contentsOf: copy) == untouched)
     }
 
+    /// **A copy of any size is read as a copy and takes the key** (the owner, 22 November 2026: "why is there a backup
+    /// limit? it shouldn't?"). The app refused a copy of more than 256 MiB in `ChosenCopy.read`, which the key's own
+    /// step reads too, so a copy that large was kept with no key and no word about it (`withKey` gave nil). The copy here
+    /// is a real ZIP of 300 MiB of records that Python's own `zipfile` writes, its records a hole on the disk, so the
+    /// test writes no 300 MiB. The bug that it catches: a limit of size left in one reader of the app.
+    @Test func aCopyOfAnySizeIsReadAsACopyAndTakesTheKey() throws {
+        let folder = try folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let manifest = try ZipArchive.member(FleetManifest.manifestMember, in: try fixtureCopy(in: folder), limit: 1 << 20)
+        let copy = folder.appendingPathComponent("founderizer-0f1e2d3c4b5a6978-20261122T120000Z.zip")
+        let made = try run("/usr/bin/python3", ["-c", """
+            import hashlib, json, sys, zipfile
+            path, manifest, size, zero = sys.argv[1], json.loads(sys.argv[2]), 300 << 20, bytes(1 << 20)
+            records = hashlib.sha256()
+            for _ in range(size // len(zero)):
+                records.update(zero)
+            manifest["files"] = {"fleet.sqlite3": {"bytes": size, "sha256": records.hexdigest()}}
+            class Holes:
+                # a file whose parts of zeros are holes: the copy is 300 MiB long and takes no 300 MiB of the disk
+                def __init__(self, f): self.f = f
+                def write(self, data):
+                    if data and not data.strip(b"\\0"):
+                        self.f.seek(len(data), 1)
+                        return len(data)
+                    return self.f.write(data)
+                def __getattr__(self, name): return getattr(self.f, name)
+            with open(path, "wb") as f, zipfile.ZipFile(Holes(f), "w", zipfile.ZIP_STORED) as z:
+                z.writestr("fleet.json", json.dumps(manifest))
+                with z.open(zipfile.ZipInfo("fleet.sqlite3", date_time=(1980, 1, 1, 0, 0, 0)), "w") as member:
+                    for _ in range(size // len(zero)):
+                        member.write(zero)
+            """, copy.path, String(decoding: manifest, as: UTF8.self)])
+        #expect(made.status == 0, "python said: \(made.output)")
+        let size = try #require(try FileManager.default.attributesOfItem(atPath: copy.path)[.size] as? NSNumber).int64Value
+        #expect(size > 300 << 20)
+        let chosen = try ChosenCopy.read(copy)
+        #expect(chosen.bytes == size)
+        #expect(chosen.manifest.files[FleetManifest.recordsMember]?.bytes == 300 << 20)
+        let key = try #require(OwnerAccessKey(seed: Self.seed))
+        let kept = try #require(OwnerAccess.withKey(copy) { _ in key })
+        #expect(OwnerAccess.key(in: kept)?.key == key)
+        #expect(try ZipArchive.names(in: kept) == [FleetManifest.manifestMember, FleetManifest.recordsMember,
+                                                    OwnerAccess.member])
+    }
+
     @Test func aKeyThatCannotBeHadCostsNoCopy() throws {
         struct NoKeychain: Error {}
         let folder = try folder()

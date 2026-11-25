@@ -147,13 +147,24 @@ final class AppAutoUpdate {
         guard let build = waiting,
               AppUpdatePolicy.shouldInstall(automatic: automatic, published: published, offered: true,
                                             awaySince: awaySince,
-                                            // a card in its own window: the restart would take it away (`NeedWindows.anyOpen`)
-                                            // and an answer that waits with Undo (`AnswerHolds`)
-                                            busy: store.sending || store.pending != nil || setup || NeedWindows.anyOpen
-                                                || AnswerHolds.shared.busy,
-                                            now: now) else { return }
+                                            busy: Self.busy(store: store, setup: setup), now: now) else { return }
         working = true
         Task { await install(build) }
+    }
+
+    /// **What holds the app's own restart** (`tick`): a request of his that is on its way or waits, the setup, and what
+    /// the restart would take away or cut. His own Update and Restart asks none of it.
+    static func busy(store: FleetStore, setup: Bool) -> Bool {
+        store.sending || store.pending != nil || setup
+            // a card in its own window: the restart would take it away (`NeedWindows.anyOpen`)
+            || NeedWindows.anyOpen
+            // an answer that waits with Undo (`AnswerHolds`)
+            || AnswerHolds.shared.busy
+            // and a restore that runs: the restart would cut its upload or its wait (`RestoreModel.running`). Nothing
+            // holds it once that wait ends: a build that waited goes in while he is away, and the app starts with the
+            // restore at rest, so he does not see the landing ("Your fleet is back" and its reconnect steps) nor a wait
+            // that stands (.lost or .staged), with no press of his (a known limit; no data is lost)
+            || store.restore.running
     }
 
     /// The read before any hub answered: our channel, with no fleet id and not the early track. There is no fleet yet,

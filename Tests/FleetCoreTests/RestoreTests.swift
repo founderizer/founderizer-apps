@@ -280,3 +280,24 @@ private func task(_ id: Int) -> [String: Any] {
     #expect(receipt.removed == ["profiles/old.md"])
     #expect(receipt.records_bytes == 802_816)
 }
+
+/// **A refusal of a restore that the hub gives before it writes anything shows its words at once** (the hub-side second
+/// reader's note for the Mac, round 3, 22 November 2026): 400, 403, 404, 413, 422 and 507 come only from the hub's head
+/// or from its check of the copy. A 409 is its own question, and a 5xx or a lost connection can come after the records
+/// were staged, so the generation decides those. The bug that it catches: four minutes of "restarting" and then "lost"
+/// for a copy that the hub refused with its own words.
+@Test func aRestoreRefusedBeforeAnyWriteSaysItsWordsAndNoOtherAnswerDoes() {
+    let noRoom = Data(#"{"code": "restore_no_room", "names": {"free": "1.1 GB", "need": "1.2 GB"}, "error": "The hub's server has 1.1 GB free. This copy needs at least 1.2 GB there."}"#.utf8)
+    #expect(RestoreRefusal.wroteNothing(HubError.refusal(.read(status: 507, body: noRoom)))
+            == "The hub's server has 1.1 GB free. This copy needs at least 1.2 GB there.")
+    let words = Data(#"{"error": "refused before anything was written"}"#.utf8)
+    for status in [400, 403, 404, 413, 422] {
+        #expect(RestoreRefusal.wroteNothing(HubError.refusal(.read(status: status, body: words)))
+                == "refused before anything was written", "\(status)")
+    }
+    for status in [409, 500, 502, 503] {
+        #expect(RestoreRefusal.wroteNothing(HubError.refusal(.read(status: status, body: words))) == nil, "\(status)")
+    }
+    #expect(RestoreRefusal.wroteNothing(URLError(.networkConnectionLost)) == nil)
+    #expect(RestoreRefusal.wroteNothing(HubError.unavailable) == nil)
+}

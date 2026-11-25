@@ -602,8 +602,8 @@ struct ErrorReportsTests {
 /// **The Mac's day** (W17 of the reliability plan, inside the owner's yes Q3, and Q5): the `app` block, the copies of
 /// our site's lists, and the sender's rules (`ErrorReportsSending`): when the day goes and on which answer of the switch.
 /// The rules that matter most are about what must **not** go: a day after the owner turned the switch off or said no on
-/// the first run, a day on another hub's answer or on one older than 7 days, an empty report, and any word of this Mac
-/// that is not a word of our site's lists.
+/// the first run, a day on another hub's answer or on one older than one day, an empty report, a report with no hub
+/// without the owner's "Send" of the first run, and any word of this Mac that is not a word of our site's lists.
 struct ErrorReportsDayTests {
     static let fleet = "0123456789abcdef"
     static let t0 = Date(timeIntervalSince1970: 1_763_300_000)
@@ -647,11 +647,13 @@ struct ErrorReportsDayTests {
     /// wall clock and the time awake (the uptime, which stops while the Mac sleeps). `switchOn` is the hub's answer to
     /// the switch's read (nil: the read fails); `whileReading` runs inside the reads of the switch and of the releases,
     /// as a press of the owner during them; `sent` holds each body that went, with its channel, before `answer` gives
-    /// our site's answer.
+    /// our site's answer, or before the app's own client (`site`) sends it to a stand-in of our site.
     @MainActor final class Harness {
         let defaults: TestDefaults
         let folder: URL
         let clock: Clock
+        let version: String
+        var site: ErrorReportClient?
         private(set) var sending: ErrorReportsSending
         var switchOn: Bool? = true
         var reads = 0
@@ -668,25 +670,27 @@ struct ErrorReportsDayTests {
             init(_ now: Date) { self.now = now }
         }
 
-        init(_ label: String, at now: Date = ErrorReportsDayTests.t0) {
+        init(_ label: String, at now: Date = ErrorReportsDayTests.t0, version: String = "0.1.499 (499)") {
             defaults = TestDefaults(label)
             folder = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
                 .appendingPathComponent("\(label)-\(UUID().uuidString)", isDirectory: true)
             clock = Clock(now)
+            self.version = version
             sources = .init(update: AppUpdateFacts(at: now, in: defaults), running: AppVersion(name: "0.1.499", build: 499),
                             stops: [])
-            sending = Self.sending(folder: folder, defaults: defaults, clock: clock)
+            sending = Self.sending(folder: folder, defaults: defaults, clock: clock, version: version)
         }
 
         deinit { try? FileManager.default.removeItem(at: folder) }
 
-        private static func sending(folder: URL, defaults: UserDefaults, clock: Clock) -> ErrorReportsSending {
-            ErrorReportsSending(file: folder.appendingPathComponent("error-reports.json"), version: "0.1.499 (499)",
+        private static func sending(folder: URL, defaults: UserDefaults, clock: Clock, version: String)
+            -> ErrorReportsSending {
+            ErrorReportsSending(file: folder.appendingPathComponent("error-reports.json"), version: version,
                                 system: "macOS 26.6.2", defaults: defaults, now: { clock.now }, uptime: { clock.awake })
         }
 
         /// The app starts again: a new sender on the same defaults and kept file.
-        func restart() { sending = Self.sending(folder: folder, defaults: defaults, clock: clock) }
+        func restart() { sending = Self.sending(folder: folder, defaults: defaults, clock: clock, version: version) }
 
         /// The wall clock; a move forward is time awake too (`sleep` is not).
         var now: Date {
@@ -719,7 +723,7 @@ struct ErrorReportsDayTests {
                 storeReleases: { self.storeReleases }, sources: { self.sources },
                 send: { report, channel in
                     self.sent.append((try ErrorReportsDayTests.json(report.body()), channel))
-                    try self.answer(report)
+                    if let site = self.site { try await site.send(report, channel: channel) } else { try self.answer(report) }
                 })
             let tick = ErrorReportsSending.Tick(hub: hub, database: answers ? "g1" : nil, offered: offered,
                                                 answered: answered ?? (answers ? now : nil), reach: reach)
@@ -1228,14 +1232,14 @@ struct ErrorReportsDayTests {
         #expect(Set(hub.keys) == ["reach", "hours", "runs", "newest", "missing"] && hub["runs"] is NSNull)
         #expect(hub["hours"] as? Int == 0)       // 0 with "none"
         let install = try #require((app["installs"] as? [[String: Any]])?.first)
-        #expect(Set(install.keys) == ["kind", "stop", "cause", "count", "first", "last"])
+        #expect(Set(install.keys) == ["kind", "step", "stop", "cause", "count", "first", "last"])
         #expect(ErrorReport(fleet: Self.fleet, version: "0.1.499 (499)", system: nil, crashes: [], app: nil) == nil)
     }
 
     // ------------------------------------------------------------ the words
 
-    /// **Each copy is our site's list (founderizer-web, src/lib/errors.ts, HEALTH_WORDS of 21 November 2026), word for
-    /// word.** A word comes to our site first, and only then into a copy and here: a Mac whose copy took a word that
+    /// **Each copy is our site's list (founderizer-web, src/lib/errors.ts, HEALTH_WORDS of 21 November 2026, with
+    /// `no_hub` and `installStep` of 22 November), word for word.** A word comes to our site first, and only then into a copy and here: a Mac whose copy took a word that
     /// our site does not have would have each day refused.
     @Test func eachCopyIsOurSitesListAsItIsToday() {
         let theirs = [
@@ -1244,8 +1248,9 @@ struct ErrorReportsDayTests {
                 + "cannot_unpack not_one_app unreadable_bundle not_founderizer mismatch unsigned wrong_signature "
                 + "cannot_replace other",
             "reach": "none invalid_address refused_this_mac not_a_hub hub_error refused unreadable timed_out "
-                + "no_connection host_not_found no_network blocked_by_app not_secure other",
+                + "no_connection host_not_found no_network blocked_by_app not_secure no_hub other",
             "installKind": "hub server mac other",
+            "installStep": "none read network code plan start wait_claim claim wait_ready verify join order other",
             "installStop": "none cannot_start installer_stopped server_unreached login_refused step_failed hub_not_ours "
                 + "not_root timed_out no_claim_code no_checklist check_stopped needs_sudo_password needs_ssh_password "
                 + "network_key_refused hub_refused hub_unreached mac_refused mac_unreachable mac_unreadable other",
@@ -1256,7 +1261,8 @@ struct ErrorReportsDayTests {
         ]
         let copies = ["updateState": AppHealth.updateStates, "updateCause": AppHealth.updateCauses,
                       "reach": AppHealth.reaches, "installKind": AppHealth.installKinds,
-                      "installStop": AppHealth.installStops, "installCause": AppHealth.installCauses]
+                      "installStep": AppHealth.installSteps, "installStop": AppHealth.installStops,
+                      "installCause": AppHealth.installCauses]
         for (name, copy) in copies {
             #expect(copy == theirs[name]?.split(separator: " ").map(String.init), "\(name): put a new word on our side first")
         }
@@ -1267,6 +1273,7 @@ struct ErrorReportsDayTests {
     /// it; else it goes as "other", and nobody on our side reads what broke.
     @Test func eachWordOfTheAppsSourcesIsInItsCopy() {
         #expect(ReachFacts.ReadKind.allCases.map(\.rawValue).filter { !AppHealth.reaches.contains($0) } == [])
+        #expect(ReachFacts.InstallStepName.allCases.map(\.rawValue).filter { !AppHealth.installSteps.contains($0) } == [])
         #expect(InstallRecord.Stop.allCases.map(\.rawValue).filter { !AppHealth.installStops.contains($0) } == [])
         #expect(InstallCause.allCases.map(\.rawValue).filter { !AppHealth.installCauses.contains($0) } == [])
         let kinds = InstallRecord.Kind.allCases.map { kind in
@@ -1285,7 +1292,7 @@ struct ErrorReportsDayTests {
         #expect(words.filter { !AppHealth.updateCauses.contains($0) || $0 == "other" || $0 == "none" } == [])
         #expect(Set(words).count == failures.count)
         for copy in [AppHealth.updateStates, AppHealth.updateCauses, AppHealth.reaches, AppHealth.installKinds,
-                     AppHealth.installStops, AppHealth.installCauses] {
+                     AppHealth.installSteps, AppHealth.installStops, AppHealth.installCauses] {
             #expect(copy.last == "other" && Set(copy).count == copy.count)
         }
     }
@@ -1323,7 +1330,7 @@ struct ErrorReportsDayTests {
         log.note(step: "join", state: .failed, at: Self.t0 + 60)
         log.stop(.installerStopped, says: "the \(canary) line", cause: .firewall, at: Self.t0 + 60)
         let installs = AppHealth.installs(InstallStop.of([log.record]), since: Self.t0)
-        #expect(installs == [.init(kind: "server", stop: "installer_stopped", cause: "firewall", count: 1,
+        #expect(installs == [.init(kind: "server", step: "join", stop: "installer_stopped", cause: "firewall", count: 1,
                                    first: 1_763_300_060, last: 1_763_300_060)])
 
         let report = try #require(ErrorReport(fleet: Self.fleet, version: "0.1.499 (499)", system: "macOS 26.6.2",
@@ -1481,8 +1488,9 @@ struct ErrorReportsDayTests {
             throw ErrorReportError.refused(400)
         }
         h.now += 2 * Self.hour
-        // A crash of after the "on" that this attempt reads (the crashes' floor).
-        let at = Int(h.now.timeIntervalSince1970)
+        // A crash one second after the "on" that this attempt reads (the crashes' floor; one second after, so that a
+        // floor of ">" in place of ">=" would not change this test).
+        let at = Int(h.now.timeIntervalSince1970) + 1
         h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: at, last: at)])
         await h.tick()
         // The crash is in the first report, so the switch-off during its 400 is what stops a second send.
@@ -1506,14 +1514,512 @@ struct ErrorReportsDayTests {
         #expect(h.sent.count == 1, "a day went after a hub with no switch")
     }
 
-    /// **A "no" on the first run's page during an attempt stops that attempt's day** (review A round 2, N4): the owner
-    /// presses "Don't send" while the read of the switch runs; the hub says "on", and nothing goes.
+    /// **A "no" on the first run's page during an attempt stops that attempt's day, and its crash** (review A round 2,
+    /// N4; the validator's finding 1 of pieces 1 and 5): the owner presses "Don't send" while the read of the switch
+    /// runs; the hub says "on" (a restore during the first run), and nothing goes, a crash neither. The crash is
+    /// dropped, not kept for later (the second reader's R4-N1): no read of the hub for it a minute later, and when that
+    /// wait of the "no" ended with no hub, it goes in no report on the hub's "on". It is timed one second after the run
+    /// that this "on" starts, so that the crash floor would let it pass: only the drop under the "no" keeps it out.
     @MainActor @Test func aFirstRunNoDuringAnAttemptStopsItsDay() async throws {
         let h = Harness("ErrorReportsDayNoDuring")
         h.whileReading = { if $0 == "switch" { FirstRunReports.choose(false, in: h.defaults) } }
+        let after = Int((Self.t0 + 61).timeIntervalSince1970)
+        h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: after, last: after)])
         await h.tick()
-        #expect(h.reads == 1 && h.sent.isEmpty, "a day went after a first-run no during its attempt")
-        #expect(ErrorReportsDay.lastAnswer(in: h.defaults)?.send == false)
+        #expect(h.reads == 1 && h.sent.isEmpty, "a report went after a first-run no during its attempt")
+        #expect(ErrorReportsDay.lastAnswer(in: h.defaults)?.send == false && ErrorReport.kept(h.file).isEmpty)
+        h.whileReading = { _ in }
+        h.now += 30
+        await h.tick()
+        #expect(h.reads == 1, "the hub was asked again for a crash that waits under a first-run no")
+        FirstRunReports.forget(in: h.defaults)
+        h.now += 30
+        await h.tick()
+        // The kept "off" of the "no" holds the due day for the hourly look, and the switch was read at t0: no attempt
+        // runs now. With the crash put back, the Mac would read the switch again now and send it.
+        #expect(h.reads == 1 && h.sent.isEmpty, "a crash from before the first-run no went after it")
+    }
+
+    /// **A first-run "no" that waits, with a kept file due, reads the hub once, and the file goes** (the second reader's
+    /// R5-M1; the F5 validator's N4): the attempt that carries the file meets the "no", and the file goes, as at
+    /// `off()`: no run of "on" is kept, and the next one starts after each of its crashes. Then no pass reads the hub for
+    /// it, also past the file's minute's look. Before, each pass of the loop, about 3 seconds apart, read the hub's
+    /// switch and releases again until the "no" reached the hub, and the file stayed on the disk for the whole wait.
+    @MainActor @Test func aWaitingFirstRunNoWithADueKeptFileReadsTheHubOnce() async throws {
+        let h = Harness("ErrorReportsDayNoKept")
+        await h.tick()
+        let at = Int((h.now + 60).timeIntervalSince1970)
+        h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: at, last: at)])
+        h.answer = { _ in throw ErrorReportError.refused(503) }
+        h.now += 120
+        await h.tick()
+        #expect(h.reads == 2 && h.sent.count == 2 && ErrorReport.kept(h.file).count == 1)
+        h.answer = { _ in }
+        FirstRunReports.choose(false, in: h.defaults)
+        h.now += ErrorReportsDay.retry                      // the kept file's next try is due
+        await h.tick()
+        #expect(h.reads == 3 && h.sent.count == 2)
+        #expect(ErrorReport.kept(h.file).isEmpty, "the kept file stayed under a first-run no")
+        for _ in 1...10 {
+            h.now += 3
+            await h.tick()
+        }
+        h.now += 61                                         // past the kept file's minute's look
+        await h.tick()
+        #expect(h.reads == 3, "a pass read the hub again while a first-run no waits")
+        #expect(h.sent.count == 2)
+    }
+
+    // ------------------------------------------------------------ an install that stops (piece 4)
+
+    /// A server's join that stopped at `at`, at its step `join`, as the app's records give it.
+    static func joinStopped(at: Date, step: String = "join") -> InstallStop {
+        InstallStop(kind: "server", step: step, stop: "installer_stopped", cause: "firewall", at: at)
+    }
+
+    /// The first run's hub install that stopped at `at`, at its step `network`, with a canary in every word of its record.
+    static func hubStopped(at: Date, canary: String) -> [InstallStop] {
+        var log = InstallLog(kind: .hub, hub: nil, host: "\(canary).example", at: at - 120)
+        log.place(server: "\(canary)-server")
+        log.hide(["\(canary)-secret-of-the-plan"])
+        log.note(step: "read", state: .done, at: at - 100)
+        log.note(step: "network", state: .failed, at: at)
+        log.stop(.serverUnreached, says: "ssh: \(canary).example: no route, \(canary)-secret-of-the-plan", at: at)
+        return InstallStop.of([log.record])
+    }
+
+    /// **An install that stops makes the day go at the next pass, at most four times a day** (the F5 analysis of 22
+    /// November 2026, piece 4, part 1; the owner's note of that day: "it should report immediately and automatically!").
+    /// The day went; a join stops two hours later: the next pass sends one more report with that stop and its step, and
+    /// the pass after it sends nothing. Four more stops, an hour apart: three more early reports, and the fourth stop
+    /// waits until the first early report is a day old. A stop while the hub is silent goes early on the switch's last
+    /// "on", with the hub's reach. **After the owner turned the switch off, a stop sends nothing**,
+    /// while the hub answers and while it is silent; **with a first-run "no" that waits, neither** (the plan's check).
+    @MainActor @Test func anInstallThatStopsSendsTheDayAtTheNextPass() async throws {
+        let h = Harness("ErrorReportsDayEarly")
+        await h.tick()
+        #expect(h.sent.count == 1)
+        h.now = Self.t0 + 2 * Self.hour
+        h.sources.stops.append(Self.joinStopped(at: h.now - 60))
+        await h.tick()
+        #expect(h.reads == 2 && h.sent.count == 2, "a stopped install waited for the next day")
+        let installs = try #require((h.sent.last?.body["app"] as? [String: Any])?["installs"] as? [[String: Any]])
+        #expect(installs.count == 1 && installs[0]["step"] as? String == "join" && installs[0]["kind"] as? String == "server")
+        h.now += 60
+        await h.tick()
+        #expect(h.sent.count == 2, "one stop went twice")
+        for n in 1...4 {
+            h.now = Self.t0 + Double(2 + n) * Self.hour
+            h.sources.stops.append(Self.joinStopped(at: h.now - 60, step: "verify"))
+            await h.tick()
+        }
+        #expect(h.sent.count == 5, "more than four early reports went in a day")
+        h.now = Self.t0 + 2 * Self.hour + ErrorReportsDay.day - 60
+        await h.tick()
+        #expect(h.sent.count == 5)
+        h.now += 60
+        await h.tick()
+        #expect(h.sent.count == 6)
+        // The hub is silent, and a join stops: it goes early on the last "on", after the patience.
+        h.now += Self.hour
+        h.sources.stops.append(Self.joinStopped(at: h.now - 60))
+        await h.silent()
+        #expect(h.sent.count == 7, "a stop while the hub is silent waited for the day")
+        let silent = try #require((h.sent.last?.body["app"] as? [String: Any])?["hub"] as? [String: Any])
+        #expect(silent["reach"] as? String == "timed_out")
+
+        // The switch is off: a stop sends nothing, while the hub answers (also at its hourly look) and while it is silent.
+        h.sending.off()
+        h.switchOn = false
+        for hour in 1...2 {
+            h.now += Self.hour
+            h.sources.stops.append(Self.joinStopped(at: h.now - 60))
+            await h.tick()
+        }
+        h.now += Self.hour
+        await h.silent()
+        #expect(h.sent.count == 7, "a stop went after the switch was turned off")
+        // A first-run "no" waits, and the hub says on: nothing, while the hub answers and while it is silent.
+        h.switchOn = true
+        FirstRunReports.choose(false, in: h.defaults)
+        for _ in 1...2 {
+            h.now += Self.hour
+            h.sources.stops.append(Self.joinStopped(at: h.now - 60))
+            await h.tick()
+        }
+        h.now += Self.hour
+        await h.silent()
+        #expect(h.sent.count == 7, "a stop went while a first-run no waits")
+    }
+
+    /// **An install that stops before a hub exists goes once, with no fleet's id** (the F5 analysis, piece 4, part 2):
+    /// the owner pressed "Send anonymous usage data", no hub answered this Mac, and the hub's install stops. Exactly one
+    /// request, to our own site, through the app's client: no `fleet`, no crash (one waits in memory), the reach
+    /// `no_hub`, the stop's fixed names and its step, and none of the record's words, host, server or secret. A stop
+    /// from before the "Send" is in none. The passes after it, also a day later, send nothing. Our site's 400 holds
+    /// the next one for a day.
+    @MainActor @Test func anInstallThatStopsBeforeAHubExistsGoesOnceWithNoFleet() async throws {
+        let version = "0.1.4711 (4711)"
+        let canary = "canary4p2"
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("ErrorReportsNoHub", version: version)
+        h.site = ErrorReportClient(protocolClasses: [ErrorSite.self])
+        h.sources.stops = Self.hubStopped(at: Self.t0 - 60, canary: canary)
+        FirstRunReports.choose(true, in: h.defaults)
+        await h.tick(answers: false, reach: .hostNotFound, hub: none)
+        #expect(h.sent.isEmpty, "a stop from before the owner's Send went")
+        h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: 1_763_300_000,
+                                          last: 1_763_300_000)])
+        h.now += 600
+        h.sources.stops = Self.hubStopped(at: h.now - 60, canary: canary) + h.sources.stops
+        await h.tick(answers: false, reach: .hostNotFound, hub: none)
+        let asked = ErrorSite.asked(host: "platform.founderizer.com").filter {
+            String(decoding: $0.body, as: UTF8.self).contains(version)
+        }
+        #expect(asked.count == 1 && asked.first?.url == "https://platform.founderizer.com/api/errors")
+        let sent = try #require(asked.first?.body)
+        let body = try Self.json(sent)
+        #expect(Set(body.keys) == ["from", "version", "system", "app"] && body["from"] as? String == "mac")
+        let app = try #require(body["app"] as? [String: Any])
+        let hub = try #require(app["hub"] as? [String: Any])
+        #expect(hub["reach"] as? String == "no_hub" && hub["hours"] as? Int == 0 && hub["runs"] is NSNull)
+        let installs = try #require(app["installs"] as? [[String: Any]])
+        let at = Int((h.now - 60).timeIntervalSince1970)
+        #expect(installs.count == 1 && installs[0]["kind"] as? String == "hub" && installs[0]["step"] as? String == "network"
+            && installs[0]["stop"] as? String == "server_unreached" && installs[0]["cause"] as? String == "none"
+            && installs[0]["count"] as? Int == 1 && installs[0]["first"] as? Int == at && installs[0]["last"] as? Int == at)
+        #expect(!String(decoding: sent, as: UTF8.self).lowercased().contains(canary))
+        for wait in [60.0, Self.hour, ErrorReportsDay.day] {
+            h.now += wait
+            await h.tick(answers: false, reach: .hostNotFound, hub: none)
+        }
+        #expect(h.sent.count == 1, "the report of an install with no hub went on each pass, or each day")
+
+        // Our site refuses it: the next stop that day waits, and one a day later goes.
+        h.site = nil
+        h.answer = { _ in throw ErrorReportError.refused(400) }
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 2)
+        h.answer = { _ in }
+        h.now += Self.hour
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 2, "a report went in the day after our site refused one")
+        h.now += ErrorReportsDay.day
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 3 && h.sent.last?.body["fleet"] == nil && h.sent.last?.channel == nil)
+    }
+
+    /// **An answer that is no 200 holds the early reports as the hub's rule holds its report** (the validator's finding
+    /// 4.1 of piece 4: a report storm). A redirect that stays (301, 308) and a 4xx but 429 hold every report for a day:
+    /// no send a minute later, none an hour later, and one a day later. A redirect that may end (302, 303, 307), a 429
+    /// and a 5xx wait an hour. Before, a 301, 302, 307, 308, 401, 403, 404 or 405 to an early report held nothing,
+    /// and the same stop asked for a send at each pass of the loop. The same for the report of an install with no hub.
+    @MainActor @Test func anAnswerThatIsNo200HoldsTheEarlyReportsAsTheHubDoes() async throws {
+        for (status, wait) in [(301, ErrorReportsDay.day), (308, ErrorReportsDay.day), (400, ErrorReportsDay.day),
+                               (401, ErrorReportsDay.day), (403, ErrorReportsDay.day), (404, ErrorReportsDay.day),
+                               (405, ErrorReportsDay.day), (302, ErrorReportsDay.retry), (303, ErrorReportsDay.retry),
+                               (307, ErrorReportsDay.retry), (429, ErrorReportsDay.retry), (503, ErrorReportsDay.retry)] {
+            let h = Harness("ErrorReportsDayHold\(status)")
+            await h.tick()
+            h.now = Self.t0 + 2 * Self.hour
+            h.sources.stops.append(Self.joinStopped(at: h.now - 60))
+            h.answer = { _ in throw ErrorReportError.refused(status) }
+            await h.tick()
+            #expect(h.sent.count == 2, "\(status): the early report did not go")
+            #expect(ErrorReportsDay.installReport(of: Self.joinStopped(at: h.now - 60), now: h.now, in: h.defaults)
+                == (wait == ErrorReportsDay.day ? .refused : .waiting), "\(status)")
+            h.answer = { _ in }
+            let refused = h.now
+            h.now += 60
+            await h.tick()
+            #expect(h.sent.count == 2, "\(status): an early report went again a minute later")
+            h.now = refused + wait - 60
+            await h.tick()
+            #expect(h.sent.count == 2, "\(status): an early report went again before its wait")
+            h.now = refused + wait
+            await h.tick()
+            #expect(h.sent.count == 3, "\(status): no report went after its wait")
+        }
+
+        // The report of an install with no hub: a 403 holds it for a day, and a stop in that day goes after it.
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("ErrorReportsNoHubHold")
+        FirstRunReports.choose(true, in: h.defaults)
+        await h.tick(answers: false, hub: none)
+        h.now += 600
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        h.answer = { _ in throw ErrorReportError.refused(403) }
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 1)
+        h.answer = { _ in }
+        let refused = h.now
+        h.now += 60
+        await h.tick(answers: false, hub: none)
+        h.now = refused + 30 * 60
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        await h.tick(answers: false, hub: none)
+        h.now = refused + Self.hour
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 1, "a report with no hub went again in the day after a 403")
+        h.now = refused + ErrorReportsDay.day
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 2 && h.sent.last?.body["fleet"] == nil)
+    }
+
+    /// **No report with no hub goes without the owner's "Send" of the first run** (piece 4, the consent rule): Back to
+    /// the welcome page (`forget`) and a stop then send nothing, and a "Send" pressed after it sends only the stop that
+    /// came after it; "Don't send" sends nothing; no answer at all sends nothing; a Mac that a hub answered once sends
+    /// nothing with no hub.
+    @MainActor @Test func noReportWithNoHubGoesWithoutTheOwnersSend() async throws {
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("ErrorReportsNoHubConsent")
+        FirstRunReports.choose(true, in: h.defaults)
+        await h.tick(answers: false, hub: none)
+        FirstRunReports.forget(in: h.defaults)
+        h.now += 600
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60, step: "code"), at: 0)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.isEmpty, "a report went after Back to the welcome page")
+        FirstRunReports.choose(true, in: h.defaults)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.isEmpty, "a stop from before the new Send went")
+        h.now += 600
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 1)
+        let installs = (h.sent.first?.body["app"] as? [String: Any])?["installs"] as? [[String: Any]]
+        #expect(installs?.map { $0["step"] as? String } == ["join"])
+        FirstRunReports.choose(false, in: h.defaults)
+        h.now += 600
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        await h.tick(answers: false, hub: none)
+        h.now += ErrorReportsDay.day
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 1, "a report went after Don't send")
+
+        let unasked = Harness("ErrorReportsNoHubUnasked")
+        unasked.sources.stops = [Self.joinStopped(at: unasked.now + 60)]
+        unasked.now += 600
+        await unasked.tick(answers: false, hub: none)
+        #expect(unasked.sent.isEmpty, "a report went with no answer of the owner")
+
+        let answered = Harness("ErrorReportsNoHubAnswered")
+        FirstRunReports.choose(true, in: answered.defaults)
+        await answered.tick(answers: false, answered: answered.now - Self.hour, hub: none)
+        answered.sources.stops = [Self.joinStopped(at: answered.now + 60)]
+        answered.now += 600
+        await answered.tick(answers: false, hub: none)
+        #expect(answered.sent.isEmpty, "a report with no hub went from a Mac that a hub answered")
+    }
+
+    /// **What came of the report of an install that stopped** (`ErrorReportsDay.installReport`, for the page of that
+    /// install): `notSent` with no answer of the owner; `waiting` after a 503 and while a first-run "Send" waits for a
+    /// hub; `sent` with the time of the send after a 200, also after a switch-off; `refused` after a 400; `notSent`
+    /// after a switch-off and while a first-run "no" waits. **A stop that no report carried reads `notSent`** (the
+    /// second reader's M1), also when it is older than a stop that went: one from before the switch's "on", one that
+    /// the cut to ten entries left out, and one from before the owner's "Send" of the first run.
+    @MainActor @Test func theInstallReportSaysWhatCameOfIt() async throws {
+        let h = Harness("ErrorReportsInstallState")
+        func report(_ stop: InstallStop) -> InstallReportState {
+            ErrorReportsDay.installReport(of: stop, now: h.now, in: h.defaults)
+        }
+        let beforeOn = Self.joinStopped(at: Self.t0 - 60)
+        h.sources.stops = [beforeOn]
+        #expect(report(beforeOn) == .notSent)
+        await h.tick()                                      // the switch reads on: the day goes, with no install
+        #expect(h.sent.count == 1)
+        let first = Self.joinStopped(at: Self.t0 + 60)
+        h.sources.stops.insert(first, at: 0)
+        h.answer = { _ in throw ErrorReportError.refused(503) }
+        h.now = Self.t0 + 120
+        await h.tick()
+        #expect(h.sent.count == 2 && report(first) == .waiting)
+        h.answer = { _ in }
+        h.now += Self.hour
+        await h.tick()
+        #expect(h.sent.count == 3 && report(first) == .sent(h.now))
+        #expect(report(beforeOn) == .notSent, "a stop from before the switch's on read as sent")
+
+        // Eleven kinds of stop: the report carries the ten that stopped last, and the eleventh reads notSent.
+        let eleven = (1...11).map { InstallStop(kind: "server", stop: AppHealth.installStops[$0], cause: "none",
+                                                at: h.now + Double($0)) }
+        h.sources.stops = eleven.reversed() + h.sources.stops
+        h.now += 60
+        await h.tick()
+        #expect(h.sent.count == 4 && report(eleven[10]) == .sent(h.now))
+        #expect(report(eleven[0]) == .notSent, "a stop that the cut left out read as sent")
+
+        // Refused: a stop whose early report our site refuses.
+        let second = Self.joinStopped(at: h.now + 60, step: "verify")
+        h.sources.stops.insert(second, at: 0)
+        h.answer = { _ in throw ErrorReportError.refused(400) }
+        h.now += 120
+        await h.tick()
+        #expect(h.sent.count == 5 && report(second) == .refused)
+
+        // The switch goes off: what went stays sent, and a new stop is not sent; a first-run "no" waits: not sent.
+        h.sending.off()
+        let third = Self.joinStopped(at: h.now + 60)
+        #expect(report(first) == .sent(Self.t0 + 120 + Self.hour) && report(third) == .notSent)
+        ErrorReportsDay.take(.on(Self.releases()), hub: Self.hub, now: h.now, in: h.defaults)
+        #expect(report(third) == .waiting)
+        FirstRunReports.choose(false, at: h.now, in: h.defaults)
+        #expect(report(third) == .notSent)
+
+        // The owner's "Send" of a first run waits for a hub: a stop after it goes; one before it went in no report.
+        let none = "http://fleet.invalid:8765/"
+        let fresh = Harness("ErrorReportsInstallStateFirstRun")
+        let beforeSend = Self.joinStopped(at: fresh.now - 60, step: "code")
+        fresh.sources.stops = [beforeSend]
+        FirstRunReports.choose(true, at: fresh.now, in: fresh.defaults)
+        await fresh.tick(answers: false, hub: none)
+        fresh.now += 600
+        let afterSend = Self.joinStopped(at: fresh.now - 60)
+        fresh.sources.stops.insert(afterSend, at: 0)
+        #expect(ErrorReportsDay.installReport(of: afterSend, now: fresh.now, in: fresh.defaults) == .waiting)
+        #expect(ErrorReportsDay.installReport(of: beforeSend, now: fresh.now, in: fresh.defaults) == .notSent)
+        await fresh.tick(answers: false, hub: none)
+        #expect(fresh.sent.count == 1)
+        #expect(ErrorReportsDay.installReport(of: afterSend, now: fresh.now, in: fresh.defaults) == .sent(fresh.now))
+        #expect(ErrorReportsDay.installReport(of: beforeSend, now: fresh.now, in: fresh.defaults) == .notSent,
+                "a stop from before the Send read as sent")
+
+        // The hub answers with its switch off, while the "Send" waits for the end of the first run: a stop now waits,
+        // and goes once the hub took the "Send" (the second reader's R2-M1).
+        fresh.switchOn = false
+        fresh.now += 600
+        await fresh.tick()
+        let withHub = Self.joinStopped(at: fresh.now + 60, step: "verify")
+        fresh.sources.stops.insert(withHub, at: 0)
+        fresh.now += 120
+        #expect(ErrorReportsDay.installReport(of: withHub, now: fresh.now, in: fresh.defaults) == .waiting,
+                "a stop of the first run after its hub answered read as not sent")
+        #expect(await FirstRunReports.deliver(offered: true, in: fresh.defaults) { _ in })
+        ErrorReportsDay.pressedOn(hub: Self.hub, at: try #require(FirstRunReports.pressed(in: fresh.defaults)),
+                                  now: fresh.now, in: fresh.defaults)
+        fresh.switchOn = true
+        fresh.now += 60
+        await fresh.tick()
+        #expect(fresh.sent.count == 2)
+        #expect(ErrorReportsDay.installReport(of: withHub, now: fresh.now, in: fresh.defaults) == .sent(fresh.now))
+    }
+
+    /// **A stop that went reads `sent` for as long as the app keeps its record** (the second reader's R2-N1): the app
+    /// keeps 40 install records, and the reports that our site took are kept to 40 entries in all. After 40 reports of
+    /// one stop each, the first stop still reads `sent`; after a 41st, the first is past what is kept.
+    @Test func aStopThatWentReadsSentForAsLongAsTheAppKeepsItsRecord() async throws {
+        let defaults = TestDefaults("ErrorReportsInstallKept")
+        ErrorReportsDay.take(.on(Self.releases()), hub: Self.hub, now: Self.t0, in: defaults)
+        func stop(_ n: Int) -> InstallStop { Self.joinStopped(at: Self.t0 + Double(n) * Self.hour) }
+        func send(_ n: Int) async throws {
+            let at = Int(stop(n).at.timeIntervalSince1970)
+            let day = AppHealth(update: .init(state: "current", cause: "none", tries: 0, newest: nil),
+                                hub: .init(reach: "none", hours: 0, runs: nil, newest: nil, missing: 0),
+                                installs: [.init(kind: "server", step: "join", stop: "installer_stopped", cause: "firewall",
+                                                 count: 1, first: at, last: at)])
+            let report = try #require(ErrorReport(fleet: Self.fleet, version: "0.1.499 (499)", system: nil, crashes: [],
+                                                  app: day))
+            await ErrorReportsDay.deliver(report, day: true, at: stop(n).at + 60, in: defaults) { _ in }
+        }
+        for n in 1...40 { try await send(n) }
+        let later = Self.t0 + 41 * Self.hour
+        #expect(ErrorReportsDay.installReport(of: stop(1), now: later, in: defaults) == .sent(stop(1).at + 60),
+                "a stop that went read as not sent while the app keeps its record")
+        try await send(41)
+        #expect(ErrorReportsDay.installReport(of: stop(1), now: later, in: defaults) == .notSent)
+        #expect(ErrorReportsDay.installReport(of: stop(2), now: later, in: defaults) == .sent(stop(2).at + 60))
+    }
+
+    /// **A report of crashes alone uses none of the day's early reports** (the second reader's R2-N4): a stop of while
+    /// the switch was off asks for an early report, and the read "on" drops it; the crash that waits goes alone. Then
+    /// four stops an hour apart send four early reports.
+    @MainActor @Test func aReportOfCrashesAloneUsesNoEarlyReport() async throws {
+        let h = Harness("ErrorReportsDayCrashSlot")
+        await h.tick()
+        h.now = Self.t0 + Self.hour
+        h.switchOn = false
+        await h.tick()
+        h.sources.stops = [Self.joinStopped(at: h.now + 60)]
+        // A crash one second after the "on" that the next look reads (the crashes' floor drops one from before its run;
+        // one second after, so that a floor of ">" in place of ">=" would not change this test).
+        let after = Int((Self.t0 + 2 * Self.hour + 1).timeIntervalSince1970)
+        h.sending.take([ErrorReport.Crash(signal: 11, type: 1, code: 0, frames: [.lib], first: after, last: after)])
+        h.now = Self.t0 + 2 * Self.hour
+        h.switchOn = true
+        await h.tick()
+        #expect(h.sent.count == 2 && h.sent[1].body["crashes"] != nil && h.sent[1].body["app"] == nil)
+        for n in 1...4 {
+            h.now = Self.t0 + Double(2 + n) * Self.hour
+            h.sources.stops.insert(Self.joinStopped(at: h.now - 60, step: "verify"), at: 0)
+            await h.tick()
+        }
+        #expect(h.sent.count == 6, "a report of crashes alone used one of the day's four early reports")
+    }
+
+    /// **"Don't send", then "Send": the report with no hub goes, with only the stops after that latest "Send"** (the
+    /// second reader's M2: the kept "off" of the "Don't send" stood after Back, a new first run and a new start, and no
+    /// report with no hub went again). A stop between the "Don't send" and the later "Send" is not carried; a stop
+    /// after it is. The same when a "Don't send" and a new "Send" come between two passes of the sender: the floor is
+    /// the time of the latest press.
+    @MainActor @Test func aSendAfterADontSendGoesWithOnlyTheStopsAfterIt() async throws {
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("ErrorReportsNoHubAgain")
+        func steps() -> [String] {
+            ((h.sent.last?.body["app"] as? [String: Any])?["installs"] as? [[String: Any]] ?? []).compactMap {
+                $0["step"] as? String
+            }
+        }
+        FirstRunReports.choose(false, at: h.now, in: h.defaults)       // the first try: "Don't send"
+        await h.tick(answers: false, hub: none)
+        h.now += 600
+        h.sources.stops = [Self.joinStopped(at: h.now - 60, step: "code")]
+        await h.tick(answers: false, hub: none)
+        h.now += 600
+        FirstRunReports.forget(in: h.defaults)                          // Back to the welcome page
+        FirstRunReports.choose(true, at: h.now, in: h.defaults)         // the second try: "Send"
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.isEmpty, "a stop from before the Send went")
+        h.now += 600
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60), at: 0)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 1 && steps() == ["join"], "no report with no hub went after Don't send, then Send")
+
+        // "Don't send" and a new "Send" between two passes: a stop between the two presses is not carried.
+        h.now += 600
+        FirstRunReports.choose(false, at: h.now, in: h.defaults)
+        h.sources.stops.insert(Self.joinStopped(at: h.now + 30, step: "plan"), at: 0)
+        FirstRunReports.choose(true, at: h.now + 60, in: h.defaults)
+        h.now += 120
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 1, "a stop from before the latest Send went")
+        h.now += 600
+        h.sources.stops.insert(Self.joinStopped(at: h.now - 60, step: "verify"), at: 0)
+        await h.tick(answers: false, hub: none)
+        #expect(h.sent.count == 2 && steps() == ["verify"])
+    }
+
+    /// **A stop from while the switch was off asks for no early report** (TASK A's floor, checked for piece 4): the day
+    /// went; the switch goes off and a join stops; at the next look the switch reads on again, and nothing goes,
+    /// because that stop is from before this run of answers "on". A stop after it goes early.
+    @MainActor @Test func aStopFromWhileTheSwitchWasOffAsksForNoEarlyReport() async throws {
+        let h = Harness("ErrorReportsDayOffStop")
+        await h.tick()
+        #expect(h.sent.count == 1)
+        h.now = Self.t0 + Self.hour
+        h.switchOn = false
+        await h.tick()
+        h.sources.stops = [Self.joinStopped(at: h.now + 60)]
+        h.now = Self.t0 + 2 * Self.hour
+        h.switchOn = true
+        await h.tick()
+        #expect(h.reads == 3 && h.sent.count == 1, "a stop from while the switch was off asked for an early report")
+        h.sources.stops.insert(Self.joinStopped(at: h.now + 60, step: "verify"), at: 0)
+        h.now += 120
+        await h.tick()
+        let installs = (h.sent.last?.body["app"] as? [String: Any])?["installs"] as? [[String: Any]]
+        #expect(h.sent.count == 2 && installs?.map { $0["step"] as? String } == ["verify"])
     }
 
     /// **Kept crashes go again an hour later, with no new start** (the F5 analysis, piece 5): a send that fails with

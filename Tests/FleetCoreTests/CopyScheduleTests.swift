@@ -7,6 +7,26 @@ import Testing
 struct CopyScheduleTests {
     private let now = Date(timeIntervalSince1970: 1_792_500_000)
 
+    /// **The warning of the row Keep a copy automatically** (Settings › Backup): a failed Save copy stands there until a
+    /// copy is kept after it, also while the automatic copies are off; then the automatic copy's own failure, while
+    /// they are on, or nothing. The bug that it catches: a Save copy that failed and still says so after the next
+    /// automatic copy worked (the second reader's N9, 22 November 2026).
+    @Test func aFailedSaveCopyStandsUntilACopyIsKeptAfterIt() {
+        let failed = now.addingTimeInterval(-600)
+        var copies = CopySchedule(on: true, hasFolder: true, keptAt: now.addingTimeInterval(-86_400))
+        #expect(copies.warning(saved: "No room", savedAt: failed) == "No room")
+        #expect(copies.warning(saved: nil, savedAt: nil) == nil)
+        copies.on = false
+        #expect(copies.warning(saved: "No room", savedAt: failed) == "No room")
+        copies.on = true
+        copies.keptAt = now
+        #expect(copies.warning(saved: "No room", savedAt: failed) == nil)
+        copies.failure = "The folder is gone."
+        #expect(copies.warning(saved: "No room", savedAt: failed) == "The folder is gone.")
+        copies.on = false
+        #expect(copies.warning(saved: nil, savedAt: nil) == nil)
+    }
+
     @Test func nothingHappensUntilHeTurnsItOn() {
         let off = CopySchedule(on: false, hasFolder: true)
         #expect(off.next(now: now) == .off)
@@ -179,9 +199,122 @@ struct CopyDefaultTests {
     }
 }
 
+/// The copy's time and sizes are one hub's (`CopyKept`; the validator's W1, 23 November 2026).
+struct CopyKeptTests {
+    private let one = "http://100.64.0.1:8787", two = "http://100.64.0.2:8787"
+    private let mib: Int64 = 1 << 20
+
+    /// The bug that it catches: a second hub's first copy waits a day for the first hub's last one, and its page says the
+    /// first hub's copies; or the copy of one hub takes the place of the other's.
+    @Test func eachHubHasItsOwnCopyTimeAndSizes() {
+        let defaults = TestDefaults("copy-kept")
+        let at = Date(timeIntervalSince1970: 1_792_500_000)
+        CopyKept.keep(at: at, hub: one, database: "db-one", in: defaults)
+        CopyKept.keep(sizes: CopyFolder.Kept(newest: 117 * mib, count: 7, total: 822 * mib), hub: one, in: defaults)
+        #expect(CopyKept.keptAt(hub: two, in: defaults) == nil)
+        #expect(CopyKept.sizes(hub: two, in: defaults) == nil)
+        CopyKept.keep(at: at.addingTimeInterval(60), hub: two, database: "db-two", in: defaults)
+        CopyKept.keep(sizes: CopyFolder.Kept(newest: 3 * mib, count: 1, total: 3 * mib), hub: two, in: defaults)
+        #expect(CopyKept.keptAt(hub: one, in: defaults) == at)
+        #expect(CopyKept.sizes(hub: one, in: defaults) == CopyFolder.Kept(newest: 117 * mib, count: 7, total: 822 * mib))
+        #expect(CopyKept.sizes(hub: two, in: defaults) == CopyFolder.Kept(newest: 3 * mib, count: 1, total: 3 * mib))
+        // One hub is one key, whichever way its address ends: the app writes it with a slash, a setting may not.
+        #expect(CopyKept.keptAt(hub: one + "/", in: defaults) == at)
+        #expect(CopyKept.sizes(hub: one + "/", in: defaults)?.count == 7)
+        // A folder change takes the sizes of both: no copy of either is in the new one yet.
+        CopyKept.forgetSizes(in: defaults)
+        #expect(CopyKept.sizes(hub: one, in: defaults) == nil && CopyKept.sizes(hub: two, in: defaults) == nil)
+        #expect(CopyKept.keptAt(hub: one, in: defaults) == at)
+    }
+
+    /// A failure is one hub's own (the second reader's R15-1): another hub's page does not say it, a copy of one hub
+    /// ends only its own, and a folder change ends them all. The generation is one hub's too, and `forget` takes all
+    /// four values of one hub and none of another's.
+    @Test func aFailureAndAGenerationAreOneHubs() {
+        let defaults = TestDefaults("copy-kept-failure")
+        let at = Date(timeIntervalSince1970: 1_792_500_000)
+        CopyKept.keep(failure: "The hub refused the copy.", at: at, hub: two, in: defaults)
+        #expect(CopyKept.failure(hub: one, in: defaults)?.words == nil)
+        #expect(CopyKept.failure(hub: two + "/", in: defaults)?.words == "The hub refused the copy.")
+        CopyKept.keep(failure: "Another.", at: at, hub: one, in: defaults)
+        CopyKept.clearFailure(hub: one, in: defaults)
+        #expect(CopyKept.failure(hub: one, in: defaults)?.words == nil && CopyKept.failure(hub: two, in: defaults)?.words != nil)
+        CopyKept.clearFailures(in: defaults)
+        #expect(CopyKept.failure(hub: two, in: defaults)?.words == nil)
+        CopyKept.keep(at: at, hub: one, database: "db-one", in: defaults)
+        CopyKept.keep(sizes: CopyFolder.Kept(newest: mib, count: 1, total: mib), hub: one, in: defaults)
+        CopyKept.keep(failure: "Later.", at: at, hub: one, in: defaults)
+        CopyKept.keep(at: at, hub: two, database: "db-two", in: defaults)
+        #expect(CopyKept.database(hub: one, in: defaults) == "db-one")
+        CopyKept.forget(hub: one + "/", in: defaults)
+        #expect(CopyKept.keptAt(hub: one, in: defaults) == nil && CopyKept.sizes(hub: one, in: defaults) == nil)
+        #expect(CopyKept.failure(hub: one, in: defaults)?.words == nil && CopyKept.database(hub: one, in: defaults) == nil)
+        #expect(CopyKept.keptAt(hub: two, in: defaults) == at && CopyKept.database(hub: two, in: defaults) == "db-two")
+    }
+
+    /// The one value of an older build is the value of the hub that the app knows, so the update takes no copy at once;
+    /// another hub has none, and a second start moves nothing.
+    @Test func theOlderBuildsValueIsTheKnownHubsOnly() {
+        let defaults = TestDefaults("copy-kept-older")
+        let at = Date(timeIntervalSince1970: 1_792_400_000)
+        defaults.set(one, forKey: "hubAddress")
+        defaults.set(at.timeIntervalSince1970, forKey: "copyKeptAt")
+        CopyKept.adoptOlder(in: defaults)
+        #expect(CopyKept.keptAt(hub: one, in: defaults) == at)
+        #expect(CopyKept.keptAt(hub: two, in: defaults) == nil)
+        defaults.set(two, forKey: "hubAddress")
+        CopyKept.adoptOlder(in: defaults)
+        #expect(CopyKept.keptAt(hub: two, in: defaults) == nil)
+        // The older build's failure goes to the hub that it knew, once.
+        let older = TestDefaults("copy-kept-older-failure")
+        older.set(one, forKey: "hubAddress")
+        older.set("The folder is gone.", forKey: "copyFailure")
+        older.set(at.timeIntervalSince1970, forKey: "copyFailedAt")
+        CopyKept.adoptOlder(in: older)
+        #expect(CopyKept.failure(hub: one, in: older)?.words == "The folder is gone.")
+        #expect(CopyKept.failure(hub: two, in: older)?.words == nil)
+    }
+}
+
 /// A copy that iCloud has taken back off this Mac is still one of his copies.
 struct CopyEvictionTests {
     private let now = Date(timeIntervalSince1970: 1_792_500_000)
+
+    /// **The Where row says how much the copies weigh** (the owner, 22 November 2026: "just show the size so they can
+    /// see it too", in the form that he chose): the newest copy and all that stay, in his Mac's own numbers, one copy
+    /// in its own words, and the folder alone before this Mac kept a copy. The count is the copies that stay after the
+    /// prune, a placeholder of iCloud among them, never a number in the words. The bug that it catches: a total that
+    /// leaves a copy out, a deleted copy that is still counted, or a wrong form for one copy.
+    @Test func theWhereRowSaysWhatTheCopiesWeigh() {
+        let mib: Int64 = 1 << 20
+        let decimal = (0.5).formatted(.number.precision(.fractionLength(1))).dropFirst().first.map(String.init) ?? "."
+        let place = "iCloud Drive › Founderizer"
+        var files = (0..<9).map { day -> (name: String, at: Date, bytes: Int64) in
+            ("founderizer-0f1e2d3c4b5a6978-2026111\(day)T101500Z.zip", now.addingTimeInterval(Double(day) * 86_400),
+             Int64(100 + day) * mib)
+        }
+        files[1].name = "." + files[1].name + ".icloud"          // a copy that iCloud took back, with its size recorded
+        files.append(("his own notes.txt", now.addingTimeInterval(20 * 86_400), 900 * mib))
+        let fleet = "0f1e2d3c4b5a6978"
+        let kept = CopyFolder.kept(files, keeping: 7, fleet: fleet)
+        // A copy of another fleet in the folder is none of his, even when it is the newest: the row says his copies
+        // (the validator's R2, 23 November 2026: "last copy 3 MB, 7 copies 707 MB" for seven of 117 MB).
+        let other = (name: "founderizer-0123456789abcdef-20261119T101500Z.zip", at: now.addingTimeInterval(40 * 86_400), bytes: 3 * mib)
+        #expect(CopyFolder.kept(files + [other], keeping: 7, fleet: fleet) == kept)
+        #expect(CopyFolder.kept([other], keeping: 7, fleet: fleet) == nil)
+        #expect(CopyFolder.kept(files, keeping: 7, fleet: nil) == nil)
+        // the newest seven of the nine: days 8 down to 2, the placeholder of day 1 and day 0 deleted
+        #expect(kept == CopyFolder.Kept(newest: 108 * mib, count: 7, total: (102...108).reduce(0) { $0 + Int64($1) * mib }))
+        #expect(CopyFolder.whereWords(folder: place, kept: kept)
+                == "\(place) · last copy 108\(decimal)0 MB, 7 copies 735\(decimal)0 MB")
+        // the placeholder is a copy that stays when it is among the newest
+        #expect(CopyFolder.kept(Array(files[0...1]), keeping: 7, fleet: fleet)?.count == 2)
+        let one = CopyFolder.kept([files[0]], keeping: 7, fleet: fleet)
+        #expect(CopyFolder.whereWords(folder: place, kept: one) == "\(place) · 1 copy, 100\(decimal)0 MB")
+        #expect(CopyFolder.whereWords(folder: place, kept: nil) == place)
+        #expect(CopyFolder.kept([files[9]], keeping: 7, fleet: fleet) == nil)
+        #expect(CopyFolder.whereWords(folder: nil, kept: kept) == nil)
+    }
 
     @Test func aPlaceholderIsCountedAndPrunedAsTheCopyItStandsFor() {
         #expect(CopyFolder.isACopy(onDisk: ".founderizer-0f1e2d3c4b5a6978-20261020T120000Z.zip.icloud"))

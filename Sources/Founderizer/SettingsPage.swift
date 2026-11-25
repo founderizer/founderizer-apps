@@ -565,13 +565,17 @@ private struct ChannelsSettings: View {
 /// every day it was the same sentence, which is how a warning becomes wallpaper.
 private struct CopySettings: View {
     @Bindable var keeper: FleetCopyKeeper
+    /// What went wrong with the copy that he took himself with Save copy (`FleetCopyModel.failure`), or nil, and when.
+    var saveFailure: String? = nil
+    var saveFailedAt: Date? = nil
 
     var body: some View {
         FormSection("A copy of your fleet") {
             // The failure stays: a copy that quietly stopped is the one thing a backup must never keep to
-            // itself, and it is a row that is there only when there is something to say.
+            // itself, and it is a row that is there only when there is something to say. A Save copy that failed
+            // says so here too, in the same place (`CopySchedule.warning`): the page had no word for it.
             FormRow("Keep a copy automatically", symbol: "clock.arrow.circlepath",
-                    warning: keeper.schedule.on ? keeper.schedule.failure : nil) {
+                    warning: keeper.schedule.warning(saved: saveFailure, savedAt: saveFailedAt)) {
                 HStack(spacing: 10) {
                     if keeper.busy { ProgressView().controlSize(.small) }
                     Toggle("Keep a copy automatically", isOn: Binding(get: { keeper.schedule.on },
@@ -581,7 +585,8 @@ private struct CopySettings: View {
                 }
             }
             if keeper.schedule.on {
-                FormRow("Where", symbol: "folder", detail: keeper.shownFolderName) {
+                FormRow("Where", symbol: "folder",
+                        detail: CopyFolder.whereWords(folder: keeper.shownFolderName, kept: keeper.kept)) {
                     HStack(spacing: FleetSpace.actions) {
                         if FleetCopyKeeper.iCloudDrive != nil, !keeper.holdsICloud {
                             Button("Use iCloud Drive") { keeper.useICloud() }
@@ -593,6 +598,7 @@ private struct CopySettings: View {
                             .accessibilityIdentifier("copy-folder")
                     }.fixedSize()
                 }
+                .accessibilityIdentifier("copy-where")
             }
         }
     }
@@ -610,16 +616,15 @@ private struct CopySettings: View {
 struct BackupSettings: View {
     @Bindable var store: FleetStore
     @State private var copy = FleetCopyModel()
-    @State private var restore = RestoreModel()
 
     var body: some View {
         FleetPage("Backup") {
-            CopySettings(keeper: store.copies)
+            CopySettings(keeper: store.copies, saveFailure: copy.failure, saveFailedAt: copy.failedAt)
             // The way back. `restore` is its own feature: a hub from before owner API 1.5's second half serves
             // the copy routes and not this one, and the app offers nothing a hub cannot do.
             if RestoreOffer.inHealth(store.state) {
                 FormSection {
-                    RestoreRows(store: store, model: restore, go: { store.destination = $0 })
+                    RestoreRows(store: store, model: store.restore, go: { store.destination = $0 })
                 }
             }
         } actions: {
@@ -637,5 +642,8 @@ struct BackupSettings: View {
             }
         }
         .font(FleetStyle.body).background(FleetStyle.canvas)
+        // On the page, which stays: on the rows it can run at each change of what they draw, so that the end of a wait
+        // would take its own words away (`RestoreModel.left`).
+        .onDisappear { store.restore.left() }
     }
 }

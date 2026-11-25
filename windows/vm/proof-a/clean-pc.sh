@@ -62,7 +62,7 @@ copy)
     "$vm_sh" start
     "$vm_sh" run 'New-Item -ItemType Directory -Force -Path C:\fz\proof-a, C:\fz\setup | Out-Null'
     "$vm_sh" copy "$proof_files/founderizer-test-signing.cer" "$proof_here/focus.ps1" "$proof_here/watch.ps1" \
-        "$proof_here/team-read.ps1" vm:C:/fz/proof-a/
+        "$proof_here/team-read.ps1" "$proof_here/elevation.ps1" vm:C:/fz/proof-a/
     # The session's presses, as in the build VM (README.md of the folder above, "Pictures").
     "$vm_sh" copy "$proof_here/../pictures/ui.ps1" "$proof_here/../pictures/pick.ps1" "$proof_here/../pictures/rest.ps1" \
         "$proof_here/../pictures/click.ps1" "$proof_here/../pictures/elements.ps1" "$proof_here/../pictures/window.ps1" \

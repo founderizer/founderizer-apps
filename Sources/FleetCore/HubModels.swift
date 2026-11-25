@@ -702,6 +702,11 @@ public struct OwnerNeed: Decodable, Identifiable, Sendable {
     /// a new plan of team changes replaced it), whose answer is the hub's own words; nil on every other item and from a
     /// hub before that version. No page draws a card for it (`drawn`). Not in `signsTheSame`, as `recommended`.
     public let replaced_by: Int?
+    /// Who ended the item (`needs.answered_by`, in `/ui/state` since the hub sent it): nil for the owner's own answer,
+    /// and a name for an end that the owner did not write, as the hub's close ("Fleet": "Closed by the hub: …"), an
+    /// agent's ("Withdrawn by …", "Replaced by …") or a conversation's deputy ("P-<id> <name>"). nil from a hub before
+    /// it, as for his own answer. Not in `signsTheSame`, as `recommended`.
+    public var answered_by: String? = nil
     /// Owner feature `need_marks` (API 1.280): where a team card's plan stands after his yes ("making", "made" or
     /// "not_made"), and with "not_made" the hub's one or two sentences for him; nil on every other item and from a hub
     /// before that version. The card's mark reads them (`answeredMark`). Not in `signsTheSame`, as `recommended`: they

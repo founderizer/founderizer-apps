@@ -782,14 +782,15 @@ public enum StartAgain {
 
     /// **Clears the values that the app's settings keep by this hub's address, and no other hub's.** Each value is
     /// found by the exact form of its key, with the hub's whole address in it (`hub.absoluteString`, which ends in
-    /// "/"), so the values of a hub whose address only starts the same stay.
+    /// "/"; the tables of the copies, `CopyKept`, keep it with no slash at its end), so the values of a hub whose
+    /// address only starts the same stay.
     ///
     /// Always: the kept address when it is this hub's, the hub in the list of hubs that answered, the servers made for
     /// it and its ended installs, the agents that wait for a server and the servers that they joined, the pinned
     /// agents, the kept checks and install targets of its machines, the chat's kept marks, the marks of the owner's
     /// access, of the hardening, of the memory limit, of the system packages and of the restart on its servers
     /// (`ServerHardening`, `ServerMemory`, `ServerLibraries`, `ServerRestart`), the mark of its TCP step, the page that
-    /// the app left on it, a turn
+    /// the app left on it, the times, sizes, failures and generations of its copies (`CopyKept`), a turn
     /// of connected apps that a quit cut off, and what the door's sync keeps of it (the keys that a server refused, the
     /// refusals, the hosts and the holdings that the hub recorded).
     ///
@@ -827,7 +828,9 @@ public enum StartAgain {
                   all.keys.contains(where: { $0.hasPrefix(table.prefix) }) else { continue }
             defaults.set(all.filter { !$0.key.hasPrefix(table.prefix) }, forKey: table.key)
         }
-        var named: [(key: String, name: String)] = [("pinnedAgents", address), ("lastPages", address)]
+        var named: [(key: String, name: String)] = [("pinnedAgents", address), ("lastPages", address),
+                                                    (CopyKept.timesKey, CopyKept.key(address)), (CopyKept.sizesKey, CopyKept.key(address)),
+                                                    (CopyKept.failuresKey, CopyKept.key(address)), (CopyKept.databasesKey, CopyKept.key(address))]
         if hubServerDeleted {
             named.append(("fleetIdsByHub", address))
         }

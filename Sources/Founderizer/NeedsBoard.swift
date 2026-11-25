@@ -658,8 +658,6 @@ private struct NeedStep: View {
     /// What it needs from him. A secret request's is the hub's one sentence about its form, which is right below it, and
     /// an item that carries its grant has none: Give is its step (`OwnerNeed.give`).
     private var todo: String { need.asksForSecret || need.give != nil ? "" : need.todo }
-    /// The names that the step's words link (`CardNames`): an agent, a repository, a server, a page of the app.
-    private var names: CardNames { store.cardNames(for: need) }
     /// A reason of one or two sentences, shown whole (`NeedTalk.why`); a longer one, of a request for a key or of an
     /// item from before the rule, shows its first three lines until Show all.
     private var short: Bool { need.details != nil || need.why.count <= NeedTalk.why }
@@ -684,6 +682,7 @@ private struct NeedStep: View {
     }
 
     var body: some View {
+        let names = store.cardNames(for: need)
         VStack(spacing: 0) {
             // The step's mark is its subject, not a status: the glyph draws no dot here (`SetupStep`).
             AgentGlyph(name: need.by, size: SetupMetrics.mark, jumps: took).environment(\.glyphDots, false)
@@ -698,15 +697,15 @@ private struct NeedStep: View {
                     Task { await store.takeOver(need) }
                 }.padding(.top, 14)
             }
-            if !need.why.isEmpty { why.padding(.top, 12) }
+            if !need.why.isEmpty { why(names: names).padding(.top, 12) }
             if !task.isEmpty {
-                taskWords.padding(.top, 12)
+                taskWords(names: names).padding(.top, 12)
                 // the owner's "Open the page" (19 November 2026): a step on one page of the app opens it
-                CardPageButton(store: store, need: need, task: task, top: 12, centred: centred)
+                CardPageButton(store: store, need: need, names: names, task: task, top: 12, centred: centred)
             }
             if hasMore { moreLink.padding(.top, 10) }
-            if expanded, need.details != nil || (!todo.isEmpty && task.isEmpty) { more.padding(.top, 14) }
-            answers.padding(.top, 24)
+            if expanded, need.details != nil || (!todo.isEmpty && task.isEmpty) { more(names: names).padding(.top, 14) }
+            answers(names: names).padding(.top, 24)
         }
         .frame(maxWidth: SetupMetrics.cardsWidth)
         // a name in its words opens its page in this window (`FleetStore.openCardLink`)
@@ -771,15 +770,14 @@ private struct NeedStep: View {
         .overlay(alignment: .trailing) { if !ended { tools } }
     }
 
-    @ViewBuilder private var why: some View {
+    @ViewBuilder private func why(names: CardNames) -> some View {
         if short || expanded {
             MessageText(text: need.why, step: true, names: names, values: true).foregroundStyle(FleetStyle.text)
                 .multilineTextAlignment(centred ? .center : .leading)
                 .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         } else {
             // The start of a long reason, on three lines, until Show all.
-            CardBadgeText.text(MessageBlock.inline(need.why.components(separatedBy: .newlines).joined(separator: " ")),
-                               names: names, size: SetupMetrics.text)
+            CardBadgeText.reason(need.why, names: names, size: SetupMetrics.text)
                 .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).lineSpacing(5).tint(FleetStyle.link)
                 .lineLimit(3).multilineTextAlignment(centred ? .center : .leading).fixedSize(horizontal: false, vertical: true)
                 .cardBadges()
@@ -789,7 +787,7 @@ private struct NeedStep: View {
 
     /// What he does, as a message draws it: a command in its code block, with its copy icon, a page as its link, and
     /// steps as a list.
-    private var taskWords: some View {
+    private func taskWords(names: CardNames) -> some View {
         // owner feature need_run: the block of its command has Run (the owner's "Yes, as drawn")
         MessageText(text: task, step: true, run: NeedRunTarget.of(need, store: store), names: names, values: true)
             .foregroundStyle(FleetStyle.text)
@@ -806,7 +804,9 @@ private struct NeedStep: View {
                 Text(short ? (need.door_host != nil && need.details != nil ? "Script" : "Details")
                      : expanded ? "Show less" : "Show all")
                 if short {
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(10, weight: .semibold))
+                    // down while a press opens in place, up while it folds: a right chevron would say another page (the
+                    // owner, 20 November 2026: "taht chevron looks like gooing to a different page, not Expand")
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(IconMetrics.symbol(10, weight: .semibold))
                 }
             }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
         }.buttonStyle(.plain)
@@ -819,7 +819,7 @@ private struct NeedStep: View {
     }
 
     /// The long part of the request and what it needs from him: read from their leading edge, as a text is.
-    private var more: some View {
+    private func more(names: CardNames) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // The door's card wraps its script (API 1.125): no end of a line is off the screen when Script is open.
             if let details = need.details {
@@ -836,7 +836,7 @@ private struct NeedStep: View {
     }
 
     /// What he answers with; for a request that ended, what he answered.
-    private var answers: some View {
+    private func answers(names: CardNames) -> some View {
         VStack(spacing: 10) {
             // owner feature need_clarify: **his talk with the manager stands over the answers, and over his answer once
             // the request ended**, read only (the area of Needs-you, 20 November 2026: "the talk stands in the card"
@@ -851,17 +851,18 @@ private struct NeedStep: View {
                     .frame(maxWidth: need.asksForSecret
                            ? formWidth ?? SecretEntryView.width(of: need, onStep: true) : .infinity)
             }
-            choices
+            choices(names: names)
         }
         .onPreferenceChange(SecretFormWidth.self) { width in if let width { formWidth = width } }
     }
 
     /// The answers, or what he answered once the request ended.
-    private var choices: some View {
+    private func choices(names: CardNames) -> some View {
         VStack(spacing: 18) {
             // the form, also once the request ended, while his key save holds it (`KeySaveCard.showsForm`)
             if !keySave.showsForm(open: !ended) {
-                NeedAnswered(store: store, need: need, words: NeedRunAnswer.of(need, onItsWay: onItsWay)?.words ?? onItsWay?.text,
+                NeedAnswered(store: store, need: need, names: names,
+                             words: NeedRunAnswer.of(need, onItsWay: onItsWay)?.words ?? onItsWay?.text,
                              inWords: onItsWay?.answersInWords ?? need.answeredInWords, draws: settles,
                              waits: AnswerHolds.shared.held(need, in: store) != nil,
                              symbol: NeedRunAnswer.of(need, onItsWay: onItsWay)?.symbol ?? "checkmark")
@@ -911,6 +912,7 @@ private struct NeedStep: View {
 private struct NeedAnswered: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
+    let names: CardNames
     /// His words on their way, before the reading has them.
     let words: String?
     /// He answered in his own words: no check stands before them, and none draws itself.
@@ -945,6 +947,8 @@ private struct NeedAnswered: View {
     /// His answer on its row: the check before an option that he pressed, and his words.
     @ViewBuilder private var answerRow: some View {
         let answer = (words ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // words that he typed keep a role as he wrote it (`HisAnswer.typed`)
+        let typed = HisAnswer.typed(need, answer, inWords: inWords)
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 if !inWords && !waits { check }
@@ -952,8 +956,10 @@ private struct NeedAnswered: View {
                     Text("Answered").font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text)
                 } else {
                     // **His answer's names as their badges** (the owner, 20 November 2026: "ok but use always the
-                    // agent badges and icons!!"), as on the card of his answer in a chat (`NeedAnswerGiven`)
-                    CardBadgeText.text(MessageBlock.inline(answer), names: store.cardNames(for: need), size: SetupMetrics.text)
+                    // agent badges and icons!!"), as on the card of his answer in a chat (`NeedAnswerGiven`); words
+                    // that he typed keep a role as he wrote it (`HisAnswer`)
+                    CardBadgeText.text(HisAnswer.words(answer, inWords: typed), names: names,
+                                       size: SetupMetrics.text)
                         .font(SetupMetrics.textFont).foregroundStyle(FleetStyle.text).tint(FleetStyle.link)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                         .cardBadges()
@@ -969,9 +975,11 @@ private struct NeedAnswered: View {
                     .accessibilityIdentifier("need-undo-\(need.id)")
                 }
             }
-            // the table's words, also for an answer of files alone, which says "Answered" once
+            // the table's words, also for an answer of files alone, which says "Answered" once; his answer as the
+            // row shows it (`HisAnswer.spoken`)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(answer.isEmpty ? Text("Answered") : Text("Answered: \(answer)"))
+            .accessibilityLabel(answer.isEmpty ? Text("Answered")
+                : Text("Answered: \(HisAnswer.spoken(answer, inWords: typed, names: names))"))
             // what came of it, as the mark's tag says it (owner feature need_marks)
             .accessibilityValue(inWords ? "" : answerMark?.words ?? "")
             if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading) }
@@ -1004,7 +1012,7 @@ private struct NeedAnswered: View {
         let mark = Image(systemName: symbol).font(IconMetrics.symbol(12, weight: .semibold))
             .foregroundStyle(draws && !quiet ? Color.white : FleetStyle.muted).accessibilityHidden(true)
         if let answerMark {
-            AnsweredMarkView(mark: answerMark, moves: store.marksMove, size: 12, names: store.cardNames(for: need))
+            AnsweredMarkView(mark: answerMark, moves: store.marksMove, size: 12, names: names)
                 .foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
         } else if !draws {
             mark

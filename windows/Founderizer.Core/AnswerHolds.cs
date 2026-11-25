@@ -111,6 +111,10 @@ public sealed partial class OwnerStore
         if (s.Hub is not { } hub || s.Fleet is not { } fleet || fleet.Needs.FirstOrDefault(n => n.Id == need && n.IsOpen) is not { } item)
             return null;
         if (s.HeldOn(need) is { Leaving: true }) return null;
+        // an option that only the Mac's press starts is no answer of this app: nothing waits, and the card stays open
+        if (answer.Kind == CardAnswerKind.Option && item.OnlyOnTheMac(answer.Choice) ||
+            answer.Kind == CardAnswerKind.Ticks && answer.Ticks.Any(c => item.OnlyOnTheMac(c)))
+            return null;
         if (answer.Kind == CardAnswerKind.Words) answer = answer with { Words = s.AnswerDrafts.GetValueOrDefault(need, "").Trim() };
         // typed words that look like a key wait for his choice in the box, and do not fold the card (KeyHold)
         if (answer.Kind == CardAnswerKind.Words && s.HoldsKey(KeyHold.Answer(need), answer.Words)) return null;

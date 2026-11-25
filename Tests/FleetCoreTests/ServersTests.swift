@@ -116,6 +116,7 @@ struct ServersTests {
         #expect(Servers.state(empty, helpers: [], time: 1030, fresh: true) == ("Connected", false))
         #expect(Servers.agentProblem(name: "kai", server: shared, existing: ["leo", "iris"]) == nil)
         #expect(Servers.reason("fix_holder") == "An agent there has full control of it.")
+        #expect(Servers.reason("manager_alone") == "The fleet manager runs there, and it runs alone.")
     }
 
     /// **Add agent asks for the name and the AI before the server** (the owner, 16 November 2026: "agent onboarding

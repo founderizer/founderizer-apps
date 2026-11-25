@@ -35,7 +35,15 @@ extension FleetStore {
         let secrets: [(name: String, key: Bool)] = {
             guard SecretEntryView.isOffered(by: self) else { return [] }
             let kept: LoginReading? = quiet ? quietReading("secrets.logins.fleet") : reading("secrets.logins.fleet")
-            return kept.map { SecretsList.badges($0.catalog) } ?? []
+            guard let catalog = kept?.catalog else { return [] }
+            if let cache = secretBadgeCache, cache.catalog == catalog {
+                // An equal reading can have new dictionary storage. Share it for the next comparison.
+                secretBadgeCache?.catalog = catalog
+                return cache.badges
+            }
+            let badges = SecretsList.badges(catalog)
+            secretBadgeCache = (catalog, badges)
+            return badges
         }()
         var hasher = Hasher()
         for agent in agents { hasher.combine(agent.name); hasher.combine(agent.role) }
@@ -144,6 +152,7 @@ extension FleetStore {
 struct CardPageButton: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
+    let names: CardNames
     /// The words of the step, which name the page.
     let task: String
     /// The room over it, and whether it stands in the middle, as the step's words do (`NeedStep.centred`): both only
@@ -156,7 +165,7 @@ struct CardPageButton: View {
 
     private var page: String? {
         guard need.isOpen, !task.isEmpty else { return nil }
-        let pages = store.cardNames(for: need).pages(inMarkdown: task)
+        let pages = names.pages(inMarkdown: task)
         return pages.count == 1 && FleetStore.cardPage(pages[0]) != nil ? pages[0] : nil
     }
 

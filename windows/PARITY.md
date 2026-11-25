@@ -108,11 +108,11 @@ Mac, and a device route is all that the PC reaches.
 | `door_calls` | waits (D5) | the PC's yes needs the QR's `bind` value; the statement writer and the binding are built |
 | `door_modes` | waits (D5) | the owner's signed mode of a server |
 | `door_mode_set` | waits (step 2) | |
-| `recovery_copy` | waits (D5) | needs the QR's `bind` value |
+| `recovery_copy` | waits (D5) | needs the QR's `bind` value. **Built**: an item's `add_device` is read: the first option of a card with `add_device` 1, which opens the Add device picture on the Mac, stands grey and not enabled, and no route of the store sends it, as the row `door_setup` says |
 | `server_ai_choice` | waits (2.1) | |
 | `manager_server` | waits (2.1) | the first run's server that joined goes to the manager with the chosen provider by itself, and the setup fills the window until the manager runs (piece U3); Add server's pages for a manager with no server wait (L4b, U5) |
 | `knowledge_edit` | waits (step 2) | a write of the owner's knowledge stays on the Mac |
-| `door_setup` | waits (2.4) | |
+| `door_setup` | waits (2.4) | the App itself (GitHub's manifest flow) waits. **Built**: an item's `github_app` is read (`OwnerNeed.FirstOptionOnTheMac`, FleetCore's `OwnerNeed.firstOptionStartsOnTheMac`, which the iPhone's `MobileStore.startsOnTheMac` holds to: two options or more, no team yes, no full access and no give): the first option of a card whose `github_app` names an account stands with its own words, grey and not enabled (UI Automation too; `OptionsModel.OnlyOnTheMac`, `Pages/Requests.cs` `Row`), its click does nothing, and no route of the store sends choice 0 for it (a press, a press that waits, the 5-second hold, ticks and their hold, and the last check of a write, `OwnerNeed.OnlyOnTheMac`); the card stays open, and its other options, its other ticks and his words still go (`OptionOnTheMacTests`). A press on Windows had answered the card with choice 0: the hub closed it, and nothing started |
 | `agent_remove` | waits (2.2) | |
 | `repo_picker` | waits (2.3) | |
 | `need_talk` | built | the short card, Details and options that combine (`RequestCard`, `RequestStep`, `OptionsModel`), and an old outbox's question of Discuss (which left in owner API 1.158; its record's kind `need_talk`) is dropped; the talk under a card, whose route is back since owner API 1.272, is the line `need_clarify` |

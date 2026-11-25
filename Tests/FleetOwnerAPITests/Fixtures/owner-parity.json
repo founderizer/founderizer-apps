@@ -30466,25 +30466,7 @@
     },
     "folders": []
    },
-   "answers": [
-    {
-     "headers": {
-      "Content-Type": "application/json"
-     },
-     "status": 200,
-     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
-    },
-    {
-     "headers": {
-      "Content-Disposition": "attachment; filename=\"founderizer-fleet-20261114T000000Z.zip\"",
-      "Content-Type": "application/zip",
-      "X-Fleet-Backup-SHA256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d",
-      "X-Fleet-DB": "g1"
-     },
-     "status": 200,
-     "text": "PK\u0003\u0004 a stand-in copy of a fleet\n"
-    }
-   ],
+   "answers": [],
    "arguments": {
     "path": "<tmp>/note.txt/c.zip"
    },
@@ -30493,47 +30475,7 @@
    "outcome": {
     "refusal": "<tmp>/note.txt/c.zip could not be written on this Mac: File exists."
    },
-   "requests": [
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/state",
-     "query": {
-      "head": [
-       "1"
-      ],
-      "tasks": [
-       "window"
-      ]
-     }
-    },
-    {
-     "body": null,
-     "headers": {
-      "authorization": false,
-      "content-type": null,
-      "origin": false,
-      "x-fleet-client": false,
-      "x-fleet-name": null,
-      "x-fleet-request-id": null
-     },
-     "method": "GET",
-     "path": "/ui/backup",
-     "query": {
-      "db": [
-       "g1"
-      ]
-     }
-    }
-   ],
+   "requests": [],
    "setup": {
     "files": {
      "note.txt": "a file"

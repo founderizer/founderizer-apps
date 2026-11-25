@@ -571,31 +571,83 @@ extension OwnerTools {
     }
 
     /// `take_backup`: `GET /ui/backup` into a file on this Mac, then `POST /ui/backups/confirm` once the bytes are
-    /// checked against the hub's own SHA-256. Nothing is written on the hub machine.
+    /// checked against the hub's own SHA-256. No copy stays on the hub machine.
+    ///
+    /// The copy goes into a new file of mode 600 in the folder where it is kept, as it arrives (`Transfer.copy(into:)`),
+    /// so a copy of any size takes no more of this Mac's memory than one part; the file gets its name only once its
+    /// SHA-256 is the hub's, and goes on every other way out (`owner_mcp.py`'s `take_backup` and `kept_as`).
     func takeBackup(_ args: [String: JSONValue], on hub: OwnerHub) throws -> JSONValue? {
         guard case .string(let given)? = args["path"], !PyText.strip(given).isEmpty
         else { throw OwnerRefusal("path must be where on this Mac the copy is written.") }
         var place = try localPlace(given)
-        let answer = try hub.get("/ui/backup", "a copy of this fleet", transfer: .backup)
-        let digest = Self.sha256(answer.raw)
+        let folder: String? = LocalFile.isFolder(place) ? place : nil
+        let coming: String
+        do {
+            try LocalFile.makeFolders(folder ?? LocalFile.parent(place))
+            coming = try LocalFile.made(in: folder ?? LocalFile.parent(place), prefix: "founderizer-copy-",
+                                        suffix: ".part")
+        } catch let failure as LocalFile.Failure {
+            throw OwnerRefusal("\(place) could not be written on this Mac: \(failure.reason).")
+        }
+        defer { LocalFile.remove(coming) }
+        let started = ProcessInfo.processInfo.systemUptime
+        let answer: HubAnswer
+        do {
+            answer = try hub.get("/ui/backup", "a copy of this fleet", transfer: .copy(into: coming))
+        } catch let refused as OwnerRefusal {
+            if ProcessInfo.processInfo.systemUptime - started >= Transfer.copyTotal { throw OwnerRefusal(Self.copySlow) }
+            throw refused
+        }
+        let (bytes, digest): (Int, String)
+        do { (bytes, digest) = try LocalFile.digest(coming) } catch let failure as LocalFile.Failure {
+            throw OwnerRefusal("\(place) could not be written on this Mac: \(failure.reason).")
+        }
         if let said = answer.headers["x-fleet-backup-sha256"], !said.isEmpty, !PyText.same(said, digest) {
             throw OwnerRefusal("the copy did not arrive whole: the hub's SHA-256 is not the one of the bytes received.")
         }
-        var folder: String?
-        if LocalFile.isFolder(place) {
-            folder = place
+        if let folder {
             let fallback = "founderizer-\(Int(context.now().timeIntervalSince1970)).zip"
-            place = try Self.intoFolder(place, Self.hubFileName(answer, fallback: fallback))
+            place = try Self.intoFolder(folder, Self.hubFileName(answer, fallback: fallback))
         }
-        try Self.write(answer.raw, to: place, newIn: folder)     // before the confirmation: a refusal confirms nothing
-        let receipt = try hub.command("/ui/backups/confirm", ["sha256": .string(digest),
-                                                              "bytes": .int(Int64(answer.raw.count))],
+        try Self.keep(coming, as: place, newIn: folder)     // before the confirmation: a refusal confirms nothing
+        let receipt = try hub.command("/ui/backups/confirm", ["sha256": .string(digest), "bytes": .int(Int64(bytes))],
                                       "the confirmation of the copy", requestID: args["request_id"])
         var result = receipt?.object ?? [:]
         result["path"] = .string(place)
-        result["bytes"] = .int(Int64(answer.raw.count))
+        result["bytes"] = .int(Int64(bytes))
         result["sha256"] = .string(digest)
         return .object(result)
+    }
+
+    /// `owner_mcp.py`'s COPY_SLOW: a copy that did not arrive within one tool call's time.
+    static let copySlow = "The copy did not arrive in \(Int(Transfer.copyTotal) / 60) minutes, the most that one tool "
+        + "call waits, so nothing was kept. Save copy in Settings \u{203A} Backup of the Founderizer app has no such "
+        + "limit of time."
+
+    /// `owner_mcp.py`'s `kept_as`: the file `coming` under its name `place`, in one step (`rename`). In a folder that
+    /// the agent named, the name is made new and only new first (`O_CREAT|O_EXCL`, which follows no link at its last
+    /// part), so a file, a link or a folder of that name stays as it is and nothing is kept; a file that the agent named
+    /// is replaced.
+    static func keep(_ coming: String, as place: String, newIn folder: String?) throws {
+        do {
+            guard LocalFile.callable(place) else { throw LocalFile.Failure(EINVAL) }
+            if let folder {
+                let made = open(place, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o600)
+                if made < 0 {
+                    let code = errno
+                    if code == EEXIST {
+                        throw OwnerRefusal("\(LocalFile.name(place)) is there already in \(LocalFile.normal(folder)), so "
+                                           + "nothing was written. Name the file itself in path to replace it, or name "
+                                           + "another folder.")
+                    }
+                    throw LocalFile.Failure(code)
+                }
+                close(made)
+            }
+            guard rename(coming, place) == 0 else { throw LocalFile.Failure(errno) }
+        } catch let failure as LocalFile.Failure {
+            throw OwnerRefusal("\(place) could not be written on this Mac: \(failure.reason).")
+        }
     }
 
     // ------------------------------------------------------------ the parts that the tools share
@@ -844,6 +896,43 @@ enum LocalFile {
             }
             if count == 0 { return data }
             data.append(buffer, count: count)
+        }
+    }
+
+    /// `tempfile.mkstemp(prefix:suffix:dir:)`: a new file of mode 600 in `folder`, with a name of its own between
+    /// `prefix` and `suffix` (`mkstemps`), and its path.
+    static func made(in folder: String, prefix: String, suffix: String) throws -> String {
+        guard callable(folder) else { throw Failure(EINVAL) }
+        var template = Array(join(folder, prefix + "XXXXXXXX" + suffix).utf8CString)
+        let handle = mkstemps(&template, Int32(suffix.utf8.count))
+        guard handle >= 0 else { throw Failure(errno) }
+        close(handle)
+        return String(cString: template)
+    }
+
+    /// The file at `path` goes, when it is there.
+    static func remove(_ path: String) {
+        guard callable(path) else { return }
+        unlink(path)
+    }
+
+    /// (the size, the SHA-256) of the file at `path`, read in parts of 1 MiB: never whole in memory.
+    static func digest(_ path: String) throws -> (Int, String) {
+        guard callable(path) else { throw Failure(EINVAL) }
+        let handle = open(path, O_RDONLY | O_CLOEXEC)
+        guard handle >= 0 else { throw Failure(errno) }
+        defer { close(handle) }
+        var hash = SHA256(), size = 0
+        var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
+        while true {
+            let count = Darwin.read(handle, &buffer, buffer.count)
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw Failure(errno)
+            }
+            if count == 0 { return (size, hash.finalize().map { String(format: "%02x", $0) }.joined()) }
+            hash.update(data: buffer[0..<count])
+            size += count
         }
     }
 

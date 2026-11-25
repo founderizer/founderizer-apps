@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Founderizer.Remote;
@@ -213,13 +214,25 @@ public sealed class SetupStoreTests
         return rig;
     }
 
-    /// <summary>**The hand-over waits for the manager's join and comes at its end, with the server that joined.** The
-    /// bug: a first run that goes to the manager's setup while its server joins, so that the setup asks for a server
-    /// again; or one that never leaves the build page.</summary>
+    /// <summary>**The hand-over waits for the manager's join and comes at its end, with the server that joined; the join
+    /// sends the key that the fleet's key gave for that server.** The bugs: a first run that goes to the manager's setup
+    /// while its server joins, so that the setup asks for a server again; one that never leaves the build page; and a
+    /// join whose installer was made without its plan's key (24 November 2026): the key step wrote an empty key, and the
+    /// joined server never reached the private network. The key step names itself in the join's progress and record,
+    /// and no line or record holds the key, also where the server prints it back.</summary>
     [TestMethod]
     public async Task The_hand_over_comes_at_the_joins_end_with_the_server_that_joined()
     {
-        await using var rig = new SetupRig { Fleet = SetupRig.NewFleet() };
+        // Each key step prints back what it got on standard input, as a program that prints its input would. The key is
+        // kept here, at the call: the installer zeroes its bytes once the call ends.
+        var keys = new System.Collections.Concurrent.ConcurrentQueue<(string Host, string Key)>();
+        await using var rig = new SetupRig(call =>
+        {
+            if (call.Input is not { } input || !call.Program.Contains("cat > /root/fleet-authkey", StringComparison.Ordinal)) return null;
+            var key = Encoding.UTF8.GetString(input);
+            keys.Enqueue((call.Target.Host, key));
+            return StandInRemote.Said("got " + key + "\n" + (ClaimCode.IsPrivateAddress(call.Target.Host) ? call.Target.Host : Printed.PrivateAddress));
+        }) { Fleet = SetupRig.NewFleet() };
         await Built(rig);
         var s = await rig.Until(x => x.HandedOver, "the hand-over");
         Assert.IsNotNull(s.ManagerInstall.Checklist, "the join ended before the hand-over");
@@ -227,6 +240,17 @@ public sealed class SetupStoreTests
         Assert.AreEqual(("juno", "claude", s.ManagersServer!.Name, false, null as MadeServer), (handed.Manager, handed.Provider, handed.Joined, handed.SignInAsked, handed.Made));
         Assert.AreEqual(0, rig.Calls.SignIns, "a manager with no server gets its provider with its server, and no sign-in now");
         Assert.AreEqual(1, rig.Calls.Posts.Count(p => p == "ui/servers/join"));
+
+        var sent = keys.Where(k => k.Host == s.ManagersServer.Address).Select(k => k.Key).ToArray();
+        CollectionAssert.AreEqual(new[] { StandInNet.AuthKey }, sent, "the join's key step sends the key of the fleet's key, once");
+        var network = s.ManagerInstall.Steps.Last(p => p.Step == "network");
+        Assert.AreEqual((ProgressState.Done, "Tailscale, with your key on standard input, and the address it gets."), (network.State, network.Says));
+        CollectionAssert.Contains(network.Lines.ToList(), "got (not shown)", "the server's line, without the key");
+        var record = rig.Records.Installs.All().Single(r => r.Kind == InstallKind.Join);
+        Assert.IsTrue(record.Steps.Any(st => st.Id == InstallStepId.Network && st.State == RecordStepState.Done), "the join's record names its key step");
+        var texts = s.ManagerInstall.Steps.SelectMany(p => p.Lines.Append(p.Detail ?? "").Append(p.ToString()))
+            .Concat(Directory.EnumerateFiles(Path.Combine(rig.Folder, "records"), "*", SearchOption.AllDirectories).Select(File.ReadAllText));
+        Assert.IsFalse(texts.Any(t => t.Contains(StandInNet.AuthKey, StringComparison.Ordinal)), "no line or record holds the key");
     }
 
     /// <summary>**When the join's wait ends by its count and the new hub answers late, the hand-over comes at that

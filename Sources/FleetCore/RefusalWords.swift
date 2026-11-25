@@ -274,6 +274,12 @@ enum RefusalWords {
         case "older":
             guard let server else { return nil }
             return say("\(server) runs an older Founderizer that cannot do this yet. It updates itself when it has no job; then try again.")
+        case "mcp_url_replaced":
+            guard let server else { return nil }
+            return say("the MCP server \(server) has text in its url that a session would replace with one of its own values, so no session loads it and it takes no sign-in. Change or remove the server with the save_mcp_server tool of an AI session that has the Founderizer tools")
+        case "mcp_token_refused":
+            guard let server else { return nil }
+            return say("Fleet did not keep the sign-in of the MCP server \(server): the server gave an access token that a session could fill with one of its own values, or that no header takes. A new sign-in gets the same kind of token, so the server's maker must change it")
         default:
             return nil
         }

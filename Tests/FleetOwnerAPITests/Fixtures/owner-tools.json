@@ -5943,7 +5943,7 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Releases: Take one copy of this fleet into a file on this Mac \u2014 the records, the owner's own configuration, a manifest and RESTORE.md \u2014 check its SHA-256 and tell the hub it is saved. Nothing is written on the hub machine.",
+   "description": "Releases: Take one copy of this fleet into a file on this Mac \u2014 the records, the owner's own configuration, a manifest and RESTORE.md \u2014 check its SHA-256 and tell the hub it is saved. No copy stays on the hub machine. This copy carries no access key of the fleet: only a copy that the Founderizer app keeps has it.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -6198,5 +6198,5 @@
    "whole": []
   }
  ],
- "version": "db38d07726bf3cd3ab9cb3a69823a2e57ecd2a3d5b25be3e216c4ca7befcacf5"
+ "version": "d9b04bc2a24b1bb1f8d44cdfa2d91b9a888394bdd1a38a1c42085d0e1a59b686"
 }

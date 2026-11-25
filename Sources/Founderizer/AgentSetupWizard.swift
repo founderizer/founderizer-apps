@@ -138,9 +138,7 @@ struct AgentSetupWizard: View {
         if case .onHub(let name) = start { return name }
         guard let joined = store.joinedServer(agent) else { return nil }
         guard let list = servers else { return joined }
-        guard let entry = list.servers.first(where: { $0.name == joined }), !entry.hub,
-              entry.agents.allSatisfy({ $0 == agent }) else { return nil }
-        return joined
+        return list.takesFirst(agent, on: joined) ? joined : nil
     }
     /// The server it goes on: before the command that gives it its first server, the one that command names.
     private var serverName: String { server?.name ?? machine?.machine ?? placeOn ?? String(l10n: "its server") }
@@ -693,7 +691,8 @@ struct AgentSetupWizard: View {
 
     /// **Its server and its provider, in one command** (owner API 1.82): the hub sets its server and, for the other
     /// provider, that provider's start, and gives the server its install, which the next pages follow. A team.json that
-    /// changed between the read and the press is read again, once.
+    /// changed between the read and the press is read again, once, and so is the list of servers: the move goes again
+    /// only while the server still takes it (`stillTakes`), since another agent may have come onto it.
     private func place(on server: String, runtime provider: String, database: String) async {
         for attempt in 0..<2 {
             do {
@@ -703,10 +702,21 @@ struct AgentSetupWizard: View {
                 await store.refresh()
                 return
             } catch let HubError.refusal(refused) {
-                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
+                if refused.status == 409, attempt == 0, refused.means(.teamChanged),
+                   await stillTakes(server, database: database) { continue }
                 refusal = refused.words; return
             } catch { refusal = String(l10n: "The hub has not answered. Try again."); return }
         }
+    }
+
+    /// After a refusal for a team.json that changed: the servers read again, kept for the pages, and true only while
+    /// `server` still takes this agent by the rule of its first server (`ServerList.takesFirst`), or is the hub's own
+    /// server that the manager of a new fleet goes to. A list that the hub does not give is no go.
+    private func stillTakes(_ server: String, database: String) async -> Bool {
+        guard let list = try? await HubClient().servers(hub: store.hub, database: database) else { return false }
+        servers = list
+        if case .onHub(let name) = start, name == server { return true }
+        return list.takesFirst(agent, on: server)
     }
 
     /// Claude Code's code, to the machine, and then forgotten here.

@@ -723,6 +723,8 @@ struct StartAgainTests {
             defaults.set(["\(mine) worker-2 100.64.0.9": "aa", "\(theirs) worker-9 100.64.0.99": "bb"], forKey: key)
         }
         for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { defaults.set([mine: "one", theirs: "two"], forKey: key) }
+        // As CopyKept writes them: the address with no slash at its end.
+        for key in ["copyKeptAtByHub", "copySizesByHub", "copyFailureByHub", "copyDatabaseByHub"] { defaults.set([CopyKept.key(mine): "one", CopyKept.key(theirs): "two"], forKey: key) }
         for key in ["machineChecklists", "machineInstallTargets"] {
             let table = ["\(mine)|worker-2": ["host": "100.64.0.9", "readAt": 784_123_456.5],
                          "\(theirs)|worker-9": ["host": "100.64.0.99", "readAt": 784_123_457.25, "port": 22]]
@@ -771,6 +773,7 @@ struct StartAgainTests {
             #expect(defaults.dictionary(forKey: key) as? [String: String] == ["\(theirs) worker-9 100.64.0.99": "bb"], "\(key)")
         }
         for key in ["pinnedAgents", "fleetIdsByHub", "lastPages"] { #expect(defaults.dictionary(forKey: key) as? [String: String] == [theirs: "two"], "\(key)") }
+        for key in ["copyKeptAtByHub", "copySizesByHub", "copyFailureByHub", "copyDatabaseByHub"] { #expect(defaults.dictionary(forKey: key) as? [String: String] == [CopyKept.key(theirs): "two"], "\(key)") }
         for key in ["machineChecklists", "machineInstallTargets"] {
             // The other hub's entry is whole, with its numbers as they were.
             let kept = json(key, defaults)
@@ -805,6 +808,8 @@ struct StartAgainTests {
         #expect(defaults.string(forKey: "hubAddress") == nil && MadeServers.kept(hub: hub, in: defaults).isEmpty)
         #expect((defaults.dictionary(forKey: "pinnedAgents") as? [String: String])?[mine] == nil)
         #expect((defaults.dictionary(forKey: "lastPages") as? [String: String])?[mine] == nil)
+        // The copy's time and sizes of this hub: a new fleet at its address has none (CopyKept).
+        for key in ["copyKeptAtByHub", "copySizesByHub", "copyFailureByHub", "copyDatabaseByHub"] { #expect(defaults.dictionary(forKey: key)?[CopyKept.key(mine)] == nil, "\(key)") }
         #expect(defaults.object(forKey: "doorHosts|\(mine)|db1") == nil)
     }
 

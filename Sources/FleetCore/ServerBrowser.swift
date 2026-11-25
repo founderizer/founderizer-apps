@@ -348,12 +348,15 @@ public enum ServerBrowser {
     /// alone), so a port whose row went
     /// is closed, never open: a Browser or Shell box that goes off takes the row away at the next round, while the
     /// agent's Chrome can still run for an open task (the S3b review, rounds 3 and 4). So both ranges are reserved
-    /// for the agents' browsers on this server. nil where a row's user has no uid.
+    /// for the agents' browsers on this server. nil where a row's user has no uid, and where a row's DevTools port is
+    /// not in `devtoolsPorts` or its screen port not in `screenPorts`: `assign` keeps no such row, and this second guard
+    /// makes sure that no caller makes a rule for another port of the server (port 22, say).
     public static func table(_ rows: [Ports], uids: [String: Int], broker: Int?, worker: Int) -> String? {
         var lines = [tableComment, "table inet fleet_browser", "delete table inet fleet_browser",
                      "table inet fleet_browser {", "\tchain out {", "\t\ttype filter hook output priority 0; policy accept;"]
         for row in rows {
-            guard let uid = uids[row.user] else { return nil }
+            guard let uid = uids[row.user], devtoolsPorts.contains(row.devtools), screenPorts.contains(row.screen)
+            else { return nil }
             let allowed = ([0] + (broker.map { [$0] } ?? []) + [uid]).map(String.init).joined(separator: ", ")
             lines += ["\t\toifname \"lo\" tcp dport \(row.devtools) meta skuid != { \(allowed) } reject with tcp reset",
                       "\t\toifname \"lo\" tcp dport \(row.screen) meta skuid != { 0, \(worker) } reject with tcp reset",
@@ -366,12 +369,27 @@ public enum ServerBrowser {
     }
 
     /// **The rows for the wanted users**: each row of a user that is still wanted keeps its place and its ports, the
-    /// rows of the others go, and each new user takes the lowest ports that no row of `current` has (so that a port
+    /// rows of the others go, and each new user takes the lowest ports that no row of `current` holds (so that a port
     /// given up now goes to nobody else in the same step). As many new users as there are free ports.
+    ///
+    /// **`current` is the server's reading, and the hub relays it**, so a broken-in hub can say any number there. A row
+    /// of it whose DevTools port is not in `devtoolsPorts`, whose screen port is not in `screenPorts`, or whose user, or
+    /// one of whose ports, an earlier row has, is no row: it keeps no place and holds no port, and its user takes free
+    /// ports as a new user does. These are the same ranges and the same once-only rule as the server's reading of the
+    /// ports file (`lifecycle.browser_port_rows`, which voids the whole list where one row is wrong, while this drops
+    /// that row alone) and the same ranges as `vault.egress_browser_ports`. Without them a reading of port 22 for an
+    /// agent makes the step write the table's rules for port 22.
     public static func assign(_ current: [Ports], wanted: [String]) -> [Ports] {
         let want = Set(wanted)
-        var rows = current.filter { want.contains($0.user) }
-        var devtools = Set(current.map(\.devtools)), screens = Set(current.map(\.screen))
+        var held: [Ports] = [], devtools = Set<Int>(), screens = Set<Int>(), users = Set<String>()
+        for row in current where devtoolsPorts.contains(row.devtools) && screenPorts.contains(row.screen)
+            && !devtools.contains(row.devtools) && !screens.contains(row.screen) && !users.contains(row.user) {
+            held.append(row)
+            devtools.insert(row.devtools)
+            screens.insert(row.screen)
+            users.insert(row.user)
+        }
+        var rows = held.filter { want.contains($0.user) }
         for user in wanted where !rows.contains(where: { $0.user == user }) {
             guard let next = devtoolsPorts.first(where: { !devtools.contains($0) }),
                   let screen = screenPorts.first(where: { !screens.contains($0) }) else { break }
@@ -441,6 +459,24 @@ public enum ServerBrowser {
         }
     }
 
+    /// **Whether the worker user of a reading may have the screen ports' rule and the live proof's folder.** The hub
+    /// relays the reading, which names the worker user (the user of the server's service) and its uid. The table lets
+    /// that uid open every agent's screen port, and the step gives it the live proof's folder. Every Linux server of
+    /// this sweep runs its service as `serviceUser` (`join.sh`'s WORKER, which `server.py join` reports; no other route
+    /// starts `server.py` on a Linux server, and the hub's own server is not of this sweep), so the name must be that
+    /// one: not a cloud image's login user, an admin's account or another program's user, and no agent's or the
+    /// broker's. Its uid may be any but 0, the broker's and the uid of a `fleet-` user of the reading: a `fleet` user
+    /// that was there before the join keeps its uid (`join.sh` makes none then), also a system one. An agent that runs
+    /// as the service's own user (a reading can name one) is no `fleet-` user, so it refuses no honest server. The step
+    /// checks the same again on the server, from its own users (`worker-refused`).
+    public static func workerFits(_ user: String, uid: Int, uids: [String: Int], broker: Int?) -> Bool {
+        user == serviceUser && uid != 0 && uid != broker
+            && !uids.contains { $0.key.hasPrefix("fleet-") && $0.value == uid }
+    }
+
+    /// The user of the service of every Linux server of this sweep (`join.sh`'s WORKER).
+    public static let serviceUser = "fleet"
+
     /// The SHA-256 of a text, as the server's reading gives a file's.
     static func hash(_ text: String) -> String { hash(Data(text.utf8)) }
     static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
@@ -476,6 +512,7 @@ public enum ServerBrowser {
         }
         let rows = assign(parts.ports ?? [], wanted: wanted)
         guard let worker = reading.user, let workerID = parts.worker,
+              workerFits(worker, uid: workerID, uids: uids, broker: parts.broker),
               let table = table(rows, uids: uids, broker: parts.broker, worker: workerID) else { return nil }
         let want = Want(rows: rows, table: table, uids: uids.filter { user, _ in rows.contains { $0.user == user } },
                         broker: parts.broker, worker: worker, workerID: workerID)
@@ -619,10 +656,21 @@ public enum ServerBrowser {
 
     /// **The step, in its transient unit as root.** It says `running` first, and at its end one word: `ok`, or why it
     /// stopped (`users-changed`, `write-failed`, `apt-busy`, `update-failed`, `install-failed`, `lock-busy`,
-    /// `table-failed`, `purge-failed`, `remove-failed`, `units-running`, `ss-failed`). Each file is written whole and moved into place (a policy file
-    /// from Chrome's policy folder, so that the checker never meets a file of another name in `managed/`); a file that
-    /// holds the text already is left as it is. A package counts as there when it is installed (also on hold) for this
-    /// server's architecture or for all.
+    /// `table-failed`, `purge-failed`, `remove-failed`, `units-running`, `ss-failed`, `ports-refused`,
+    /// `worker-refused`). Each file is written whole and moved into place (a policy file from Chrome's policy folder,
+    /// so that the checker never meets a file of another name in `managed/`); a file that holds the text already is left
+    /// as it is. A package counts as there when it is installed (also on hold) for this server's architecture or for
+    /// all.
+    ///
+    /// **The ports and the table are checked on the server first** (`fits`), as a second guard beside `assign` and
+    /// `table`: before an install or a removal writes a file or runs `nft`, each line of the ports text that it will
+    /// write must be `<user> <DevTools port> <screen port>` with an agent's user (never the broker's), a DevTools port
+    /// of 9300 to 9399 and a screen port of 5910 to 5999, each user and port given once (`lifecycle.browser_port_rows`),
+    /// and each port or range that a `dport` or `sport` of the table text names must lie in one of those ranges.
+    /// Else the step says `ports-refused`, and writes no part and changes no rule. The texts that it checks are the ones
+    /// that it writes (`$P` and `$T`). An install then holds the worker user to `workerFits` from the server's own
+    /// users (`worker`: the name `fleet`, and a uid that is not 0, not the broker's and that no `fleet-` user has),
+    /// before anything else and again under the lock; else it says `worker-refused`, with the same effect.
     ///
     /// **Install**, in the contract's order, so that Chrome never exists without its policies: the users still have
     /// the uids that the table was made from; the folders, the live proof's of the worker user; the APT key and source
@@ -686,6 +734,28 @@ public enum ServerBrowser {
               return 1
             }
             gone() { apt-get -s "$@" 2>/dev/null | awk '$1 == "Purg" || $1 == "Remv" {sub(/:.*/, "", $2); print $2}'; }
+            fits() {
+              printf '%s' "$1" | awk -v b=\(broker) 'BEGIN {k = 1}
+                {if (NF != 3 || $0 != ($1 " " $2 " " $3) || $1 !~ /^fleet-[a-z][a-z0-9-]*$/ || length($1) < 8 ||
+                length($1) > 32 || $1 == b || $2 !~ /^93[0-9][0-9]$/ || $3 !~ /^59[1-9][0-9]$/ || ($1 in u) ||
+                ($2 in u) || ($3 in u)) k = 0; u[$1] = 1; u[$2] = 1; u[$3] = 1}
+                END {exit !k}' || return 1
+              printf '%s' "$2" | awk 'function one(t, a, n, lo, hi) {
+                  sub(/,$/, "", t); n = split(t, a, "-")
+                  if (n < 1 || n > 2 || a[1] !~ /^[1-9][0-9]*$/ || a[n] !~ /^[1-9][0-9]*$/) return 0
+                  lo = a[1] + 0; hi = a[n] + 0
+                  return lo <= hi && (lo >= \(screenPorts.lowerBound) && hi <= \(screenPorts.upperBound) ||
+                    lo >= \(devtoolsPorts.lowerBound) && hi <= \(devtoolsPorts.upperBound))
+                }
+                BEGIN {k = 1}
+                /^#/ {next}
+                {for (i = 1; i <= NF; i++) if ($i ~ /[ds]port/) {
+                  if ($i != "dport" && $i != "sport") k = 0
+                  else if ($(i + 1) != "{") k = k && one($(i + 1))
+                  else { for (j = i + 2; j <= NF && $j != "}"; j++) k = k && one($j); if (j > NF || j == i + 2) k = 0 }
+                }}
+                END {exit !k}'
+            }
             came() {
               every "$s/after" && { for p in $(comm -13 "$s/before" "$s/after"); do
                 case ' \(keptPackages.joined(separator: " ")) ' in *" $p "*) continue;; esac
@@ -705,11 +775,13 @@ public enum ServerBrowser {
             let browserFolder = (portsPath as NSString).deletingLastPathComponent
             let kept = keptPackages.map { "-e " + $0 }.joined(separator: " ")
             return head + """
+                P=''; T=\(q(emptyTable))
+                fits "$P" "$T" || { say ports-refused; exit 0; }
                 if [ -f "\(lock)" ]; then
                   command exec 9<"\(lock)" && flock -w 60 9 || { say lock-busy; exit 0; }
                 fi
                 if [ -f "$r\(portsPath)" ] || [ -f "$r\(tablePath)" ]; then
-                  put \(portsPath) "" text '' && put \(tablePath) "" text \(q(emptyTable)) || { say write-failed; exit 0; }
+                  put \(portsPath) "" text "$P" && put \(tablePath) "" text "$T" || { say write-failed; exit 0; }
                   systemctl reload-or-restart fleet-browser-ports.service >/dev/null 2>&1 \
                   || nft -f "$r\(tablePath)" >/dev/null 2>&1 || { say table-failed; exit 0; }
                 fi
@@ -759,7 +831,15 @@ public enum ServerBrowser {
             let policies = (policyPath as NSString).deletingLastPathComponent
             let stage = (policies as NSString).deletingLastPathComponent
             return head + """
+                P=\(q(portsText(want.rows))); T=\(q(want.table))
+                fits "$P" "$T" || { say ports-refused; exit 0; }
                 b=\(q(want.broker.map(String.init) ?? "")); u=\(q(want.worker)); i=\(want.workerID)
+                worker() {
+                  [ "$u" = \(serviceUser) ] && [ "$i" != 0 ] && [ "$i" != "$b" ] || return 1
+                  pw=$(getent passwd) && [ -n "$pw" ] || return 1
+                  printf '%s\\n' "$pw" | awk -F: -v i="$i" '$1 ~ /^fleet-[a-z][a-z0-9-]*$/ && $3 == i {f = 1} END {exit f}'
+                }
+                worker || { say worker-refused; exit 0; }
                 same() { [ "$(id -u "$1" 2>/dev/null)" = "$2" ]; }
                 users() {
                   c=1
@@ -801,7 +881,8 @@ public enum ServerBrowser {
                 own "\(lock)" "root:$(id -gn "$u")" && chmod 640 "\(lock)" || { say write-failed; exit 0; }
                 command exec 9<"\(lock)" && flock -w 60 9 || { say lock-busy; exit 0; }
                 users || { say users-changed; exit 0; }
-                put \(portsPath) "" text \(q(portsText(want.rows))) && put \(tablePath) "" text \(q(want.table)) \
+                worker || { say worker-refused; exit 0; }
+                put \(portsPath) "" text "$P" && put \(tablePath) "" text "$T" \
                 && put \(unitPath) "" text \(q(unitText)) && put \(dropinPath) "" text \(q(dropinText)) \
                 || { say write-failed; exit 0; }
                 systemctl daemon-reload >/dev/null 2>&1 || { say table-failed; exit 0; }

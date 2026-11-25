@@ -20,6 +20,15 @@ public struct ServerList: Decodable, Sendable {
     public var keptStep: ServersStep? { shape?.step }
     /// The hub's own row.
     public var hubRow: ServerEntry? { servers.first { $0.hub } }
+    /// **A server that takes `agent` as its first server**, by the rule of the agent's setup: a server of this list, not
+    /// the hub's own, with no other agent on it. The setup checks it before its move, and again after a refusal for a
+    /// team.json that changed: the hub lets a shared Linux server take a second agent (hub.py move_refusal), so a retry
+    /// with no new list put the agent beside one that came in the meantime (two readers of the Windows setup, 24
+    /// November 2026).
+    public func takesFirst(_ agent: String, on name: String) -> Bool {
+        guard let entry = servers.first(where: { $0.name == name }), !entry.hub else { return false }
+        return entry.agents.allSatisfy { $0 == agent }
+    }
 
     public func validate(database: String) throws {
         guard db == database, time.isFinite, servers.count <= 1000, Set(servers.map(\.name)).count == servers.count,
@@ -597,6 +606,8 @@ public enum Servers {
         case "fix_holder": return String(l10n: "An agent there has full control of it.")
         // The agent there holds servers through the door, which knows it by its server's address.
         case "door_caller": return String(l10n: "The agent there manages your servers, so it runs alone.")
+        // The fleet manager runs alone on its server (owner API 1.336): an agent beside it could read its key.
+        case "manager_alone": return String(l10n: "The fleet manager runs there, and it runs alone.")
         default: return String(l10n: "It cannot take an agent now.")
         }
     }

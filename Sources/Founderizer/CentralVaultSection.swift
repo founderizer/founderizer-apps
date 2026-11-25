@@ -497,9 +497,21 @@ final class CentralVaultModel {
         resigned.remove(step.server)
         let keys = await keySwapStep(row, KeySwapRemote.keys(step.keys, fleet: step.fleet), keys: step.keys, fleet: step.fleet,
                                      store: store, database: database, fleetID: fleet)
+        if step.gate, keys != nil { await keySwapGate(row, database: database) }
         guard let to = step.then, let keys, KeySwapPlan.switchMayFollow(keys, central: central) else { return }
         _ = await keySwapStep(row, KeySwapRemote.turn(to), keys: step.keys, fleet: step.fleet, store: store,
                               database: database, fleetID: fleet)
+    }
+
+    /// **The outgoing gate on the hub's own server** (`KeySwapStep.gate`), after a keys step that reached it: its own
+    /// root step, which changes nothing where the gate is on. Its answer keeps no record of the key swap's: a gate that
+    /// did not come is the hub's server watch's to say, for a hub's server that takes agents (`egress_troubles`).
+    private func keySwapGate(_ row: KeySwapServer, database: String) async {
+        // the hub's own machine only by `hubTarget` (VAULT.md, "Who the Mac logs in as, and where")
+        guard row.hub, let target = try? await hubTarget(row.name, database: database, record: reading?.hub?.reach)
+        else { return }
+        _ = try? await SSHRun.run(CentralVaultRemote.arguments(target: target, program: KeySwapRemote.gate), to: target,
+                                  timeout: 600)
     }
 
     /// One root step on one server, its record and its reading to the hub; its answer, or nil when it did not reach
@@ -510,9 +522,17 @@ final class CentralVaultModel {
         let now = Date().timeIntervalSince1970, server = row.name, wish = row.wish
         do {
             guard let program else { throw Stop(String(l10n: "Founderizer cannot write the install for this owner key.")) }
-            let target = try await self.target(row.name, database: database)
-            guard await MacNetwork.device(of: target.host) == row.name else {
-                throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(row.name). Founderizer pinned nothing."))
+            // The hub's own server only by `hubTarget`, as the central vault's steps (VAULT.md, "Who the Mac logs in as,
+            // and where"): the record is the hub's word, and a first label alone could name another node. Each joined
+            // server by its own connection, which this Mac's Tailscale names.
+            let target: InstallTarget
+            if row.hub {
+                target = try await hubTarget(row.name, database: database, record: reading?.hub?.reach)
+            } else {
+                target = try await self.target(row.name, database: database)
+                guard await MacNetwork.device(of: target.host) == row.name else {
+                    throw Stop(String(l10n: "This Mac's Tailscale does not say that \(target.host) is \(row.name). Founderizer pinned nothing."))
+                }
             }
             let output = try await SSHRun.run(CentralVaultRemote.arguments(target: target, program: program), to: target,
                                               timeout: 600)

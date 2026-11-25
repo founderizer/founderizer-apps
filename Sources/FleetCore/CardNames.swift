@@ -14,15 +14,18 @@ import Foundation
 /// - an agent: its role, word for word, when one agent holds it ("Customer Support Lead"); the first two words or
 ///   more of a role that no other role starts with, when no word with a capital follows ("Customer Support", but not
 ///   "Head of" in "Head of Sales"); its name with a capital, or a role of one word, when no word with a capital stands
-///   beside it ("Nova", but not "Studio" in "Visual Studio" or "Manager" in "Password Manager");
+///   beside it ("Nova", but not "Studio" in "Visual Studio" or "Manager" in "Password Manager"), but a verb that opens
+///   the sentence before it ("Give Marketing write"); where a role is also an agent's name, the name;
 /// - a repository: owner/name, in any case, on a card also as the whole of an inline code (the owner, 23 November
-///   2026, of a code that is "owner/name of a repository of your fleet": "The repository's badge"); its name alone when
+///   2026, of a code that is "owner/name of a repository of your fleet": "The repository's badge"), but not in his own
+///   typed answer, where his code stays code (`CardBadgeText.pieces`); its name alone when
 ///   it has a hyphen or an underscore, starts with no point, and no other repository of the book has that name
 ///   ("shop-api"); and on the card whose own Give names the repository, its name alone in any form, also of letters
 ///   only ("web"; the owner, that day: "Yes: a name that the card's Give names is a badge"), but for one that starts
 ///   with a point or that a secret or a page of the book also is, in any case ("Stripe", "Resources"): in small
 ///   letters, as the hub gives the Give, or in other capitals with no word with a capital beside it ("Web", but not
-///   "Studio" in "Visual Studio" for acme/studio). A name that two repositories of that Give have names neither. No
+///   "Studio" in "Visual Studio" for acme/studio), but a verb that opens the sentence before it ("Tell Sales the
+///   price" for acme/sales). A name that two repositories of that Give have names neither. No
 ///   name alone counts in inline code;
 /// - a server: its name, in any case, when it has a digit or a hyphen ("app-1");
 /// - a knowledge file of the owner's: its path, word for word ("knowledge/owner/brand.md"), also as the whole of an
@@ -106,8 +109,9 @@ public struct CardNames: Equatable, Sendable {
     enum Rule: Equatable, Sendable {
         /// Anywhere between two word boundaries: a role of more than one word, a repository, a server.
         case exact
-        /// With no word with a capital beside it: an agent's own name, a role of one word, and the name alone of a
-        /// repository of the card's own Give in other capitals than the Give's.
+        /// With no word with a capital beside it, but a verb that opens its sentence (`opening`): an agent's own
+        /// name, a role of one word, and the name alone of a repository of the card's own Give in other capitals than
+        /// the Give's (so "Give Web write" makes "Web" a badge on that card too).
         case alone
         /// With no word with a capital after it: the start of a role.
         case start
@@ -176,6 +180,11 @@ public struct CardNames: Equatable, Sendable {
                 names.append(Name(words: words, length: words.count, anyCase: anyCase, target: target, rule: rule))
             }
         }
+        // **The names first: where a role is also an agent's name, the name decides** (F23: an agent shows by its
+        // name), as it does in a tag (`AgentTags`): a place takes the first name of the book that stands there
+        for agent in agents where agent.name.contains(where: \.isLetter) {
+            add(agent.name.capitalized, anyCase: false, .agent(agent.name), .alone)
+        }
         let roles = agents.compactMap { agent in agent.role.map { (agent.name, Self.words($0)) } }
             .filter { !$0.1.isEmpty }
         let held = Dictionary(roles.map { ($0.1, 1) }, uniquingKeysWith: +)
@@ -188,9 +197,6 @@ public struct CardNames: Equatable, Sendable {
                     add(start.joined(separator: " "), anyCase: false, .agent(name), .start)
                 }
             }
-        }
-        for agent in agents where agent.name.contains(where: \.isLetter) {
-            add(agent.name.capitalized, anyCase: false, .agent(agent.name), .alone)
         }
         let own = Set(given.map { $0.lowercased() })
         let repos = Set(repositories.map { $0.lowercased() }).union(own)
@@ -275,7 +281,8 @@ public struct CardNames: Equatable, Sendable {
         return next < text.endIndex && text[next].isUppercase
     }
 
-    /// The word before `start`, one space back, starts with a capital: also at a sentence's start ("Android Studio").
+    /// The word before `start`, one space back, starts with a capital: also at a sentence's start ("Android Studio"),
+    /// but for a verb that opens the sentence there (`opening`), which is no part of a name ("Give Marketing write").
     private static func capitalBefore(_ text: String, _ start: String.Index) -> Bool {
         guard start > text.startIndex else { return false }
         let space = text.index(before: start)
@@ -284,7 +291,52 @@ public struct CardNames: Equatable, Sendable {
         while word > text.startIndex, text[text.index(before: word)].isLetter || text[text.index(before: word)].isNumber {
             word = text.index(before: word)
         }
-        return word < space && text[word].isUppercase
+        guard word < space, text[word].isUppercase else { return false }
+        return !(opening.contains(String(text[word..<space])) && startsASentence(text, word))
+    }
+
+    /// **The verbs that open a step for an agent** (C6 of F23 N1): at a sentence's start, the word with a capital
+    /// before a name or a role of one word, or before the name of a repository that the card's own Give names, is one of
+    /// them, and the name stands alone ("Give Marketing write", "Ask Nova first", "Tell Sales the price" on the card
+    /// whose Give names acme/sales); any other word there may be a part of a product's name ("Android Studio", "Visual
+    /// Studio"). Only
+    /// verbs whose next word is the one that the step is for, so that "Add Sales tax" or "Email Marketing" stays
+    /// words. Spanish puts "a" before a person ("Dale a Marketing"), so it needs none.
+    /// Not "Let", whose next word is often a noun of the sentence ("Let Marketing spend run until Friday").
+    static let opening: Set<String> = ["Give", "Grant", "Ask", "Tell", "Remind", "Invite", "Ping"]
+
+    /// `index` begins its text, its line or a sentence: before it only spaces, after the start, a line break, or ".",
+    /// "!", "?" or "…" and a space; or the mark of a list item, a heading or a quote at its line's start ("- Give
+    /// Marketing write", "1. ", "# ", "> "), which the open card does not draw (`MessageBlock`): a folded reason, which
+    /// reads the marks too (`CardBadgeText.reason`), reads the line as the open card does.
+    private static func startsASentence(_ text: String, _ index: String.Index) -> Bool {
+        let before = back(overSpacesFrom: index, in: text)
+        guard before > text.startIndex else { return true }
+        let mark = text[text.index(before: before)]
+        if mark.isNewline || (".!?…".contains(mark) && before < index) { return true }
+        // a line's mark: a word of its own, a space after it, and only spaces before it on its line
+        guard before < index else { return false }
+        var start = before
+        while start > text.startIndex, !text[text.index(before: start)].isWhitespace { start = text.index(before: start) }
+        guard lineMark(text[start..<before]) else { return false }
+        let line = back(overSpacesFrom: start, in: text)
+        return line == text.startIndex || text[text.index(before: line)].isNewline
+    }
+
+    /// `index`, back over the spaces before it.
+    private static func back(overSpacesFrom index: String.Index, in text: String) -> String.Index {
+        var before = index
+        while before > text.startIndex, text[text.index(before: before)] == " " { before = text.index(before: before) }
+        return before
+    }
+
+    /// The mark of a list item ("-", "*", "+", "•", "1." or "1)"), a heading ("#" to "######") or a quote (">").
+    private static func lineMark(_ word: Substring) -> Bool {
+        if ["-", "*", "+", "•", ">"].contains(String(word)) { return true }
+        if !word.isEmpty, word.count <= 6, word.allSatisfy({ $0 == "#" }) { return true }
+        guard let last = word.last, last == "." || last == ")" else { return false }
+        let number = word.dropLast()
+        return !number.isEmpty && number.count <= 9 && number.allSatisfy { $0.isASCII && $0.isNumber }
     }
 
     /// The words of `text` from the start of the sentence of `index` to it: after the last end of a sentence or line.
@@ -400,7 +452,8 @@ public struct CardNames: Equatable, Sendable {
     /// enclose it in like a badge entirely", "Same for agents", and "Badge them too" of repositories and the app's
     /// pages). The pieces hold every character of `text` once, in its order; a name in the words of a link of its own
     /// or in inline code stays words, but for those that can be the whole of one (`shown`). `codedRepositories`: a
-    /// repository's owner/name is one of them, which is a card's rule and no chat's (`ChatNames`).
+    /// repository's owner/name is one of them, which is the rule of an agent's words on a card, and neither a chat's
+    /// (`ChatNames`) nor that of his own typed answer on a card (`CardBadgeText.pieces`).
     public func pieces(_ text: AttributedString, codedRepositories: Bool = true) -> [Piece] {
         var pieces: [Piece] = [], start = text.startIndex
         for (found, range) in shown(in: text, codedRepositories: codedRepositories) {

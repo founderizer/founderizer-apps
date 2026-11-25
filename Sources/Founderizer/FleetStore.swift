@@ -143,6 +143,10 @@ final class FleetStore {
     let notifications = FleetNotifications()
     /// The copy of his fleet that this Mac keeps for him, on the schedule he set (`CopyKeeper.swift`).
     let copies = FleetCopyKeeper()
+    /// **The way back** (`RestoreModel`, Settings › Backup), kept here and not in a page: the Settings shell builds its
+    /// pages again at each change of tab and of hub, and a restore must outlive them, with its upload, its watch and
+    /// its landing (the validator's P1, 22 November 2026). Each change of hub of this store tells it (`hubMoved`).
+    let restore = RestoreModel()
     /// This app's own update, put in place without a press while he is away from it (`AppUpdateModel.swift`).
     let updates = AppAutoUpdate()
     /// What each page read last, so a page that opens again draws it at once (`PageReadings.swift`).
@@ -570,6 +574,8 @@ final class FleetStore {
     /// chat's rules (`chatNames`), and the servers' symbols for its badges. New names drop the books of every Give.
     @ObservationIgnored var cardBook: (key: Int, cards: [[String]: CardNames], chat: ChatNames,
                                        symbols: [String: String])?
+    /// Badge names in display order for the last secrets catalog read by a card or chat.
+    @ObservationIgnored var secretBadgeCache: (catalog: [String: TeamLogin], badges: [(name: String, key: Bool)])?
     /// build plan 04, S6: the hub's servers, read for a take-over's card, whose readings name a Linux agent's
     /// screen-sharing port (`readTakeOverServers`).
     var takeOverServers: [ServerEntry]?
@@ -2382,6 +2388,7 @@ final class FleetStore {
             // reports go on no answer of the hub before it (W17).
             if next != hub { welcomePassed = true; ErrorReportsDay.forget() }
             hub = next
+            restore.hubMoved(store: self)       // the way back of the first hub ends here, and its upload with it
             // A connect is the owner's own ask (the first run's own search never asks for a hub that "Start again"
             // left): that hub is passed over no more.
             StartAgain.LeftHubs.forget(next)
@@ -2453,6 +2460,7 @@ final class FleetStore {
         if hubServerDeleted { StartAgain.forgetMacKey(hub: old) } else { StartAgain.LeftHubs.note(old) }
         // As on a Mac that was never given a hub.
         hub = (try? HubClient.address(HubClient.defaultAddress)) ?? old
+        restore.hubMoved(store: self)
         addressText = ""
         hubAnsweredBefore = false; startedWithFleet = false; firstRunHolds = false
         // The next first run opens on its welcome page, with none of an earlier one's work (`FirstRunWork`).
@@ -2545,6 +2553,7 @@ final class FleetStore {
             }
             noteAdded(fresh)
             state = fresh
+            restore.hubRead(fresh.db, at: requestedHub)     // a generation that moved is the landing of a restore
             chooseHome()
             follow(fresh)
             markRepliesSeen()

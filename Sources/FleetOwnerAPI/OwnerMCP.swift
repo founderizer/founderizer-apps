@@ -5,8 +5,9 @@ import Foundation
 /// reading; every other request gets its answer at once, also while a call runs, so a `ping` is answered then too. A
 /// notification (no id) gets no answer. This version sends no progress: a call waits only for the lock (one request
 /// of another command) and for a few requests to the hub of 60 seconds each, or of 15 minutes at most for the one file
-/// of `attach_file`, `read_attachment` and `take_backup` (`Transfer`), under the 30 minutes after which Claude Code ends
-/// a call with no progress; a call of a cloud tool runs a few commands of the cloud's program of 120 seconds each.
+/// of `attach_file` and `read_attachment` and 25 minutes for the copy of `take_backup` (`Transfer`), under the 30
+/// minutes after which Claude Code ends a call with no progress; a call of a cloud tool runs a few commands of the
+/// cloud's program of 120 seconds each.
 ///
 /// **A cancel** (MCP's `notifications/cancelled`, which a client sends at the owner's Esc or at its own time limit), as
 /// `owner_mcp.py`'s `Calls` takes it: a call that waits never starts, a call that runs starts no other command of a

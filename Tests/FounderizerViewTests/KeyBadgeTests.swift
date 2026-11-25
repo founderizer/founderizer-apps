@@ -28,7 +28,7 @@ import Testing
     }
 
     @Test func aPressOnAKeysBadgeOpensTheKeysCardOverTheChat() async throws {
-        let (seen, screen) = try await ViewHost.onMainLoop { () -> (card: Bool, chat: Bool) in
+        let (seen, screen) = try await ViewHost.onMainLoop { () -> (card: Bool, chat: Bool, renamed: Bool) in
             let now = Int(Date().timeIntervalSince1970)
             let store = ViewHost.store(try ViewHost.reading(
                 needs: [["id": 81, "title": "Make a new key for the logs", "raised": now - 300, "by": "manager",
@@ -36,18 +36,30 @@ import Testing
                          "answered": NSNull()]],
                 features: [SecretEntryView.feature, "secret_grants"]))
             store.destination = .agent("manager")
-            try Self.keepTheKey(in: store)
+            let need = try #require(store.state?.needs.first)
+            let oldName = "EXAMPLE_OLD_KEY"
+            try Self.keepTheKey(in: store, keys: [Self.keyA: oldName])
+            let hadOldName = !store.cardNames(for: need).find(in: oldName).isEmpty
             let window = ViewHost.window(store)
             defer { ViewHost.close(window) }
-            guard let badge = try ViewHost.middle(of: "EXAMPLE_API_KEY", in: window) else {
-                throw ViewHost.Missing(description: "the card does not show the key's name")
+            guard try ViewHost.middle(of: "expired", in: window) != nil else {
+                throw ViewHost.Missing(description: "the open card did not show its reason")
             }
-            ViewHost.atOnce(ViewHost.click(badge, in: window))
+            // The next reading renames the same key while the card is on screen.
+            try Self.keepTheKey(in: store)
+            let renamed = hadOldName && store.cardNames(for: need).find(in: oldName).isEmpty
+            guard ViewHost.turn(10, until: { !Self.presses(in: window.contentView!).isEmpty }),
+                  let badge = Self.presses(in: window.contentView!).first else {
+                throw ViewHost.Missing(description: "the new key name did not become a badge")
+            }
+            let frame = badge.convert(badge.bounds, to: nil)
+            ViewHost.atOnce(ViewHost.click(NSPoint(x: frame.midX, y: frame.midY), in: window))
             ViewHost.turn(10) { store.secretCard != nil }
             let card = store.secretCard != nil
             if card { store.secretCard = nil }
-            return (card, store.destination == .agent("manager"))
+            return (card, store.destination == .agent("manager"), renamed)
         }
+        #expect(seen.renamed, "the old badge goes away at the next reading")
         #expect(seen.card, "the key's own card opens")
         #expect(seen.chat, "over the chat, where he was")
         #expect(screen.stayedHis)

@@ -1330,6 +1330,9 @@ struct OwnerMacKeyTests {
         #expect(Self.bareSends(in: "try await session\n    .data(\n        for: request)") == 1)
         #expect(Self.bareSends(in: "x.data(for:request); y.upload( for: r, fromFile: f); z.bytes(from: u); s.dataTask(with: r)") == 4)
         #expect(Self.bareSends(in: "URLSession.shared.download(from: url)") == 1)
+        // A task whose request is signed where it starts is no bare send (the copy's own data task, CopyDownload).
+        #expect(Self.bareSends(in: "s.dataTask(with: OwnerMacKey.authorized(r))") == 0)
+        #expect(Self.bareSends(in: "s.dataTask(with: r); s.uploadTask(with: OwnerMacKey.authorized(r), from: d)") == 1)
         #expect(Self.bareSends(in: "session.hubData(for: request); t.upload(for: OwnerMacKey.authorized(request), fromFile: f)") == 0)
         // A read that takes its answer as a stream goes through `hubBytes`, also when it signs its request: its
         // callers compare the answer's address with their own request's, and only `hubBytes` gives it back so.
@@ -1371,7 +1374,7 @@ struct OwnerMacKeyTests {
     static func bareSends(in text: String, ownSend: Bool = false) -> Int {
         let sends = try! NSRegularExpression(
             pattern: (ownSend ? "(?<!self)" : "")
-                + #"\.\s*(data|upload|download)\s*\(\s*(for|from)\s*:(?!\s*OwnerMacKey\.authorized\()|\.\s*bytes\s*\(\s*(for|from)\s*:|\.\s*(data|upload|download|webSocket|stream)Task\s*\("#)
+                + #"\.\s*(data|upload|download)\s*\(\s*(for|from)\s*:(?!\s*OwnerMacKey\.authorized\()|\.\s*bytes\s*\(\s*(for|from)\s*:|\.\s*(data|upload|download|webSocket|stream)Task\s*\((?!\s*with\s*:\s*OwnerMacKey\.authorized\()"#)
         return sends.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
     }
 

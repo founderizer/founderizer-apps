@@ -169,11 +169,24 @@ extension FleetHealth {
     /// **A size of the hub's storage in a few words, with one decimal** (fix round 3b): "830 KB", "12,4 MB", "829,8 GB",
     /// in his Mac's own numbers, as an attachment's size is written. The system's formatter wrote gigabytes with two
     /// and dropped a last zero, so the size of a disk that writes logs changed its words between two reads.
-    public static func storageWords(_ bytes: Int64) -> String {
+    public static func storageWords(_ bytes: Int64) -> String { storageText(bytes, rounding: nil) }
+
+    /// The same words with the last digit rounded that way: a refusal for room writes what is free `.down` and what it
+    /// needs `.up`, as the hub does, because near the bound both rounded to the nearest read the same ("It needs 1.1 GB,
+    /// and 1.1 GB is free"; the validator's finding W1 of F14, 22 November 2026).
+    public static func storageWords(_ bytes: Int64, rounding: FloatingPointRoundingRule) -> String {
+        storageText(bytes, rounding: rounding)
+    }
+
+    private static func storageText(_ bytes: Int64, rounding: FloatingPointRoundingRule?) -> String {
         let units = ["KB", "MB", "GB", "TB", "PB"]
         guard bytes >= 1024 else { return "\(max(bytes, 0).formatted()) B" }
         var size = Double(bytes) / 1024, unit = 0
         while size >= 1024, unit < units.count - 1 { size /= 1024; unit += 1 }
+        if let rounding {           // the last digit rounded that way: `.down` for what is free, `.up` for a need
+            let scale: Double = unit == 0 ? 1 : 10
+            size = (size * scale).rounded(rounding) / scale
+        }
         let words = unit == 0 ? Int(size).formatted() : size.formatted(.number.precision(.fractionLength(1)))
         return "\(words) \(units[unit])"
     }

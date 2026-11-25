@@ -1310,6 +1310,8 @@ public sealed partial class OwnerStore : IAsyncDisposable
     /// <see cref="Hold"/>).</summary>
     private Task PressAsync(long need, int choice)
     {
+        // an option that only the Mac's press starts is no answer of this app (OwnerNeed.FirstOptionOnTheMac): dropped
+        if (State.Fleet?.Needs.FirstOrDefault(n => n.Id == need)?.OnlyOnTheMac(choice) == true) return Task.CompletedTask;
         if (State.CanWrite(clock.Now))
         {
             Update(x => x with { WaitingPresses = x.WaitingPresses.Remove(need) });
@@ -1440,7 +1442,7 @@ public sealed partial class OwnerStore : IAsyncDisposable
     private Task<string?> SendChoiceAsync(long need, int choice)
     {
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
-        if (item is null || choice < 0 || choice >= item.Choices.Count) return NoWrite;
+        if (item is null || choice < 0 || choice >= item.Choices.Count || item.OnlyOnTheMac(choice)) return NoWrite;
         return WriteAsync(item.Choices[choice], needId: need, recipient: item.By, choice: choice);
     }
 
@@ -1448,7 +1450,8 @@ public sealed partial class OwnerStore : IAsyncDisposable
     public Task<string?> TickAsync(long need, IReadOnlyCollection<int> choices)
     {
         var item = State.Fleet?.Needs.FirstOrDefault(n => n.Id == need);
-        if (item is null || !item.Combines || choices.Count == 0 || choices.Any(c => c < 0 || c >= item.Choices.Count))
+        if (item is null || !item.Combines || choices.Count == 0 || choices.Any(c => c < 0 || c >= item.Choices.Count) ||
+            choices.Any(c => item.OnlyOnTheMac(c)))
             return NoWrite;
         // The Mac's words of ticked options (FleetStore.answer(choices:)): their own words in order, joined by "; ".
         var words = string.Join("; ", choices.Order().Select(c => item.Choices[c]));
@@ -1594,6 +1597,10 @@ public sealed partial class OwnerStore : IAsyncDisposable
         if (needId is { } n && !fleet.Needs.Any(x => x.Id == n && x.IsOpen)) return null;
         // (Words that look like a key: their hold was decided at his press, SendMessageAsync, AnswerAsync, TalkAsync and
         // Hold, and is not asked again here with a later state.)
+        // the last wall of an option that only the Mac's press starts (OwnerNeed.FirstOptionOnTheMac), on every route
+        if (needId is { } item && fleet.Needs.FirstOrDefault(x => x.Id == item) is { } need &&
+            (choice is { } one && need.OnlyOnTheMac(one) || choices?.Any(c => need.OnlyOnTheMac(c)) == true))
+            return null;
         // his message under a card: a card that takes one now, whose answer is not on its way, within the hub's most
         if (command is { Kind: OwnerCommand.TalkKind } talk &&
             (fleet.Needs.FirstOrDefault(x => x.Id == talk.Target)?.Clarifies(fleet) != true ||

@@ -167,6 +167,30 @@ struct AgentSetupFlowTests {
         #expect(AgentSetupFlow.stopped(runtime: "codex", job: stopped, machine: leo) == "The install failed.")
     }
 
+    /// **The rule of an agent's first server** (`ServerList.takesFirst`), which the setup checks before its move and
+    /// again, with a new list, after a refusal for a team.json that changed: a server of the list, not the hub's own,
+    /// with no agent but this one. Bug it catches (two readers of the Windows setup, 24 November 2026): a retry that
+    /// puts the agent beside another agent that came onto a shared Linux server in the meantime, which the hub's own
+    /// rule lets that server take.
+    @Test func aServerTakesAnAgentFirstOnlyWhenNoOtherAgentIsOnIt() throws {
+        func entry(_ name: String, _ agents: [String], hub: Bool = false) -> [String: Any] {
+            ["name": name, "kind": "linux", "address": "100.96.100.130", "user": "fleet", "hub": hub, "joined": true,
+             "agents": agents, "available": agents.isEmpty, "why": agents.isEmpty ? [] : ["has_agent"],
+             "job": NSNull()]
+        }
+        let list = try JSONDecoder().decode(ServerList.self, from: json([
+            "db": "d", "time": 1,
+            "servers": [entry("free", []), entry("own", ["leo"]), entry("taken", ["scout"]),
+                        entry("both", ["leo", "scout"]), entry("hub", [], hub: true)],
+        ] as [String: Any]))
+        #expect(list.takesFirst("leo", on: "free"))
+        #expect(list.takesFirst("leo", on: "own"))
+        #expect(!list.takesFirst("leo", on: "taken"))
+        #expect(!list.takesFirst("leo", on: "both"))
+        #expect(!list.takesFirst("leo", on: "hub"))
+        #expect(!list.takesFirst("leo", on: "gone"))
+    }
+
     @Test func anotherAgentsJobIsNotThisOnes() throws {
         let server = try JSONDecoder().decode(ServerEntry.self, from: json([
             "name": "vps", "kind": "linux", "address": "100.96.100.130", "user": "fleet", "hub": false, "joined": true,

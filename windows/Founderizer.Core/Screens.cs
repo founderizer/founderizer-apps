@@ -464,6 +464,7 @@ public static partial class Screens
             WaitingPress = s.WaitingPresses.TryGetValue(need.Id, out var press) ? press : null,
             Pictures = ended ? ValueList<FileTile>.Empty : ValueList.Of(NeedPictures.Drawn(s, need).Select(p => Tile(s, p, now))),
             Ticked = s.Undone.GetValueOrDefault(need.Id)?.Ticks ?? ValueList<int>.Empty,
+            OnlyOnTheMac = kind != OptionsKind.QuickReplies && need.FirstOptionOnTheMac ? ValueList.Of([0]) : ValueList<int>.Empty,
         };
     }
 
@@ -1596,12 +1597,17 @@ public sealed record OptionsModel
     /// the card ticks them again, once for each Undo (<see cref="AnswerBoxModel.Given"/>).</summary>
     public ValueList<int> Ticked { get; init; } = ValueList<int>.Empty;
 
+    /// <summary>The options that only the Mac's press starts (<see cref="OwnerNeed.FirstOptionOnTheMac"/>): each stands
+    /// with its own words, grey and off, and a click on it does nothing.</summary>
+    public ValueList<int> OnlyOnTheMac { get; init; } = ValueList<int>.Empty;
+
     /// <summary>What a click on option <paramref name="index"/> does, on its picture or on its words: the one command of
     /// the window's options. A click on a picture opens it (<see cref="OptionClickKind.Open"/>) and answers nothing; a
     /// click on the words answers with that option's index, ticks it, or sends a quick reply's words, as before.</summary>
     public OptionClick Click(int index, bool onPicture)
     {
         if (index < 0 || index >= Labels.Count) return OptionClick.Nothing;
+        if (!onPicture && OnlyOnTheMac.Contains(index)) return OptionClick.Nothing;
         if (onPicture) return index < Pictures.Count ? new(OptionClickKind.Open, index, Picture: Pictures[index]) : OptionClick.Nothing;
         return Kind switch
         {

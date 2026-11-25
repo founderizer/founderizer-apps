@@ -18,6 +18,27 @@ public interface ISecretBox
     void Write(string name, byte[] value);
     /// <summary>Takes the value of a name away. A name that holds nothing is no error.</summary>
     void Remove(string name);
+
+    /// <summary>**Writes the value only where the name holds none**, in one step for every process that writes the box:
+    /// true when it wrote, false (and nothing written) when the name holds a value, also one that does not open. A box
+    /// that cannot do it in one step reads first and then writes.</summary>
+    bool WriteNew(string name, byte[] value)
+    {
+        try
+        {
+            if (Read(name) is { } held)
+            {
+                CryptographicOperations.ZeroMemory(held);
+                return false;
+            }
+        }
+        catch (Exception e) when (e is CryptographicException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+        Write(name, value);
+        return true;
+    }
 }
 
 /// <summary>The rule of the names of a box.</summary>
@@ -54,6 +75,11 @@ public sealed class MemorySecretBox : ISecretBox
     public void Remove(string name)
     {
         lock (gate) values.Remove(SecretNames.Checked(name));
+    }
+
+    public bool WriteNew(string name, byte[] value)
+    {
+        lock (gate) return values.TryAdd(SecretNames.Checked(name), (byte[])value.Clone());
     }
 }
 
@@ -102,6 +128,35 @@ public sealed class FileSecretBox(string folder, IKeyProtection protection) : IS
     public void Write(string name, byte[] value)
     {
         var path = PathOf(name);
+        Place(path, Seal(name, value), Temporary(path), overwrite: true);
+    }
+
+    /// <summary>A new file moved into the name's place with no overwrite, so that of two processes that write a new value
+    /// at once one wins and the other gets false; each writes its own temporary file.</summary>
+    public bool WriteNew(string name, byte[] value)
+    {
+        var path = PathOf(name);
+        if (File.Exists(path)) return false;
+        var temporary = Path.Combine(Path.GetDirectoryName(path)!,
+            "." + Path.GetFileName(path) + "." + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant() + ".new");
+        try
+        {
+            Place(path, Seal(name, value), temporary, overwrite: false);
+            return true;
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            return false;
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
+    /// <summary>The bytes that the protection seals: the box's mark, the name and the value.</summary>
+    private byte[] Seal(string name, byte[] value)
+    {
         var head = Head(name);
         var plain = new byte[head.Length + value.Length];
         byte[] stored;
@@ -115,8 +170,13 @@ public sealed class FileSecretBox(string folder, IKeyProtection protection) : IS
         {
             CryptographicOperations.ZeroMemory(plain);
         }
+        return stored;
+    }
+
+    /// <summary>The sealed bytes written whole to a temporary file, then moved to the name's place.</summary>
+    private static void Place(string path, byte[] stored, string temporary, bool overwrite)
+    {
         if (Path.GetDirectoryName(path) is { } parent) CreateFolder(parent);
-        var temporary = Temporary(path);
         var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
         if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         using (var stream = new FileStream(temporary, options))
@@ -124,7 +184,7 @@ public sealed class FileSecretBox(string folder, IKeyProtection protection) : IS
             stream.Write(stored);
             stream.Flush(flushToDisk: true);
         }
-        File.Move(temporary, path, overwrite: true);
+        File.Move(temporary, path, overwrite);
     }
 
     public void Remove(string name)

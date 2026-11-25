@@ -35,7 +35,7 @@ enum ChatBadgeText {
     @MainActor private static var rooms: [CGFloat: CGFloat] = [:]
 
     /// **A block's words with their names as badges**, as a card draws them (`CardBadgeText`) but for a copy of them,
-    /// which holds the words as the message holds them (`ChatWords.text`): the room of a name's icon is a kern on the
+    /// which holds the words as they show (`ChatWords.text`): the room of a name's icon is a kern on the
     /// character before it, and the end of its badge a kern on the character that `ChatWords.Badge.end` names. A link
     /// of the words' own is a part of its own (`LinkRun`, which `linkPresses` gives the hand); words with no name and no
     /// link are one plain text. `badges`: where the names stand, for their drawing (`chatBadges`).
@@ -46,7 +46,7 @@ enum ChatBadgeText {
         guard !words.badges.isEmpty else {
             return (links ? CardBadgeText.text(words.text, names: nil, size: size) : Text(words.text), [], 0)
         }
-        var text = words.text
+        var text = Self.drawn(words.text)
         let width = room(size), end = size * CardBadgeText.end
         func kern(at offset: Int, _ more: CGFloat) {
             let at = text.characters.index(text.startIndex, offsetBy: offset)
@@ -82,6 +82,30 @@ enum ChatBadgeText {
         var joined = LocalizedStringKey.StringInterpolation(literalCapacity: 0, interpolationCount: parts.count)
         for part in parts { joined.appendInterpolation(part) }
         return (Text(LocalizedStringKey(stringInterpolation: joined)), badges, lead)
+    }
+
+    /// **A block's words as its badges draw them**: the role beside an agent's name muted (`mutedRole`), and no part of
+    /// the name's link, as in a card's badge (`CardBadgeText`): one link for one name, for the keyboard and VoiceOver, and
+    /// the role apart from the name as his approved picture has it. (A run with its own colour keeps that colour with or
+    /// without a link: measured with ImageRenderer and in an NSHostingView, 24 November 2026.) The badge's press is its
+    /// own, by the badge's place (`chatBadgeLayer`), and the name keeps its link.
+    static func drawn(_ text: AttributedString) -> AttributedString {
+        var text = text.mutedRole()
+        for (mark, range) in text.runs[RoleNames.RolePart.self] where mark == true { text[range].link = nil }
+        return text
+    }
+}
+
+extension AttributedString {
+    /// **The role beside an agent's name in its badge is muted** (`RoleNames.RolePart`; the owner's answer of 23 November
+    /// 2026: "The name with the role in grey"), in the muted of the line of an agent's name (`AgentNameLine`): "Wren"
+    /// keeps the badge's colour, and " · Marketing" is grey. A card's words take it too (`CardBadgeText`).
+    func mutedRole() -> AttributedString {
+        var words = self
+        for (mark, range) in words.runs[RoleNames.RolePart.self] where mark == true {
+            words[range].swiftUI.foregroundColor = FleetStyle.muted
+        }
+        return words
     }
 }
 

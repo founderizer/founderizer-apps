@@ -1,5 +1,5 @@
 {
-  "about" : "Words that FleetCore makes: AgentNames.label and role with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC.",
+  "about" : "Words that FleetCore makes: AgentNames.label and role with the roles of team.json, String.capitalized, MessageBlock.parse and plain, ChatList.plain (the line under an agent's row), ChatList.time and activityAge in UTC with two locales, AgentNames.matches (Search) for each typed text, and the runs of MessageBlock.inline for each inline text, FleetTask.checkStatus, TaskWords.waitingFor and waiting, and the Tasks board's Ended lane of each period (HubState.activity, EndedTasks) in UTC, and a request's words where an agent is named by its whole role (RoleNames.words).",
   "ages" : [
     {
       "locale" : "en_GB",
@@ -2154,6 +2154,84 @@
 
       ],
       "words" : "fleet  manager"
+    }
+  ],
+  "named" : [
+    {
+      "text" : "Add the key, so Marketing and Customer Support can count visits.",
+      "words" : "Add the key, so Orla · Marketing and Wren · Customer Support can count visits."
+    },
+    {
+      "text" : "I asked Marketing.",
+      "words" : "I asked Orla · Marketing."
+    },
+    {
+      "text" : "I read Orla's plan and the plan of Quality assurance.",
+      "words" : "I read Orla's plan and the plan of Qa · Quality assurance."
+    },
+    {
+      "text" : "I read Marketing's plan.",
+      "words" : "I read Orla · Marketing's plan."
+    },
+    {
+      "text" : "I read Marketing’s plan.",
+      "words" : "I read Orla · Marketing’s plan."
+    },
+    {
+      "text" : "Marketing spend rose 10%.",
+      "words" : "Marketing spend rose 10%."
+    },
+    {
+      "text" : "Done. Marketing spend rose.",
+      "words" : "Done. Marketing spend rose."
+    },
+    {
+      "text" : "We asked\nMarketing spend rose.",
+      "words" : "We asked\nMarketing spend rose."
+    },
+    {
+      "text" : "Then ask the Fleet Manager first.",
+      "words" : "Then ask the Fleet Manager first."
+    },
+    {
+      "text" : "Then ask DevOps first.",
+      "words" : "Then ask DevOps first."
+    },
+    {
+      "text" : "Give Customer Support write",
+      "words" : "Give Wren · Customer Support write"
+    },
+    {
+      "text" : "Wren is our Customer Support now.",
+      "words" : "Wren is our Customer Support now."
+    },
+    {
+      "text" : "Wren is back. Please ask Customer Support.",
+      "words" : "Wren is back. Please ask Wren · Customer Support."
+    },
+    {
+      "text" : "Then ask the Café helper first.",
+      "words" : "Then ask the Bistro · Café helper first."
+    },
+    {
+      "text" : "I asked Café helper first.",
+      "words" : "I asked Bistro · Café helper first."
+    },
+    {
+      "text" : "I wrote to the Head of Marketing.",
+      "words" : "I wrote to the Head of Marketing."
+    },
+    {
+      "text" : "Increase our Marketing budget.",
+      "words" : "Increase our Marketing budget."
+    },
+    {
+      "text" : "Set the title to \"Customer Support\".",
+      "words" : "Set the title to \"Customer Support\"."
+    },
+    {
+      "text" : "I read Marketing' plan.",
+      "words" : "I read Marketing' plan."
     }
   ],
   "names" : [

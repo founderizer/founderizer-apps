@@ -14,8 +14,8 @@ public enum CopyEvery: String, CaseIterable, Sendable, Equatable {
 /// The owner, 20 October 2026, reading that his last copy was 26 hours old: "this should be done automatically
 /// via a setting, like a backup and probably on icloud?"
 ///
-/// The hub builds the copy in memory, serves it once and keeps nothing of its own, so this Mac is the only thing
-/// that can hold one — and this Mac runs only while he runs it. That is the whole difficulty of this type, and it
+/// The hub makes the copy in passing files beside its records, serves it once and keeps nothing of its own, so this
+/// Mac is the only thing that can hold one — and this Mac runs only while he runs it. That is the whole difficulty of this type, and it
 /// is why **"every day" can never mean a time of day**: nothing wakes this app up. It means *the first time
 /// Founderizer is open after a day has passed*, which is what `next(now:)` decides and what `says(now:)` tells
 /// him in those words, so no screen ever claims a copy that does not exist.
@@ -49,6 +49,16 @@ public struct CopySchedule: Equatable, Sendable {
 
     /// How long a failure holds the next attempt back.
     public static let afterAFailure: TimeInterval = 60 * 60
+
+    /// The warning of the row Keep a copy automatically (Settings › Backup): the failure of the copy that he took
+    /// himself with Save copy (`saved`, at `savedAt`) while no copy was kept after it, else the failure of the automatic
+    /// copy while the copies are on, else none. A copy of either kind that works after a failed Save copy ends that
+    /// warning: an automatic copy by its `keptAt`, and a Save copy that works, which clears its own failure at the
+    /// press (the second reader's N9, 22 November 2026).
+    public func warning(saved: String?, savedAt: Date?) -> String? {
+        if let saved, !(keptAt.flatMap { kept in savedAt.map { kept > $0 } } ?? false) { return saved }
+        return on ? failure : nil
+    }
 
     /// What this Mac should do about a copy now.
     public enum Next: Equatable, Sendable {
@@ -149,6 +159,112 @@ public enum CopyDefault {
     public static func waits(on: Bool, chosen: Bool, tried: Bool) -> Bool { on && !chosen && !tried }
 }
 
+/// **The time of the last automatic copy and the sizes of the copies, for each hub** (the validator's W1, 23 November
+/// 2026). One app meets more than one hub: Start again makes a new one, and a second fleet of the owner's has its own.
+/// With one value for the whole app, the second hub's first copy waited a day for the first hub's last one, and its page
+/// said the first hub's copies. The key is the hub's address, as the app keeps its other values of a hub
+/// (`StartAgain.forgetKept`). A fleet that moved to a new address has no value there until its next copy.
+///
+/// **The generation of the hub's records (`db`) is kept beside the time**, so the app forgets the values of a hub whose
+/// records are another fleet's now: a server that is rebuilt or restored at the same address (a restore moves the
+/// generation; `FleetCopyKeeper.tick`). Known limits: an app that never learned a `db` (no copy kept by this build) does
+/// not see such a change, and one fleet that the app reaches at two addresses has two entries, so it keeps two copies a
+/// day in one folder, and the prune's 7 is then less than 7 days.
+public enum CopyKept {
+    static let timesKey = "copyKeptAtByHub"
+    static let sizesKey = "copySizesByHub"
+    static let failuresKey = "copyFailureByHub"
+    static let databasesKey = "copyDatabaseByHub"
+
+    /// One address has one key: `http://host:8787` and `http://host:8787/` are the same hub (`HubClient.address` ends in a
+    /// slash, the address that a test writes does not).
+    public static func key(_ hub: String) -> String { hub.hasSuffix("/") ? String(hub.dropLast()) : hub }
+
+    /// The values of an older build (`copyKeptAt`, `copyFailure`) become those of the hub that the app knows, so that
+    /// the update does not take a copy at once and does not lose the words of a failure. Once, at the app's start; an
+    /// app with no such value has nothing to move.
+    public static func adoptOlder(in defaults: UserDefaults) {
+        guard let hub = defaults.string(forKey: "hubAddress") else { return }
+        if defaults.object(forKey: timesKey) == nil, let older = defaults.object(forKey: "copyKeptAt") as? Double {
+            defaults.set([key(hub): older], forKey: timesKey)
+        }
+        if defaults.object(forKey: failuresKey) == nil, let words = defaults.string(forKey: "copyFailure"),
+           let at = defaults.object(forKey: "copyFailedAt") as? Double {
+            defaults.set([key(hub): ["words": words, "at": at] as [String: Any]], forKey: failuresKey)
+        }
+    }
+
+    public static func keptAt(hub: String, in defaults: UserDefaults) -> Date? {
+        (defaults.dictionary(forKey: timesKey)?[key(hub)] as? Double).map { Date(timeIntervalSince1970: $0) }
+    }
+
+    /// The time of a copy of this hub, and the generation of its records. `copyKeptAt` goes too, for an older build that
+    /// reads it.
+    public static func keep(at: Date, hub: String, database: String, in defaults: UserDefaults) {
+        var all = defaults.dictionary(forKey: timesKey) ?? [:]
+        all[key(hub)] = at.timeIntervalSince1970
+        defaults.set(all, forKey: timesKey)
+        defaults.set(at.timeIntervalSince1970, forKey: "copyKeptAt")
+        var known = defaults.dictionary(forKey: databasesKey) ?? [:]
+        known[key(hub)] = database
+        defaults.set(known, forKey: databasesKey)
+    }
+
+    /// The generation that the last copy of this hub had, or nil when this build kept none.
+    public static func database(hub: String, in defaults: UserDefaults) -> String? {
+        defaults.dictionary(forKey: databasesKey)?[key(hub)] as? String
+    }
+
+    /// Everything that this Mac keeps of one hub's copies: the time, the sizes, the failure and the generation.
+    public static func forget(hub: String, in defaults: UserDefaults) {
+        for table in [timesKey, sizesKey, failuresKey, databasesKey] {
+            guard var all = defaults.dictionary(forKey: table), all[key(hub)] != nil else { continue }
+            all[key(hub)] = nil
+            defaults.set(all, forKey: table)
+        }
+    }
+
+    // A failure is a hub's own: another hub's page never says it (the validator's and the second reader's points of
+    // 23 November 2026).
+    public static func failure(hub: String, in defaults: UserDefaults) -> (words: String, at: Date)? {
+        guard let all = defaults.dictionary(forKey: failuresKey), let one = all[key(hub)] as? [String: Any],
+              let words = one["words"] as? String, let at = one["at"] as? Double else { return nil }
+        return (words, Date(timeIntervalSince1970: at))
+    }
+
+    public static func keep(failure words: String, at: Date, hub: String, in defaults: UserDefaults) {
+        var all = defaults.dictionary(forKey: failuresKey) ?? [:]
+        all[key(hub)] = ["words": words, "at": at.timeIntervalSince1970] as [String: Any]
+        defaults.set(all, forKey: failuresKey)
+    }
+
+    public static func clearFailure(hub: String, in defaults: UserDefaults) {
+        guard var all = defaults.dictionary(forKey: failuresKey), all[key(hub)] != nil else { return }
+        all[key(hub)] = nil
+        defaults.set(all, forKey: failuresKey)
+    }
+
+    /// The folder changed, so no failure about the old one holds for any hub.
+    public static func clearFailures(in defaults: UserDefaults) { defaults.removeObject(forKey: failuresKey) }
+
+    public static func sizes(hub: String, in defaults: UserDefaults) -> CopyFolder.Kept? {
+        guard let all = defaults.dictionary(forKey: sizesKey), let sizes = all[key(hub)] as? [NSNumber], sizes.count == 3
+        else { return nil }
+        return CopyFolder.Kept(newest: sizes[0].int64Value, count: sizes[1].intValue, total: sizes[2].int64Value)
+    }
+
+    public static func keep(sizes: CopyFolder.Kept?, hub: String, in defaults: UserDefaults) {
+        var all = defaults.dictionary(forKey: sizesKey) ?? [:]
+        all[key(hub)] = sizes.map { [NSNumber(value: $0.newest), NSNumber(value: $0.count), NSNumber(value: $0.total)] }
+        defaults.set(all, forKey: sizesKey)
+    }
+
+    /// The folder changed, so no size of a copy in the old one holds for any hub.
+    public static func forgetSizes(in defaults: UserDefaults) {
+        defaults.removeObject(forKey: sizesKey)
+    }
+}
+
 /// **Which copies go when a new one is kept.** It is the one thing in this feature that deletes a file of his, so
 /// it is a decision over names and dates and nothing else, proved on its own.
 ///
@@ -166,16 +282,17 @@ public enum CopyFolder {
     /// none (the app's own fallback name, when a hub sent no name): then the fallback names are the group, so that
     /// those copies have a limit too.
     public static func toDelete(_ files: [(name: String, at: Date)], keeping: Int, fleet: String?) -> [String] {
-        guard keeping >= 0 else { return [] }
-        let group: (String) -> Bool
-        if let fleet {
-            guard isAFleet(fleet) else { return [] }
-            group = { Self.fleet(of: $0) == fleet }
-        } else {
-            group = isAFallback
-        }
+        guard keeping >= 0, let group = group(fleet) else { return [] }
         let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }
         return ours.dropFirst(keeping).map(\.name)
+    }
+
+    /// Which names `toDelete` and `kept` count for a copy kept with this fleet's name: that fleet's copies, or the app's
+    /// own fallback names when the kept copy's name gave no fleet. nil for a name that is no fleet's.
+    private static func group(_ fleet: String?) -> ((String) -> Bool)? {
+        guard let fleet else { return isAFallback }
+        guard isAFleet(fleet) else { return nil }
+        return { Self.fleet(of: $0) == fleet }
     }
 
     /// The app's own name for a copy whose hub sent none (`FleetCopy.name(fromDisposition:)`): the prefix, the time
@@ -216,5 +333,43 @@ public enum CopyFolder {
     public static func real(_ name: String) -> String {
         guard name.hasPrefix("."), name.hasSuffix(".icloud") else { return name }
         return String(name.dropFirst().dropLast(".icloud".count))
+    }
+
+    /// The copies that stay in his folder after a prune, weighed.
+    public struct Kept: Equatable, Sendable {
+        /// The size of the newest copy.
+        public let newest: Int64
+        public let count: Int
+        /// The size of all of them together: what they take of his disk, or of his iCloud.
+        public let total: Int64
+
+        public init(newest: Int64, count: Int, total: Int64) {
+            self.newest = newest; self.count = count; self.total = total
+        }
+    }
+
+    /// **The copies that stay after a prune, weighed**, from the same list and the same group that `toDelete` reads, with
+    /// each file's size: the newest `keeping` copies of `fleet`, a placeholder of iCloud counted as the copy it stands
+    /// for. A copy of another fleet in the folder is none of them. nil when no copy stays.
+    public static func kept(_ files: [(name: String, at: Date, bytes: Int64)], keeping: Int, fleet: String?) -> Kept? {
+        guard let group = group(fleet) else { return nil }
+        let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }.prefix(max(keeping, 0))
+        guard let newest = ours.first else { return nil }
+        return Kept(newest: newest.bytes, count: ours.count, total: ours.reduce(0) { $0 + $1.bytes })
+    }
+
+    /// **The Where row of Settings › Backup: the folder, and the size of the copies in it** (the owner, 22 November 2026:
+    /// "just show the size so they can see it too", and his choice of this form on his tracker page):
+    /// "iCloud Drive › Founderizer · last copy 117.4 MB, 7 copies 822.1 MB", with one copy
+    /// "iCloud Drive › Founderizer · 1 copy, 117.4 MB", and the folder alone before the first copy that this Mac kept.
+    /// The count is the copies that stay, which the app's own number of kept copies bounds (`FleetCopyKeeper.keeps`).
+    /// nil with no folder.
+    public static func whereWords(folder: String?, kept: Kept?) -> String? {
+        guard let folder else { return nil }
+        guard let kept, kept.count > 0 else { return folder }
+        let sizes = kept.count == 1
+            ? String(l10n: "1 copy, \(FleetHealth.storageWords(kept.total))")
+            : String(l10n: "last copy \(FleetHealth.storageWords(kept.newest)), \(kept.count) copies \(FleetHealth.storageWords(kept.total))")
+        return folder + " · " + sizes
     }
 }

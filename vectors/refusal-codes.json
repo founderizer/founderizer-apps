@@ -101,7 +101,11 @@
     "link_file": "The hub cannot open the key file of the Founderizer app's links.",
     "link_key": "The hub cannot read the key of the Founderizer app's links now. Try again in a minute.",
     "link_most": "This fleet has {most} Founderizer rows with an invite or a device, the most that it can have. Remove one first.",
-    "link_from_tool": "An invite is made in Founderizer on the Mac, never by an AI session or a program."
+    "link_from_tool": "An invite is made in Founderizer on the Mac, never by an AI session or a program.",
+    "copy_no_room": "The hub's server has {free} free. A copy needs {need} there while the hub makes it.",
+    "copy_over_format": "This fleet's records are larger than 2 GB. Founderizer cannot put them into one copy yet.",
+    "restore_no_room": "The hub's server has {free} free. This copy needs at least {need} there.",
+    "update_waits_for_copy": "A copy of this fleet is on its way ({copy}), and an update waits until it ends. When it is done, press Update again."
   },
   "holes": {
     "profile_unread": [
@@ -249,6 +253,17 @@
     ],
     "link_most": [
       "most"
+    ],
+    "copy_no_room": [
+      "free",
+      "need"
+    ],
+    "restore_no_room": [
+      "free",
+      "need"
+    ],
+    "update_waits_for_copy": [
+      "copy"
     ]
   }
 }

@@ -395,9 +395,12 @@ final class OwnerWriteTests {
         let transport = Fixture.transport()
         let request = URLRequest(url: URL(string: hub.base + "/ui/backup")!)
         #expect(throws: TransportFailure.self) { try transport.send(request, transfer: .call) }
-        // An answer that is no success is words: at most 8 MiB, also on a file route.
+        // An answer that is no success is words: at most 8 MiB, also on a file route, and none goes into a copy's file.
         hub.full = { _ in (500, ["Content-Type": "text/plain"], Data(count: Transfer.call.limit + 1)) }
-        #expect(throws: TransportFailure.self) { try transport.send(request, transfer: .backup) }
+        let file = home.appendingPathComponent("copy.part").path
+        FileManager.default.createFile(atPath: file, contents: nil)
+        #expect(throws: TransportFailure.self) { try transport.send(request, transfer: .copy(into: file)) }
+        #expect((try? LocalFile.size(file)) == 0)
     }
 
     @Test func pathsAreWrittenAsPathlibWritesThem() {
@@ -426,9 +429,26 @@ final class OwnerWriteTests {
         let request = URLRequest(url: URL(string: hub.base + "/ui/backup")!)
         #expect(throws: TransportFailure.self) { try transport.send(request, transfer: .call) }
         #expect(try transport.send(request, transfer: .attachment).body.count == nine.count)
-        #expect(try transport.send(request, transfer: .backup).body.count == nine.count)
-        #expect(Transfer.attachment.limit == 25 * 1024 * 1024 && Transfer.backup.limit == 256 * 1024 * 1024)
+        #expect(Transfer.attachment.limit == 25 * 1024 * 1024)
         #expect(Transfer.fileWait == 60 && Transfer.fileTotal == 900)
+    }
+
+    /// **A copy of the fleet goes into its file as it arrives, with no limit of size** (`take_backup`; the owner, 22
+    /// November 2026: "why is there a backup limit? it shouldn't?"): a body above the limit of a file is written
+    /// whole into the file, the answer holds none of it, and the times are those of a copy, under one tool call's 30
+    /// minutes. The bug that it catches: the program reads the copy into memory again, under a limit that a fleet
+    /// passes.
+    @Test func aCopyGoesIntoItsFileWithNoLimitOfSize() throws {
+        let hub = StandInHub(features: [])
+        let body = Data((0..<(Transfer.attachment.limit + 1024 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        hub.full = { _ in (200, ["Content-Type": "application/zip"], body) }
+        let file = home.appendingPathComponent("copy.part").path
+        FileManager.default.createFile(atPath: file, contents: nil)
+        let request = URLRequest(url: URL(string: hub.base + "/ui/backup")!)
+        let sent = try Fixture.transport().send(request, transfer: .copy(into: file))
+        #expect(sent.status == 200 && sent.body.isEmpty)
+        #expect(try LocalFile.digest(file) == (body.count, OwnerTools.sha256(body)))
+        #expect(Transfer.copyWait == 600 && Transfer.copyTotal == 1500 && Transfer.copyTotal < 30 * 60)
     }
 }
 

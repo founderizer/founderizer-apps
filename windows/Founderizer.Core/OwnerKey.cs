@@ -38,7 +38,14 @@ public sealed class SoftwareOwnerKey : IOwnerKey, IDisposable
             var point = P256.Point(publicKey) ?? throw new CryptographicException("not a P-256 public key");
             parameters.Q = new ECPoint { X = point[1..33], Y = point[33..] };
         }
-        return new SoftwareOwnerKey(ECDsa.Create(parameters));
+        try
+        {
+            return new SoftwareOwnerKey(ECDsa.Create(parameters));
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(parameters.D);   // the key holds its own copy
+        }
     }
 
     public string PublicKey

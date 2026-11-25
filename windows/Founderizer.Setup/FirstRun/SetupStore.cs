@@ -1069,7 +1069,8 @@ public sealed class SetupStore
             var plan = InstallPlan.Join(target, line, code, authKey);
             log.Hide(plan.Redactions);
             Set(s => s with { ManagerInstall = s.ManagerInstall with { Planned = plan.Steps.Select(p => p.Id).ToList() } });
-            var checklist = await new Installer(plan, clock: settings.JoinClock).RunAsync(settings.Remote, progress =>
+            // The plan's key step sends the installer's key: the same key, or the server never reaches the private network.
+            var checklist = await new Installer(plan, authKey, clock: settings.JoinClock).RunAsync(settings.Remote, progress =>
             {
                 if (log.Note(progress.Step, Recorded(progress.State), settings.Now())) Keep();
                 Set(s => s with { ManagerInstall = s.ManagerInstall.Reported(progress, settings.Now()) });

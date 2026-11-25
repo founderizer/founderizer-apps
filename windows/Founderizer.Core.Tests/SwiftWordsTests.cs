@@ -53,7 +53,7 @@ public sealed class SwiftWordsTests
         var hold = Screens.Chat(s, "wren", Clock, Utc).Composer.KeyHold!;
         Assert.AreEqual(Literal("SecretRequestViews.swift", "This message holds what looks like a key."), hold.Words);
         Assert.AreEqual(Literal("SecretRequestViews.swift", "Keep it"), hold.KeepWords);
-        Assert.AreEqual(With(line, "\\(agent.agentLabel)", "Customer Support")[..hold.Line.Length], hold.Line);
+        Assert.AreEqual(With(line, "\\(agent.agentLabel)", s.Names.Label("wren"))[..hold.Line.Length], hold.Line);
     }
 
     [TestMethod]

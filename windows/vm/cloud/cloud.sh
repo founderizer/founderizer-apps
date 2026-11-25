@@ -25,7 +25,8 @@
 #                                 -Arch x64 publishes and signs it into C:\fz\out\x64 (C:\fz\out\x64-proofs with --proofs)
 #   cloud.sh <lane> test [--filter <expression>] [--no-sync]
 #                                 sync of the current folder's worktree, then dotnet test of Founderizer.Windows.Tests
-#                                 (a test that hangs for 30 minutes ends the run)
+#                                 (a test that hangs for 30 minutes ends the run), with FOUNDERIZER_TPM_TESTS from
+#                                 Azure's own fact of the machine (its vTPM, read at make and start): 1 or 0
 #   cloud.sh <lane> run <command>          as vm.sh run: one PowerShell command over SSH
 #   cloud.sh <lane> copy <from> <to>       as vm.sh copy; vm:<path> is the machine's side
 #   cloud.sh <lane> desktop <command>      as vm.sh desktop: in builder's desktop session
@@ -101,6 +102,16 @@ mac_address() {
 }
 
 note() { printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" >> "$machine_dir/record.log"; }
+
+# Whether the machine has a TPM, from Azure's own fact of it (its vTPM), read at each make and start: test gives it to
+# the owner key's tests as FOUNDERIZER_TPM_TESTS (1 or 0), so that the code under test never says it of itself.
+note_tpm() {
+    local vtpm
+    vtpm="$(az_sub vm show -g "$group" -n "$name" --query securityProfile.uefiSettings.vTpmEnabled -o tsv)" ||
+        die "Azure did not say whether the machine has a vTPM"
+    case "$vtpm" in true) printf '1\n' ;; *) printf '0\n' ;; esac > "$machine_dir/tpm"
+    note tpm "vTpmEnabled ${vtpm:-none}"
+}
 
 # The machine's own SSH, with its key from known_hosts only: a key that is not there is refused.
 machine_ssh() {
@@ -272,6 +283,7 @@ print("what-if: %d changes; status %s; nothing was made" % (len(changes), r.get(
     say "waiting for SSH with a full token and the desktop session of builder after the restart"
     wait_ready 900 || die "no SSH answer with a desktop session of builder in 15 minutes; the machine costs until: cloud.sh $lane stop"
     note ready "$name at $address: SSH by key, builder signed in"
+    note_tpm
 
     say "the SDK $sdk for x64"
     vm_ps 'New-Item -ItemType Directory -Force -Path C:\fz\setup | Out-Null'
@@ -381,6 +393,7 @@ command_of_lane() {
             [ -f "$machine_dir/address" ] || die "no machine of lane $lane on this Mac: cloud.sh $lane make"
             az_sub vm start -g "$group" -n "$name" -o none
             note started "$name"
+            note_tpm
             let_mac_in
             wait_ready 900 || die "no SSH answer with a desktop session of builder in 15 minutes after the start"
             say "lane $lane's machine runs: $address. It costs while it runs: cloud.sh $lane stop" ;;
@@ -414,7 +427,11 @@ Push-Location C:\\fz\\src\\windows\\Founderizer.Windows; 'dotnet ' + (& \"\$env:
 & C:\\fz\\src\\windows\\vm\\setup\\build-window.ps1 -Source C:\\fz\\src\\windows\\Founderizer.Windows -Arch x64$proofs"
             else
                 case "$filter" in *$'\n'*|*$'\r'*) die "a filter of one line" ;; esac
-                text="\$filter = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$(printf '%s' "$filter" | base64 | tr -d '\n')'))
+                local tpm
+                tpm="$(cat "$machine_dir/tpm" 2>/dev/null || true)"
+                [[ "$tpm" =~ ^[01]$ ]] || die "Azure's fact of the machine's TPM is not here: cloud.sh $lane start reads it"
+                text="\$env:FOUNDERIZER_TPM_TESTS = '$tpm'; 'FOUNDERIZER_TPM_TESTS=$tpm (from Azure: the vTPM of the machine)'
+\$filter = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$(printf '%s' "$filter" | base64 | tr -d '\n')'))
 $(cat <<'PS'
 'source: ' + (Get-Content C:\fz\src\SOURCE.txt)
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; $env:DOTNET_NOLOGO = '1'

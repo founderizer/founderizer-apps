@@ -14,8 +14,13 @@
 #   azure-pc-make.sh elevated <since>    the starts with a full administrator's token of the user builder since that
 #                                        time (UTC), from Windows' audit of process creation: the run's record. On this
 #                                        PC an administrator's rise has no question (run 1 on the ARM VM proves it)
-#   azure-pc-make.sh probe               the first step of the run on this PC: one elevated start on purpose (whoami.exe
-#                                        as an administrator, from the desktop session); the list must hold it
+#   azure-pc-make.sh probe               the first step of the run on this PC: one elevated start on purpose, asked
+#                                        from a limited process (probe.cmd, which explorer starts, asks for whoami.exe
+#                                        as an administrator); the list's line probe=<n> must have n of 1 or more.
+#                                        With --from-full-token, the self-test: probe.cmd from a task with builder's
+#                                        full token, whose whoami.exe is no rise. It exits 0 only when the list ran, a
+#                                        whoami.exe was refused as no rise and the list says probe=0; 1 in every other
+#                                        case. It never writes elevated-probe. Run it before the run's start time
 #
 # Options: --size Standard_D2s_v6 (an x64 size with Trusted launch; never an Arm "p" size), --location northeurope,
 # --group proof-a-pc-rg, --name proof-a-pc. FZ_AZURE_SUBSCRIPTION_NAME names the subscription that pays
@@ -36,6 +41,7 @@ name="proof-a-pc"
 command="${1:-}"
 [ $# -gt 0 ] && shift
 since=""
+from_full=""
 if [ "$command" = elevated ] && [ $# -gt 0 ]; then since="$1"; shift; fi
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -43,6 +49,7 @@ while [ $# -gt 0 ]; do
         --location) location="$2"; shift 2 ;;
         --group) group="$2"; shift 2 ;;
         --name) name="$2"; shift 2 ;;
+        --from-full-token) [ "$command" = probe ] || proof_die "--from-full-token is an option of probe"; from_full=yes; shift ;;
         *) proof_die "unknown option $1" ;;
     esac
 done
@@ -67,7 +74,8 @@ forward() {
     sed -n "s|^[^ ]* |[127.0.0.1]:$port |p" "$proof_files/azure/known_hosts" > "$dir/known_hosts"
     use_copy azure
     "$vm_sh" run 'New-Item -ItemType Directory -Force -Path C:\fz\proof-a, C:\fz\setup | Out-Null'
-    "$vm_sh" copy "$proof_here/focus.ps1" "$proof_here/watch.ps1" "$proof_here/team-read.ps1" "$proof_here/type-pipe.ps1" vm:C:/fz/proof-a/
+    "$vm_sh" copy "$proof_here/focus.ps1" "$proof_here/watch.ps1" "$proof_here/team-read.ps1" "$proof_here/type-pipe.ps1" \
+        "$proof_here/elevation.ps1" "$proof_here/probe.cmd" vm:C:/fz/proof-a/
     "$vm_sh" copy "$proof_here/../pictures/ui.ps1" "$proof_here/../pictures/pick.ps1" "$proof_here/../pictures/rest.ps1" \
         "$proof_here/../pictures/click.ps1" "$proof_here/../pictures/elements.ps1" "$proof_here/../pictures/window.ps1" vm:C:/fz/setup/
     proof_say "copy azure: $address through 127.0.0.1:$port; the tools take FZ_PROOF_A_COPY=azure"
@@ -75,16 +83,56 @@ forward() {
 if [ "$command" = forward ]; then forward; exit 0; fi
 if [ "$command" = probe ]; then
     # The list's own proof: a start that Windows elevates must be in it (its user is in the event's TargetUserName).
+    # The rise is asked from a limited process, as a person's program asks it: on this PC a task of vm.sh desktop has
+    # the full token, and a RunAs from it starts whoami.exe with that token at once, with no rise. So explorer starts
+    # probe.cmd with builder's limited token, and probe.cmd asks for the elevated whoami.exe.
     use_copy azure
-    since="$(date -u -v-1M +%Y-%m-%dT%H:%MZ)"
-    "$vm_sh" desktop 'Start-Process -FilePath "$env:WINDIR\System32\whoami.exe" -Verb RunAs -WindowStyle Hidden -Wait; "one elevated start of whoami.exe"'
-    sleep 3
-    list="$(run_ps azure-pc-elevated.ps1 "since=$since")" || proof_die "the list of elevated starts did not run"
+    "$vm_sh" copy "$proof_here/probe.cmd" vm:C:/fz/proof-a/
+    # The PC's own clock, to the second, just before the step: the list reads from there, so a rise from before it (a
+    # real probe two minutes before a self-test, say) is not in this one, and no clock of this Mac is compared with it.
+    pc_now() { "$vm_sh" run '(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")' 2>/dev/null | tr -d '\r' | tail -1 || true; }
+    since="$(pc_now)"
+    [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || proof_die "the PC's clock could not be read: $since"
+    if [ -n "$from_full" ]; then
+        # The self-test: the rig's own proof that the probe fails closed. probe.cmd from a task with builder's full
+        # token, whose RunAs gives whoami.exe that token at once, with no rise: the list must refuse it. It never writes
+        # elevated-probe, and its task goes at any end.
+        unregister_full() { "$vm_sh" run 'Unregister-ScheduledTask -TaskName "fz-probe-full-token" -Confirm:$false -ErrorAction SilentlyContinue' >/dev/null 2>&1; }
+        trap unregister_full EXIT
+        "$vm_sh" run '$a = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c C:\fz\proof-a\probe.cmd"; $p = New-ScheduledTaskPrincipal -UserId "builder" -LogonType Interactive -RunLevel Highest; Register-ScheduledTask -TaskName "fz-probe-full-token" -Action $a -Principal $p -Force | Out-Null; Start-ScheduledTask -TaskName "fz-probe-full-token"; "probe.cmd started by a task with the full token"'
+    else
+        "$vm_sh" desktop 'Start-Process explorer.exe -ArgumentList "C:\fz\proof-a\probe.cmd"; "probe.cmd started through explorer"'
+    fi
+    list=""
+    for _ in $(seq 1 12); do
+        sleep 5
+        list="$(run_ps azure-pc-elevated.ps1 "since=$since" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
+        if [ -n "$from_full" ]; then
+            # Once a whoami.exe is in the list, one more read: a rise in the self-test's time must be seen too.
+            printf '%s\n' "$list" | grep -q '^whoami.exe ' || continue
+            sleep 5
+            list="$(run_ps azure-pc-elevated.ps1 "since=$since" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
+            break
+        fi
+        printf '%s\n' "$list" | grep -qE '^probe=[1-9]' && break
+    done
     printf '%s\n' "$list"
-    printf '%s\n' "$list" | grep -qi 'whoami.exe' ||
+    if [ -n "$from_full" ]; then
+        printf '%s\n' "$list" | grep -qE '^probe=[1-9]' &&
+            proof_die "self-test: a rise counted in its time, so it proves nothing: run it again when nothing else starts"
+        printf '%s\n' "$list" | grep -qx 'probe=0' || proof_die "self-test: the list gave no line probe=0"
+        printf '%s\n' "$list" | grep -q '^whoami.exe .*refused: not a rise' ||
+            proof_die "self-test: no whoami.exe was refused as no rise (did the task run?)"
+        proof_say "self-test passed: the whoami.exe of a full token was refused and the list says probe=0; no elevated-probe was written"
+        exit 0
+    fi
+    printf '%s\n' "$list" | grep -qE '^probe=[1-9]' ||
         proof_die "the list does not hold the elevated start on purpose: on this PC the record of elevated starts proves nothing"
-    # elevated reads only on a PC whose probe passed; the time says from when the list holds the probe's own start.
-    date -u +%Y-%m-%dT%H:%M:%SZ > "$FZ_VM_DIR/elevated-probe"
+    # elevated reads only on a PC whose probe passed; the time (the PC's own clock) says from when the list holds the
+    # probe's own start.
+    probe_at="$(pc_now)"
+    [[ "$probe_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || proof_die "the PC's clock could not be read: $probe_at"
+    printf '%s\n' "$probe_at" > "$FZ_VM_DIR/elevated-probe"
     proof_say "the list holds the elevated start on purpose: the run's record of elevated starts can be read"
     exit 0
 fi
@@ -99,7 +147,7 @@ if [ "$command" = elevated ]; then
         proof_say "note: the probe's own elevated start of whoami.exe ($probe_at) is in this list, because it starts before it"
     mkdir -p "$proof_files/logs"
     out="$proof_files/logs/azure-elevated-$(date -u +%Y%m%dT%H%M%SZ).txt"
-    run_ps azure-pc-elevated.ps1 "since=$since" | tee "$out"
+    run_ps azure-pc-elevated.ps1 "since=$since" "probeAt=$probe_at" | tee "$out"
     proof_say "the record: $out"
     exit 0
 fi

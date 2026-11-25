@@ -22,13 +22,17 @@ public enum KeySwapPlan {
     public static let lockedFor: Double = 60
 
     /// **What the table wants on one server** (the design, section 3), or nil for a row that gets no step: a Mac, a row
-    /// that has not joined, the hub's own machine, a server that the owner removed on this Mac, a row whose key swap
-    /// fields this app cannot read (a hub before them), and a row whose name is not a server's name
+    /// that has not joined (also the hub's own machine with no server service of its own), a server that the owner
+    /// removed on this Mac, a row whose key swap fields this app cannot read (a hub before them), and a row whose name
+    /// is not a server's name
     /// (`Servers.machinePattern`, as the reading's own request needs): a step's record is kept under that name, so a
     /// hub that is broken into cannot make this Mac's record grow with names of its own. `central` is false when this
-    /// Mac has no list of the owner keys: then only the reading runs, and no switch (change 4).
+    /// Mac has no list of the owner keys: then only the reading runs, and no switch (change 4). **The hub's own server
+    /// with its server service** gets its steps as each joined server (the reads of the areas "Vault, keys and access",
+    /// MUST 2, and "Door and security", M2, of 23 November 2026): until then a hub that took agents later had no key
+    /// swap there, and its broker no owner key and no fleet, so it handed no login over (VAULT.md, limit 6).
     public static func wanted(_ row: KeySwapServer, central: Bool, removed: Set<String> = []) -> KeySwapWanted? {
-        guard row.kind == "linux", row.joined, !row.hub, !removed.contains(row.name), let word = row.word,
+        guard row.kind == "linux", row.joined, !removed.contains(row.name), let word = row.word,
               row.name.range(of: Servers.machinePattern, options: .regularExpression) != nil else { return nil }
         let swaps = word
         switch row.wish {
@@ -82,7 +86,7 @@ public enum KeySwapPlan {
                 || facts.resignDue.contains(row.name)
             guard needs, record?.tries?.isDue(at: facts.now) ?? true else { continue }
             let step = KeySwapStep(server: row.name, keys: central?.ownerKeys ?? [], fleet: central?.fleet,
-                                   then: switchTo)
+                                   then: switchTo, gate: row.hub)
             if let locked = record?.lockedAt, facts.now - locked < lockedFor {
                 later = later ?? step           // after the others' turn
                 continue
@@ -208,6 +212,10 @@ public struct KeySwapStep: Equatable, Sendable {
     public let keys: [String]
     public let fleet: String?
     public let then: KeySwapSwitch?
+    /// **The outgoing gate's step follows** (`KeySwapRemote.gate`): on the hub's own server, which a hub that took agents
+    /// later, or one from an install before 17 November 2026, got with no gate (the same reads). Its own root step
+    /// changes nothing where the gate is on; a joined server got its gate at its join.
+    public var gate = false
 }
 
 /// The owner keys and the fleet of the central vault, read as root on the hub's server from its own configuration,
@@ -570,6 +578,12 @@ public enum KeySwapRemote {
     public static func turn(_ to: KeySwapSwitch) -> String {
         "sha256sum \(program); python3 -I \(program) configure --swap \(to.rawValue)"
     }
+
+    /// The outgoing gate's own root step (VAULT.md, "The outgoing gate"), after the keys step on the hub's own server
+    /// (`KeySwapStep.gate`): `configure --egress on`, which keeps the key swap as it is, only where the gate's
+    /// configuration was never written. Root's `--egress off` keeps that file, so a gate that root took away stays away
+    /// (the validator's R3-S4), and a gate that is on needs no step.
+    public static let gate = "test -e /etc/founderizer-egress/egress.json || python3 -I \(program) configure --egress on"
 }
 
 /// **What one root step answered**: the checksum of the installed program when the step printed it, and the step's

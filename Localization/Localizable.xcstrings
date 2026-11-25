@@ -2946,6 +2946,16 @@
         }
       }
     },
+    "1 copy, %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 copia de %@"
+          }
+        }
+      }
+    },
     "1 core" : {
       "localizations" : {
         "es" : {
@@ -3326,16 +3336,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Código activo · %@"
-          }
-        }
-      }
-    },
-    "A copy is at most 256 MiB. Put this one back on the hub server itself." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Una copia no puede superar los 256 MiB. Restaura esta directamente en el servidor del hub."
           }
         }
       }
@@ -8510,6 +8510,16 @@
         }
       }
     },
+    "Fleet did not keep the sign-in of the MCP server %@: the server gave an access token that a session could fill with one of its own values, or that no header takes. A new sign-in gets the same kind of token, so the server's maker must change it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fleet no ha guardado el inicio de sesión del servidor MCP %@: el servidor dio un token de acceso que una sesión podría rellenar con uno de sus propios valores, o que ningún encabezado admite. Un nuevo inicio de sesión recibe el mismo tipo de token, así que quien creó el servidor debe cambiarlo"
+          }
+        }
+      }
+    },
     "Folds the request" : {
       "localizations" : {
         "es" : {
@@ -10616,6 +10626,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ya en la bóveda"
+          }
+        }
+      }
+    },
+    "In this file, every agent that reads it would have it. Saved as a secret, it goes straight into the vault, and agents get only its name." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si dejas la clave en este archivo, cualquier agente que lo lea tendrá acceso a ella. Si la guardas como secreto, irá directamente a la bóveda y los agentes solo recibirán su nombre."
           }
         }
       }
@@ -21710,6 +21730,16 @@
         }
       }
     },
+    "The fleet manager runs there, and it runs alone." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El gestor del equipo se ejecuta en ese servidor, y es el único que se ejecuta allí."
+          }
+        }
+      }
+    },
     "The fleet's manager never talks with other people." : {
       "localizations" : {
         "es" : {
@@ -24490,6 +24520,16 @@
         }
       }
     },
+    "This Mac has no room for the copy. It needs %@, and %@ is free." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este Mac no tiene espacio suficiente para la copia. Se necesitan %1$@ y solo quedan %2$@ libres."
+          }
+        }
+      }
+    },
     "This Mac holds no %@ token yet. Paste one first." : {
       "localizations" : {
         "es" : {
@@ -24940,6 +24980,16 @@
         }
       }
     },
+    "This file holds what looks like a key." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este archivo contiene lo que parece ser una clave."
+          }
+        }
+      }
+    },
     "This file is no longer in the list." : {
       "localizations" : {
         "es" : {
@@ -24966,16 +25016,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este equipo ya tiene %lld personas."
-          }
-        }
-      }
-    },
-    "This fleet is larger than 256 MiB. Take the copy on the hub server itself." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este equipo ocupa más de 256 MiB. Haz la copia en el propio servidor del hub."
           }
         }
       }
@@ -29380,6 +29420,16 @@
         }
       }
     },
+    "last copy %@, %lld copies %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "última copia de %1$@, %2$lld copias con un total de %3$@"
+          }
+        }
+      }
+    },
     "last reading" : {
       "localizations" : {
         "es" : {
@@ -29836,6 +29886,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El servidor MCP %@ no dio endpoints de OAuth: %@."
+          }
+        }
+      }
+    },
+    "the MCP server %@ has text in its url that a session would replace with one of its own values, so no session loads it and it takes no sign-in. Change or remove the server with the save_mcp_server tool of an AI session that has the Founderizer tools" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "el servidor MCP %@ tiene en su URL un texto que una sesión sustituiría por uno de sus propios valores, así que ninguna sesión lo carga y no admite inicio de sesión. Cambia o elimina el servidor con la herramienta save_mcp_server de una sesión de IA que tenga las herramientas de Founderizer"
           }
         }
       }

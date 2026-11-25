@@ -40,6 +40,7 @@
     <Compile Include="../Founderizer.Windows/Pages/EndedRows.cs" Link="Linked/EndedRows.cs" />
     <Compile Include="../Founderizer.Windows/Pages/ThreadRows.cs" Link="Linked/ThreadRows.cs" />
     <Compile Include="../Founderizer.Windows/Update/ReleaseChannel.cs" Link="Linked/ReleaseChannel.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/TpmOwnerKey.cs" Link="Linked/TpmOwnerKey.cs" />
     <EmbeddedResource Include="../Founderizer.Windows/Sample/SampleFleet.json" LogicalName="Founderizer.Windows.Sample.SampleFleet.json" />
     <!-- The Mac's string catalog: the window's own words of the first run are held to it (FirstRunWordsTests). -->
     <None Include="../../Localization/Localizable.xcstrings" Link="catalog/Localizable.xcstrings" CopyToOutputDirectory="PreserveNewest" />

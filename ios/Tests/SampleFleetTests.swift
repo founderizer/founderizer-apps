@@ -2390,8 +2390,9 @@ extension SampleFleetTests {
             try await Task.sleep(for: .milliseconds(300))
             let pressed = ContinuousClock.now
             #expect(window.press("need-option-8-1"))
-            try await Task.sleep(for: .milliseconds(400))
-            // folded, with Undo at the end of its line, and nothing saved or sent
+            // folded, with Undo at the end of its line, and nothing saved or sent (the wait follows the card's
+            // drawing, not a fixed time: a ship run under load draws it later)
+            try await Self.until { window.parts.keys.contains("need-undo-8") }
             let parts = Set(window.parts.keys)
             #expect(parts.contains("need-undo-8") && !parts.contains("need-option-8-1"))
             #expect(store.pending == nil && hub.answers.isEmpty)
@@ -2411,19 +2412,19 @@ extension SampleFleetTests {
             // behind another card's answer whose receipt the hub holds, his press on card 8 (open again: the hub's
             // reading still lists it) waits for the hub after its wait with Undo: its folded line keeps Undo and has
             // no check, and Undo opens the card, and nothing of it goes
+            try await Self.until { window.parts.keys.contains("need-option-8-2") }
             try #require(window.parts.keys.contains("need-option-8-2"), "card 8 did not open again")
             store.answerWait = .milliseconds(100)
             hub.holdsAnswers = true
             store.press(needID: 7, choice: 0)
             try await Self.until { hub.answers.count == 2 && store.sending }
             #expect(window.press("need-option-8-2"))
-            try await Self.until { store.waitingPresses[8] != nil }
-            try await Task.sleep(for: .milliseconds(300))
+            try await Self.until { store.waitingPresses[8] != nil && window.parts.keys.contains("need-undo-8") }
             let waiting = try #require(NeedCard.going(need, store: store, given: store.givenAnswer(to: 8)))
             #expect(waiting.waits && !waiting.checks, "a press that waits for the hub shows the check")
             #expect(window.parts.keys.contains("need-undo-8"), "a press that waits for the hub has no Undo")
             #expect(window.press("need-undo-8"))
-            try await Task.sleep(for: .milliseconds(500))
+            try await Self.until { store.waitingPresses[8] == nil && window.parts.keys.contains("need-option-8-2") }
             #expect(store.waitingPresses[8] == nil && window.parts.keys.contains("need-option-8-2"),
                     "Undo did not open the card")
             hub.release()

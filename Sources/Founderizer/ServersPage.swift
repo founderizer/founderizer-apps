@@ -514,8 +514,11 @@ struct ServerPage: View {
     /// mark or a value with its words behind it. The providers are not here: each agent's card names the one it runs
     /// on, from that agent's own reading.
     @ViewBuilder private func serverCard(_ server: ServerEntry) -> some View {
-        let reasons = server.available || server.why.contains("has_agent") ? nil
-            : server.why.map(Servers.reason).joined(separator: " ")
+        // The manager's own server takes no agent (manager_alone): its card says no more of that, and it offers no Add
+        // agent. Its other reasons stay, as on every server.
+        let shown = server.why.filter { $0 != "manager_alone" }
+        let reasons = server.available || server.why.contains("has_agent") || shown.isEmpty ? nil
+            : shown.map(Servers.reason).joined(separator: " ")
         FormSection("Server", footer: reasons) {
             if let reading = server.reading {
                 let fresh = store.isFresh && reading.isCurrent(at: time)

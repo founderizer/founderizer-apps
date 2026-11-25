@@ -57,6 +57,9 @@ app/windows/vm/cloud/cloud.sh 1 stop               # deallocate it when the work
 app/windows/vm/cloud/cloud.sh list                 # each lane's machine and its power state
 ```
 
+- `test` gives the tests `FOUNDERIZER_TPM_TESTS` from Azure's own fact of the machine (its vTPM, which `make` and
+  `start` read into `tpm` in the machine's folder): 1 with a vTPM, 0 without. The owner key's tests that depend on the
+  machine fail when it is not set, so a run elsewhere sets it by hand (the Mac's ARM64 VM has a TPM: 1).
 - `FZ_AZURE_TENANT` is set in the session's shell, never in a file of the repository. `make`, `start`, `stop`,
   `status` and `list` need it (they call Azure); the SSH verbs do not.
 - `sync` (and `build` and `test`, which sync first unless `--no-sync`) sends the files of the worktree of the current

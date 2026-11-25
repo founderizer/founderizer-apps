@@ -71,6 +71,20 @@ struct KnowledgePage: View {
     /// and the check mark after it send the text once (the hub refuses the same text again).
     @State private var taken: [String: String] = [:]
     @FocusState private var typing: Bool
+    /// He chose "Keep it" or "Paste it anyway" for the key in the box's text: no second question while it is in it.
+    @State private var keyAllowed = false
+    /// The height of the question of a key under the box, with the space over it: the box gives it up while the
+    /// question shows, so that the question stands on the page and not under its edge.
+    @State private var keyStrip: CGFloat = 0
+    /// The key-like parts of the hub's text of the open file (`KeyInText.all`), read once for each such text: the guard
+    /// asks only about a key that his edit adds to it.
+    @State private var savedKeys: (text: String, keys: Set<String>)?
+    /// **His unsent text of a file whose save a key held when the page went away, in memory only** (as his words under
+    /// a request's card, `NeedAnswerBox.clarifyDrafts`): the file gives it back in the box, with its question, when it
+    /// opens again, on the hub's text that it began from (`giveBack`). Never on the disk, because the key is in it. By
+    /// the hub, its generation and the file. It is given back once, and goes with its file, its hub's generation and a
+    /// change of the hub's text; a text that is saved, or that is the hub's text again, is never kept here.
+    @MainActor private static var heldDrafts: [String: KnowledgeEdit] = [:]
     private let client = KnowledgeClient()
     /// The most text that the reader shows: the Markdown view makes every block at once.
     private static let readerLimit = 100_000
@@ -468,7 +482,7 @@ struct KnowledgePage: View {
             }
         } actions: { readerActions(entry) }
         .scrollsAsAChat(selection, store: store)
-        .task(id: entry.path) { await read(entry) }
+        .task(id: entry.path) { if let fresh = await read(entry) { giveBack(entry, fresh: fresh) } }
         // Back, Esc or another page: what was typed and not saved yet goes with it.
         .onDisappear { leave() }
     }
@@ -482,7 +496,7 @@ struct KnowledgePage: View {
         } else if entry.isOwner, store.state?.ui_features?.contains(KnowledgeClient.editFeature) == true,
                   let file, file.path == entry.path, let edit = KnowledgeEdit(file: file) {
             IconButton(symbol: "pencil", words: String(l10n: "Edit \(entry.title)")) {
-                saveState = nil; problem = nil; taken[edit.path] = edit.saved; draft = edit
+                saveState = nil; problem = nil; keyAllowed = false; taken[edit.path] = edit.saved; draft = edit
             }
             .disabled(!canChange)
             .accessibilityIdentifier("knowledge-edit")
@@ -494,17 +508,31 @@ struct KnowledgePage: View {
     /// under the title, and the page stays a form page**, so the header keeps the cards' 680 points and the check mark
     /// stands where the pencil stood (the owner, 5 November 2026: the top buttons end where the cards end). A page that
     /// `fills` keeps the column's 1,100 for its header.
+    ///
+    /// **A key in it waits for his choice, as in the chat's composer** (`KeyHoldBanner`, under the box): one that he
+    /// pastes is not pasted, and words that add one to the file are not saved, until he saves it as a secret or keeps
+    /// it; a key-like part that the file held already asks nothing (`addedKey`). Until 22 November 2026 the box saved
+    /// such words into the file, which agents read.
     private func editor(_ entry: KnowledgeEntry) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let box = keyBox(entry.path)
+        return VStack(alignment: .leading, spacing: 10) {
             TextEditor(text: Binding(get: { draft?.text ?? "" }, set: { draft?.text = $0 }))
                 .font(FormMetrics.text)
                 // The words where they stood: the box's own 7 points of room come out of the row's inset.
                 .padding(.horizontal, FormMetrics.rowInset - 5 - 7).padding(.vertical, 10 - 7)
                 .frame(maxWidth: .infinity)
                 .fleetTextBox(focus: $typing)
-                .containerRelativeFrame(.vertical) { height, _ in max(Self.editorLeast, height - Self.editorRoom) }
+                .containerRelativeFrame(.vertical) { height, _ in max(Self.editorLeast, height - Self.editorRoom - keyStrip) }
                 .onAppear { typing = true }
                 .accessibilityLabel("Text of \(entry.title)").accessibilityIdentifier("knowledge-text")
+            if let held = store.heldKey, held.composer == box {
+                let reader = keyReader(entry)
+                KeyHoldBanner(hold: held.hold, agent: reader, holds: .file) { saveHeldKey(held, reader: reader) } goOn: {
+                    keepHeldKey(held)
+                }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { keyStrip = $0 + 10 }
+                    .onDisappear { keyStrip = 0 }
+            }
             if let problem {
                 Text(problem).font(FormMetrics.detail).foregroundStyle(.orange).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("knowledge-problem")
@@ -515,6 +543,103 @@ struct KnowledgePage: View {
         .frame(maxWidth: FormMetrics.formWidth, alignment: .topLeading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: typing) { was, now in if was && !now { save(draft) } }
+        .task(id: draft?.text) { await heldKeyCheck() }
+        .keyPasteGuard(store: store, composer: typing && SecretEntryView.isOffered(by: store) ? box : nil)
+        // The question of a key goes with the box, so no other box waits behind it.
+        .onDisappear { if store.heldKey?.composer == box { store.heldKey = nil } }
+    }
+
+    /// The box's name in the guard of a key (`HeldKey`): its file, in its hub's database.
+    private func keyBox(_ path: String) -> String { "knowledge:\(store.state?.db ?? ""):\(path)" }
+
+    /// The agent that gets the secret's name after "Save it as a secret" (the question names none: the file's words are
+    /// every reader's): the first agent of the fleet that reads the file, else the manager, who gives files to agents.
+    private func keyReader(_ entry: KnowledgeEntry) -> String {
+        let readers = Set(users(of: entry).map(\.agent))
+        return store.state?.agents.map(\.name).first { readers.contains($0) } ?? store.state?.managerName ?? "manager"
+    }
+
+    /// The edit against the text that the hub took last for its file (`taken`), as a save compares them.
+    private func hubText(_ edit: KnowledgeEdit) -> KnowledgeEdit {
+        var edit = edit
+        if let text = taken[edit.path] { edit.saved = text }
+        return edit
+    }
+
+    /// **The first part of the edit's text that looks like a key and that the hub's text does not hold**, and the hub's
+    /// text's key-like parts as read: a file that holds such a part already is not held for it, and an edit that
+    /// changes nothing reads nothing. Off the main actor, so a long file is read off the main thread while he types.
+    nonisolated private static func addedKey(_ edit: KnowledgeEdit, savedKeys: Set<String>?) -> (key: Substring?, savedKeys: Set<String>?) {
+        guard edit.isChanged else { return (nil, savedKeys) }
+        let keys = savedKeys ?? Set(KeyInText.all(in: edit.saved).map(String.init))
+        return (KeyInText.all(in: edit.text).first { !keys.contains(String($0)) }, keys)
+    }
+
+    /// The key that the box's text adds and that he did not choose to keep, or nil: one read of the text for each
+    /// action that saves, and one of the hub's text for each such text (`savedKeys`).
+    private func addedKey(_ edit: KnowledgeEdit) -> Substring? {
+        guard SecretEntryView.isOffered(by: store), !keyAllowed else { return nil }
+        let edit = hubText(edit)
+        let cached = savedKeys?.text == edit.saved ? savedKeys?.keys : nil
+        let reading = Self.addedKey(edit, savedKeys: cached)
+        if cached == nil, let keys = reading.savedKeys { savedKeys = (edit.saved, keys) }
+        return reading.key
+    }
+
+    /// The guard before a save (`addedKey`), with its question under the box while the box shows that text.
+    private func keyHeld(_ edit: KnowledgeEdit) -> Bool {
+        guard addedKey(edit) != nil else { return false }
+        if draft?.path == edit.path { store.heldKey = HeldKey(composer: keyBox(edit.path), hold: .text) }
+        return true
+    }
+
+    /// Words that add a key, however they came in, get the question once; words that add none end it. The box's words
+    /// are read after a pause in his typing and off the main thread, unlike a composer's: a file holds up to a
+    /// megabyte, and the guard reads one in about 0.2 s, which at each key would hold his typing.
+    private func heldKeyCheck() async {
+        guard SecretEntryView.isOffered(by: store), let edit = draft.map(hubText) else { return }
+        do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+        let cached = savedKeys?.text == edit.saved ? savedKeys?.keys : nil
+        let reading = await Task.detached(priority: .userInitiated) { Self.addedKey(edit, savedKeys: cached) }.value
+        if cached == nil, let keys = reading.savedKeys { savedKeys = (edit.saved, keys) }
+        guard !Task.isCancelled, draft?.path == edit.path, draft?.text == edit.text else { return }
+        let mine = HeldKey(composer: keyBox(edit.path), hold: .text)
+        if reading.key == nil {
+            keyAllowed = false
+            if store.heldKey == mine { store.heldKey = nil }
+        } else if !keyAllowed && store.heldKey == nil {
+            store.heldKey = mine
+        }
+    }
+
+    /// "Save it as a secret": the key goes into the secure form over the page and out of the box's text, and the agent
+    /// of `keyReader` gets the secret's name in its chat where he has one. Only the key leaves the text: the
+    /// file's other lines and spaces stay as they are, and so does a key-like part that the file held already. A paste
+    /// reads the clipboard again now.
+    private func saveHeldKey(_ held: HeldKey, reader: String) {
+        var cut: String?
+        if held.hold == .paste {
+            cut = KeyCut.onClipboard()
+        } else if let edit = draft, let key = addedKey(edit) {
+            var text = edit.text
+            text.removeSubrange(key.startIndex..<key.endIndex)
+            cut = String(key); draft?.text = text
+        }
+        store.heldKey = nil
+        store.secretForm = SecretPreset(tell: store.canChat(with: reader) ? reader : nil, key: cut, kept: SecretValueKept())
+    }
+
+    /// "Paste it anyway": the paste at the cursor, as Cmd+V would have put it (at the end of the text where the box no
+    /// longer has the keys). "Keep it": the box's text is saved now, as the save that the question held.
+    private func keepHeldKey(_ held: HeldKey) {
+        store.heldKey = nil
+        keyAllowed = true
+        if held.hold == .paste {
+            guard let pasted = NSPasteboard.general.string(forType: .string) else { return }
+            if !NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) { draft?.text += pasted }
+        } else if let edit = draft {
+            queue(edit)
+        }
     }
 
     /// The page's height that is not the box's: its top and bottom margins, the header and the space under it.
@@ -522,23 +647,60 @@ struct KnowledgePage: View {
     /// The least height of the box, in the smallest window.
     private static let editorLeast: CGFloat = 240
 
-    /// The check mark: the box's text goes to the hub, and the page shows the formatted text again.
+    /// The check mark: the box's text goes to the hub, and the page shows the formatted text again. Words that add a
+    /// key that he did not keep keep the box open, with the question under it. One read of the words.
     private func done() {
-        let edit = draft
+        guard let edit = draft, !keyHeld(edit) else { return }
         draft = nil; typing = false
-        save(edit)
+        queue(edit)
     }
 
-    /// The page goes away: what the box holds goes to the hub, and the next file opens with its formatted text.
+    /// The page goes away: what the box holds goes to the hub, and the next file opens with its formatted text. Words
+    /// that add a key that he did not keep are not saved: they wait in memory, and the file gives them back with the
+    /// question when it opens again (`heldDrafts`).
     private func leave() {
         guard let edit = draft else { return }
         draft = nil
-        save(edit)
+        if addedKey(edit) != nil { Self.heldDrafts[heldDraftKey(edit.path)] = edit; return }
+        queue(edit)
     }
 
-    /// One save of the box's text, after the save before it. Nothing goes when the text is what the hub has.
+    /// The file's name among the texts that a key held (`heldDrafts`): its hub, its generation and its path.
+    private func heldDraftKey(_ path: String) -> String { "\(store.hub.absoluteString) \(store.state?.db ?? "") \(path)" }
+
+    /// **The file opens in the box with his text that a key held when the page went away**, and the box asks again:
+    /// only after the hub's text has been read again, and only while that text is the one that his edit began from.
+    /// A text that the hub has changed meanwhile (an agent's edit, another save, a file that went and came back) drops
+    /// it, because its save sends the whole text and would put his old one over the newer one; so does a hub's text that
+    /// is his text already. While the hub gives no text, it waits.
+    private func giveBack(_ entry: KnowledgeEntry, fresh file: KnowledgeFile) {
+        dropGoneDrafts()
+        let key = heldDraftKey(entry.path)
+        guard draft == nil, let kept = Self.heldDrafts[key] else { return }
+        Self.heldDrafts[key] = nil
+        guard let fresh = KnowledgeEdit(file: file), fresh.path == kept.path, fresh.saved == kept.saved,
+              kept.isChanged else { return }
+        saveState = nil; problem = nil; keyAllowed = false; draft = kept
+    }
+
+    /// The texts that a key held and that no file will give back go: those of another hub or another generation of
+    /// it, and those whose file the hub lists no more, so no key stays in memory longer than it can be used.
+    private func dropGoneDrafts() {
+        guard store.state != nil else { return }
+        let here = heldDraftKey(""), listed = store.state?.knowledge.map { Set($0.map { heldDraftKey($0.path) }) }
+        let keeps = { (key: String) in key.hasPrefix(here) && listed?.contains(key) != false }
+        if Self.heldDrafts.keys.contains(where: { !keeps($0) }) { Self.heldDrafts = Self.heldDrafts.filter { keeps($0.key) } }
+    }
+
+    /// One save of the box's text, after the save before it. Nothing goes when the text is what the hub has, or while
+    /// it adds a key that he did not choose to keep (`keyHeld`).
     private func save(_ edit: KnowledgeEdit?) {
-        guard let edit else { return }
+        guard let edit, !keyHeld(edit) else { return }
+        queue(edit)
+    }
+
+    /// The save of words that the guard has read, after the save before it.
+    private func queue(_ edit: KnowledgeEdit) {
         let before = sending
         sending = Task {
             await before?.value
@@ -548,8 +710,7 @@ struct KnowledgePage: View {
 
     private func send(_ edit: KnowledgeEdit) async {
         // The text the hub took last for this file, which a save before this one may have moved on.
-        var edit = edit
-        if let text = taken[edit.path] { edit.saved = text }
+        let edit = hubText(edit)
         if edit.sent.isEmpty {
             saveState = .failed(KnowledgeEdit.empty); problem = KnowledgeEdit.empty
             if draft?.path != edit.path { message = (KnowledgeEdit.empty, true) }
@@ -583,19 +744,22 @@ struct KnowledgePage: View {
         }
     }
 
-    private func read(_ entry: KnowledgeEntry) async {
+    /// The file's text from the hub, kept for the reader; it gives back the text that it read, or nil when it read none.
+    @discardableResult private func read(_ entry: KnowledgeEntry) async -> KnowledgeFile? {
         fileError = nil
-        guard let db = store.state?.db else { return }
+        guard let db = store.state?.db else { return nil }
         let start = ContinuousClock.now, first = file?.path != entry.path
         do {
             let read = try await client.file(hub: store.hub, database: db, path: entry.path)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             if first { await store.settle(since: start) }
             file = read
+            return read
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             if first { await store.settle(since: start) }
             cause = Self.cause(error); fileError = Self.reason(error)
+            return nil
         }
     }
 
@@ -728,6 +892,7 @@ struct KnowledgePage: View {
         if agent == nil, let path = store.knowledgeRead { store.knowledgeRead = nil; opened = path }
         let start = ContinuousClock.now
         while !Task.isCancelled {
+            dropGoneDrafts()
             let current = await readProfiles(since: start)
             do { try await store.nap(current ? 15 : 3) } catch { return }
         }

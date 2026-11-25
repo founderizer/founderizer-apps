@@ -22,8 +22,8 @@
 # until the field is empty or gone, the mark "value-on-screen" in the copy's folder stops vm.sh picture and vm.sh
 # screen. On a copy with no QEMU keyboard (the x64 PC at Azure,
 # azure-pc-make.sh forward), the value goes on SSH's standard input to a named pipe of the desktop session, whose typer
-# (type-pipe.ps1) types it with Windows' own key events into that field only, stops when the window in front changes,
-# and makes the same checks before Enter; the same characters.
+# (type-pipe.ps1) types it with Windows' own key events into that field, stops when the window in front changes (one
+# key can still reach that window first: it fails closed), and makes the same checks before Enter; the same characters.
 set -uo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 umask 077

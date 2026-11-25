@@ -169,20 +169,25 @@ public enum TransportFailure: Error, Sendable {
 }
 
 /// **How much one request reads, and how long it waits.** An owner call reads at most 8 MiB (`owner_mcp.py`
-/// READ_MAX; the whole snapshot 64 MiB, `state`) and waits 30 seconds for each part and 60 for the whole. A file (`attach_file`, `read_attachment`,
-/// `take_backup`) reads up to the hub's own limit of that file and waits 60 seconds for each part and 900 for the whole,
-/// as the Mac app reads a copy (`FleetCopy.takeCopy`) and as `owner_mcp.py` does since 14 November 2026 (FILE_WAIT,
-/// FILE_TOTAL).
+/// READ_MAX; the whole snapshot 64 MiB, `state`) and waits 30 seconds for each part and 60 for the whole. A file
+/// (`attach_file`, `read_attachment`) reads up to the hub's own limit of that file and waits 60 seconds for each part and
+/// 900 for the whole, as `owner_mcp.py` does since 14 November 2026 (FILE_WAIT, FILE_TOTAL). A copy of the fleet
+/// (`take_backup`) goes into a file as it arrives, with no limit of size, and waits 600 seconds for a part and 1,500 for
+/// the whole (COPY_WAIT, COPY_TOTAL, since 22 November 2026).
 public struct Transfer: Sendable, Equatable {
     public let limit: Int
     public let file: Bool
     /// The seconds of a request that is no file when they are not the transport's own (a table tool's `wait`), or nil.
     public var wait: TimeInterval?
+    /// The path of the file that the body of a success goes into as it arrives (`copy(into:)`), or nil: then the body
+    /// is the answer's. A body that is no success is words, and the answer's, as for every request.
+    public var into: String?
 
-    public init(limit: Int, file: Bool, wait: TimeInterval? = nil) {
+    public init(limit: Int, file: Bool, wait: TimeInterval? = nil, into: String? = nil) {
         self.limit = limit
         self.file = file
         self.wait = wait
+        self.into = into
     }
 
     public static let call = Transfer(limit: 8 * 1024 * 1024, file: false)
@@ -205,11 +210,16 @@ public struct Transfer: Sendable, Equatable {
     static let stateHead = stateRoute + "?head=1&tasks=window"
     /// `hub.py` ATTACH_MAX: the largest file that the owner attaches.
     public static let attachment = Transfer(limit: 25 * 1024 * 1024, file: true)
-    /// `hub.py` BACKUP_MAX: the largest copy that the hub serves.
-    public static let backup = Transfer(limit: 256 * 1024 * 1024, file: true)
+    /// A copy of the fleet into the file at `path` (`take_backup`), with no limit of size: the hub's copy has none
+    /// (the owner, 22 November 2026: "why is there a backup limit? it shouldn't?").
+    public static func copy(into path: String) -> Transfer { Transfer(limit: .max, file: true, into: path) }
 
     public static let fileWait: TimeInterval = 60
     public static let fileTotal: TimeInterval = 900
+    /// The times of a copy (`owner_mcp.py` COPY_WAIT, COPY_TOTAL): the hub makes the copy before its first byte, and
+    /// the whole stays under the 30 minutes of one tool call.
+    public static let copyWait: TimeInterval = 600
+    public static let copyTotal: TimeInterval = 1500
 }
 
 /// The way to the hub: `URLSession` for the program, a stand-in for a test.
@@ -231,6 +241,8 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
     private let session: URLSession
     /// The session of the file tools: the same rules, with the times of a file (`Transfer`).
     private let fileSession: URLSession
+    /// The session of a copy of the fleet, with the times of a copy (`Transfer.copy(into:)`).
+    private let copySession: URLSession
     /// A copy of the configuration, for the session of a request with a wait of its own (`Transfer.wait`), which is made
     /// at its first request and kept: the same rules, with that wait and twice it in all.
     private let template: URLSessionConfiguration
@@ -253,21 +265,25 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
     /// `configuration`: a test gives one whose `protocolClasses` hold its stand-in hub, so that no port is opened.
     public init(configuration: URLSessionConfiguration = .ephemeral, timeout: TimeInterval = 30) {
         let files = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
+        let copies = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
         template = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
         session = Self.made(configuration, wait: timeout, total: timeout * 2)
         fileSession = Self.made(files, wait: Transfer.fileWait, total: Transfer.fileTotal)
+        copySession = Self.made(copies, wait: Transfer.copyWait, total: Transfer.copyTotal)
         super.init()
     }
 
     deinit {
         session.finishTasksAndInvalidate()
         fileSession.finishTasksAndInvalidate()
+        copySession.finishTasksAndInvalidate()
         for one in waited.values { one.finishTasksAndInvalidate() }
     }
 
-    /// The session of one request: the file tools', one with the request's own wait, or the transport's own.
+    /// The session of one request: a copy's, the file tools', one with the request's own wait, or the transport's own.
     private func chosenSession(_ transfer: Transfer) -> URLSession {
-        transfer.file ? fileSession : transfer.wait.map { session(waiting: $0) } ?? session
+        transfer.into != nil ? copySession
+            : transfer.file ? fileSession : transfer.wait.map { session(waiting: $0) } ?? session
     }
 
     /// The limit of the session that a request of `transfer` takes, without data (a test reads it).
@@ -292,8 +308,13 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
         var response: HTTPURLResponse?
         var error: Error?
         var tooLarge = false
+        /// `Transfer.into`, and the file that a success's body goes into, open while it arrives.
+        let into: String?
+        var file: FileHandle?
+        /// The system's words for a write into that file that failed: the request ends there.
+        var unwritten: String?
         let done = DispatchSemaphore(value: 0)
-        init(limit: Int) { self.limit = limit }
+        init(limit: Int, into: String? = nil) { self.limit = limit; self.into = into }
     }
 
     /// **The answer stops at its limit while it arrives**: a `Content-Length` above the limit ends the request at its
@@ -327,6 +348,14 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
             state.response = http
             if let status = http?.statusCode, !(200..<300).contains(status) {
                 state.limit = min(state.limit, Transfer.call.limit)
+            } else if let path = state.into {
+                // A success's body goes into the file as it arrives, with no limit of size (a copy of the fleet).
+                guard let file = FileHandle(forWritingAtPath: path) else {
+                    state.unwritten = String(cString: strerror(errno))
+                    return completionHandler(.cancel)
+                }
+                state.file = file
+                return completionHandler(.allow)
             }
             if response.expectedContentLength > Int64(state.limit) {
                 state.tooLarge = true
@@ -336,7 +365,14 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
         }
 
         func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-            guard let state = state(dataTask), !state.tooLarge else { return }
+            guard let state = state(dataTask), !state.tooLarge, state.unwritten == nil else { return }
+            if let file = state.file {
+                do { try file.write(contentsOf: data) } catch {
+                    state.unwritten = (error as NSError).localizedDescription
+                    dataTask.cancel()
+                }
+                return
+            }
             state.data.append(data)
             if state.data.count > state.limit {
                 state.tooLarge = true
@@ -350,6 +386,7 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
             lock.lock()
             arriving[task.taskIdentifier] = nil
             lock.unlock()
+            try? state.file?.close()
             state.error = error
             state.done.signal()
         }
@@ -372,11 +409,12 @@ public final class SessionTransport: NSObject, HubTransport, @unchecked Sendable
     public func send(_ request: URLRequest, transfer: Transfer) throws(TransportFailure)
         -> (status: Int, headers: [String: String], body: Data) {
         let chosen = chosenSession(transfer)
-        let state = Arriving(limit: transfer.limit)
+        let state = Arriving(limit: transfer.limit, into: transfer.into)
         let task = chosen.dataTask(with: request)
         (chosen.delegate as? Loader)?.add(task, state)
         task.resume()
         state.done.wait()
+        if let unwritten = state.unwritten { throw .lost("the file on this Mac could not be written: \(unwritten)") }
         if state.tooLarge { throw .tooLarge }
         if let error = state.error { throw Self.failure(error) }
         guard let http = state.response else { throw .lost("no HTTP answer") }

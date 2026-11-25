@@ -470,7 +470,7 @@ struct HealthView: View {
 
 /// Taking the owner's own copy of his fleet, from the one button that does it.
 ///
-/// The hub builds the copy in memory and writes nothing on its own machine, so a copy exists only once this Mac
+/// The hub makes the copy in passing files and keeps none on its own machine, so a copy exists only once this Mac
 /// has it and has said so (`POST /ui/backups/confirm`). The order here is therefore the only honest one: take it,
 /// check that what arrived is what the hub sent, let the owner say where it goes, put it there, and **only then**
 /// tell the hub. A copy he did not keep never clears the warning.
@@ -479,18 +479,22 @@ final class FleetCopyModel {
     private(set) var busy = false
     private(set) var said: String?
     private(set) var failure: String?
+    /// When `failure` came: a copy kept after it ends its warning (`CopySchedule.warning`).
+    private(set) var failedAt: Date?
     /// The system's own words for a copy the hub did not record: behind the line, never in it.
     private(set) var cause: String?
 
     func save(store: FleetStore) async {
         guard !busy, let database = store.state?.db else { return }
-        busy = true; said = nil; failure = nil; cause = nil
+        // The hub of this copy, read once (as `FleetCopyKeeper.keepOne`): another hub met meanwhile is not its hub.
+        let hub = store.hub
+        busy = true; said = nil; failure = nil; failedAt = nil; cause = nil
         defer { busy = false }
         let client = HubClient()
         var taken: FleetCopy?
         defer { taken.map { try? FileManager.default.removeItem(at: $0.file.deletingLastPathComponent()) } }
         do {
-            let copy = try await client.takeCopy(hub: store.hub, database: database)
+            let copy = try await client.takeCopy(hub: hub, database: database)
             taken = copy
             guard let kept = Self.place(copy) else {
                 said = String(l10n: "Nothing was saved, so your fleet still has no confirmed copy.")
@@ -499,16 +503,18 @@ final class FleetCopyModel {
             // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`).
             try FileManager.default.moveItem(at: OwnerAccess.withKey(copy.file) ?? copy.file, to: kept)
             do {
-                try await client.confirmCopy(hub: store.hub, database: database, client: store.installation,
+                try await client.confirmCopy(hub: hub, database: database, client: store.installation,
                                              sha256: copy.sha256, bytes: copy.bytes)
                 said = String(l10n: "Saved to \(kept.path) and confirmed with your hub.")
             } catch {
                 // The copy is on his disk, which is the half that matters; only the hub's record is missing.
                 failure = String(l10n: "Saved to \(kept.path), but your hub did not record it. Press \(FleetHealth.Warning.Act.saveCopy.label) again.")
+                failedAt = Date()
                 cause = HubError.said(error) ?? (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         } catch {
             failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            failedAt = Date()
         }
     }
 

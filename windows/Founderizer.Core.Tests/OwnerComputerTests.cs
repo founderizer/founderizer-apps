@@ -398,6 +398,49 @@ public sealed class OwnerComputerTests
         Assert.IsNull(OwnerPcKey.Waiting(box, hub));
     }
 
+    /// <summary>**A new value goes only where the name holds none** (WriteNew, the owner key's first make, U4): a name that
+    /// holds a value, also one that does not open, keeps it, and WriteNew says false. The bug: WriteNew writes over the
+    /// value, so of two starts that make the owner key at once the box keeps one key and the vault gets the other's public
+    /// half.</summary>
+    [TestMethod]
+    public void A_new_value_goes_only_where_the_name_holds_none()
+    {
+        var folder = Folder();
+        foreach (ISecretBox box in new ISecretBox[] { new FileSecretBox(Path.Combine(folder, "keys"), new TestProtection()), new MemorySecretBox() })
+        {
+            Assert.IsTrue(box.WriteNew("owner-key/0123456789abcdef", [1, 2, 3]));
+            Assert.IsFalse(box.WriteNew("owner-key/0123456789abcdef", [4, 5, 6]));
+            CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, box.Read("owner-key/0123456789abcdef"));
+        }
+        var place = Path.Combine(folder, "keys", "owner-key", "fedcba9876543210");
+        File.WriteAllBytes(place, "not a sealed value"u8.ToArray());
+        var file = new FileSecretBox(Path.Combine(folder, "keys"), new TestProtection());
+        Assert.IsFalse(file.WriteNew("owner-key/fedcba9876543210", [7]));
+        CollectionAssert.AreEqual("not a sealed value"u8.ToArray(), File.ReadAllBytes(place));
+        Assert.AreEqual(2, Directory.GetFiles(Path.Combine(folder, "keys", "owner-key")).Length, "no temporary file stays");
+
+        // Another process writes the name after WriteNew looked (while it seals): the move does not go over it.
+        var raced = Path.Combine(folder, "race", "owner-key", "0011223344556677");
+        Directory.CreateDirectory(Path.GetDirectoryName(raced)!);
+        var racing = new FileSecretBox(Path.Combine(folder, "race"), new RacingProtection(raced));
+        Assert.IsFalse(racing.WriteNew("owner-key/0011223344556677", [9]));
+        CollectionAssert.AreEqual("the other start's value"u8.ToArray(), File.ReadAllBytes(raced));
+        Assert.AreEqual(1, Directory.GetFiles(Path.GetDirectoryName(raced)!).Length, "no temporary file stays");
+    }
+
+    /// <summary>The test protection, which also writes another value into a box's place while it seals: the stand-in of
+    /// another process that writes the same name at the same time.</summary>
+    private sealed class RacingProtection(string place) : IKeyProtection
+    {
+        public byte[] Protect(byte[] key)
+        {
+            if (!File.Exists(place)) File.WriteAllBytes(place, "the other start's value"u8.ToArray());
+            return new TestProtection().Protect(key);
+        }
+
+        public byte[] Unprotect(byte[] stored) => new TestProtection().Unprotect(stored);
+    }
+
     /// <summary>**A box value that does not open stops no claim**: the claim makes a new key in place of a key that waits
     /// and does not open, carries it, and the hub's "kept" puts it in place of a kept value that does not open. The bug:
     /// the claim goes with no key, or throws after the hub took it, and the PC holds no key of a hub that holds one.</summary>

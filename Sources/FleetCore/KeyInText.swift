@@ -71,6 +71,29 @@ public enum KeyInText {
     /// Whether `text` holds something that looks like a key.
     public static func contains(_ text: String) -> Bool { first(in: text) != nil }
 
+    /// **Every part of `text` that looks like a key**, in the order of the text, each where it stands in `text`: each
+    /// key with a shape of its own, and each run that reads as random outside of them (`first(in:)` finds one). A
+    /// knowledge file's box asks only about a part that the hub's text of the file does not hold already.
+    public static func all(in text: String) -> [Substring] {
+        let whole = NSRange(text.startIndex..., in: text)
+        func overlaps(_ range: NSRange, _ ranges: [NSRange]) -> Bool {
+            ranges.contains { NSIntersectionRange($0, range).length > 0 }
+        }
+        var shaped: [NSRange] = []
+        for shape in shapes {
+            for match in shape.matches(in: text, range: whole) where !overlaps(match.range, shaped) { shaped.append(match.range) }
+        }
+        let words = text as NSString
+        var found = shaped
+        // A run that holds a key with a shape is that key, as in `first(in:)`; its value after `NAME=` is what counts.
+        for match in run.matches(in: text, range: whole) {
+            let value = assigned(match.range, of: words)
+            if value.length >= 32, !overlaps(value, shaped), !inAddressPath(value, of: words),
+               looksRandom(words.substring(with: value)) { found.append(value) }
+        }
+        return found.sorted { $0.location < $1.location }.compactMap { Range($0, in: text).map { text[$0] } }
+    }
+
     /// A run that reads as random: capitals, small letters and digits all three, not a path, about as varied as
     /// random letters are, changing between them as often, and with few runs of small letters that read as words. A
     /// name in camel case, a hash in hex, a path and a UUID are none of these. Of random runs of 32 letters and

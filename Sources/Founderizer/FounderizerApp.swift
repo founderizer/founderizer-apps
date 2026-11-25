@@ -8,7 +8,11 @@ import SwiftUI
 @main
 enum FounderizerStart {
     @MainActor static func main() {
+        let started = Date()
         if AppHome.settle(runsThere: { runs(at: $0) }) { exit(0) }
+        // The folders of copies that an earlier process of this app left in the temporary folder, off the main thread
+        // (`FleetCopy.leftoversGone`): no copy arrives before this start has a store.
+        DispatchQueue.global(qos: .utility).async { FleetCopy.leftoversGone(before: started) }
         // The ledger of the accounts of the app's own SSH key: its folder only, nothing is read or written here.
         SSHKeyLedger.shared.open()
         // The link `~/.founderizer/cli` to this app's program for the owner's AI agent, off the main thread (`ProgramLink`).

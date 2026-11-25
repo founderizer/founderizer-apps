@@ -796,14 +796,14 @@ extension NeedAnswerBox {
 
     // MARK: Needs clarification (owner feature need_clarify, owner API 1.272)
 
-    /// **Needs clarification**: the key card's quiet link and words (`SetupLink` on a step; in a chat's card, the
-    /// card's small muted words), under his answer, with the hand of a link. A press puts the field in its place.
+    /// **Needs clarification**: the key card's link and words (`StepClarifyLink` on a step, in the violet of Details; in
+    /// a chat's card, the card's small muted words), under his answer, with the hand of a link. A press puts the field
+    /// in its place.
     @ViewBuilder private var clarifyLink: some View {
         let help = String(l10n: "Write to \(need.by.agentLabel) about this request")
         if onStep {
             // in the middle, as a step's one link and its one button stand
-            SetupLink(String(l10n: "Needs clarification")) { openClarify() }
-                .pointerStyle(.link)
+            StepClarifyLink { openClarify() }
                 .help(help).accessibilityIdentifier("need-clarify-\(need.id)")
                 .frame(maxWidth: .infinity)
         } else {
@@ -1024,11 +1024,42 @@ extension FleetStore {
     }
 }
 
+/// **His answer as a card shows it** (F23 N1; the owner, 23 November 2026: "We should ALWAYS use the name", and "The
+/// name with the role in grey"): an option that he pressed is the agent's words, and an agent that it names by its
+/// whole role shows by its name with the role beside it (`RoleNames`); **words that he typed keep a role as he wrote
+/// it** (`RoleNames.written`), as his bubble in a chat does. VoiceOver reads what the card shows.
+enum HisAnswer {
+    /// **The answer is words that he typed**: an answer in words (`inWords`: no option that he pressed, no form), that
+    /// no one else wrote for him: not the hub's or an agent's end of the item (`answered_by`: "Closed by the hub: …",
+    /// "Withdrawn by …"), and not the agent's recommended words, which a press of their row sends (`recommended`). Those
+    /// are the agent's or the hub's words, which show an agent by its name.
+    static func typed(_ need: OwnerNeed, _ answer: String, inWords: Bool) -> Bool {
+        let words = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        return inWords && need.answered_by == nil
+            && words != need.recommended?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The words of `answer` (`MessageBlock.inline`), marked as his own where he typed them (`inWords`, `typed`).
+    static func words(_ answer: String, inWords: Bool) -> AttributedString {
+        let words = MessageBlock.inline(answer)
+        return inWords ? RoleNames.written(words) : words
+    }
+
+    /// What VoiceOver reads of `answer`: its words as the card draws them, a name and its role beside it as one
+    /// (`RoleNames.words`), and as written where no names are read.
+    static func spoken(_ answer: String, inWords: Bool, names: CardNames?,
+                       roles: [String: String] = AgentNames.shared.roles) -> String {
+        let words = Self.words(answer, inWords: inWords)
+        return String((names.map { RoleNames.words(words, names: $0, roles: roles) } ?? words).characters)
+    }
+}
+
 /// What the owner answered: the words, and the files that went with them, because an answer may be files alone.
 /// The files are the ones on the message that answered this request.
 struct NeedAnswerGiven: View {
     @Bindable var store: FleetStore
     let need: OwnerNeed
+    let names: CardNames
 
     private var files: [MessageAttachment] { store.answerFiles(of: need) }
 
@@ -1050,9 +1081,11 @@ struct NeedAnswerGiven: View {
                     Text("Your answer").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                     // **His answer whole, as the card's words are drawn** (the owner, 20 November 2026: "ok but use
                     // always the agent badges and icons!!"): the chat's look, and each name that the card links as its
-                    // badge (`CardNames`), where it was plain text of 12 points
+                    // badge (`CardNames`), where it was plain text of 12 points; words that he typed keep a role as he
+                    // wrote it (`HisAnswer`)
                     if !answer.isEmpty {
-                        MessageText(text: answer, chat: true, card: true, names: store.cardNames(for: need))
+                        MessageText(text: answer, chat: true, card: true, names: names,
+                                    asWritten: HisAnswer.typed(need, answer, inWords: need.answeredInWords))
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if !files.isEmpty { MessageFilesView(store: store, files: files, alignment: .leading) }
@@ -1147,8 +1180,6 @@ struct NeedRequestCard: View {
     /// What it needs from him. A secret request's is the hub's one sentence about its form, which is right below it, and
     /// an item that carries its grant has none: Give is its step (`OwnerNeed.give`).
     private var todo: String { need.asksForSecret || need.give != nil ? "" : need.todo }
-    /// The names that the card's words link (`CardNames`): an agent, a repository, a server, a page of the app.
-    private var names: CardNames { store.cardNames(for: need) }
     /// **His task stands on the card, under the reason** (the owner, 15 November 2026: "the task itself need to be
     /// very clear"; `OwnerNeed.taskInFront`): it stood behind Details, under "What it needs from you". An item with a
     /// door call keeps its words there, and so does a conversation's item.
@@ -1176,6 +1207,13 @@ struct NeedRequestCard: View {
         if need.answeredWithKey { return String(l10n: "Saved") }     // the word behind the check of a saved key
         return givenWords.isEmpty ? String(l10n: "Answered") : givenWords
     }
+    /// What VoiceOver reads of his answer on the folded card: the words that it shows (`HisAnswer.spoken`).
+    private func spokenAnswer(names: CardNames?) -> String {
+        guard ranAnswer == nil, !need.answeredWithKey, !givenWords.isEmpty else { return answerWords }
+        return HisAnswer.spoken(givenWords, inWords: typed, names: names)
+    }
+    /// His answer is words that he typed (`HisAnswer.typed`), which keep a role as he wrote it.
+    private var typed: Bool { HisAnswer.typed(need, givenWords, inWords: inWords) }
     /// The words of his answer, on their way or as the reading has them, or "" for an answer of files alone.
     private var givenWords: String {
         (onItsWay?.text ?? need.answer)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1191,10 +1229,12 @@ struct NeedRequestCard: View {
                              expanded: expanded) {
                 // **The files of his answer stand under it on the folded card**, as they stood under his message: the
                 // card is his answer in the chat, and a file is pressed by itself, outside the card's own press.
+                let names = need.answeredWithKey || ranAnswer != nil ? nil : store.cardNames(for: need)
                 let files = store.answerFiles(of: need)
                 VStack(alignment: .leading, spacing: 0) {
                     Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded = true } } label: {
-                        folded.padding(FormMetrics.rowInset).padding(.bottom, files.isEmpty ? 0 : 8 - FormMetrics.rowInset)
+                        folded(names: names).padding(FormMetrics.rowInset)
+                            .padding(.bottom, files.isEmpty ? 0 : 8 - FormMetrics.rowInset)
                             .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                     }
                         // **The whole folded card is the press, and shows it** (the area of Needs-you, 20 November
@@ -1202,7 +1242,7 @@ struct NeedRequestCard: View {
                         // all"): the hand, a soft fill and its chevron in the words' colour under the pointer
                         .buttonStyle(CardFoldStyle(fill: files.isEmpty ? .whole : .top))
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(Text("\(need.shownTitle), answered: \(answerWords)"))
+                        .accessibilityLabel(Text("\(need.shownTitle), answered: \(spokenAnswer(names: names))"))
                         .accessibilityValue(foldedMarkWords)
                         .accessibilityHint("Shows the whole request")
                         .accessibilityActions {
@@ -1304,7 +1344,7 @@ struct NeedRequestCard: View {
     /// check and its line of 12 points muted, and a press of Run its mark. Each name in his answer is its badge (his
     /// "use always the agent badges and icons!!"). **A request that a saved key answered is one line**: its title, the
     /// check where the check of his save drew itself (`keyHead`), and the chevron.
-    @ViewBuilder private var folded: some View {
+    @ViewBuilder private func folded(names: CardNames?) -> some View {
         if need.answeredWithKey {
             keyHead(saved: true, draws: false, folded: true)
         } else {
@@ -1323,7 +1363,8 @@ struct NeedRequestCard: View {
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
                 } else if !written.isEmpty {
                     HStack(alignment: .lastTextBaseline, spacing: 8) {
-                        FoldedWords(words: written, names: names).frame(maxWidth: .infinity, alignment: .leading)
+                        FoldedWords(words: written, names: names, typed: typed)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         lineEnd.font(FormMetrics.detail)
                     }
                 } else {
@@ -1334,7 +1375,8 @@ struct NeedRequestCard: View {
                                              moves: store.marksMove, names: names,
                                              opens: markOpensTask ? { openTask() } : nil)
                         }
-                        CardBadgeText.text(MessageBlock.inline(answerWords), names: names, size: FormMetrics.detailSize)
+                        CardBadgeText.text(HisAnswer.words(answerWords, inWords: typed), names: names,
+                                           size: FormMetrics.detailSize)
                             .lineLimit(1).tint(FleetStyle.link)
                         lineEnd
                     }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
@@ -1524,7 +1566,8 @@ struct NeedRequestCard: View {
 
     /// The whole card's parts over its answer.
     private var parts: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let names = store.cardNames(for: need)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) { expanded.toggle() } } label: {
                     HStack(alignment: .firstTextBaseline) {
@@ -1582,8 +1625,7 @@ struct NeedRequestCard: View {
                     } else {
                         // **An older long card folds to three lines** (the owner, 9 November 2026: "MUCH better so they
                         // are shorter"): the start of its reason, until Show all opens the rest.
-                        CardBadgeText.text(MessageBlock.inline(need.why.components(separatedBy: .newlines)
-                            .joined(separator: " ")), names: names, size: ChatStyle.size)
+                        CardBadgeText.reason(need.why, names: names, size: ChatStyle.size)
                             .font(ChatStyle.font).lineSpacing(ChatStyle.lineSpacing).tint(FleetStyle.link)
                             .lineLimit(3).fixedSize(horizontal: false, vertical: true)
                             .cardBadges()
@@ -1592,7 +1634,7 @@ struct NeedRequestCard: View {
                     if !task.isEmpty {
                         MessageText(text: task, chat: true, card: true, run: NeedRunTarget.of(need, store: store),
                                     names: names, values: true)
-                        CardPageButton(store: store, need: need, task: task)
+                        CardPageButton(store: store, need: need, names: names, task: task)
                     }
                 }
             }
@@ -1609,7 +1651,10 @@ struct NeedRequestCard: View {
                             Text(need.details != nil ? (need.door_host != nil ? "Script" : "Details")
                                  : expanded ? "Show less" : "Show all")
                             if need.details != nil {
-                                Image(systemName: expanded ? "chevron.down" : "chevron.right").font(IconMetrics.symbol(9, weight: .semibold))
+                                // down while a press opens in place, up while it folds: a right chevron would say
+                                // another page (the owner, 20 November 2026: "taht chevron looks like gooing to a
+                                // different page, not Expand")
+                                Image(systemName: expanded ? "chevron.up" : "chevron.down").font(IconMetrics.symbol(9, weight: .semibold))
                             }
                         }.padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
                     }.buttonStyle(.plain)
@@ -1644,7 +1689,7 @@ struct NeedRequestCard: View {
                 let talk = need.shownTalk(features: store.state?.ui_features)
                 if !talk.isEmpty { NeedTalkLines(talk: talk, font: FormMetrics.text) }
             }
-            NeedAnswerGiven(store: store, need: need)
+            NeedAnswerGiven(store: store, need: need, names: names)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today
             // (T-12). **Copy prompt at the right end of the line** (the owner's "Yes, as drawn" of 21 November 2026), on
             // a request with steps for him outside the app while no answer of his is on its way (`NeedPrompt.offers`);
@@ -1668,6 +1713,28 @@ struct NeedRequestCard: View {
         }.font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
     }
 
+}
+
+/// **Needs clarification on Needs you** (the request at hand, a key request's card as every other one; the owner's answer
+/// of 23 November 2026 to how it looks at rest: "The violet of Details, with the hand"): the words in the place and at
+/// the size of the quiet grey link that it was (`SetupLink`), in the colour of Details (`FleetStyle.link`), so that it
+/// reads as a link like Details on the same card, with the hand under the pointer while it can be pressed, over all that
+/// a click reaches. A card in a chat keeps its own look.
+struct StepClarifyLink: View {
+    let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    var body: some View {
+        // The click reaches over and under the words (`IconMetrics.reach`), and the step does not move for it.
+        Button(action: action) {
+            Text(String(l10n: "Needs clarification")).padding(.vertical, IconMetrics.reach).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .pointerStyle(isEnabled ? .link : nil)
+            .padding(.vertical, -IconMetrics.reach).font(SetupMetrics.textFont)
+            // while it cannot be pressed (a save, a reading that is not current), its muted words of before: the violet
+            // says that a press goes
+            .foregroundStyle(isEnabled ? FleetStyle.link : FleetStyle.muted)
+    }
 }
 
 extension EnvironmentValues {
@@ -1735,21 +1802,23 @@ struct FoldChevron: View {
 
 /// **His own words on a folded request card** (the area of Needs-you, 20 November 2026, from the owner: "that wall of
 /// small text is unreadable"): the chat's look (14 points in the words' colour, with its line spacing), each name that
-/// the card links as its badge (`CardBadgeText`; his "use always the agent badges and icons!!"), and a long answer
-/// folds to six lines whose last fades, as a long message of his does (`OwnerBubble`). A click opens the card, which
-/// shows the words whole under "Your answer". **The six lines are a limit of the text, not a frame over it**: a frame
-/// would keep the press of a badge under the fold, over the chat's next rows, because a badge's press stands on every
-/// line of the text's layout (`CardBadge.parts`).
+/// the card links as its badge (`CardBadgeText`; his "use always the agent badges and icons!!"), a role as he wrote it
+/// (`HisAnswer`), and a long answer folds to six lines whose last fades, as a long message of his does (`OwnerBubble`).
+/// A click opens the card, which shows the words whole under "Your answer". **The six lines are a limit of the text,
+/// not a frame over it**: a frame would keep the press of a badge under the fold, over the chat's next rows, because a
+/// badge's press stands on every line of the text's layout (`CardBadge.parts`).
 private struct FoldedWords: View {
     let words: String
     let names: CardNames?
+    /// The words are his own (`HisAnswer.typed`), not the hub's or an agent's end of the item.
+    let typed: Bool
     /// The height of the words whole, and of the lines that show: the last line fades only where words are cut.
     @State private var whole: CGFloat = 0
     @State private var shown: CGFloat = 0
     static let lines = 6
 
     var body: some View {
-        let text = CardBadgeText.text(MessageBlock.inline(words), names: names, size: ChatStyle.size)
+        let text = CardBadgeText.text(HisAnswer.words(words, inWords: typed), names: names, size: ChatStyle.size)
         let cut = whole > shown + 1
         look(text).lineLimit(Self.lines)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shown = $0 }

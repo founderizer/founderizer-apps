@@ -102,8 +102,9 @@ struct HeldKey: Equatable {
 }
 
 /// What the box of a key's question holds, which its words name: a message (the chat's box, a request's answer, Needs
-/// clarification, a task's guidance, feedback, a correction), or a rule of an agent's profile (`RuleEditor`).
-enum KeyHoldText { case message, rule }
+/// clarification, a task's guidance, feedback, a correction), a rule of an agent's profile (`RuleEditor`), or a
+/// knowledge file, which every agent that reads it has (`KnowledgePage`; the owner's words of 22 November 2026).
+enum KeyHoldText { case message, rule, file }
 
 /// The question of the guard, over the box that the owner writes in: save it in the vault instead, or go on.
 struct KeyHoldBanner: View {
@@ -152,11 +153,14 @@ struct KeyHoldBanner: View {
             Group {
                 if hold == .paste { Text("That looks like a key, so it was not pasted.") }
                 else if holds == .rule { Text("This rule holds what looks like a key.") }
+                else if holds == .file { Text("This file holds what looks like a key.") }
                 else { Text("This message holds what looks like a key.") }
             }
                 .font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
             Group {
-                if holds == .rule {
+                if holds == .file {
+                    Text("In this file, every agent that reads it would have it. Saved as a secret, it goes straight into the vault, and agents get only its name.")
+                } else if holds == .rule {
                     Text("In a rule, \(agent.agentLabel) and its transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")
                 } else if let copyTo, copyTo != agent {
                     Text("In a guidance, \(agent.agentLabel) and \(copyTo.agentLabel) and their transcripts would have it. Saved as a secret, it goes straight into the vault, and \(agent.agentLabel) gets only its name.")

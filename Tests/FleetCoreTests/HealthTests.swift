@@ -152,6 +152,85 @@ import Testing
     }
 }
 
+/// **A copy has no limit of size; this Mac's free space is its bound** (the owner, 22 November 2026: "why is there a
+/// backup limit? it shouldn't?"). Before the first byte is written, the answer's `Content-Length` is read against the
+/// free space of the disk: a copy that does not fit, with 256 MiB left free beside it, is refused with both sizes, an
+/// answer with no length is refused, because an answer with no end could fill the disk, and a disk whose room the
+/// system does not say takes the copy. Near the bound the words never say that the Mac has what the copy needs: what
+/// is free is rounded down, the need up (the validator's finding W1, 22 November 2026). The bugs that it catches: a
+/// copy that fills the Mac, also to its last byte (the second reader's N2), a size that refuses a copy that fits, and
+/// "It needs 1.1 GB, and 1.1 GB is free".
+@Test func aCopyIsTakenWhenThisMacHasRoomForIt() {
+    let gib: Int64 = 1 << 30, reserve: Int64 = 256 << 20
+    #expect(FleetCopy.reserve == reserve)
+    #expect(FleetCopy.room(length: 300 << 20, free: (300 << 20) + reserve) == nil)
+    #expect(FleetCopy.room(length: 300 << 20, free: 300 << 20) == .noRoom(need: (300 << 20) + reserve, free: 300 << 20))
+    #expect(FleetCopy.room(length: 5 * gib, free: nil) == nil)
+    #expect(FleetCopy.room(length: 0, free: reserve) == nil)
+    #expect(FleetCopy.room(length: -1, free: 100 * gib) == .noLength)
+    // A length that no sum with the reserve holds is refused, not a trap of the app (the second reader's R2-2).
+    #expect(FleetCopy.room(length: .max, free: 100 * gib) == .noRoom(need: .max, free: 100 * gib))
+    let refused = FleetCopy.room(length: gib + gib / 5, free: 2 * gib / 5)
+    #expect(refused == .noRoom(need: gib + gib / 5 + reserve, free: 2 * gib / 5))
+    #expect(refused?.errorDescription == "This Mac has no room for the copy. It needs "
+            + FleetHealth.storageWords(gib + gib / 5 + reserve, rounding: .up) + ", and "
+            + FleetHealth.storageWords(2 * gib / 5, rounding: .down) + " is free.")
+    let decimal = (0.5).formatted(.number.precision(.fractionLength(1))).dropFirst().first.map(String.init) ?? "."
+    #expect(FleetHealth.storageWords(gib + gib / 5) == "1\(decimal)2 GB")
+    let bound = Int64(1.13 * Double(gib))          // a copy and its reserve of some 1.1 GB, and 1 MiB less free
+    #expect(FleetCopy.room(length: bound - reserve, free: bound - (1 << 20))?.errorDescription
+            == "This Mac has no room for the copy. It needs 1\(decimal)2 GB, and 1\(decimal)1 GB is free.")
+}
+
+/// **The folders of copies that an earlier process of the app left go at its start** (the second reader's N3, 22
+/// November 2026): a quit or an update's restart during a download left the copy's folder with its part in the
+/// temporary folder, and nothing removed it. Only folders of that exact name and made before the start go, and a
+/// folder `founderizer-copy-<pid>-<UUID>` only when its process runs no more: not one of a process that runs (here this
+/// test's own), not one that a copy makes now, not a file or a link of that name (nor what the link names), not a
+/// folder of another name, and not one of the older form `founderizer-copy-<UUID>`, which an older app that runs beside
+/// this one makes and holds through its save panel. The bugs that they catch: a leftover that stays for good, and a
+/// copy that another running app process takes, also an older app's, or another program's folder, that the start
+/// removes (the second reader's R2-1 and R3-1).
+@Test func theFoldersOfCopiesThatAnEarlierProcessLeftGoAtTheStart() throws {
+    let manager = FileManager.default
+    let root = manager.temporaryDirectory.appendingPathComponent("leftovers-\(UUID().uuidString)")
+    let elsewhere = manager.temporaryDirectory.appendingPathComponent("leftovers-target-\(UUID().uuidString)")
+    try manager.createDirectory(at: root, withIntermediateDirectories: false)
+    try manager.createDirectory(at: elsewhere, withIntermediateDirectories: false)
+    defer { try? manager.removeItem(at: root); try? manager.removeItem(at: elsewhere) }
+    let start = Date(), before = start.addingTimeInterval(-3600)
+    func folder(_ name: String, made: Date) throws -> String {
+        let place = root.appendingPathComponent(name)
+        try manager.createDirectory(at: place, withIntermediateDirectories: false)
+        try Data("part".utf8).write(to: place.appendingPathComponent("copy.part"))
+        try manager.setAttributes([.creationDate: made], ofItemAtPath: place.path)
+        return name
+    }
+    let ended = Process()                   // a process that ran and ended: its number runs no more
+    ended.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+    try ended.run()
+    ended.waitUntilExit()
+    let gone = ended.processIdentifier, mine = getpid()
+    let older = try folder("founderizer-copy-" + UUID().uuidString, made: before)
+    let leftByAnEnded = try folder("founderizer-copy-\(gone)-" + UUID().uuidString, made: before)
+    let held = try folder("founderizer-copy-\(mine)-" + UUID().uuidString, made: before)
+    let endedButNew = try folder("founderizer-copy-\(gone)-" + UUID().uuidString, made: start.addingTimeInterval(1))
+    let noNumber = try folder("founderizer-copy-x1-" + UUID().uuidString, made: before)
+    let arriving = try folder("founderizer-copy-" + UUID().uuidString, made: start.addingTimeInterval(1))
+    let notAUUID = try folder("founderizer-copy-notes", made: before)
+    let another = try folder("founderizer-copyright-" + UUID().uuidString, made: before)
+    let file = "founderizer-copy-" + UUID().uuidString
+    try Data("a file".utf8).write(to: root.appendingPathComponent(file))
+    try manager.setAttributes([.creationDate: before], ofItemAtPath: root.appendingPathComponent(file).path)
+    let link = "founderizer-copy-" + UUID().uuidString
+    try manager.createSymbolicLink(at: root.appendingPathComponent(link), withDestinationURL: elsewhere)
+    #expect(kill(gone, 0) == -1 && errno == ESRCH, "the ended process's number runs again")
+    #expect(FleetCopy.leftoversGone(before: start, in: root) == [leftByAnEnded])
+    let stays = try Set(manager.contentsOfDirectory(atPath: root.path))
+    #expect(stays == [older, held, endedButNew, noNumber, arriving, notAUUID, another, file, link])
+    #expect(manager.fileExists(atPath: elsewhere.path))
+}
+
 /// "The manager is not signed in" does not stand over the manager's own setup or sign-in, which is that sign-in; it
 /// stands over every other page, and every other warning stands over its setup too.
 @Test func theNotSignedInBandDoesNotStandOverTheManagersOwnSignIn() {

@@ -298,7 +298,8 @@ struct AgentTagsTests {
             let marked = AgentTags.marked(text, mentions: mentions)
             return MessageBlock.parse(marked?.text ?? text).filter { $0.kind != .table }.map { block in
                 let words = MessageBlock.inline(block.text)
-                return book.words(marked.map { AgentTags.unmarked(words, by: $0) } ?? words)
+                // his own words, as his bubble marks them (`MessageText.asWritten`)
+                return book.words(RoleNames.written(marked.map { AgentTags.unmarked(words, by: $0) } ?? words))
             }
         }
         let words = try drawn(text, mentions)

@@ -2,7 +2,9 @@ import AppKit
 import FleetCore
 import SwiftUI
 
-/// Markdown is display-only: a copy takes the words as they were written. Checked files use literal Text instead.
+/// Markdown is display-only: a copy of selected words takes what shows, which is an agent's name and its role where its
+/// words named it by its whole role (`RoleNames`); Copy message takes the words as they were written. Checked files use
+/// literal Text instead.
 struct MessageText: View, Equatable {
     let text: String
     /// An agent's text in a chat or a task thread: the chat's measures (`ChatStyle`). Else the size of a form.
@@ -35,6 +37,9 @@ struct MessageText: View, Equatable {
     /// agent's badge over its whole range, "@" included (`ChatNames.pieces`). Their places are in his text, which the
     /// blocks take from it with a mark for each tag (`AgentTags.marked`).
     var mentions: [AgentTags.Mention]? = nil
+    /// **The owner's own words keep a role as he wrote it** (`OwnerBubble`; `RoleNames.Written`): an agent's words draw
+    /// its name there.
+    var asWritten = false
     /// **Each block of the text, and each cell of a table, is a row of this selection** (a long file in the knowledge
     /// reader): only the row under the pointer and the row whose words he pressed last can be selected, as only two
     /// rows of a chat can (`ChatSelection`), and a block or a cell longer than `keepsFields` can always be selected.
@@ -61,7 +66,8 @@ struct MessageText: View, Equatable {
     /// Code in a line of a step's words: a little under the words' 15 points, as the chat's code is under its 14.
     private static let stepCode = Font.system(size: 13.5, design: .monospaced)
 
-    private struct Block {
+    /// One block as the text draws it (not private: its test reads the blocks).
+    struct Block {
         let kind: MessageBlock.Kind
         let text: String
         var marker = ""
@@ -84,24 +90,27 @@ struct MessageText: View, Equatable {
         cache.totalCostLimit = 2 * 1024 * 1024
         return cache
     }()
-    private var blocks: [Block] {
+    /// The text's blocks, read once for each form of it: the cache keys his own words apart (`asWritten`), so that
+    /// his bubble and an agent's reply with the same words never share a reading.
+    var blocks: [Block] {
         // his tags, only where the chat draws badges: the text with a mark for each (`AgentTags.marked`); a list,
         // also an empty one, says that only its entries are tags (`AgentTags.Given`)
         let given = chatNames != nil && mentions != nil
         let marked = given ? mentions.flatMap { AgentTags.marked(text, mentions: $0) } : nil
         // The inline code of the chat is larger, so the two forms of one text have their own entries.
         let key = ((step ? "step\u{0}" : chat ? "chat\u{0}" : "form\u{0}") + (given ? "given\u{0}" : "")
-                   + (marked?.key ?? text)) as NSString
+                   + (asWritten ? "written\u{0}" : "") + (marked?.key ?? text)) as NSString
         if let cached = Self.cache.object(forKey: key) { return cached.blocks }
         let parsed = Self.parse(text, code: step ? Self.stepCode : chat ? ChatStyle.code : FormMetrics.code, marked: marked,
-                                given: given)
+                                given: given, asWritten: asWritten)
         Self.cache.setObject(Parsed(parsed), forKey: key, cost: text.utf8.count * 4)
         return parsed
     }
     /// The blocks of a text by the rules both apps share (`MessageBlock`, FleetCore), with their inline marks drawn in
     /// this app's fonts. `marked`: the text with the marks of its tags, which each block's words give back as "@" and
     /// as the tag's words (`AgentTags.unmarked`).
-    private static func parse(_ text: String, code: Font, marked: AgentTags.Marked? = nil, given: Bool = false) -> [Block] {
+    private static func parse(_ text: String, code: Font, marked: AgentTags.Marked? = nil, given: Bool = false,
+                              asWritten: Bool = false) -> [Block] {
         MessageBlock.parse(marked?.text ?? text).map { block in
             let words = marked.map { AgentTags.unmarked(block.text, by: $0) } ?? block.text
             var drawn = Block(kind: block.kind, text: words, marker: block.marker, level: block.level)
@@ -120,6 +129,7 @@ struct MessageText: View, Equatable {
                     mark[AgentTags.Given.self] = true
                     drawn.formatted.mergeAttributes(mark)
                 }
+                if asWritten { drawn.formatted = RoleNames.written(drawn.formatted) }
                 drawn.links = LinkRun.has(drawn.formatted)
             }
             return drawn
@@ -518,8 +528,8 @@ struct OwnerBubble: View {
             // have any format... it is so plain"): his numbered list, his paragraphs and his bold read as the reply
             // under them reads, where the literal text ran them all together.
             if !text.isEmpty {
-                MessageText(text: text, chat: true, chatNames: names, mentions: mentions, fold: folded ? Self.foldedHeight : nil,
-                            lead: room ?? 0)
+                MessageText(text: text, chat: true, chatNames: names, mentions: mentions, asWritten: !theirs,
+                            fold: folded ? Self.foldedHeight : nil, lead: room ?? 0)
                     .equatable()
                     .frame(maxHeight: folded ? Self.foldedHeight : nil, alignment: .top)
                     .mask {

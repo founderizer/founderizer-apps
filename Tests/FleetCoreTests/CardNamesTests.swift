@@ -23,6 +23,10 @@ private func names(_ text: String, given: [String] = []) -> [String: CardNames.T
                uniquingKeysWith: { first, _ in first })
 }
 
+/// An agent is its role, the unique start of its role or its name with a capital; **where a role is also another
+/// agent's name, the name decides** (F23: an agent shows by its name, as a tag's name decides in `AgentTags`). The bug
+/// that this catches: with the role "Sales" for Bo and an agent named sales, "I asked Sales" links Bo and reads "Bo ·
+/// Sales".
 @Test func anAgentIsItsRoleTheUniqueStartOfItsRoleOrItsNameWithACapital() {
     let found = names("Customer Support asks Kai, the Manager and Customer Developer; the manager and Customer wait.")
     #expect(found == ["Customer Support": .agent("nova"), "Kai": .agent("kai"), "Manager": .agent("manager"),
@@ -30,14 +34,39 @@ private func names(_ text: String, given: [String] = []) -> [String: CardNames.T
     // the whole role wins over its start and over a name inside it
     #expect(names("Customer Support Lead and Fleet Manager") ==
             ["Customer Support Lead": .agent("nova"), "Fleet Manager": .agent("manager")])
+    let team: [(name: String, role: String?)] = [("bo", "Sales"), ("sales", nil)]
+    let both = CardNames(agents: team)
+    #expect(both.find(in: "I asked Sales.").map(\.target) == [.agent("sales")])
+    let drawn = CardJoin.join(both.pieces(AttributedString("I asked Sales.")),
+                              roles: AgentNames.roles(team.map { ($0.name, $0.role) }))
+    #expect(drawn.map { String($0.words.characters) } == ["I asked ", "Sales", "."])
+    #expect(drawn.map(\.badge) == [nil, .agent("sales"), nil])
 }
 
+/// A name that can be a part of another name is no agent: a name or a role of one word beside a word with a capital,
+/// the start of a role before one, a role that two hold. **A verb that opens the sentence is no such word** (C6 of F23
+/// N1): "Give Marketing write" names the agent, at the sentence's start only. The bug that this catches: the step
+/// "Give Marketing write" shows no badge, or a word with a capital at a sentence's start or a verb inside a product's
+/// name makes "Android Studio", "Visual Studio" or "the Ask Studio app" a badge.
 @Test func aNameThatCanBePartOfAnotherNameIsNoAgent() {
-    // a name or a role of one word beside a word with a capital; the start of a role before one; a role that two hold
     #expect(names("Open Visual Studio and your Password Manager. Android Studio is no agent; ask Studio.") ==
             ["Studio": .agent("studio")])
     #expect(names("Ask the Head of Growth, not the Head of Sales.") == ["Head of Growth": .agent("rex")])
     #expect(names("Ask a Designer.").isEmpty)
+    let opened = CardNames(agents: [("wren", "Marketing"), ("studio", nil)])
+    func found(_ text: String) -> [CardNames.Target] { opened.find(in: text).map(\.target) }
+    #expect(found("Give Marketing write") == [.agent("wren")])
+    #expect(found("Done. Ask Studio first.\nTell Marketing too.") == [.agent("studio"), .agent("wren")])
+    // a list item's, a heading's or a quote's mark at its line's start, which the folded reason reads (its open card
+    // reads the line without it)
+    #expect(found("Steps:\n- Give Marketing write\n  2. Ask Studio first\n> Tell Marketing") ==
+            [.agent("wren"), .agent("studio"), .agent("wren")])
+    // "Let" is no opening verb: its next word is often a noun of the sentence
+    #expect(found("Let Marketing spend run until Friday.").isEmpty)
+    for text in ["Android Studio is no agent.", "Visual Studio opens it.", "It runs. Visual Studio opens it.",
+                 "Open the Ask Studio app.", "We use Visual Studio.", "Done - Ask Studio first."] {
+        #expect(found(text).isEmpty, "\(text)")
+    }
 }
 
 @Test func aRepositoryIsOwnerAndNameOrADistinctNameOfOneRepository() {
@@ -53,13 +82,17 @@ private func names(_ text: String, given: [String] = []) -> [String: CardNames.T
 /// **On the card whose own Give names a repository, its name alone is a badge in any form** (the owner, 23 November
 /// 2026: "Yes: a name that the card's Give names is a badge"). The bugs that this catches: a name of letters only stays
 /// words on the card that gives it; it is a badge on every card, so a common word of another card opens a repository
-/// ("web", "docs"); one of two repositories of one name opens for the other.
+/// ("web", "docs"); one of two repositories of one name opens for the other; an opening verb before it ("Tell Sales
+/// the price") keeps it words, where it lets an agent's name stand.
 @Test func onTheCardOfItsOwnGiveARepositoryIsItsNameAloneInAnyForm() {
     let words = "Push it to web. Web is old, and shop-api too."
     #expect(names(words, given: ["acme/shop-api", "acme/web"]) ==
             ["web": .repository("acme/web"), "Web": .repository("acme/web"),
              // the one of two fleet repositories of this name that the Give names
              "shop-api": .repository("acme/shop-api")])
+    // an opening verb before it lets the name stand, as before an agent's name (C6 of F23 N1), on that card only
+    #expect(names("Tell Sales the price.", given: ["acme/sales"]) == ["Sales": .repository("acme/sales")])
+    #expect(names("Tell Sales the price.").isEmpty)
     // the same words with no Give, and on a card whose Give names another repository
     #expect(names(words).isEmpty)
     #expect(names(words, given: ["acme/docs-site"]).isEmpty)
@@ -219,8 +252,11 @@ private func coded(_ words: String) -> AttributedString {
 /// of one word after anything but a word (a line's start, punctuation, a quote, a bracket, a digit, an emoji, an arrow),
 /// the start of a role, a server or a repository in other capitals, a page of the app, a secret's name in other
 /// capitals or inside a longer word or code, and a name of letters only in free words stay words with no link, where a
-/// card's rules found them; and every character stays as written, in its order. What the book keeps of a text that it
-/// read is the text's alone, its marks too.
+/// card's rules found them; and every character stays as written, in its order, but a whole role, which draws its
+/// agent's name with the role muted beside it, and a copy holds what shows (the owner, 23 November 2026: "We should
+/// ALWAYS use the name", and "The name with the role in grey"; the bug that this catches: a reply shows the role where
+/// the sidebar shows the name, the role is no part of its own, or his own bubble changes what he wrote). What
+/// the book keeps of a text that it read is the text's alone, its marks too.
 @Test func aChatMessageBadgesOnlyWhatNamesOneThingInFreeWords() {
     func words(_ text: String) -> [String] { chat.pieces(AttributedString(text)).map { String($0.words.characters) } }
     func badges(_ text: String) -> [CardNames.Target?] { chat.pieces(AttributedString(text)).map(\.badge) }
@@ -229,8 +265,8 @@ private func coded(_ words: String) -> AttributedString {
             ["Leo", " is going ahead with 80 and updating ", "Mia", "'s duty."])
     #expect(badges("Leo is going ahead with 80 and updating Mia's duty.") == [.agent("leo"), nil, .agent("mia"), nil])
     let named = "Customer Support Lead and SEO & AI Search read acme/web; Kai’s post waits for app-1."
-    #expect(words(named) == ["Customer Support Lead", " and ", "SEO & AI Search", " read ", "acme/web", "; ", "Kai",
-                             "’s post waits for ", "app-1", "."])
+    #expect(words(named) == ["Nova · Customer Support Lead", " and ", "Iris · SEO & AI Search", " read ", "acme/web", "; ",
+                             "Kai", "’s post waits for ", "app-1", "."])
     #expect(badges(named) == [.agent("nova"), nil, .agent("iris"), nil, .repository("acme/web"), nil, .agent("kai"), nil,
                               .server("app-1"), nil])
     // the book keeps what it read by the words with their marks: the same name in inline code is no badge
@@ -251,10 +287,21 @@ private func coded(_ words: String) -> AttributedString {
     }
     #expect(chat.words(coded("export EXAMPLE_API_KEY=1")).badges.isEmpty)
     #expect(chat.words(coded("Stripe key")).badges.isEmpty)
-    // a role of one word inside a sentence
-    #expect(words("I asked Marketing to check it.") == ["I asked ", "Marketing", " to check it."])
+    // a role of one word inside a sentence: its agent's name, where the badge stands in the words that a copy holds
+    #expect(words("I asked Marketing to check it.") == ["I asked ", "Kai · Marketing", " to check it."])
     #expect(badges("I asked Marketing to check it.") == [nil, .agent("kai"), nil])
     #expect(badges("The quote goes to Sales today.") == [nil, .agent("bo"), nil])
+    #expect(words("I read Marketing's post.") == ["I read ", "Kai · Marketing", "'s post."])
+    let asked = chat.words(AttributedString("I asked Marketing to check it."))
+    #expect(String(asked.text.characters) == "I asked Kai · Marketing to check it.")
+    #expect(asked.badges.map(\.characters) == [8..<23])
+    // the role is the marked part of the badge's words, which a drawer draws muted
+    #expect(asked.text.runs[RoleNames.RolePart.self].compactMap { $0.0 == true ? String(asked.text[$0.1].characters) : nil }
+            == [" · Marketing"])
+    // his own bubble keeps what he wrote, and the book reads it apart from the same words of an agent
+    let his = chat.words(RoleNames.written(AttributedString("I asked Marketing to check it.")))
+    #expect(String(his.text.characters) == "I asked Marketing to check it.")
+    #expect(his.badges.map(\.target) == [.agent("kai")])
     // the review's sentences, which a card's rules badge, and a role of one word after a sentence's end or a list's mark
     for sentence in ["Marketing spend rose 10%.", "Sales grew 5%.", "Done. Marketing waits for it.", "- Sales grew 5%.",
                      "It rose!\nMarketing spend too.", "We asked\nMarketing spend rose.",
@@ -356,7 +403,8 @@ private func coded(_ words: String) -> AttributedString {
 /// words. **In an agent's reply, a name right after an "@" that starts a tag takes the "@" into its badge**, and a role
 /// of one word counts there as after a word; any other name after such an "@" stays words, as it was. The bug that this
 /// catches: his tag drawn as another agent's badge, a removed agent's tag drawn as the agent that now has its words,
-/// "@" left outside the badge, or "@app-1" a server's badge where it was words. Every character stays, in its order.
+/// "@" left outside the badge, or "@app-1" a server's badge where it was words. Every character stays, in its order, but
+/// a whole role after an agent's "@", which draws the agent's name with its role (`RoleNames`).
 @Test func aTagIsItsAgentsBadgeAndAnAtBeforeANameJoinsItsBadge() {
     func tagged(_ text: String, _ agent: String, _ range: Range<Int>) -> AttributedString {
         var words = AttributedString(text)
@@ -381,9 +429,13 @@ private func coded(_ words: String) -> AttributedString {
     #expect(shown(tagged("Ask @Marketing now", "gone", 4..<14)) == ["Ask @Marketing now"])
     // an agent's reply: the name or the role after an "@" that starts a tag, with the "@"
     #expect(shown(AttributedString("I asked @Leo, then (@Marketing): ok.")) ==
-            ["I asked ", "[leo: @Leo]", ", then (", "[kai: @Marketing]", "): ok."])
-    #expect(shown(AttributedString("@Marketing drafts it.")) == ["[kai: @Marketing]", " drafts it."])
-    #expect(shown(AttributedString("@Customer Support Lead answers.")) == ["[nova: @Customer Support Lead]", " answers."])
+            ["I asked ", "[leo: @Leo]", ", then (", "[kai: @Kai · Marketing]", "): ok."])
+    #expect(shown(AttributedString("@Marketing drafts it.")) == ["[kai: @Kai · Marketing]", " drafts it."])
+    #expect(shown(AttributedString("@Customer Support Lead answers.")) ==
+            ["[nova: @Nova · Customer Support Lead]", " answers."])
+    // the agent's "@" name in the same sentence: the role stays, in addition to the name
+    #expect(shown(AttributedString("@Nova is Customer Support Lead now.")) ==
+            ["[nova: @Nova]", " is ", "[nova: Customer Support Lead]", " now."])
     // no badge: a role of one word at a sentence's start with no "@", a server after "@", an email, a name in small letters
     for text in ["Marketing drafts it.", "Ping @app-1 now.", "Write to pat@Leo.example today.", "Ask @leo now.",
                  "Ask x@Leo now."] {
