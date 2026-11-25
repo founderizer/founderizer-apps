@@ -12,6 +12,9 @@ namespace Founderizer.Remote.Tests;
 [TestClass]
 public sealed class RecordAndRulesTests
 {
+    /// <summary>A server at this host and port; <paramref name="owners"/>: the owner gave this port for this host.</summary>
+    private static RemoteTarget At(string host, int port, bool owners = false) => new(host, port, "root", owners ? host : null);
+
     private static byte[] Blob(string type, byte fill)
     {
         var name = Encoding.ASCII.GetBytes(type);
@@ -37,12 +40,51 @@ public sealed class RecordAndRulesTests
             var keys = new HostKeys(folder);
             File.WriteAllText(keys.Path, "{\"hosts\": {\"[203.0.113.9]:22\": 7}}");
             var before = File.ReadAllText(keys.Path);
-            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check("203.0.113.9", 22, Blob("ssh-ed25519", 1), HostKeyRule.TakeNew));
-            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check("198.51.100.4", 22, Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check(At("203.0.113.9", 22), Blob("ssh-ed25519", 1), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check(At("198.51.100.4", 22), Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
             Assert.AreEqual(before, File.ReadAllText(keys.Path));
 
             keys.ForgetAll();
-            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check("198.51.100.4", 22, Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(At("198.51.100.4", 22), Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    /// <summary>
+    /// **Only port 22, or a port that the owner gave for this very host, keeps a new key; at any other port the server
+    /// must show the key of the host's port 22** (the Mac's <c>hostKeyOptions</c> and <c>HostKeyAlias</c>, the hole of
+    /// 22 November 2026). Bugs: a hub that is broken into names port 2222 of a server, where an agent's own small SSH
+    /// server answers, and a TakeNew there keeps that program's key, so every later root call (the vault's steps, the
+    /// owner's access line) takes its answer for root's; a line that an earlier build kept at "[host]:2222" opens the
+    /// server; a port that the owner gave for the typed address counts at an address that the hub gives.
+    /// </summary>
+    [TestMethod]
+    public void Only_port_22_or_the_owners_port_keeps_a_key_and_another_port_must_show_the_port_22_key()
+    {
+        var folder = Local.Folder("founderizer-remote-record");
+        try
+        {
+            var keys = new HostKeys(folder);
+            var hubs = At("203.0.113.9", 2222);
+            foreach (var rule in new[] { HostKeyRule.TakeNew, HostKeyRule.Known })
+                Assert.AreEqual(HostKeyVerdict.Unknown, keys.Check(hubs, Blob("ssh-ed25519", 1), rule), rule.ToString());
+            Assert.IsNull(keys.Find("203.0.113.9", 2222), "no key kept at a port of the hub's record");
+            Assert.IsNull(keys.Find("203.0.113.9", 22));
+
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(At("203.0.113.9", 22), Blob("ssh-ed25519", 1), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(hubs, Blob("ssh-ed25519", 1), HostKeyRule.Known), "the port 22 key");
+            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check(hubs, Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
+            Assert.AreEqual(keys.Find("203.0.113.9", 22), keys.Find(hubs));
+
+            var owners = At("203.0.113.9", 2222, owners: true);
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(owners, Blob("ssh-ed25519", 2), HostKeyRule.TakeNew), "the owner's port");
+            Assert.AreEqual(keys.Find("203.0.113.9", 2222), keys.Find(owners));
+            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check(hubs, Blob("ssh-ed25519", 2), HostKeyRule.Known),
+                            "a line of [host]:2222 is not read at a port that the owner did not give");
+
+            var moved = new RemoteTarget("100.80.1.7", 2222, "root", PortGivenFor: "203.0.113.9");
+            Assert.AreEqual(HostKeyVerdict.Unknown, keys.Check(moved, Blob("ssh-ed25519", 3), HostKeyRule.TakeNew));
+            Assert.IsNull(keys.Find("100.80.1.7", 2222));
         }
         finally { Directory.Delete(folder, recursive: true); }
     }
@@ -58,14 +100,14 @@ public sealed class RecordAndRulesTests
         try
         {
             var keys = new HostKeys(folder);
-            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check("203.0.113.9", 22, Blob("ssh-ed25519", 1), HostKeyRule.TakeNew));
-            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check("Server.Example.COM", 2222, Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
-            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check("203.0.113.9", 22, Blob("ssh-ed25519", 3), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(At("203.0.113.9", 22), Blob("ssh-ed25519", 1), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(At("Server.Example.COM", 2222, owners: true), Blob("ssh-ed25519", 2), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Changed, keys.Check(At("203.0.113.9", 22), Blob("ssh-ed25519", 3), HostKeyRule.TakeNew));
 
             keys.Forget("203.0.113.9", 22);
             Assert.IsNull(keys.Find("203.0.113.9", 22));
             Assert.IsNotNull(keys.Find("server.example.com", 2222));
-            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check("203.0.113.9", 22, Blob("ssh-ed25519", 3), HostKeyRule.TakeNew));
+            Assert.AreEqual(HostKeyVerdict.Trusted, keys.Check(At("203.0.113.9", 22), Blob("ssh-ed25519", 3), HostKeyRule.TakeNew));
         }
         finally { Directory.Delete(folder, recursive: true); }
     }

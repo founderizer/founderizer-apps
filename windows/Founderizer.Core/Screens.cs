@@ -1973,7 +1973,8 @@ public sealed record RequestStep
     /// owner's "Yes, same marks there", 21 November 2026).</summary>
     public AnswerMark AnswerMark { get; init; } = AnswerMark.Plain;
     /// <summary>**His answer waits 5 seconds, with Undo at the end of its line and no check** (the owner's "Yes, Undo
-    /// there too", 21 November 2026; the Mac's NeedAnswered.waits): the request stays at hand meanwhile, then leaves as
+    /// there too", 21 November 2026; the Mac's NeedAnswered.waits of Founderizer 0.1.435, which F12 of 0.1.482 replaced on the
+    /// Mac, and which the PC takes in U5): the request stays at hand meanwhile, then leaves as
     /// before (<see cref="RequestCard.Holds"/>).</summary>
     public bool Holds { get; init; }
     public string UndoWords => "Undo";

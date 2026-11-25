@@ -92,8 +92,14 @@ public sealed partial record InstallTarget(string Host, string User = "root", in
 
     public bool IsValid => Problem is null;
 
+    /// <summary>**The host for which the owner gave the port** (the Mac's <c>portGivenFor</c>): the address that the owner
+    /// typed, or the private address that the install moved to over this very connection; null for a port of the hub's
+    /// record. A move to an address that the hub gives keeps the old host here, so the port is not the owner's there
+    /// (<see cref="RemoteTarget.PortIsOwners"/>).</summary>
+    public string? PortGivenFor { get; init; }
+
     /// <summary>The target of an IRemote call.</summary>
-    public RemoteTarget Remote => new(Host, Port, User);
+    public RemoteTarget Remote => new(Host, Port, User, PortGivenFor);
 
     [GeneratedRegex(@"\A[a-zA-Z0-9]([a-zA-Z0-9.:-]{0,252}[a-zA-Z0-9])?\z", RegexOptions.CultureInvariant)]
     private static partial Regex HostShape();

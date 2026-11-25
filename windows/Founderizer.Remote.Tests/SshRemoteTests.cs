@@ -181,7 +181,7 @@ public sealed class SshRemoteTests
         using var sshd = new ScratchSshd([app.Key.PublicLine]);
         using var relay = new Relay(sshd.Port);
         var started = new TaskCompletionSource();
-        var target = new RemoteTarget("127.0.0.1", relay.Port, sshd.User);
+        var target = new RemoteTarget("127.0.0.1", relay.Port, sshd.User, PortGivenFor: "127.0.0.1");
         var call = app.Run(target, "echo started; sleep 60", also: text => { if (text == "started") started.TrySetResult(); });
         await started.Task.WaitAsync(TimeSpan.FromSeconds(30));
         relay.Cut();

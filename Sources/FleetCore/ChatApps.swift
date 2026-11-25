@@ -534,10 +534,12 @@ public struct BotToken: Sendable, Equatable, CustomStringConvertible, CustomDebu
     let app: String
 
     /// The pasted text without spaces and line ends at its ends, if it has the hub's form: 50 to 100 characters of
-    /// `A-Z a-z 0-9 . _ -`.
+    /// `A-Z a-z 0-9 . _ -` that do not start as a Slack token does (`xox`, `xapp-`), which has the same characters
+    /// (owner API 1.338).
     public init?(pasted: String) {
         let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (50...100).contains(text.count), text.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || ".-_".contains($0)) })
+        guard (50...100).contains(text.count), text.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || ".-_".contains($0)) }),
+              !text.hasPrefix("xox"), !text.hasPrefix("xapp-")
         else { return nil }
         value = text; app = "discord"
     }

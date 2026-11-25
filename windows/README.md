@@ -18,6 +18,7 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | `Founderizer.Remote/` | SSH from the owner's PC (step 2, piece L1): `IRemote` and `SshRemote`, the host key record, the app's own SSH key; the owner's key once and its check (piece L1a). The only project that names SSH.NET; it names no other project. `net10.0`, no Windows call | any OS |
 | `Founderizer.Remote.Tests/` | MSTest: against a scratch `sshd` of this machine, and an `sshd` in a Docker container for the password and `sudo -S`; the owner's keys made by this machine's `ssh-keygen`, and in the container by `puttygen` and OpenSSL's `ssh-keygen` | macOS, Linux |
 | `Founderizer.Setup/Install/` | the install of a server and the claim of a new hub from the owner's PC (step 2, piece L3): the Mac's `InstallPlan`, `MachineInstaller`, `ServerCheck` and their reads, over `IRemote`; held to `../vectors/remote-install.json` and `install-reads.json` | any OS |
+| `Founderizer.Setup/RootJobs/` | the root jobs of the owner's PC (step 2, piece L6): the Mac's sweeps (the owner's access line, the join's hardening, the agents' browser parts), the vault's install and pins and the key registration's proof over `IRemote`; held to `../vectors/remote-root.json` and `remote-vault.json` | any OS |
 | `Founderizer.Setup/FirstRun/`, `Founderizer.Setup/Agents/`, `Founderizer.Owner/Reads/` | the first run and the manager's setup as models (step 2, piece L4): the Mac's `FirstRunModel` and its page models, the build, Start again, the records, the password once, the agent setup and its sign-in, and the reads of `GET /ui/servers`, `/ui/machines` and `/ui/team`; held to `../vectors/setup-words.json` and `remote-password.json` | any OS |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
@@ -521,7 +522,12 @@ and 6). These names stay.
 - `HostKeys`: `known-hosts.json` in the app's folder; the owner's own `%USERPROFILE%\.ssh` is never read or written.
   `TakeNew` (`accept-new`) keeps the key of a server with none on record. Under either rule, a server with a key on
   record must show that key, of that type; a key of another type is a changed key (OpenSSH's `accept-new` would take
-  it). `Forget(host, port)` when a server is removed, `ForgetAll()` at start again. A file that cannot be read refuses
+  it). **The rule by port** (the Mac's `hostKeyOptions`, 22 November 2026): only port 22, or a port that the owner gave
+  for that very host (`RemoteTarget.PortGivenFor`, `PortIsOwners`), has a line of its own and keeps a new key. At any
+  other port, a port of the hub's record, the server must show the key of the host's port 22 line (the Mac's
+  `HostKeyAlias`) under either rule, and a line of `[host]:port` is not read. The owner's typed `user@host:port`
+  (`SetupStore.Target`) gives its port for its host; an install's move to the private address that the server printed
+  keeps it (`Installer.Moved`); a move to an address of the hub's (`MachineReach.Reaching`) does not. `Forget(host, port)` when a server is removed, `ForgetAll()` at start again. A file that cannot be read refuses
   every server as `HostKeyChanged`, and nothing writes over it, until `ForgetAll`. No method takes a changed key, and
   none is added.
 - `AppSshKey.Make()` gives `(PrivateKey, PublicLine)`: 32 bytes for the box under `AppSshKey.BoxName`, and
@@ -723,6 +729,95 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   that the PC makes has a build record with its hub). The sentences that the Mac holds only in its view files are copied
   in `SetupScreens` and held to the Mac's string catalog (`app/Localization/Localizable.xcstrings`) by a test; the area
   "Setup, servers and owner tools" has queued a FleetCore `FirstRunWords` that the writer will then read.
+
+### The root jobs: `Founderizer.Setup/RootJobs` (step 2, piece L6)
+
+For the window's piece U4 (`Fleet/RootRounds.cs`, which starts the rounds from the store's read) and the vault's
+`VaultRound` (after piece L5). The steps that the owner's Mac runs by itself as root on the fleet's servers
+(`OwnerAccessSweep.swift`, `ServerHardening.swift`, `ServerBrowser.swift`, `CentralVault.swift` `CentralVaultRemote`,
+`OwnerMacKey.swift` the registration), with the same rules and the same programs: `../vectors/remote-root.json` and
+`remote-vault.json` hold them, made by FleetCore's own code (`Tests/FleetCoreTests/RootVectorsTests.swift` and
+`RemoteVaultVectorsTests.swift`), and `RootVectorTests` holds the C# equal to them, byte for byte. **Nothing of it is on a
+page**: what a run said is a line for the log. **No program's text comes from the hub or from a server**: each is of this
+build's own code (rule 12). Namespace `Founderizer.Setup.RootJobs`. These names stay. The folder names no type of L5.
+
+- **The engine** (`RootJob.cs`): `JobTries` (the Mac's VaultTries: a failure waits ten minutes, six in a row and then it
+  waits for good), `SweepMemory` and `SweepReading` / `SweepStep` / `SweepOutcome` (the Mac's `ServerHardening.Memory`,
+  `Reading`, `Step`, `Outcome`), `RootJob.Step` (**the two-rounds rule**: a fault runs its program only when the round
+  before read it too) and `RootJob.TurnAsync` (**a try is a kept run only when the program started**, which its own first
+  line says; a try that reached no server, a host key that is not on record, a login that was refused, nothing that
+  answered, is counted for this start of the app only). The Mac's memory of an older build's reasons (`ofRuns`) has no
+  counterpart: a PC never kept one.
+- **The call** (`RootCall`): `AnswerAsync(remote, target, program, limit)` gives the program's lines (both streams in their
+  order, at most 1 MiB) and the way the call failed; `RunAsync` gives the text alone, with the failure as its last line.
+  Every call has **`HostKeyRule.Known`** (the Mac's `StrictHostKeyChecking=yes`), the app's own key, and root through
+  `sudo -n` for a user that is not root (`InstallPlan.Command`). A server with no host key on record gets no program, and the
+  job counts a try that ran nothing. **How a PC learns the key of a server of a fleet that it took over is not decided** (see
+  "Open").
+- **The records** (`RootRecords`): one file, `records/root-jobs.json` in the app's folder, for what the jobs keep between two
+  starts: the counts of the sweeps (`Sweep`, `KeepSweep`), the browser parts (`BrowserOf`, `KeepBrowser`) and the marks of
+  the access line (`Marks`, `KeepMarks`), by `RootRecords.NameOf(hub, server)` (the hub's address, the server's name, its
+  private address). No secret. A file that does not read is an empty record: each server then has at most six more tries;
+  so is a member or a server's record that is null. Two objects of one folder (the round's and the access line's) share
+  one lock, and each reads the file again after another wrote it, so none writes over the others' records; a record that
+  the disk did not take stays in memory for that start.
+- **The round** (`RootRound(records).RunAsync(fleet, servers, tailscaleStatus, run, now)`, every `RootRound.Every` =
+  300 s): for each server that the hardening is for, the hardening's turn and then the browser parts', each server reached
+  only with `servers.RootConnectionAsync` (`ServerRecords`, below). A cancel ends it before a server or between a
+  server's two turns, and the next round is then a first round. `RootFleet(Hub, Time, Join, Servers,
+  Agents, Tasks)` is what the store read: `Time` is the hub's clock (`ServerList.Time`), `Servers` the rows of `GET
+  /ui/servers` as `RootServer.Of(entry, row)`, `Agents` and `Tasks` the whole state's (`BrowserAgent.Of`, `BrowserTask.Of`),
+  null where there is none (the browser parts then wait). It gives the log's lines. The L15 sweeps (memory, restart,
+  libraries) are each a turn more here.
+- **The hardening** (`Hardening`), **the browser parts** (`Browser`, `BrowserParts`, `AgentUsers`, `BrowserWant`; the Mac's
+  rules of 24 November 2026: a reading's row with a port outside 9300-9399 or 5910-5999, or a port or a user that an earlier
+  row has, is no row (`Browser.Assign`); no table names such a port (`Browser.Table`); the worker user is the service's own,
+  `fleet`, with a uid that is not 0, not the broker's and no agent's (`Browser.WorkerFits`); the step checks both again on
+  the server (`ports-refused`, `worker-refused`); a reading's numbers are 64-bit, as the Mac's `Int`;
+  `../vectors/server-browser-ports.json`, by the Mac's `ServerBrowserVectorsTests.swift`, holds them), **the
+  owner's access line** (`AccessLine(records).RoundAsync(hub, servers, publicLine, fingerprint, connections, tailscaleStatus,
+  run, now)`, every `AccessLine.Every` = 900 s; the key's public line and fingerprint come from the caller, as plain text, and
+  a text that is not one line "`ssh-ed25519 <base64> founderizer-owner-access`" (`AccessLine.IsAccessLine`) throws before
+  any program is made or any server is reached: the Mac makes the line from the key), **the connection**
+  (`ServerRecords(machines, own, keptOf).RootConnectionAsync(server, tailscaleStatus)`, the one way of a root job to a
+  server: the connection that this PC keeps from an install (`keptOf`), else the fleet's own record of the server, **whose
+  user other than root is none for a root job**, and **only at an address that this PC's own Tailscale names as that
+  server** (`TailnetNodes`), the connection's address and never the row's; `MachineAccess` and `OwnServer` are plain rows of
+  `GET /ui/machines` and `GET /ui/vault`; `ServerRecords.Target(…, rootOnly: false)` for the key registration alone).
+- **The vault** (`VaultInstall.Program(ownerKey, keepOwner, releaseKeys)`, `.Installed(output)`, `.HubMachineStop` (the
+  install and the update run only on the node that this PC's Tailscale names as both the connection's host and the hub's
+  address, by node ID, never by a first label) and `.PinRefusal` (an update or the app's own install never moves a pin that
+  this PC holds); `VaultPins.TrustAsync`, which signs a pin **only when this PC's own Tailscale names the connection's address
+  as that server**, the key that was read there is the one that the hub reports, and the clocks agree, and reads a server as
+  a Mac only when the hub's `kind` and the node's Tailscale `OS` both say so (`VaultPins.ReadOf`); else as root, never as a
+  record's user that is not root). All take plain values: the owner key's public half as base64, the release keys as text
+  (the window's `ReleaseChannel.ShippedKeys` and `EarlyKeys`), the Tailscale status as JSON, an `IOwnerKey`. `VaultRound`,
+  which joins them with L5's `VaultPlan`, keeps the pins and the Mac server pin's guard (the Mac's `MacVaultPin`, VAULT.md
+  limit 10) and sends the statement, is written after L5 is on `main`, with three rules of the Mac that it must keep: the
+  Mac server pin's guard comes **before** `VaultPins.TrustAsync`, which signs inside; it makes an owner key only when the
+  store says that none is there, and stops on a read that failed (the Mac's `OwnerKeychain.lookup`, 09edee16b); and the
+  PC's maker of the owner access key (whose public line `AccessLine` takes) keeps the key on a read that failed, and makes
+  one only where none is there (the Mac's `FleetKeychainItem.held` and `mayMake`, 5bc07c316).
+- **The owner's computer key** (`OwnerKeyProof.RunAsync(hub, box, post, read)` and `OwnerKeyPlan`): the registration of a key
+  with the one-time proof that the PC reads over SSH. `OwnerPcKey` and the store call it in the repair (next piece of this
+  entry).
+
+**Open, for the owner** (9.1 of `windows-app-plan-v2.md`, "it is a question for the owner before piece L6, and no builder
+settles it"): how a PC learns a server's host key without a console when it has none on record (a new PC that takes over a
+fleet, a server that joined some other way). The Mac's sentence says "Connect to it once with ssh from Terminal". Every job
+runs under `Known`, so such a server gets no root program and no pin until the key is on record. The words that stand
+meanwhile are the PC's own `ServerCheck.HostKeyUnknown` ("This PC has no host key on record for <server>. Remove the server
+and add it again."), which no job shows on a page: only `VaultPins` gives it, as a reason of a Secrets page row (wave B's
+window).
+
+**Where L6 differs from the Mac**: no `ssh` and no Terminal; no `SSHKeyLedger` gate (the PC has one key); no `~/.ssh`; the
+Mac's old marks of before 14 November 2026 are not read (a PC never wrote one); the public SSH check (`PublicSSHCheck`), the
+system libraries, the memory limit and the restart settings are L15's. A PC reads `GET /ui/servers` rows' `reading.browser`
+and `reading.agents`, and `GET /ui/machines`' `access`, which `Founderizer.Owner/Reads` skips today: U4 takes the raw rows
+(`RootServer.Of(entry, row)`) or adds the members to those records after L4b is on `main`. The Mac's host key rule by port
+(22 November 2026: a new key only at port 22 or at a port that the owner gave, else the key of the host's port 22) is in
+the SSH layer (`HostKeys`, L1), for every call: a root job takes no new key at any port, because every one runs under
+`Known`, and at a port of the hub's record it compares the server's key with the host's port 22 line.
 
 ### The first run in the window (step 2, piece U1)
 

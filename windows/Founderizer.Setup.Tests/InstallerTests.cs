@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Founderizer.Core;
 using Founderizer.Remote;
+using Founderizer.Setup.FirstRun;
 using Founderizer.Setup.Install;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -68,6 +69,15 @@ public sealed class InstallerTests
         Assert.AreEqual(6, hosts.Count - 2);
         Assert.AreEqual(Printed.PrivateAddress, installer.Reached.Host);
         Assert.AreEqual(new Uri($"http://{Printed.PrivateAddress}:8765/"), installer.ClaimedHub);
+
+        // A port that the owner typed is the owner's for that host, and for the private address that the server printed
+        // over this very connection; any other port stays one that the owner did not give (the Mac's MachineInstaller.moved).
+        // Bugs: the install's later steps at the owner's port 2222 find no host key there and stop; a port of the hub's
+        // record keeps a new host key after a move.
+        var typed = SetupStore.Target("admin@203.0.113.10:2222");
+        Assert.IsTrue(typed.Remote.PortIsOwners);
+        Assert.IsTrue(Installer.Moved(typed, Printed.PrivateAddress).Remote.PortIsOwners);
+        Assert.IsFalse(Installer.Moved(typed with { PortGivenFor = null }, Printed.PrivateAddress).Remote.PortIsOwners);
     }
 
     /// <summary>**A step that fails stops the install**, with the server's last line, and no step after it runs: a clone

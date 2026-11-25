@@ -543,7 +543,8 @@ public enum SaveBotToken {
     }
 
     /// **The parts of a Discord bot token**: three parts with two dots, the first the bot's id (a number of 15 to 22
-    /// digits) in base64. The hub and the app's own page take any 50 to 100 characters of `A-Z a-z 0-9 . _ -`, which is
+    /// digits) in base64. The hub and the app's own page take any 50 to 100 characters of `A-Z a-z 0-9 . _ -` but a
+    /// Slack token's start (`xox`, `xapp-`; owner API 1.338), which is
     /// also the form of many other services' keys (a 64-character API token, a Tailscale key). The page takes what the
     /// owner pastes; this tool takes a file that a caller names, so it is stricter: a file that holds another
     /// service's key must not go to the hub, and from there to Discord, as a bot's token. If Discord ever changes

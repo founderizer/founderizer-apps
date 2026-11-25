@@ -27,6 +27,13 @@ internal enum HostKeyVerdict
 /// is on record must show that same key, of that same type, under either rule: the app has no way to take a changed
 /// key. Only <see cref="Forget"/> (the removal of a server) and <see cref="ForgetAll"/> (start again) take a key away.
 ///
+/// **The rule by port** (the Mac's <c>InstallTarget.hostKeyOptions</c>, the hole of 22 November 2026): a hub that is
+/// broken into names a high port of a server in its record, where an agent's own small SSH server answers with a key of
+/// its own. So only port 22, or a port that the owner gave for this very host (<see cref="RemoteTarget.PortIsOwners"/>),
+/// has a line of its own and can keep a new key. At any other port the server must show the key of the host's port 22
+/// line (the Mac's <c>HostKeyAlias</c>), under either rule, and a key that is not known there is refused: a line for
+/// "<c>[host]:port</c>" is not read at all, so a key that an earlier build kept there opens nothing.
+///
 /// The file is written to a new file beside it and moved over it, so a reader never sees half of it. A file that is
 /// there and cannot be read is no record of nothing: every server is then <see cref="HostKeyVerdict.Changed"/>, and
 /// nothing is written over it, until start again removes it. So an older build that cannot read a newer file, or a
@@ -52,7 +59,7 @@ public sealed class HostKeys
     /// <summary>The file's whole path.</summary>
     public string Path { get; }
 
-    /// <summary>The key on record for this server ("<c>ssh-ed25519 AAAA…</c>"), or null.</summary>
+    /// <summary>The line on record for this host and port ("<c>ssh-ed25519 AAAA…</c>"), or null.</summary>
     public string? Find(string host, int port)
     {
         lock (gate)
@@ -81,20 +88,32 @@ public sealed class HostKeys
         }
     }
 
+    /// <summary>The key that a server at this target must show: the line of its port, or of the host's port 22 at a port
+    /// that is not the owner's (<see cref="RemoteTarget.PortIsOwners"/>); null when there is none.</summary>
+    public string? Find(RemoteTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return Find(target.Host, target.PortIsOwners ? target.Port : 22);
+    }
+
     /// <summary>
     /// The verdict on the key that a server showed (its SSH public key blob), under the call's rule, as one step: two
-    /// calls to one new server at once keep one key, and the second must show it.
+    /// calls to one new server at once keep one key, and the second must show it. At a port that is not the owner's
+    /// (<see cref="RemoteTarget.PortIsOwners"/>) the key must be the one of the host's port 22, and none is kept.
     /// </summary>
-    internal HostKeyVerdict Check(string host, int port, byte[] blob, HostKeyRule rule)
+    internal HostKeyVerdict Check(RemoteTarget target, byte[] blob, HostKeyRule rule)
     {
+        ArgumentNullException.ThrowIfNull(target);
         if (Line(blob) is not { } shown) return HostKeyVerdict.Changed;
+        var owners = target.PortIsOwners;
+        var name = Name(target.Host, owners ? target.Port : 22);
         lock (gate)
         {
             if (Read() is not { } hosts) return HostKeyVerdict.Changed;
-            if (hosts.TryGetValue(Name(host, port), out var kept))
+            if (hosts.TryGetValue(name, out var kept))
                 return string.Equals(kept, shown, StringComparison.Ordinal) ? HostKeyVerdict.Trusted : HostKeyVerdict.Changed;
-            if (rule != HostKeyRule.TakeNew) return HostKeyVerdict.Unknown;
-            hosts[Name(host, port)] = shown;
+            if (rule != HostKeyRule.TakeNew || !owners) return HostKeyVerdict.Unknown;
+            hosts[name] = shown;
             try { Write(hosts); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return HostKeyVerdict.Unknown; }
             return HostKeyVerdict.Trusted;

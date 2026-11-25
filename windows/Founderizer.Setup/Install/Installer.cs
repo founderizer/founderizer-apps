@@ -185,6 +185,12 @@ public sealed class Installer
     /// server on the private network, and from then on its address there.</summary>
     public InstallTarget Reached { get; private set; }
 
+    /// <summary>**The connection at the machine's own private address**, which the machine printed in the network step over
+    /// this very connection, not the hub (the Mac's <c>MachineInstaller.moved</c>). A port that the owner gave for the typed
+    /// address is the owner's for that address too; any other port stays one that the owner did not give.</summary>
+    internal static InstallTarget Moved(InstallTarget target, string address) =>
+        target with { Host = address, PortGivenFor = target.PortGivenFor == target.Host ? address : target.PortGivenFor };
+
     /// <summary>The hub that the claim step claimed, or that served this PC already: its address with the hub's port.</summary>
     public Uri? ClaimedHub { get; private set; }
 
@@ -236,7 +242,7 @@ public sealed class Installer
                 try
                 {
                     var lines = await PerformAsync(remote, step, report, cancel);
-                    if (step.Id == "network" && InstallPlan.PrivateAddress(lines) is { } address) Reached = Reached with { Host = address };
+                    if (step.Id == "network" && InstallPlan.PrivateAddress(lines) is { } address) Reached = Moved(Reached, address);
                     if (step.Action is StepAction.Verify)
                     {
                         var output = string.Join("\n", lines);

@@ -151,7 +151,7 @@ public sealed class SshRemote : IRemote
                     Timeout = call.Connect,
                     Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
                 };
-                Harden(info, owner.hostKeys.Find(target.Host, target.Port));
+                Harden(info, owner.hostKeys.Find(target));
                 client = new SshClient(info) { KeepAliveInterval = KeepAlive };
                 client.HostKeyReceived += CheckHostKey;
                 if (cancel.IsCancellationRequested) return Result(null, stopped());
@@ -247,7 +247,7 @@ public sealed class SshRemote : IRemote
 
         private void CheckHostKey(object? sender, HostKeyEventArgs e)
         {
-            var verdict = owner.hostKeys.Check(call.Target.Host, call.Target.Port, e.HostKey, call.HostKey);
+            var verdict = owner.hostKeys.Check(call.Target, e.HostKey, call.HostKey);
             if (verdict == HostKeyVerdict.Trusted) return;
             Interlocked.CompareExchange(ref refused, (int)verdict + 1, 0);
             e.CanTrust = false;

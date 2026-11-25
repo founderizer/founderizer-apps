@@ -140,7 +140,7 @@ Mac, and a device route is all that the PC reaches.
 
 ## What no feature name carries
 
-- **The background repair of servers that exist** (the Mac's sweep in `OwnerAccessSweep.swift` and `FleetStore.swift`: `ServerHardening`, `ServerMemory`, `ServerRestart`, `ServerUplink`, and the start guard for cloud-init's units that the area Setup, servers and owner tools builds now): **waits.** On a server that exists, the hub's own included, these root steps come only from the owner's Mac, so a fleet whose owner has only a PC gets each guard on new servers (the installers) and never on the servers that exist. The owner, 22 November 2026: "we need something reliable for ALL servers". It adds no element to a screen. Its order is rule 7 of section 0.1 of `~/dev/founderizer-plans/reliability-test-fleet-2026-11-21.md` (tested with the fault made on purpose, one server first, his fleet before the customers' track, one step takes it back), and its root part is read by the area Door and security, as the Mac's is. It needs the owner's computer on a PC (Windows step 2) before it can run.
+- **The background repair of servers that exist** (the Mac's sweep in `OwnerAccessSweep.swift` and `FleetStore.swift`: `ServerHardening`, `ServerMemory`, `ServerRestart`, `ServerUplink`, and the start guard for cloud-init's units that the area Setup, servers and owner tools builds now): **waits.** On a server that exists, the hub's own included, these root steps come only from the owner's Mac, so a fleet whose owner has only a PC gets each guard on new servers (the installers) and never on the servers that exist. The owner, 22 November 2026: "we need something reliable for ALL servers". It adds no element to a screen. Its order is rule 7 of section 0.1 of `~/dev/founderizer-plans/reliability-test-fleet-2026-11-21.md` (tested with the fault made on purpose, one server first, his fleet before the customers' track, one step takes it back), and its root part is read by the area Door and security, as the Mac's is. It needs the owner's computer on a PC (Windows step 2) before it can run. Piece L6 (the library, `Founderizer.Setup/RootJobs`) has the engine, the hardening, the browser parts and the access line, with the Mac's programs byte for byte; no round runs before the window's U4 starts it, and `ServerMemory`, `ServerRestart`, `ServerUplink` and `ServerLibraries` are the plan's L15.
 - **The line, the minutes and the bar of an install on the first run's build page** (F4 of the owner's feedback of 22
   November 2026, pieces 2 to 5; the Mac's `InstallPhases`, `InstallHold`, `MachineInstallModel.record` and
   `FleetBuildLine`): built, through the shared vectors (`install-reads.json`, `InstallVectorTests`). The line is the one
@@ -210,7 +210,9 @@ Mac, and a device route is all that the PC reaches.
 - **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
   Mac's alone, an AppKit panel over every app, also over a full-screen one.
 - **An answer waits 5 seconds with Undo, Pause stands on its card while its task works, and the mark opens the task**
-  (the Mac's `AnswerHolds`, `NeedRequestCard.lineEnd`, `NeedAnswered.waits`, Founderizer 0.1.435; the owner's "Yes, 5
+  (the Mac's `AnswerHolds`, `NeedRequestCard.lineEnd`, `NeedAnswered.waits` of Founderizer 0.1.435, which F12 (Founderizer
+  0.1.482, `bbceecaa5`: one held answer for the app, the card completes at once, ONE badge holds Undo for 5 seconds) replaced
+  on the Mac; the PC takes F12 in U5; the owner's "Yes, 5
   seconds (Recommended)", "Both (Recommended)", "Yes, open task", "Gray pause, as the row" and "Yes, Undo there too" of
   21 November 2026): built. Each answer that a card sends (an option, the ticked options, a quick reply, his words with
   the box's files) waits in the store's state for 5 seconds (`OwnerStore.Hold`, `StoreState.HeldAnswers`,

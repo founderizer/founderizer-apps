@@ -123,7 +123,9 @@ internal sealed class ScratchSshd : IDisposable
     public string User { get; } = Environment.UserName;
     public string HostKeyLine { get; private set; } = "";
     public string LogPath => Path.Combine(Folder, "sshd.log");
-    public RemoteTarget Target => new("127.0.0.1", Port, User);
+    // Each port of a scratch server is given for 127.0.0.1, as the owner gives a port (RemoteTarget.PortIsOwners), so a
+    // first call keeps its host key.
+    public RemoteTarget Target => new("127.0.0.1", Port, User, PortGivenFor: "127.0.0.1");
 
     /// <summary>Whether this machine has an OpenSSH server and ssh-keygen (not on Windows, where proof A runs it).</summary>
     public static void RequireOrSkip()
@@ -391,9 +393,9 @@ internal sealed class ContainerSshd : IDisposable
         }
     }
 
-    public RemoteTarget Target => new("127.0.0.1", Port, User);
-    public RemoteTarget PasswordOnly => new("127.0.0.1", PasswordOnlyPort, User);
-    public RemoteTarget Tcsh => new("127.0.0.1", Port, TcshUser);
+    public RemoteTarget Target => new("127.0.0.1", Port, User, PortGivenFor: "127.0.0.1");
+    public RemoteTarget PasswordOnly => new("127.0.0.1", PasswordOnlyPort, User, PortGivenFor: "127.0.0.1");
+    public RemoteTarget Tcsh => new("127.0.0.1", Port, TcshUser, PortGivenFor: "127.0.0.1");
 
     /// <summary>What the sshd of port 22 logged.</summary>
     public string Log() => Local.Run(Docker, ["logs", Name]).Output;

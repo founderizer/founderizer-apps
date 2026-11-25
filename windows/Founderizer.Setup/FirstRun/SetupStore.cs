@@ -708,7 +708,7 @@ public sealed class SetupStore
     }
 
     /// <summary>"root@203.0.113.10:2222" as the server, its user and its port; a user that is not root becomes root with
-    /// <c>sudo</c>.</summary>
+    /// <c>sudo</c>. The owner typed the port, so it is the owner's for that host (<see cref="InstallTarget.PortGivenFor"/>).</summary>
     internal static InstallTarget Target(string typed)
     {
         var user = "root";
@@ -720,7 +720,8 @@ public sealed class SetupStore
             port = given;
             rest = rest[..rest.IndexOf(':')];
         }
-        return new InstallTarget(rest.Trim('[', ']'), user, port, user != "root");
+        var host = rest.Trim('[', ']');
+        return new InstallTarget(host, user, port, user != "root") { PortGivenFor = host };
     }
 
     /// <summary>One check, and a busy server read again every fifteen seconds until it says something else.</summary>

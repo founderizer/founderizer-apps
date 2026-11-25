@@ -111,6 +111,17 @@ struct BotTokenTests {
         #expect(BotToken(pasted: String(repeating: "a", count: 60) + "/") == nil)
         #expect(BotToken(pasted: String(repeating: "é", count: 60)) == nil)
         #expect(BotToken(pasted: "") == nil)
+        // A Slack token has the same characters, but is never a Discord bot token (owner API 1.338); made up, in parts.
+        let slackBot = "xo" + "xb-" + String(repeating: "1", count: 12) + "-" + String(repeating: "2", count: 13)
+            + "-SyntheticSlackBotToken01"
+        let slackApp = "xa" + "pp-1-A0123456789-" + String(repeating: "3", count: 13) + "-" + String(repeating: "f", count: 64)
+        let slackUser = "xo" + "xp-" + String(repeating: "1", count: 12) + "-" + String(repeating: "2", count: 13) + "-"
+            + String(repeating: "3", count: 13) + "-" + String(repeating: "f", count: 32)
+        #expect(BotToken(pasted: slackBot) == nil && BotToken(pasted: slackApp) == nil)
+        #expect(BotToken(pasted: slackUser) == nil)
+        #expect(BotToken(pasted: "  " + slackBot + "\n") == nil, "the check reads the trimmed text")
+        #expect(BotToken(pasted: "xo" + String(repeating: "x", count: 60)) == nil)
+        #expect(BotToken(pasted: "xa" + String(repeating: "pp", count: 30)) != nil)
         // No print, interpolation or dump shows the value.
         var dumped = ""
         dump(pasted, to: &dumped)

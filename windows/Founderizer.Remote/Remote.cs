@@ -6,8 +6,19 @@ using System.Threading.Tasks;
 
 namespace Founderizer.Remote;
 
-/// <summary>A server as the owner gave it: its address or host name, its SSH port, and the user the app logs in as.</summary>
-public sealed record RemoteTarget(string Host, int Port, string User);
+/// <summary>
+/// A server as the owner gave it: its address or host name, its SSH port, and the user the app logs in as.
+/// <c>PortGivenFor</c> is the host for which the owner gave this port himself (the Mac's
+/// <c>InstallTarget.portGivenFor</c>), or null for a port of the hub's record. Only port 22, or a port that the owner gave
+/// for this very host, can keep a new host key (<see cref="HostKeyRule.TakeNew"/>); at any other port the server must
+/// show the key that the app knows for the host's port 22 (<see cref="HostKeys"/>).
+/// </summary>
+public sealed record RemoteTarget(string Host, int Port, string User, string? PortGivenFor = null)
+{
+    /// <summary>**The port is no word of the hub's** (the Mac's <c>InstallTarget.portIsOwners</c>): port 22, which on
+    /// Linux only root's own <c>sshd</c> can hold, or the port that the owner gave for this very host.</summary>
+    public bool PortIsOwners => Port == 22 || string.Equals(PortGivenFor, Host, StringComparison.Ordinal);
+}
 
 /// <summary>
 /// How the app logs in. Never an SSH agent, never a file of keys, and the owner's own key only as the bytes of the one

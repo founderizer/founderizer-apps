@@ -1,0 +1,620 @@
+{
+  "about" : "The central vault's root steps and the key registration's proof read, as the owner's computer runs them over SSH (windows-app-plan-v2.md, 5.6, piece L6), made by FleetCore's own code.",
+  "bridges" : [
+    {
+      "bridge" : "if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '%s\\n' 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=' 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi",
+      "keys" : "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\nCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=",
+      "name" : "two keys"
+    },
+    {
+      "bridge" : "if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '%s\\n' 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=' 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi",
+      "keys" : "  BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=  \nnot a key\n\nCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=\n",
+      "name" : "two keys with space and a line that is no key"
+    },
+    {
+      "bridge" : "if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi",
+      "keys" : "",
+      "name" : "no key"
+    },
+    {
+      "bridge" : "if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '%s\\n' '8Gc80zgZcWqA7nX3+lChW09v2cOSi0lfjf4OzFiY2Ao=' 'pQ2RwJ1nL5KXI7dv6Pt71GHMqk61hMA0NQmPUwlSFiY=' 'VxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4=' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi",
+      "keys" : "8Gc80zgZcWqA7nX3+lChW09v2cOSi0lfjf4OzFiY2Ao=\npQ2RwJ1nL5KXI7dv6Pt71GHMqk61hMA0NQmPUwlSFiY=\nVxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4=",
+      "name" : "this build's keys"
+    }
+  ],
+  "broker_config" : "/etc/fleet-vault/vault.json",
+  "broker_keys" : [
+    {
+      "key" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "output" : "# public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\n"
+    },
+    {
+      "key" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "output" : "Welcome\n  # public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69  \n"
+    },
+    {
+      "key" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "output" : "# public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\n# public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\n"
+    },
+    {
+      "key" : null,
+      "output" : "# public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\n# public key: age1pyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyyscxl7ka\n"
+    },
+    {
+      "key" : null,
+      "output" : "# public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt6q\n"
+    },
+    {
+      "key" : null,
+      "output" : "# public key: AGE1QURSWPC8QURSWPC8QURSWPC8QURSWPC8QURSWPC8QURSWPC8QURS95JT69\n"
+    },
+    {
+      "key" : null,
+      "output" : "#public key: age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\n"
+    },
+    {
+      "key" : null,
+      "output" : "# public key: None\n"
+    },
+    {
+      "key" : null,
+      "output" : "Host key verification failed.\n"
+    },
+    {
+      "key" : null,
+      "output" : ""
+    }
+  ],
+  "hub_kit" : "/root/fleet-kit",
+  "hub_machine_stops" : [
+    {
+      "host" : "100.64.0.2",
+      "hub" : "http://100.64.0.2:8765",
+      "machine" : "hub",
+      "stop" : null,
+      "stop_without_tailscale" : "This Mac's Tailscale does not say that 100.64.0.2 is hub. Founderizer pinned nothing."
+    },
+    {
+      "host" : "hub",
+      "hub" : "http://100.64.0.2:8765",
+      "machine" : "hub",
+      "stop" : null,
+      "stop_without_tailscale" : "This Mac's Tailscale does not say that 100.64.0.2 is hub. Founderizer pinned nothing."
+    },
+    {
+      "host" : "100.64.0.7",
+      "hub" : "http://100.64.0.2:8765",
+      "machine" : "hub",
+      "stop" : "This Mac's Tailscale does not say that 100.64.0.7 is hub. Founderizer pinned nothing.",
+      "stop_without_tailscale" : "This Mac's Tailscale does not say that 100.64.0.2 is hub. Founderizer pinned nothing."
+    },
+    {
+      "host" : "100.64.0.2",
+      "hub" : "http://100.64.0.99:8765",
+      "machine" : "hub",
+      "stop" : "This Mac's Tailscale does not say that 100.64.0.99 is hub. Founderizer pinned nothing.",
+      "stop_without_tailscale" : "This Mac's Tailscale does not say that 100.64.0.99 is hub. Founderizer pinned nothing."
+    },
+    {
+      "host" : "twin",
+      "hub" : "http://100.64.0.11:8765",
+      "machine" : "hub",
+      "stop" : "This Mac's Tailscale does not say that twin is hub. Founderizer pinned nothing.",
+      "stop_without_tailscale" : "This Mac's Tailscale does not say that 100.64.0.11 is hub. Founderizer pinned nothing."
+    },
+    {
+      "host" : "100.64.0.11",
+      "hub" : "http://100.64.0.11:8765",
+      "machine" : "hub",
+      "stop" : null,
+      "stop_without_tailscale" : "This Mac's Tailscale does not say that 100.64.0.11 is hub. Founderizer pinned nothing."
+    }
+  ],
+  "installed" : [
+    {
+      "answer" : {
+        "fleet" : "0123456789abcdef",
+        "kind" : "installed",
+        "recipient" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69"
+      },
+      "output" : "Cloning…\n{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789abcdef\"}\n"
+    },
+    {
+      "answer" : {
+        "fleet" : "0123456789abcdef",
+        "kind" : "installed",
+        "recipient" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69"
+      },
+      "output" : "{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789abcdef\"}\nsome words after it\n"
+    },
+    {
+      "answer" : {
+        "kind" : "other_owner"
+      },
+      "output" : "{\"ok\": false, \"owner\": \"other\"}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "refused",
+        "says" : "the vault's store is held by another process"
+      },
+      "output" : "{\"ok\": false, \"error\": \"the vault's store is held by another process\"}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "refused",
+        "says" : "It gave no reason."
+      },
+      "output" : "{\"ok\": false}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "refused",
+        "says" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "output" : "{\"ok\": false, \"error\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "refused",
+        "says" : "It printed no vault key and no fleet that Founderizer can read."
+      },
+      "output" : "{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt6q\", \"fleet\": \"0123456789abcdef\"}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "refused",
+        "says" : "It printed no vault key and no fleet that Founderizer can read."
+      },
+      "output" : "{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789ABCDEF\"}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "refused",
+        "says" : "It printed no vault key and no fleet that Founderizer can read."
+      },
+      "output" : "{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\"}\n"
+    },
+    {
+      "answer" : null,
+      "output" : "{\"ok\": \"yes\", \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789abcdef\"}\n"
+    },
+    {
+      "answer" : {
+        "kind" : "other_owner"
+      },
+      "output" : "{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789abcdef\"}\n{\"ok\": false, \"owner\": \"other\"}\n"
+    },
+    {
+      "answer" : {
+        "fleet" : "0123456789abcdef",
+        "kind" : "installed",
+        "recipient" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69"
+      },
+      "output" : "{\"ok\": false, \"owner\": \"other\"}\n{\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789abcdef\"}\n"
+    },
+    {
+      "answer" : {
+        "fleet" : "0123456789abcdef",
+        "kind" : "installed",
+        "recipient" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69"
+      },
+      "output" : "  {\"ok\": true, \"recipient\": \"age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69\", \"fleet\": \"0123456789abcdef\"}  \n"
+    },
+    {
+      "answer" : null,
+      "output" : "[1, 2]\n{not json\n"
+    },
+    {
+      "answer" : null,
+      "output" : ""
+    }
+  ],
+  "installs" : [
+    {
+      "keep_owner" : true,
+      "name" : "the app's own install",
+      "owner_key" : "BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=",
+      "program" : "if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '%s\\n' '8Gc80zgZcWqA7nX3+lChW09v2cOSi0lfjf4OzFiY2Ao=' 'pQ2RwJ1nL5KXI7dv6Pt71GHMqk61hMA0NQmPUwlSFiY=' 'VxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4=' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi; python3 /usr/local/lib/founderizer-kit/hubsetup.py kit-clone && python3 /usr/local/lib/founderizer-kit/hubsetup.py central-vault --owner-key 'BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=' --keep-owner",
+      "through_sudo" : "sudo -n -i -- /bin/sh -c 'if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '\\''%s\\n'\\'' '\\''8Gc80zgZcWqA7nX3+lChW09v2cOSi0lfjf4OzFiY2Ao='\\'' '\\''pQ2RwJ1nL5KXI7dv6Pt71GHMqk61hMA0NQmPUwlSFiY='\\'' '\\''VxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4='\\'' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi; python3 /usr/local/lib/founderizer-kit/hubsetup.py kit-clone && python3 /usr/local/lib/founderizer-kit/hubsetup.py central-vault --owner-key '\\''BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A='\\'' --keep-owner'"
+    },
+    {
+      "keep_owner" : false,
+      "name" : "the owner's Set up",
+      "owner_key" : "BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=",
+      "program" : "if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '%s\\n' '8Gc80zgZcWqA7nX3+lChW09v2cOSi0lfjf4OzFiY2Ao=' 'pQ2RwJ1nL5KXI7dv6Pt71GHMqk61hMA0NQmPUwlSFiY=' 'VxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4=' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi; python3 /usr/local/lib/founderizer-kit/hubsetup.py kit-clone && python3 /usr/local/lib/founderizer-kit/hubsetup.py central-vault --owner-key 'BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A='",
+      "through_sudo" : "sudo -n -i -- /bin/sh -c 'if test -d /usr/local/lib/founderizer-kit/.git && ! test -e /usr/local/lib/founderizer-kit/early-key.pub; then printf '\\''%s\\n'\\'' '\\''8Gc80zgZcWqA7nX3+lChW09v2cOSi0lfjf4OzFiY2Ao='\\'' '\\''pQ2RwJ1nL5KXI7dv6Pt71GHMqk61hMA0NQmPUwlSFiY='\\'' '\\''VxNkV9MNGrcPp62dGE9/mQjXsfgq7WAfWfnNzWSGZe4='\\'' > /usr/local/lib/founderizer-kit/release-key.pub || exit 1; fi; if ! test -e /usr/local/lib/founderizer-kit/hubsetup.py && test -e /root/fleet-kit/hubsetup.py; then python3 /root/fleet-kit/hubsetup.py kit-clone || exit 1; fi; python3 /usr/local/lib/founderizer-kit/hubsetup.py kit-clone && python3 /usr/local/lib/founderizer-kit/hubsetup.py central-vault --owner-key '\\''BAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A='\\'''"
+    },
+    {
+      "keep_owner" : true,
+      "name" : "a key that is too short",
+      "owner_key" : "BAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+      "program" : null,
+      "through_sudo" : null
+    },
+    {
+      "keep_owner" : true,
+      "name" : "a key whose first byte is not 04",
+      "owner_key" : "AgECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0A=",
+      "program" : null,
+      "through_sudo" : null
+    },
+    {
+      "keep_owner" : true,
+      "name" : "no base64",
+      "owner_key" : "not a key!",
+      "program" : null,
+      "through_sudo" : null
+    },
+    {
+      "keep_owner" : false,
+      "name" : "an empty key",
+      "owner_key" : "",
+      "program" : null,
+      "through_sudo" : null
+    }
+  ],
+  "made_by" : "app/Tests/FleetCoreTests/RemoteVaultVectorsTests.swift",
+  "pin_refusals" : [
+    {
+      "held" : null,
+      "printed" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "refusal" : null,
+      "set_up" : false
+    },
+    {
+      "held" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "printed" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "refusal" : null,
+      "set_up" : false
+    },
+    {
+      "held" : "age1pyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyyscxl7ka",
+      "printed" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "refusal" : "The hub names another vault key than the one this Mac pinned.",
+      "set_up" : false
+    },
+    {
+      "held" : "age1pyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyyscxl7ka",
+      "printed" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "refusal" : null,
+      "set_up" : true
+    },
+    {
+      "held" : null,
+      "printed" : "age1qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurswpc8qurs95jt69",
+      "refusal" : null,
+      "set_up" : true
+    }
+  ],
+  "proof" : {
+    "file" : "owner-key.proof",
+    "paths" : [
+      {
+        "path" : "/home/fleet/.founderizer/owner-key.proof",
+        "said" : "/home/fleet/.founderizer/owner-key.proof"
+      },
+      {
+        "path" : "/var/lib/fleet/owner-key.proof",
+        "said" : "/var/lib/fleet/owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : "owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fleet/../root/owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fleet/./owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fleet//owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fleet/owner-key.prooff"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fleet/other.proof"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fl eet/owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : "/home/fleet/owner-key.proof/"
+      },
+      {
+        "path" : null,
+        "said" : "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/owner-key.proof"
+      },
+      {
+        "path" : null,
+        "said" : null
+      },
+      {
+        "path" : null,
+        "said" : ""
+      }
+    ],
+    "programs" : [
+      {
+        "as_login" : "f='/home/fleet/.founderizer/owner-key.proof'; u=$(stat -c %u -- \"$f\" 2>/dev/null || stat -f %u -- \"$f\" 2>/dev/null); [ -n \"$u\" ] && [ \"$u\" != 0 ] || exit 1; v=$(if [ \"$(id -u)\" = \"$u\" ]; then head -c 64 -- \"$f\"; else sudo -n -u \"#$u\" -- head -c 64 -- \"$f\"; fi 2>/dev/null); printf 'founderizer-proof:%s\\n' \"$v\"; a=$(PATH=\"$PATH:/usr/sbin:/sbin\"; { ip -o addr 2>/dev/null || ifconfig 2>/dev/null; } | tr '\\n' ' '); printf 'founderizer-addresses:%s\\n' \"$a\"",
+        "path" : "/home/fleet/.founderizer/owner-key.proof",
+        "program" : "f='/home/fleet/.founderizer/owner-key.proof'; u=$(stat -c %u -- \"$f\" 2>/dev/null || stat -f %u -- \"$f\" 2>/dev/null); [ -n \"$u\" ] && [ \"$u\" != 0 ] || exit 1; v=$(if [ \"$(id -u)\" = \"$u\" ]; then head -c 64 -- \"$f\"; else sudo -n -u \"#$u\" -- head -c 64 -- \"$f\"; fi 2>/dev/null); printf 'founderizer-proof:%s\\n' \"$v\"; a=$(PATH=\"$PATH:/usr/sbin:/sbin\"; { ip -o addr 2>/dev/null || ifconfig 2>/dev/null; } | tr '\\n' ' '); printf 'founderizer-addresses:%s\\n' \"$a\"",
+        "through_sudo" : "sudo -n -i -- /bin/sh -c 'eval \"`printf '\\''f=\\047/home/fleet/.founderizer/owner-key.proof\\047; u=\\044(stat -c \\045u -- \\042\\044f\\042 2>/dev/null || stat -f \\045u -- \\042\\044f\\042 2>/dev/null); [ -n \\042\\044u\\042 ] && [ \\042\\044u\\042 != 0 ] || exit 1; v=\\044(if [ \\042\\044(id -u)\\042 = \\042\\044u\\042 ]; then head -c 64 -- \\042\\044f\\042; else sudo -n -u \\042#\\044u\\042 -- head -c 64 -- \\042\\044f\\042; fi 2>/dev/null); printf \\047founderizer-proof:\\045s\\134n\\047 \\042\\044v\\042; a=\\044(PATH=\\042\\044PATH:/usr/sbin:/sbin\\042; { ip -o addr 2>/dev/null || ifconfig 2>/dev/null; } | tr \\047\\134n\\047 \\047 \\047); printf \\047founderizer-addresses:\\045s\\134n\\047 \\042\\044a\\042'\\''`\"'"
+      },
+      {
+        "as_login" : "f='/var/lib/fleet'\\''s/owner-key.proof'; u=$(stat -c %u -- \"$f\" 2>/dev/null || stat -f %u -- \"$f\" 2>/dev/null); [ -n \"$u\" ] && [ \"$u\" != 0 ] || exit 1; v=$(if [ \"$(id -u)\" = \"$u\" ]; then head -c 64 -- \"$f\"; else sudo -n -u \"#$u\" -- head -c 64 -- \"$f\"; fi 2>/dev/null); printf 'founderizer-proof:%s\\n' \"$v\"; a=$(PATH=\"$PATH:/usr/sbin:/sbin\"; { ip -o addr 2>/dev/null || ifconfig 2>/dev/null; } | tr '\\n' ' '); printf 'founderizer-addresses:%s\\n' \"$a\"",
+        "path" : "/var/lib/fleet's/owner-key.proof",
+        "program" : "f='/var/lib/fleet'\\''s/owner-key.proof'; u=$(stat -c %u -- \"$f\" 2>/dev/null || stat -f %u -- \"$f\" 2>/dev/null); [ -n \"$u\" ] && [ \"$u\" != 0 ] || exit 1; v=$(if [ \"$(id -u)\" = \"$u\" ]; then head -c 64 -- \"$f\"; else sudo -n -u \"#$u\" -- head -c 64 -- \"$f\"; fi 2>/dev/null); printf 'founderizer-proof:%s\\n' \"$v\"; a=$(PATH=\"$PATH:/usr/sbin:/sbin\"; { ip -o addr 2>/dev/null || ifconfig 2>/dev/null; } | tr '\\n' ' '); printf 'founderizer-addresses:%s\\n' \"$a\"",
+        "through_sudo" : "sudo -n -i -- /bin/sh -c 'eval \"`printf '\\''f=\\047/var/lib/fleet\\047\\134\\047\\047s/owner-key.proof\\047; u=\\044(stat -c \\045u -- \\042\\044f\\042 2>/dev/null || stat -f \\045u -- \\042\\044f\\042 2>/dev/null); [ -n \\042\\044u\\042 ] && [ \\042\\044u\\042 != 0 ] || exit 1; v=\\044(if [ \\042\\044(id -u)\\042 = \\042\\044u\\042 ]; then head -c 64 -- \\042\\044f\\042; else sudo -n -u \\042#\\044u\\042 -- head -c 64 -- \\042\\044f\\042; fi 2>/dev/null); printf \\047founderizer-proof:\\045s\\134n\\047 \\042\\044v\\042; a=\\044(PATH=\\042\\044PATH:/usr/sbin:/sbin\\042; { ip -o addr 2>/dev/null || ifconfig 2>/dev/null; } | tr \\047\\134n\\047 \\047 \\047); printf \\047founderizer-addresses:\\045s\\134n\\047 \\042\\044a\\042'\\''`\"'"
+      }
+    ],
+    "values" : [
+      {
+        "output" : "founderizer-proof:AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz\nfounderizer-addresses:1: lo    inet 127.0.0.1/8\n",
+        "value" : "AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz"
+      },
+      {
+        "output" : "sudo: a line\nfounderizer-proof:AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz\r\nfounderizer-addresses:\n",
+        "value" : "AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz"
+      },
+      {
+        "output" : "founderizer-proof:AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzzx\n",
+        "value" : null
+      },
+      {
+        "output" : "founderizer-proof:AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzz\n",
+        "value" : null
+      },
+      {
+        "output" : "founderizer-proof:\n",
+        "value" : null
+      },
+      {
+        "output" : "founderizer-proof:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\nfounderizer-proof:AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz\n",
+        "value" : "AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz"
+      },
+      {
+        "output" : "founderizer-proof: AAAAAAAAAAAAAAAAAAAAA-_zzzzzzzzzzzzzzzzzzzz\n",
+        "value" : null
+      },
+      {
+        "output" : "no mark at all\n",
+        "value" : null
+      },
+      {
+        "output" : "",
+        "value" : null
+      }
+    ]
+  },
+  "read_broker_key" : {
+    "program" : "k=$(python3 -c 'import json; print(json.load(open(\"/etc/fleet-vault/vault.json\"))[\"age_key\"])') && grep -m1 -E '^# public key: age1[0-9a-z]{58}$' \"$k\"",
+    "through_sudo" : "sudo -n -i -- /bin/sh -c 'eval \"`printf '\\''k=\\044(python3 -c \\047import json; print(json.load(open(\\042/etc/fleet-vault/vault.json\\042))[\\042age_key\\042])\\047) && grep -m1 -E \\047^# public key: age1[0-9a-z]{58}\\044\\047 \\042\\044k\\042'\\''`\"'"
+  },
+  "read_mac_vault_key" : {
+    "as_login" : "python3 -c 'import json, os, socket; s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(os.path.expanduser(\"~/Library/Application Support/AgentFleet/vault.sock\")); s.sendall(b\"{\\\"v\\\": 2, \\\"op\\\": \\\"status\\\"}\\n\"); print(\"# public key: \" + str(json.loads(s.makefile().readline()).get(\"recipient\")))'",
+    "program" : "python3 -c 'import json, os, socket; s = socket.socket(socket.AF_UNIX); s.settimeout(10); s.connect(os.path.expanduser(\"~/Library/Application Support/AgentFleet/vault.sock\")); s.sendall(b\"{\\\"v\\\": 2, \\\"op\\\": \\\"status\\\"}\\n\"); print(\"# public key: \" + str(json.loads(s.makefile().readline()).get(\"recipient\")))'"
+  },
+  "root_kit" : "/usr/local/lib/founderizer-kit",
+  "tailnet" : {
+    "hosts" : [
+      {
+        "device" : "hub",
+        "host" : "100.64.0.2",
+        "node" : "id:n1",
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : "hub",
+        "host" : "hub",
+        "node" : "id:n1",
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : "hub",
+        "host" : "hub.tail1234.ts.net",
+        "node" : "id:n1",
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : null,
+        "host" : "HUB.tail1234.ts.net.",
+        "node" : null,
+        "os" : null
+      },
+      {
+        "device" : "studio",
+        "host" : "100.64.0.9",
+        "node" : "id:n3",
+        "os" : [
+          "macOS"
+        ]
+      },
+      {
+        "device" : "studio",
+        "host" : "studio",
+        "node" : "id:n3",
+        "os" : [
+          "macOS"
+        ]
+      },
+      {
+        "device" : "twin",
+        "host" : "twin",
+        "node" : null,
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : "twin",
+        "host" : "100.64.0.11",
+        "node" : "id:n4",
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : "twin",
+        "host" : "twin.example.ts.net",
+        "node" : "id:n5",
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : "old-1",
+        "host" : "old-1",
+        "node" : "name:old-1.tail1234.ts.net",
+        "os" : [
+
+        ]
+      },
+      {
+        "device" : "old-1",
+        "host" : "100.64.0.31",
+        "node" : "name:old-1.tail1234.ts.net",
+        "os" : [
+
+        ]
+      },
+      {
+        "device" : null,
+        "host" : "100.64.0.99",
+        "node" : null,
+        "os" : null
+      },
+      {
+        "device" : "app-1",
+        "host" : "[100.64.0.7]",
+        "node" : "id:n2",
+        "os" : [
+          "linux"
+        ]
+      },
+      {
+        "device" : "pc",
+        "host" : "pc",
+        "node" : "id:n0",
+        "os" : [
+          "windows"
+        ]
+      },
+      {
+        "device" : null,
+        "host" : "",
+        "node" : null,
+        "os" : null
+      }
+    ],
+    "status" : "{\"Peer\":{\"a\":{\"DNSName\":\"hub.tail1234.ts.net.\",\"ID\":\"n1\",\"OS\":\"linux\",\"TailscaleIPs\":[\"100.64.0.2\"]},\"b\":{\"DNSName\":\"app-1.tail1234.ts.net.\",\"ID\":\"n2\",\"OS\":\"linux\",\"TailscaleIPs\":[\"100.64.0.7\"]},\"c\":{\"DNSName\":\"studio.tail1234.ts.net.\",\"ID\":\"n3\",\"OS\":\"macOS\",\"TailscaleIPs\":[\"100.64.0.9\"]},\"d\":{\"DNSName\":\"twin.tail1234.ts.net.\",\"ID\":\"n4\",\"OS\":\"linux\",\"TailscaleIPs\":[\"100.64.0.11\"]},\"e\":{\"DNSName\":\"twin.example.ts.net.\",\"ID\":\"n5\",\"OS\":\"linux\",\"TailscaleIPs\":[\"100.64.0.12\"]},\"f\":{\"DNSName\":\"old-1.tail1234.ts.net.\",\"TailscaleIPs\":[\"100.64.0.31\"]}},\"Self\":{\"DNSName\":\"pc.tail1234.ts.net.\",\"ID\":\"n0\",\"OS\":\"windows\",\"TailscaleIPs\":[\"100.64.0.1\"]}}"
+  },
+  "trust_reads" : [
+    {
+      "kept" : false,
+      "kind" : "mac",
+      "os" : [
+        "macOS"
+      ],
+      "read" : "agents",
+      "user" : "admin"
+    },
+    {
+      "kept" : false,
+      "kind" : "mac",
+      "os" : [
+        "linux"
+      ],
+      "read" : null,
+      "user" : "admin"
+    },
+    {
+      "kept" : false,
+      "kind" : "mac",
+      "os" : [
+        "macOS"
+      ],
+      "read" : "agents",
+      "user" : "root"
+    },
+    {
+      "kept" : false,
+      "kind" : "linux",
+      "os" : [
+        "macOS"
+      ],
+      "read" : null,
+      "user" : "admin"
+    },
+    {
+      "kept" : false,
+      "kind" : "linux",
+      "os" : [
+        "linux"
+      ],
+      "read" : "root",
+      "user" : "root"
+    },
+    {
+      "kept" : false,
+      "kind" : "linux",
+      "os" : [
+        "linux"
+      ],
+      "read" : null,
+      "user" : "fleet"
+    },
+    {
+      "kept" : true,
+      "kind" : "linux",
+      "os" : [
+        "linux"
+      ],
+      "read" : "root",
+      "user" : "fleet"
+    },
+    {
+      "kept" : false,
+      "kind" : null,
+      "os" : [
+        "macOS"
+      ],
+      "read" : null,
+      "user" : "admin"
+    },
+    {
+      "kept" : false,
+      "kind" : "mac",
+      "os" : [
+
+      ],
+      "read" : null,
+      "user" : "admin"
+    },
+    {
+      "kept" : true,
+      "kind" : "mac",
+      "os" : [
+        "macOS",
+        "linux"
+      ],
+      "read" : "root",
+      "user" : "admin"
+    }
+  ]
+}
