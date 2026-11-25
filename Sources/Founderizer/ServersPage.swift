@@ -579,7 +579,8 @@ struct ServerPage: View {
             .help(help ?? "")
     }
 
-    /// **Security in one row**: the private network, the firewall and, on a server, its automatic security updates.
+    /// **Security in one row**: the private network and, on a server, its firewall and its automatic security updates
+    /// (`securityParts`: a Mac's firewall is its owner's choice).
     /// A tick when all are on; a cross that names what is off, with Report a problem, because the fix is work on the
     /// machine itself. Each one, and the security updates that wait, are behind the mark.
     private func securityRow(_ server: ServerEntry, _ security: ServerReading.Security) -> some View {

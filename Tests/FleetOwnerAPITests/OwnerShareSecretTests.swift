@@ -381,8 +381,9 @@ struct OwnerShareSecretFieldTests {
         #expect(source.contains("RESOURCE_AUDIENCE = \"\(ShareSecret.audience)\""))
         #expect(source.contains(#"RESOURCE_LEVELS = {"secret": ("use", "read"),"#))
         #expect(source.contains(#"ids = {f"secret:{ref}" for ref in (team.get("logins") or {})}"#))
-        #expect(source.contains(#""grant": {"max": entry["max"], "to": entry.get("to", RESOURCE_AUDIENCE)} if "#
-                                + #"entry.get("max") else None,"#))
+        // the standing that counts (owner feature pool_default): the owner's own level, else the default
+        #expect(source.contains(#""grant": standing and {"max": standing["max"], "to": standing["to"], "by": "#
+                                + #"standing["by"]},"#))
         // The one 409 of the standing's own act: the base moved (`save_integration`), and the hub refuses a pool
         // statement for an account's key before the vault gets it.
         #expect(source.contains("    if base is not None and base != current:\n"

@@ -679,14 +679,14 @@ struct FleetTroubleTests {
     }
 
     @Test func aServerWithAgentsHasOneRowThatKnowsThem() throws {
-        let found = read(servers: [try server("mac-studio", kind: "mac", agents: ["studio", "atlas"],
+        let found = read(servers: [try server("box", agents: ["scout", "atlas"],
                                               security: ["firewall": "inactive", "tailscale": true])])
         let finding = try #require(found.findings.first)
         #expect(found.findings.count == 1)
-        #expect(finding.title == "Firewall off · mac-studio")
-        #expect(finding.machine == "studio")
-        #expect(finding.server == "mac-studio")
-        #expect(finding.agents == ["studio", "atlas"])
+        #expect(finding.title == "Firewall off · box")
+        #expect(finding.machine == "scout")
+        #expect(finding.server == "box")
+        #expect(finding.agents == ["scout", "atlas"])
     }
 
     /// The row's words are the cross's: everything that is off, in one row.
@@ -714,12 +714,19 @@ struct FleetTroubleTests {
         }
     }
 
-    /// What the page does not call off is no row: what is on, what nobody reported, and a Mac's security updates.
+    /// What the page does not call off is no row: what is on, what nobody reported, a Mac's security updates, and a
+    /// Mac's firewall, which is its owner's choice (the owner, 25 November 2026: "All Macs: no fault"), so its Security
+    /// row has no cross for it either.
     @Test func onlyWhatThePageCallsOffIsARow() throws {
         #expect(read(servers: [try server(security: ["tailscale": true, "firewall": "active",
                                                      "unattended_upgrades": true])]).isClear)
         #expect(read(servers: [try server()]).isClear)
         #expect(read(servers: [try server(kind: "mac", security: ["unattended_upgrades": false])]).isClear)
+        let mac = try server("mac-studio", kind: "mac", agents: ["scout"],
+                             security: ["firewall": "inactive", "tailscale": true, "unattended_upgrades": false])
+        #expect(read(servers: [mac]).isClear)
+        let parts = try #require(mac.reading?.security).map { mac.securityParts($0, at: 1_000) } ?? []
+        #expect(parts.map(\.name) == ["Private network"] && parts.allSatisfy { $0.on != false })
     }
 
     /// An old reading says nothing about the server now, as for an agent's machine.

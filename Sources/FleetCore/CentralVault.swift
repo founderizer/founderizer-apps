@@ -164,6 +164,14 @@ public struct VaultMachine: Decodable, Equatable, Identifiable, Sendable {
     }
 }
 
+/// One pool statement that the owner's app owes the central vault (owner feature `pool_default`): `in` true for a secret
+/// that the fleet manager may give by the standing that counts and that the vault's signed pool lacks, false for one of
+/// that pool that is the owner's alone now.
+public struct VaultPoolDue: Decodable, Sendable, Equatable {
+    public let login: String
+    public let `in`: Bool
+}
+
 /// `GET /ui/vault`: the central vault's status (nil while there is none), the hub's last word about reading it,
 /// each machine's pin, and which secrets each machine holds now. `fleet` comes even without a central vault: the
 /// fleet's id, which the owner's key and the pins are kept under. The hub names no path: the app installs the vault
@@ -182,8 +190,13 @@ public struct VaultReading: Decodable, Sendable {
     public let program: String?
     /// The central vault's machine, or nil from a hub that does not say: then it is the manager's, as before.
     public let hub: VaultHub?
+    /// The pool statements that the owner's app owes the central vault (owner feature `pool_default`, owner API 1.328):
+    /// `standing.due`, which the hub gives only with a fresh status read after the last statement it passed on, so a
+    /// statement that is on its way is never owed twice. Empty from a hub that does not say.
+    public let poolDue: [VaultPoolDue]
 
-    private enum Keys: String, CodingKey { case db, fleet, central, read_at, error, machines, held, program, hub }
+    private enum Keys: String, CodingKey { case db, fleet, central, read_at, error, machines, held, program, hub, standing }
+    private struct Standing: Decodable { let due: [Lossy<VaultPoolDue>]? }
 
     public init(from decoder: Decoder) throws {
         let data = try decoder.container(keyedBy: Keys.self)
@@ -197,6 +210,8 @@ public struct VaultReading: Decodable, Sendable {
             .mapValues { $0.filter(LoginSecret.isReference) }
         program = CentralVault.program(try? data.decodeIfPresent(String.self, forKey: .program))
         hub = (try? data.decodeIfPresent(VaultHub.self, forKey: .hub)).flatMap { CentralVault.isMachine($0.machine) ? $0 : nil }
+        poolDue = (((try? data.decodeIfPresent(Standing.self, forKey: .standing)) ?? nil)?.due ?? []).compactMap(\.value)
+            .filter { LoginSecret.isReference($0.login) }
     }
 
     /// The central vault runs another program than the `vault.py` of the hub's release, as both of them say: the app

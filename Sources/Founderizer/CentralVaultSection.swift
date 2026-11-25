@@ -154,11 +154,25 @@ final class CentralVaultModel {
                 if case .nothing = plan.step {
                     await seedRound(store)
                     await keySwapRound(store)
+                    await poolRound(store)
                 }
                 return
             }
         }
         _ = await read(store)
+    }
+
+    /// At most this many pool statements a round (`poolRound`): the rest wait for the next round, which reads the hub's
+    /// list again, so one round of a fleet with hundreds of secrets stays short.
+    static let poolBatch = 32
+
+    /// **The pool statements that the hub's default owes the central vault** (owner feature `pool_default`, owner API
+    /// 1.328), signed under the hood with the owner key (`GrantSigning.pools`): with no step and no question of the
+    /// owner's, a secret that the fleet manager may give reaches its agent at the vault's next delivery.
+    private func poolRound(_ store: FleetStore) async {
+        guard store.hub == hub, store.state?.ui_features?.contains("pool_default") == true,
+              let database = store.state?.db, let due = reading?.poolDue, !due.isEmpty else { return }
+        _ = await GrantSigning.pools(Array(due.prefix(Self.poolBatch)), store: store, hub: hub, database: database)
     }
 
     /// One reading and the plan it gives. A failed read keeps the last reading and decides nothing.

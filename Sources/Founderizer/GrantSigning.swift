@@ -142,15 +142,56 @@ enum GrantSigning {
                                           statement: made.statement, signature: made.signature)
     }
 
+    /// **The pool statements that the hub's default owes the central vault, signed and sent under the hood** (owner
+    /// feature `pool_default`, owner API 1.328: GET /ui/vault's `standing.due`). The hub lets the fleet manager give each
+    /// secret that the fleet holds, and the vault seals a secret to a server only with the owner's signed grant or pool
+    /// statement of it, so this Mac signs each owed one with the owner key, which asks the owner nothing (it has no
+    /// access control). One read of the key and every signature off the main actor, so a chip or a token daemon that
+    /// does not answer stops no window; an `unpool` first, and a `default_pool` only while the clocks agree
+    /// (`checkClock`). A `default_pool` never ends the owner's own `unpool` (`OwnerStatement.defaultPool`).
+    /// The number sent: a stop ends the batch, and the next round reads the hub's list again.
+    static func pools(_ due: [VaultPoolDue], store: FleetStore, hub: URL, database: String) async -> Int {
+        guard offered(store), !due.isEmpty else { return 0 }
+        let clockGood = (try? checkClock(store)) != nil
+        let owed = due.filter { !$0.in || clockGood }
+        guard !owed.isEmpty, let fleet = try? await VaultClient().reading(hub: hub, database: database)?.fleetID else {
+            return 0
+        }
+        let made = await Task.detached { () -> [(statement: String, signature: String)] in
+            guard let key = OwnerKeychain.key(fleet: fleet) else { return [] }
+            var made: [(statement: String, signature: String)] = []
+            for one in owed {
+                guard let pair = try? signed(pool: one.in, login: one.login, fleet: fleet, key: key, byDefault: true)
+                else { break }
+                made.append(pair)
+            }
+            return made
+        }.value
+        var sent = 0
+        for one in made {
+            do {
+                _ = try await VaultClient().grant(hub: hub, database: database, client: store.installation,
+                                                  statement: one.statement, signature: one.signature)
+                sent += 1
+            } catch HubError.refusal(let refusal) where (400..<500).contains(refusal.status) {
+                continue        // the vault refused this one (no value yet, money, their unpool): the next one goes on
+            } catch {
+                break           // the hub or the network: the next round tries again
+            }
+        }
+        return sent
+    }
+
     /// **The statement of one secret's place in the grantable pool, and its signature, with the key that the caller
     /// gives**: `pool` or `unpool`, at this Mac's next time for the fleet (`GrantClock.next`). It reads no key and
-    /// sends nothing: `pool` above gives it the key of its one read (`owner`), and `send(pool:...)` the key that it
-    /// read itself.
-    private static func signed(pool inPool: Bool, login: String, fleet: String,
-                               key: any OwnerKey) throws -> (statement: String, signature: String) {
+    /// sends nothing: `pool` above gives it the key of its one read (`owner`), `pools` the key of its own one read, and
+    /// `send(pool:...)` the key that it read itself.
+    nonisolated private static func signed(pool inPool: Bool, login: String, fleet: String, key: any OwnerKey,
+                                           byDefault: Bool = false) throws -> (statement: String, signature: String) {
         let at = GrantClock.next(fleet: fleet)
-        let statement = inPool ? OwnerStatement.pool(fleet: fleet, login: login, at: at)
-                               : OwnerStatement.unpool(fleet: fleet, login: login, at: at)
+        let statement = !inPool ? OwnerStatement.unpool(fleet: fleet, login: login, at: at)
+            : byDefault ? OwnerStatement.defaultPool(fleet: fleet, login: login, at: at)
+            : OwnerStatement.pool(fleet: fleet, login: login, at: at)
         return (statement, try key.sign(statement))
     }
 

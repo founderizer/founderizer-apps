@@ -46,14 +46,18 @@ public struct ServerList: Decodable, Sendable {
 }
 
 extension ServerEntry {
-    /// What a server's Security row reads: the private network, the firewall and, on a server, its automatic security
-    /// updates, each with its name, whether it is on (nil: not reported) and its words. Automatic updates whose last
-    /// good run is older than three days at `time` are stalled, which is not on (Fleet 2026.11.173 reads that run).
+    /// What a server's Security row reads: the private network and, on a server, its firewall and its automatic
+    /// security updates, each with its name, whether it is on (nil: not reported) and its words. Automatic updates
+    /// whose last good run is older than three days at `time` are stalled, which is not on (Fleet 2026.11.173 reads
+    /// that run). A Mac has neither: macOS updates itself, and its firewall is its owner's choice, which the installer
+    /// and the join line turn on by default (the owner, 25 November 2026: "All Macs: no fault"), so an off one is no
+    /// cross on the row and no row of Fix problems.
     public func securityParts(_ security: ServerReading.Security, at time: Double) -> [(name: String, on: Bool?, words: String)] {
         var parts: [(name: String, on: Bool?, words: String)] = [
-            (String(l10n: "Private network"), security.tailscale, Servers.onOffWords(security.tailscale)),
-            (String(l10n: "Firewall"), security.firewall.map { $0 == "active" }, security.firewall?.capitalized ?? String(l10n: "Not reported"))]
+            (String(l10n: "Private network"), security.tailscale, Servers.onOffWords(security.tailscale))]
         if kind != "mac" {
+            parts.append((String(l10n: "Firewall"), security.firewall.map { $0 == "active" },
+                          security.firewall?.capitalized ?? String(l10n: "Not reported")))
             let stalled = security.unattended_upgrades == true
                 && (security.upgraded_at.map { time - $0 > Servers.updatesStalled } ?? false)
             parts.append((String(l10n: "Security updates"), stalled ? false : security.unattended_upgrades,

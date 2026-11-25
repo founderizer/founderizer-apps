@@ -92,6 +92,14 @@ public enum OwnerStatement {
                    "at": .number(at)])
     }
 
+    /// The secret is in the grantable pool by the hub's default (owner feature `pool_default`): what the owner's app
+    /// signs under the hood. The vault takes it as a `pool`, but never over the owner's own `unpool` of that secret,
+    /// which only their own `pool` ends, so a hub that is broken into cannot undo their "Only you" (`vault.py`).
+    public static func defaultPool(fleet: String, login: String, at: Int) -> String {
+        canonical(["v": .number(1), "kind": .text("default_pool"), "fleet": .text(fleet),
+                   "login": .text(login.lowercased()), "at": .number(at)])
+    }
+
     /// The owner's yes to one door call (owner feature `door_calls`, DevOps plan 5.4): the door lets the call whose hash
     /// is `call` through once, for the Needs-you item `need`. The door checks this signature against the owner keys of
     /// its own access file, so the hub that carries it can hold it back and forge none.
