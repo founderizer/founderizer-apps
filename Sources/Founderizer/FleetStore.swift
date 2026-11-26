@@ -406,6 +406,35 @@ final class FleetStore {
         return read
     }
     @ObservationIgnored private var askCache: [Ask]?
+    /// **Each request's answered mark and the task that his answer let go on, worked out once for each reading**
+    /// (`NeedRequestCard`, `NeedsBoard`; the owner, 25 November 2026: "scrolling Fleet Manager chat is SO slow"): a card
+    /// read them several times at each of its draws, and each read searched every task of the fleet (3,010 on his), so
+    /// each reading of the hub drew the manager's 16 cards for about 15 % of the 90 to 113 ms that it held the main
+    /// thread, and the reading came in between two flicks of a scroll.
+    func answered(_ need: OwnerNeed) -> (mark: AnsweredMark, task: FleetTask?) {
+        // A view that asks reads `state`, so a new reading draws it again.
+        guard let state else { return (need.answeredMark(in: nil), nil) }
+        if answeredCache.reading != readingCount { answeredCache = (readingCount, nil, [:]) }
+        let key = AnsweredKey(need)
+        if let kept = answeredCache.byNeed[key] { return kept }
+        let tasks = answeredCache.tasks ?? Dictionary(state.tasks.map { ($0.id, $0) }) { first, _ in first }
+        answeredCache.tasks = tasks
+        let task = need.task.flatMap { tasks[$0] }
+        let answered = (mark: need.answeredMark(in: state) { tasks[$0] }, task: task)
+        answeredCache.byNeed[key] = answered
+        return answered
+    }
+    /// What `OwnerNeed.answeredMark(in:)` reads of a request, so a card given a request that differs from the reading's
+    /// own copy gets its own mark.
+    private struct AnsweredKey: Hashable {
+        let id: Int, task: Int?, teamState: String?, teamReason: String?, given: Bool, chosen: Int?, by: String
+        init(_ need: OwnerNeed) {
+            (id, task, teamState, teamReason) = (need.id, need.task, need.team_state, need.team_reason)
+            (given, chosen, by) = (need.give != nil, need.chosen, need.by)
+        }
+    }
+    @ObservationIgnored private var answeredCache: (reading: Int, tasks: [Int: FleetTask]?,
+                                                    byNeed: [AnsweredKey: (mark: AnsweredMark, task: FleetTask?)]) = (-1, nil, [:])
     private(set) var chatTimeline = ChatTimeline()
     /// The page this app opens on when somebody asked for one with
     /// `-openPage settings.<tab> | agent.<name>.<section> | task.<id> | needs | tasks | …`, which is how one screen can

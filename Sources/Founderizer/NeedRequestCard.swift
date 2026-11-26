@@ -1183,13 +1183,13 @@ struct NeedRequestCard: View {
     @Environment(\.cardOnPage) private var onPage
     private var undoOnLine: Bool { holding != nil && !onPage }
     /// The task that his answer let go on, where the reading has it (owner feature `need_marks`).
-    private var answeredTask: FleetTask? { need.task.flatMap { id in store.state?.tasks.first { $0.id == id } } }
+    private var answeredTask: FleetTask? { store.answered(need).task }
     /// **The turning mark, the orange mark and the gray mark of his pause open the task** (his "Both (Recommended)",
     /// "Yes, open task" and "Gray pause, as the row", 21 November 2026): its panel, with Resume, Stop and the guidance
     /// box. The check and the red mark open nothing.
     private var markOpensTask: Bool {
         guard holding == nil, onItsWay == nil, answeredTask != nil else { return false }
-        switch need.answeredMark(in: store.state) {
+        switch store.answered(need).mark {
         case .working(_, let agent?, _): return !agent.isEmpty
         case .attention, .paused: return true
         default: return false
@@ -1199,7 +1199,7 @@ struct NeedRequestCard: View {
     /// panel (`TaskHoldControls`), on a task that the hub can pause and that no hold holds. After it the mark is the
     /// orange paused mark of the task's row, and Pause goes.
     private var pausable: FleetTask? {
-        guard markOpensTask, case .working = need.answeredMark(in: store.state), let task = answeredTask,
+        guard markOpensTask, case .working = store.answered(need).mark, let task = answeredTask,
               TaskHoldControls.shows(task, in: store.state),
               !(store.state?.holds?.contains { $0.task == task.id && $0.state != "released" } ?? false) else { return nil }
         return task
@@ -1359,7 +1359,7 @@ struct NeedRequestCard: View {
     /// answer, the key card, the Run card, and an answer on its way.
     private var foldedMarkWords: String {
         guard !need.answeredWithKey, ranAnswer == nil, !inWords, onItsWay == nil else { return "" }
-        return need.answeredMark(in: store.state).words
+        return store.answered(need).mark.words
     }
 
     /// What a press of Run answered (owner feature `need_run`), or nil.
@@ -1399,7 +1399,7 @@ struct NeedRequestCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
                         // owner feature need_marks: what came of his answer, in the check's place (`AnsweredMarkView`)
                         if !inWords && !undoOnLine {
-                            AnsweredMarkView(mark: onItsWay == nil ? need.answeredMark(in: store.state) : nil,
+                            AnsweredMarkView(mark: onItsWay == nil ? store.answered(need).mark : nil,
                                              moves: store.marksMove, names: names,
                                              opens: markOpensTask ? { openTask() } : nil)
                         }

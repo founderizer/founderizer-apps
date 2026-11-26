@@ -169,12 +169,41 @@ public enum OwnerAccessKeychain {
     }
 }
 
+/// **A hub's copy that passed the form check** (`OwnerAccess.checkHubForm`): its file, and what the file was when it
+/// passed (its device, file number, size and time of change), which the key's step reads again. Only the check makes one.
+public struct HubCopy: Sendable {
+    public let file: URL
+    let identity: [Int]?
+
+    /// What a file is now, or nil when it cannot be read: a link is read as itself, never followed.
+    static func identity(of file: URL) -> [Int]? {
+        var info = stat()
+        guard lstat(file.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else { return nil }
+        return [Int(info.st_dev), Int(info.st_ino), Int(info.st_size), Int(info.st_mtimespec.tv_sec),
+                Int(info.st_mtimespec.tv_nsec), Int(info.st_ctimespec.tv_sec), Int(info.st_ctimespec.tv_nsec)]
+    }
+}
+
 /// **The access key in a copy of the fleet.** The hub writes a copy and never sees this key, so this Mac puts it in:
 /// one more member of the zip, which the hub's restore does not read (it reads the members that the copy's own
 /// manifest lists, and this one is not among them).
 public enum OwnerAccess {
     /// The member's name in the zip.
     public static let member = "owner-access.key"
+
+    /// The names that a copy's manifest lists under `files`, and nothing else of it: none when it has no such object.
+    static func listedFiles(_ copy: URL) throws -> [String] {
+        let manifest: Data
+        do {
+            manifest = try ZipArchive.member(FleetManifest.manifestMember, in: copy, limit: 1 << 20)
+        } catch {
+            throw RestoreError.notACopy
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: manifest) as? [String: Any] else {
+            throw RestoreError.notACopy
+        }
+        return ((object["files"] as? [String: Any]) ?? [:]).keys.map { $0 }
+    }
 
     /// Puts the fleet's access key into this copy, when the copy has none. The fleet is the one that the copy's own
     /// manifest names. `key` gives the key of a fleet; the app's is the keychain's, which makes one when it keeps none.
@@ -203,26 +232,57 @@ public enum OwnerAccess {
         return fleet
     }
 
-    /// **The copy with the fleet's access key in it**, as a second file beside the copy, in the folder that this app made
-    /// for the copy; nil when the key did not go in, and the copy is then as it was. The key goes into the second file
-    /// and never into the copy itself, so a write that stops halfway costs no copy, and the second file counts only
-    /// once it reads as a copy that carries the key.
-    public static func withKey(_ copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept) -> URL? {
+    /// **The copy with the fleet's access key in it**, as a second file beside the copy, mode 600, in the folder that
+    /// this app made for the copy; nil when the key did not go in, and the copy is then as it was. The key goes into the
+    /// second file and never into the copy itself, so a write that stops halfway costs no copy. A key member that the
+    /// hub's copy carries already is not this fleet's key: it stays out (`ZipArchive.copy`), so no hub puts a key of its
+    /// own into the copies that the owner keeps for the way back. The second file counts only once the key that it
+    /// reads is the fleet's own.
+    public static func withKey(_ copy: HubCopy, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept) -> URL? {
+        (try? keyed(copy, key: key))?.file
+    }
+
+    /// `withKey` of a file that no form check passed: this module's tests only.
+    static func withKey(_ copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept) -> URL? {
         keyed(copy, key: key).file
+    }
+
+    /// **The key's step of a hub's copy that passed the form check** (`checkHubForm`, the validator's S1 of 26 November
+    /// 2026): only that check makes a `HubCopy`, so no caller keys a copy that skipped it, and the caller's fallback (the
+    /// hub's own file when the key could not go in) is a file that passed it. It throws when the file is no longer the one
+    /// that passed (another file in its place, or changed since), and the caller keeps nothing then.
+    public static func keyed(_ copy: HubCopy, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept)
+        throws -> (file: URL?, cause: String?) {
+        guard HubCopy.identity(of: copy.file) == copy.identity else {
+            throw FleetCopyError.cannotKeep(RestoreError.notACopy.errorDescription ?? "")
+        }
+        return keyed(copy.file, key: key)
     }
 
     /// `withKey`, with why the key did not go in when it did not (the validator's S3 of 25 November 2026): the system's
     /// or this app's own words of the failure, which Report a problem carries (`FleetCopyKeeper.keyCause`). A failure of
     /// the keychain names its item and status, and one of the copy names what the zip did not allow; neither holds the
     /// key.
-    public static func keyed(_ copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept)
+    static func keyed(_ copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept)
         -> (file: URL?, cause: String?) {
         let made = copy.deletingLastPathComponent().appendingPathComponent("with-key-" + copy.lastPathComponent)
         try? FileManager.default.removeItem(at: made)
         do {
-            try FileManager.default.copyItem(at: copy, to: made)
-            try add(to: made, key: key)
-            guard self.key(in: made) != nil else { throw ZipArchive.Trouble.damaged }
+            // The hub's copy as it is, as a clone that takes no time, when it carries no member of the key's name (the
+            // usual case); else written new without them (`ZipArchive.copy`).
+            if try ZipArchive.names(in: copy).contains(where: isKey) {
+                try ZipArchive.copy(copy, to: made, without: isKey)
+            } else {
+                try FileManager.default.copyItem(at: copy, to: made)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: made.path)
+            }
+            // A manifest that lists a member of the key's name is a hub's, never this app's: such a copy keeps no key
+            // (the Door area's read of 25 November 2026). Only the names of its files are read, so a hub that adds
+            // members of its own to the manifest still has its copies kept (fleet(of:)).
+            guard try !listedFiles(made).contains(where: isKey) else { throw RestoreError.notACopy }
+            let wanted = try key(try fleet(of: made))
+            guard try ZipArchive.add(Data(wanted.privateFile.utf8), named: member, to: made),
+                  self.key(in: made)?.key == wanted else { throw ZipArchive.Trouble.damaged }
             return (made, nil)
         } catch {
             try? FileManager.default.removeItem(at: made)
@@ -236,6 +296,108 @@ public enum OwnerAccess {
     /// read into memory (retention's question, `FleetCopyKeeper.carriesKey`). `withKey` checked the key when it wrote it.
     public static func carries(_ copy: URL) -> Bool {
         (try? ZipArchive.names(in: copy))?.contains(member) == true
+    }
+
+    /// Whether a member's name is the key's: the copy's own top level (a name whose other parts are only "." or empty,
+    /// split at / and \\), in any case, read to its first NUL as unzip and ditto write it. That is the member that the
+    /// way back reads (`unzip -p <copy>.zip owner-access.key`, `key(in:)`); a file of that name in a folder, such as an
+    /// agent's skill file under config/skills, is another file, and stops no copy (the Door area's read of
+    /// 25 November 2026).
+    public static func isKey(_ name: String) -> Bool {
+        // By Unicode scalars, not by characters: a mark or a Prepend scalar next to a / would join it into one
+        // character, and a split by characters would not see that /.
+        var parts: [String] = []
+        var part = String.UnicodeScalarView()
+        for scalar in name.unicodeScalars {
+            if scalar == "\0" { break }
+            if scalar == "/" || scalar == "\\" {
+                parts.append(String(part))
+                part = String.UnicodeScalarView()
+            } else {
+                part.append(scalar)
+            }
+        }
+        parts.append(String(part))
+        // The whole name resolved as ditto (Finder's Archive Utility) resolves it: "" and "." go, ".." takes the part
+        // before it and stops at the top. The key is a name whose first part left is the key's, folded as this Mac's
+        // disk folds names ("owner-acceß.key", the long s): the file itself, or a folder of that name, which would
+        // keep a full extraction from writing the key's file.
+        // A drive letter first ("C:", "C:\\") goes too, as bsdtar takes it away.
+        if let drive = parts.first?.unicodeScalars, drive.count >= 2,
+           CharacterSet.letters.contains(drive[drive.startIndex]), drive[drive.index(after: drive.startIndex)] == ":" {
+            parts[0] = String(String.UnicodeScalarView(drive.dropFirst(2)))
+        }
+        var left: [String] = []
+        for part in parts where !part.isEmpty && part != "." {
+            if part == ".." { _ = left.popLast() } else { left.append(part) }
+        }
+        guard let first = left.first else { return false }
+        return first.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX")) == member
+    }
+
+    /// **The copy as it goes to a hub: without the fleet's access key**, which is root on every server of the fleet and
+    /// which no hub ever holds. nil when the copy carries no member of that name, and it goes as it is. Else a new file,
+    /// mode 600, in a new folder of this app's own, mode 700, which the caller removes: the copy without those members
+    /// (`ZipArchive.copy`, which only reads the copy). It counts only when it holds every other member and no key
+    /// member, when one key member ended where the directory starts (where `add` writes the key: a hub that crafted
+    /// its copy for a Mac whose `withKey` took any key could hide that entry behind one of its own and cover its bytes
+    /// with another member's extra field — the Door area's read of 25 November 2026), and when the file holds neither
+    /// the key members' bytes nor this fleet's own key (`known`, this Mac's keychain), anywhere. Else nothing goes: a
+    /// `RestoreError`, `notACopy` for a file that is not a copy this app reads or wrote (a key member inside one would
+    /// go with it), `cannotRead` for a file it could not read or write, such as a full disk.
+    public static func withoutKey(_ copy: URL,
+                                  known: (String) -> OwnerAccessKey? = { OwnerAccessKeychain.key(fleet: $0) }) throws -> URL? {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("founderizer-restore-" + UUID().uuidString)
+        do {
+            let names = try ZipArchive.names(in: copy)
+            let keys = names.filter(isKey)
+            guard !keys.isEmpty else { return nil }
+            let fleetKey = (try? fleet(of: copy)).flatMap { known($0) }
+            let secrets = try keys.map { try ZipArchive.member($0, in: copy, limit: 64 << 10) }.filter { !$0.isEmpty }
+                + (fleetKey.map { [Data($0.privateFile.utf8)] } ?? [])
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false,
+                                                    attributes: [.posixPermissions: 0o700])
+            let made = folder.appendingPathComponent("copy.zip")
+            let (gone, atDirectory) = try ZipArchive.copy(copy, to: made, without: isKey)
+            guard gone == keys, atDirectory, try ZipArchive.names(in: made) == names.filter({ !isKey($0) }),
+                  try !holds(made, any: secrets) else { throw ZipArchive.Trouble.damaged }
+            return made
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            if let error = error as? RestoreError { throw error }
+            if error is ZipArchive.Trouble { throw RestoreError.notACopy }
+            throw RestoreError.cannotRead(error.localizedDescription)
+        }
+    }
+
+    /// **A hub's copy that the owner may keep** (`CopyKeeper`, `HealthView`, before the key's step `keyed`): it must be in
+    /// the one form that a hub writes (`HubCopyForm`, the owner tools' check), else it throws, and the caller keeps and
+    /// confirms nothing. A hub that hides a member in a gap, after the last one, inside a member after its deflate
+    /// stream ends, or behind a second directory could else make a reader of the kept copy (ditto, unzip) write its own
+    /// key as owner-access.key, the owner's way back (the validator's read of 25 November 2026). A copy in that form
+    /// holds no member of the key's name and nothing hidden, so `keyed`'s file, or the hub's own file when the key could
+    /// not go in, is safe to keep. It inflates the whole copy: call it off the main actor.
+    @discardableResult
+    public static func checkHubForm(_ copy: URL) throws -> HubCopy {
+        let before = HubCopy.identity(of: copy)
+        guard before != nil, HubCopyForm.fault(copy.path) == nil, HubCopy.identity(of: copy) == before else {
+            throw FleetCopyError.cannotKeep(RestoreError.notACopy.errorDescription ?? "")
+        }
+        return HubCopy(file: copy, identity: before)
+    }
+
+    /// Whether the file holds any of these byte strings anywhere, read a mebibyte at a time.
+    static func holds(_ file: URL, any needles: [Data]) throws -> Bool {
+        guard let longest = needles.map(\.count).max(), longest > 0 else { return false }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var carry = Data()
+        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+            let window = carry + chunk
+            if needles.contains(where: { window.range(of: $0) != nil }) { return true }
+            carry = Data(window.suffix(longest - 1))
+        }
+        return false
     }
 
     /// What `install`'s program prints once the key's line is in the file.

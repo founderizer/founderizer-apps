@@ -178,7 +178,7 @@ struct CopyKeyTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let bare = folder.appendingPathComponent("founderizer-\(Self.fleet)-20261125T080000Z.zip")
         try FileManager.default.copyItem(at: Self.fixture, to: bare)
-        let keyed = try #require(OwnerAccess.withKey(bare) { _ in Self.key })
+        let keyed = try #require(OwnerAccess.withKey(try OwnerAccess.checkHubForm(bare)) { _ in Self.key })
         let placeholder = folder.appendingPathComponent(".founderizer-\(Self.fleet)-20261124T080000Z.zip.icloud")
         try Data("<plist/>".utf8).write(to: placeholder)
         #expect(FleetCopyKeeper.carriesKey(keyed) == true)

@@ -519,13 +519,17 @@ final class FleetCopyModel {
         do {
             let copy = try await client.takeCopy(hub: hub, database: database)
             taken = copy
+            // Only a copy in the one form that a hub writes is kept (`OwnerAccess.checkHubForm`): before the panel, so a
+            // copy that is not kept replaces no file of his, and no hub's own key stays with him.
+            let file = copy.file
+            let form = try await Task.detached(priority: .utility) { try OwnerAccess.checkHubForm(file) }.value
             guard let kept = place(copy) else {
                 said = String(l10n: "Nothing was saved, so your fleet still has no confirmed copy.")
                 return
             }
             // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`). A copy
             // whose key did not go in is kept all the same, and the hub hears that it has none (the audit's finding 1).
-            let withKey = OwnerAccess.keyed(copy.file, key: store.copies.accessKey)
+            let withKey = try OwnerAccess.keyed(form, key: store.copies.accessKey)
             try FileManager.default.moveItem(at: withKey.file ?? copy.file, to: kept)
             store.copies.saved(kept.lastPathComponent, keyed: withKey.file != nil, cause: withKey.cause,
                                hub: hub.absoluteString)

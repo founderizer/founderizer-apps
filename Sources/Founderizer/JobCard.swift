@@ -65,7 +65,7 @@ struct JobCard: View {
     /// How long it has stood in its column ("for 2 h"), or for a card of Done how long ago it ended ("20 min ago").
     private var age: String {
         ended ? activityAge(job.endedAt, now: state.time)
-            : activityFor(JobColumns.shared.times.since(job, hub: state.db), now: state.time)
+            : activityFor(JobColumns.shared.since(job, hub: state.db), now: state.time)
     }
 
     /// The narrowest lane in which a task's row keeps its title, its agent's glyph and name and its time on one line:
@@ -268,12 +268,46 @@ struct JobCard: View {
 
 /// The kept column times of the cards (`ColumnTimes`), which the store writes at each reading of the hub and each card
 /// reads.
+///
+/// **The note of a reading is made away from the main thread** (the owner, 25 November 2026: "scrolling Fleet Manager
+/// chat is SO slow"): it works out every job of the fleet (3,010 tasks on his), about 13 % of the 90 to 113 ms that a
+/// reading held the main thread, at each reading and on every page. Each note starts from the times of the note before
+/// it, so the times are the ones that the readings in their order give; the cards read them when the newest is made.
 @MainActor @Observable final class JobColumns {
     static let shared = JobColumns()
-    private(set) var times = ColumnTimes()
+    /// The newest note that was made. Not observed: a card draws again when a time can change (`changes`), not at each
+    /// reading, whose time every note keeps (that drew every card of the board a second time at each reading).
+    @ObservationIgnored private(set) var times = ColumnTimes()
+    private var changes = 0
+    /// The newest note on its way, which the next one starts from.
+    @ObservationIgnored private var noting: Task<ColumnTimes, Never>?
+    /// A note is on its way (a test waits for the times that the cards draw).
+    var notesOnTheirWay: Bool { noting != nil }
+
+    /// Since when `job` stands in its column, for a card, which draws again when that can change.
+    func since(_ job: Job, hub: String) -> Double {
+        _ = changes
+        return times.since(job, hub: hub)
+    }
 
     func note(_ state: HubState?) {
-        if let state { times.note(state) }
+        guard let state else { return }
+        let before = noting, kept = times
+        let next = Task.detached(priority: .userInitiated) {
+            var times = await before?.value ?? kept
+            times.note(state)
+            return times
+        }
+        noting = next
+        Task { @MainActor [weak self] in
+            let times = await next.value
+            // A newer note holds this one's times too: only the newest is drawn.
+            guard let self, self.noting == next else { return }
+            self.noting = nil
+            let moved = !times.sameTimes(as: self.times)
+            self.times = times
+            if moved { self.changes += 1 }
+        }
     }
 }
 

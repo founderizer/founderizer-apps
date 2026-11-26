@@ -1013,7 +1013,7 @@ private struct NeedAnswered: View {
     /// own mark.
     private var answerMark: AnsweredMark? {
         guard symbol == "checkmark", words == nil, !draws || quiet else { return nil }
-        return need.answeredMark(in: store.state)
+        return store.answered(need).mark
     }
 
     /// The check before his answer. It keeps its place while it is not drawn yet, so the words do not move.

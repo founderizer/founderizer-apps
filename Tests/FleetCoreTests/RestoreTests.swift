@@ -300,4 +300,9 @@ private func task(_ id: Int) -> [String: Any] {
     }
     #expect(RestoreRefusal.wroteNothing(URLError(.networkConnectionLost)) == nil)
     #expect(RestoreRefusal.wroteNothing(HubError.unavailable) == nil)
+    // This Mac's own refusal before any byte went (`OwnerAccess.withoutKey`): its words at once, and the copy stays
+    // chosen. A 409's question stays the hub's.
+    #expect(RestoreRefusal.wroteNothing(RestoreError.notACopy) == RestoreError.notACopy.errorDescription)
+    #expect(RestoreRefusal.wroteNothing(RestoreError.cannotRead("no room")) == RestoreError.cannotRead("no room").errorDescription)
+    #expect(RestoreRefusal.wroteNothing(RestoreError.holdsWork("it holds work")) == nil)
 }

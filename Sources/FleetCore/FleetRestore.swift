@@ -366,8 +366,14 @@ public enum RestoreConflict: Sendable, Equatable {
 public enum RestoreRefusal {
     public static let beforeAnyWrite: Set<Int> = [400, 403, 404, 413, 422, 507]
 
-    /// What the hub said, for a refusal before anything was written; nil for every other error.
+    /// What the hub said, for a refusal before anything was written, or this Mac's own words when it sent nothing
+    /// (`OwnerAccess.withoutKey`: a copy that is not one, or a file it could not read or write); nil for every other
+    /// error.
     public static func wroteNothing(_ error: Error) -> String? {
+        if let error = error as? RestoreError {
+            if case .holdsWork = error { return nil }
+            return error.errorDescription
+        }
         guard case HubError.refusal(let refusal) = error, beforeAnyWrite.contains(refusal.status) else { return nil }
         return HubError.said(error) ?? HubError.refusal(refusal).errorDescription
     }
@@ -602,6 +608,108 @@ enum ZipArchive {
         return true
     }
 
+    /// **The zip again, without the members that `leaves` names**, into `target`, a new file of mode 600 that this call
+    /// makes and that must not be there yet (`O_EXCL`, never through a link): the source is only read, so a copy that is
+    /// locked, read only or a link stays as it is. A member that stays is copied from its own local header to its own
+    /// end — the header, its name and extra field, its packed bytes as the directory gives their length, and its data
+    /// descriptor when bit 3 of its flags says it has one — and never to the next member's start, so no byte between
+    /// members, before the first one or after the last one goes with it. The central directory follows with each
+    /// entry's new place, then the zip's comment. A copy is the hub's file, and nothing in it is trusted: members that
+    /// overlap, that end past the directory's start, or whose local header is not one are `damaged`. What left: the
+    /// names, in directory order, and whether one of them ended where the directory starts, which is where `add`
+    /// wrote the key (`OwnerAccess.withoutKey`).
+    @discardableResult
+    static func copy(_ source: URL, to target: URL, without leaves: (String) -> Bool) throws
+        -> (gone: [String], atDirectory: Bool) {
+        let handle = try FileHandle(forReadingFrom: source)
+        defer { try? handle.close() }
+        let found = try entries(handle: handle)
+        let total = try handle.seekToEnd()
+        let tailLength = UInt64(min(total, 22 + 65_535))
+        try handle.seek(toOffset: total - tailLength)
+        guard let tail = try handle.read(upToCount: Int(tailLength)), tail.count == Int(tailLength) else {
+            throw Trouble.notAZip
+        }
+        var end = tail.count - 22
+        while end >= 0, number(tail, end, 4) != 0x0605_4b50 { end -= 1 }
+        guard end >= 0 else { throw Trouble.notAZip }
+        let count = number(tail, end + 10, 2), size = number(tail, end + 12, 4), offset = number(tail, end + 16, 4)
+        let commentLength = Int(number(tail, end + 20, 2))
+        guard number(tail, end + 4, 2) == 0, number(tail, end + 6, 2) == 0, number(tail, end + 8, 2) == count,
+              Int(count) == found.count, end + 22 + commentLength <= tail.count else { throw Trouble.damaged }
+        try handle.seek(toOffset: offset)
+        guard let directory = try handle.read(upToCount: Int(size)), directory.count == Int(size) else {
+            throw Trouble.notAZip
+        }
+        // Each entry's record in the directory, and each member's own extent in the file, from its own local header.
+        var records: [Data] = []
+        var extents: [(start: UInt64, end: UInt64)] = []
+        var cursor = 0
+        for entry in found {
+            let length = 46 + Int(number(directory, cursor + 28, 2)) + Int(number(directory, cursor + 30, 2))
+                + Int(number(directory, cursor + 32, 2))
+            guard cursor + length <= directory.count, number(directory, cursor + 42, 4) == entry.at else {
+                throw Trouble.damaged
+            }
+            records.append(directory.subdata(in: (directory.startIndex + cursor)..<(directory.startIndex + cursor + length)))
+            cursor += length
+            try handle.seek(toOffset: entry.at)
+            guard let header = try handle.read(upToCount: 30), header.count == 30,
+                  number(header, 0, 4) == 0x0403_4b50 else { throw Trouble.damaged }
+            var last = entry.at + 30 + number(header, 26, 2) + number(header, 28, 2) + entry.packed
+            if number(header, 6, 2) & 0x8 != 0 {        // a data descriptor: 12 bytes, or 16 with its own signature
+                try handle.seek(toOffset: last)
+                guard let descriptor = try handle.read(upToCount: 4), descriptor.count == 4 else { throw Trouble.damaged }
+                last += number(descriptor, 0, 4) == 0x0807_4b50 ? 16 : 12
+            }
+            guard last <= offset else { throw Trouble.damaged }
+            extents.append((entry.at, last))
+        }
+        let order = extents.indices.sorted { extents[$0].start < extents[$1].start }
+        for (before, after) in zip(order, order.dropFirst()) where extents[after].start < extents[before].end {
+            throw Trouble.damaged
+        }
+        let fd = open(target.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode_t(0o600))
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let out = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        defer { try? out.close() }
+        var placed: [Int: UInt64] = [:]
+        var written: UInt64 = 0
+        for index in order where !leaves(found[index].name) {
+            placed[index] = written
+            var reading = extents[index].start
+            try handle.seek(toOffset: reading)
+            while reading < extents[index].end {
+                guard let chunk = try handle.read(upToCount: Int(min(1 << 20, extents[index].end - reading))),
+                      !chunk.isEmpty else { throw Trouble.damaged }
+                try out.write(contentsOf: chunk)
+                reading += UInt64(chunk.count)
+            }
+            written += extents[index].end - extents[index].start
+        }
+        var kept = Data()
+        var gone: [String] = []
+        var atDirectory = false
+        for (index, record) in records.enumerated() {
+            guard let at = placed[index] else {
+                gone.append(found[index].name)
+                atDirectory = atDirectory || extents[index].end == offset
+                continue
+            }
+            var one = record
+            one.replaceSubrange((one.startIndex + 42)..<(one.startIndex + 46), with: bytes(at, 4))
+            kept += one
+        }
+        let left = UInt64(found.count - gone.count)
+        guard written + UInt64(kept.count) < 0xFFFF_FFFF else { throw Trouble.damaged }
+        let comment = tail.subdata(in: (tail.startIndex + end + 20)..<(tail.startIndex + end + 22 + commentLength))
+        let closing = bytes(0x0605_4b50, 4) + bytes(0, 2) + bytes(0, 2) + bytes(left, 2) + bytes(left, 2)
+            + bytes(UInt64(kept.count), 4) + bytes(written, 4) + comment
+        try out.write(contentsOf: kept + closing)
+        try out.synchronize()
+        return (gone, atDirectory)
+    }
+
     /// The check of a member's bytes that every zip carries (CRC-32).
     static func crc32(_ data: Data) -> UInt32 {
         var crc: UInt32 = 0xFFFF_FFFF
@@ -729,8 +837,16 @@ extension HubClient {
     ///
     /// The hub restarts about two seconds after it answers, so a send can also fail in transport with the restore
     /// already accepted. That is why the caller watches the generation rather than believing this call's error.
+    ///
+    /// The fleet's access key never goes up (`OwnerAccess.withoutKey`): a copy that this Mac kept carries it, and the
+    /// hub writes the whole upload to its own disk before it reads the members that the manifest lists. Such a copy
+    /// goes as a new file without that member, which goes again after the send; the copy itself is only read. When
+    /// that file cannot be made, nothing is sent, and the `RestoreError` says why (`RestoreRefusal.wroteNothing`).
+    /// `protocolClasses` is for a test only: it answers the request with no network.
     public func restore(copy file: URL, hub: URL, database: String, client: String, requestID: UUID,
-                        replace: Bool) async throws -> RestoreReceipt {
+                        replace: Bool, protocolClasses: [AnyClass]? = nil) async throws -> RestoreReceipt {
+        let plain = try OwnerAccess.withoutKey(file)
+        defer { if let plain { try? FileManager.default.removeItem(at: plain.deletingLastPathComponent()) } }
         var parts = URLComponents(url: hub.appendingPathComponent("ui/restore"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database)]
             + (replace ? [URLQueryItem(name: "replace", value: "yes")] : [])
@@ -745,9 +861,10 @@ extension HubClient {
         // and a wait for the answer that covers the hub's unpacking and check of a large copy.
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 600
+        if let protocolClasses { configuration.protocolClasses = protocolClasses }
         let transfer = URLSession(configuration: configuration)
         defer { transfer.finishTasksAndInvalidate() }
-        let (data, response) = try await transfer.upload(for: OwnerMacKey.authorized(request), fromFile: file)
+        let (data, response) = try await transfer.upload(for: OwnerMacKey.authorized(request), fromFile: plain ?? file)
         guard let http = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard http.statusCode == 200 else {
             throw HubError.refusal(.read(status: http.statusCode, body: data))

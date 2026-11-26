@@ -537,7 +537,17 @@ public struct ColumnTimes: Sendable {
     /// Since when this job of hub `hub` stands in its column: the kept time while its column is the one kept, else its
     /// own guess.
     public func since(_ job: Job, hub: String) -> Double {
-        guard let old = kept[hub + "/" + job.id], old.column == job.column else { return job.columnSince }
-        return old.since
+        guard let old = kept[hub + "/" + job.id] else { return job.columnSince }
+        // A job whose column changed after the last note: the time that its next note keeps (`note`), so a card drawn
+        // before that note (the Mac makes it away from the main thread) shows what it shows after it.
+        return old.column == job.column ? old.since : max(job.columnSince, old.seen)
+    }
+
+    /// Every job has the same column and the same time in its column as in `other`: only the time of the readings
+    /// that saw them differs, which no card draws while its column stays.
+    public func sameTimes(as other: ColumnTimes) -> Bool {
+        kept.count == other.kept.count && kept.allSatisfy { key, mine in
+            other.kept[key].map { $0.column == mine.column && $0.since == mine.since } ?? false
+        }
     }
 }

@@ -190,6 +190,14 @@ struct JobsTests {
         let waits = try hub([task(1, "working", ["created": Self.now - 4 * 3600, "started": Self.now - 3 * 3600,
                                                  "since": Self.now + 300, "parked_until": later, "works": false])])
         let parked = try #require(waits.board(period: .all, calendar: Self.utc)[.waiting]?.first)
+        // a card drawn before its reading's note (the Mac makes the note away from the main thread) shows the time that
+        // the note keeps: the later of the hub's guess and the last reading that saw it in its column before, here
+        // the reading at now + 5 over a guess of now - 500
+        let early = try hub([task(1, "working", ["created": Self.now - 4 * 3600, "started": Self.now - 3 * 3600,
+                                                 "since": Self.now - 500, "parked_until": later, "works": false])])
+        let parkedEarly = try #require(early.board(period: .all, calendar: Self.utc)[.waiting]?.first)
+        #expect(parkedEarly.columnSince == Self.now - 500)
+        #expect(times.since(parkedEarly, hub: "h") == Self.now + 5)
         times.note([parked], hub: "h", now: Self.now + 2 * 3600)                    // two hours with no reading
         #expect(times.since(parked, hub: "h") == Self.now + 300)
         // an agent's own board names its part of another agent's job apart: a reading notes that card by its own id

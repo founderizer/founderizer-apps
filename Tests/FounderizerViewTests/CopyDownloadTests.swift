@@ -86,7 +86,8 @@ struct CopyDownloadTests {
         let small = try await HubClient().takeCopy(hub: address, database: "copy-test")
         defer { try? FileManager.default.removeItem(at: small.file.deletingLastPathComponent()) }
         let key = try #require(OwnerAccessKey(seed: Data((0..<32).map { UInt8($0 * 7 + 3) })))
-        let kept = try #require(OwnerAccess.withKey(small.file) { _ in key }, "the fixture copy takes the key")
+        let kept = try #require(OwnerAccess.withKey(try OwnerAccess.checkHubForm(small.file)) { _ in key },
+                                "the fixture copy takes the key")
         #expect(try Self.mode(kept) == 0o600, "the copy with the fleet's access key is this account's alone")
 
         hub.give(copy: body, fields: answer(String(repeating: "0", count: 64)))

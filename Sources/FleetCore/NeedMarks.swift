@@ -50,6 +50,12 @@ extension OwnerNeed {
     /// A card that he answered in words keeps no mark, and the key card and the Run card keep their own: the card
     /// decides those, as it did for the check.
     public func answeredMark(in state: HubState?) -> AnsweredMark {
+        answeredMark(in: state) { id in state?.tasks.first { $0.id == id } }
+    }
+
+    /// The same, with its task found by `found` in place of a search of every task of the reading (the Mac's index of
+    /// a reading's tasks, `FleetStore.answered(_:)`).
+    public func answeredMark(in state: HubState?, found taskOf: (Int) -> FleetTask?) -> AnsweredMark {
         let received = AnsweredMark.done(words: String(l10n: "\(by.agentLabel) has your answer"))
         guard let state, state.ui_features?.contains(AnsweredMark.feature) == true else { return received }
         switch team_state {
@@ -59,7 +65,7 @@ extension OwnerNeed {
         default: break
         }
         if give != nil, chosen == 0 { return .done(words: String(l10n: "Given")) }
-        guard let task, let found = state.tasks.first(where: { $0.id == task }) else { return received }
+        guard let task, let found = taskOf(task) else { return received }
         let mark = found.mark(in: state)
         switch found.tint(in: state) {
         case .failed: return .failed(words: found.failedResult ?? mark.words)

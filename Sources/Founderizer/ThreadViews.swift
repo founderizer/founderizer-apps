@@ -340,17 +340,10 @@ struct ManagerView: View {
             }
             // The agent of this conversation stands over it, and stays there while it scrolls.
             .overlay(alignment: .top) { ChatAgentPill(agent: agent) }
+            // **"Latest" scrolls to the chat's end over 0.25 s** (`FleetMotion.latest`; the owner's yes of 17 November
+            // 2026), as the iPhone's chat does: the view jumped there. An end that is far stays a jump.
             .overlay(alignment: .bottomTrailing) {
-                if end.showsLatest {
-                    // **"Latest" scrolls to the chat's end over 0.25 s** (`FleetMotion.latest`; the owner's yes of 17
-                    // November 2026), as the iPhone's chat does: the view jumped there. An end that is far stays a jump.
-                    Button("Latest", systemImage: "arrow.down") {
-                        withAnimation(reduceMotion || farFromEnd ? nil : FleetMotion.latest) { proxy.scrollTo("latest", anchor: .bottom) }
-                        end.followsLatest = true
-                    }
-                        .buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
-                        .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
-                }
+                ChatLatestButton(end: $end, far: $farFromEnd) { proxy.scrollTo("latest", anchor: .bottom) }
             }
             // Owner feature attachments: a file dropped anywhere in the conversation is staged in this chat's
             // composer, with the rules and the words of a file picked with the plus.
@@ -588,7 +581,6 @@ struct TaskView<After: View>: View {
     @State private var end = ChatEnd()
     /// The thread's end is more than three of its room's heights away: "Latest" goes there in one frame.
     @State private var farFromEnd = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var latestActivity = 0
     /// Why the thread's last read failed, in the hub's words.
     @State private var readError: String?
@@ -848,16 +840,10 @@ struct TaskView<After: View>: View {
             .onChange(of: liveLine?.says) { _, _ in
                 if end.followsLatest { proxy.scrollTo("latest-task", anchor: .bottom) }
             }
+            // Over 0.25 s, as a chat's (`FleetMotion.latest`); an end that is far stays a jump.
             .overlay(alignment: .bottomTrailing) {
-                if end.showsLatest {
-                    Button("Latest", systemImage: "arrow.down") {
-                        // Over 0.25 s, as a chat's (`FleetMotion.latest`); an end that is far stays a jump.
-                        withAnimation(reduceMotion || farFromEnd ? nil : FleetMotion.latest) { proxy.scrollTo("latest-task", anchor: .bottom) }
-                        end.followsLatest = true
-                    }.buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
-                        .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
-                        .accessibilityIdentifier("task-latest")
-                }
+                ChatLatestButton(end: $end, far: $farFromEnd) { proxy.scrollTo("latest-task", anchor: .bottom) }
+                    .accessibilityIdentifier("task-latest")
             }
         }
     }
@@ -1089,6 +1075,29 @@ private struct ReplyArrival: ViewModifier {
                     .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
+    }
+}
+
+/// **"Latest" over a chat or a task thread, a view of its own** (the owner, 25 November 2026: "scrolling Fleet Manager
+/// chat is SO slow"): it is the only view that reads where the scroll stands, so a scroll that leaves the end or comes
+/// back to it draws this button again and not the whole chat, which took 30 to 42 ms of a frame each time (the
+/// manager's chat on his fleet's reading, measured in a hidden copy of the app).
+private struct ChatLatestButton: View {
+    @Binding var end: ChatEnd
+    /// Read only when he presses: the end is far, so the chat goes there in one frame.
+    @Binding var far: Bool
+    let go: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if end.showsLatest {
+            Button("Latest", systemImage: "arrow.down") {
+                withAnimation(reduceMotion || far ? nil : FleetMotion.latest) { go() }
+                end.followsLatest = true
+            }
+                .buttonStyle(.plain).font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
+                .padding(9).background(FleetStyle.surface, in: Capsule()).padding(12)
+        }
     }
 }
 

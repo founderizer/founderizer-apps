@@ -292,11 +292,15 @@ final class FleetCopyKeeper {
         do {
             let copy = try await client.takeCopy(hub: hub, database: database)
             taken = copy
+            // Only a copy in the one form that a hub writes is kept (`OwnerAccess.checkHubForm`), so no hub's own key
+            // stays with him; a copy that is not kept removes no copy of his that has its name.
+            let file = copy.file
+            let form = try await Task.detached(priority: .utility) { try OwnerAccess.checkHubForm(file) }.value
             let kept = folder.appendingPathComponent(copy.suggestedName)
             try? FileManager.default.removeItem(at: kept)
             // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`). A copy
             // whose key did not go in is kept all the same, and the hub hears that it has none (the audit's finding 1).
-            let withKey = OwnerAccess.keyed(copy.file, key: accessKey)
+            let withKey = try OwnerAccess.keyed(form, key: accessKey)
             try FileManager.default.moveItem(at: withKey.file ?? copy.file, to: kept)
             // Retention knows this copy's key by its name from now on, also once iCloud takes its bytes back, and also
             // when the hub does not take the confirm.

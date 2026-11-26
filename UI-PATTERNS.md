@@ -153,7 +153,7 @@ most frames of its scroll were late. A row that gets or loses its fields is slow
 scrolls. A long list of words in a scroll view takes `selectableWords()` and `wordsSelectable(in:row:)`, and one long
 text `MessageText(text:selection:)`, never `.textSelection(.enabled)` on every row. **A new reading of the fleet waits
 while one of these views scrolls** (`ScrollHold`, `FleetStore.scroll(_:moving:)`), because a reading draws the window
-again: it comes in when the view rests, and at the latest nine seconds after the hub's last answer, well inside one
+again: it comes in when the view has rested for one second (`ScrollHold.settle`), and at the latest nine seconds after the hub's last answer, well inside one
 break. **No control of a row comes or goes with the pointer** (its hidden selection fields do, and they keep the pointer
 on the row): a footer that was made only under the pointer took the pointer from its row, which then lost it, and the
 app drew the row again for ever. A footer stays hidden by its opacity.
