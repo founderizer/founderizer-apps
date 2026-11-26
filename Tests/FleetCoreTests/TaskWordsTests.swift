@@ -67,8 +67,46 @@ struct TaskWordsTests {
         #expect(TaskWords.state("rejected", accepted: nil, requester: "manager") == "Rejected")
     }
 
-    /// The Mac's task reads its hold and its agent's limit from the fleet's state, and gives the same word.
+    /// The Mac's task reads its hold and its usage limit from the fleet's state, and gives the same word. **On a hub with
+    /// `task_limit` a task's own `limit` alone says that a usage limit holds it** (owner API 1.330; the owner, 24
+    /// November 2026: an agent's usage was wrong): its agent's `limit` is then the hold of the agent's own route, and
+    /// says nothing of a task whose own `limit` is null. A hub without it has no task `limit`, and its agent's `limit`
+    /// decides, as before. Fails when the rule reads the agent's `limit` on every hub: a desktop task that a hold of the
+    /// screen route keeps waiting said "Working" for days, and the agent's other tasks said "Usage limit".
     @Test func aTaskReadsItsHoldFromTheFleet() throws {
+        let usage: [String: Any] = ["since": 900.0, "until": 4000.0, "reset_known": true, "task": NSNull()]
+        func reading(features: [String]?, agentHeld: Bool, taskHeld: Bool) throws -> HubState {
+            var agent: [String: Any] = ["name": "remy", "role": "worker", "runtime": "claude", "can": []]
+            if agentHeld { agent["limit"] = usage }
+            let task: [String: Any] = ["id": 437, "title": "Desktop work", "details": "", "done_when": "", "needs": "screen",
+                                       "goal": "", "owner": "remy", "requester": "manager", "state": "working",
+                                       "created": 1.0, "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0,
+                                       "limit": taskHeld ? usage : NSNull()]
+            var fields: [String: Any] = ["schema_version": 1, "db": "test-db", "time": 1000.0, "agents": [agent],
+                                         "tasks": [task], "holds": [], "outcomes": [], "notes": [], "needs": [],
+                                         "permissions": [], "messages": [], "reports": []]
+            if let features { fields["ui_features"] = features }
+            return try HubState.decode(JSONSerialization.data(withJSONObject: fields))
+        }
+        // With the feature: the task's own hold, while its agent has none (a hold of its screen route).
+        let screen = try reading(features: ["direct_chat", TaskLimit.feature], agentHeld: false, taskHeld: true)
+        #expect(screen.limit(of: screen.tasks[0])?.until == 4000.0)
+        #expect(screen.tasks[0].mark(in: screen) == ("hourglass", "Usage limit", true, false))
+        #expect(screen.tasks[0].tint(in: screen) == .attention)
+        #expect(screen.limitedTasks == [437])
+        // With the feature: no own hold is no wait, also while its agent's own route is held.
+        let free = try reading(features: [TaskLimit.feature], agentHeld: true, taskHeld: false)
+        #expect(free.limit(of: free.tasks[0]) == nil)
+        #expect(free.tasks[0].mark(in: free) == ("circle.dotted", "Working", false, true))
+        #expect(free.limitedTasks.isEmpty)
+        // Without it: the agent's limit, as before, and a task limit alone says nothing.
+        let older = try reading(features: ["direct_chat"], agentHeld: true, taskHeld: false)
+        #expect(older.tasks[0].mark(in: older).words == "Usage limit")
+        #expect(older.limitedTasks == [437])
+        let none = try reading(features: nil, agentHeld: false, taskHeld: true)
+        #expect(none.tasks[0].mark(in: none).words == "Working")
+        #expect(none.limitedTasks.isEmpty)
+
         let task = try JSONDecoder().decode(FleetTask.self, from: Data("""
         {"id": 437, "title": "Paused work", "details": "", "done_when": "", "needs": "", "goal": "", "owner": "remy",
          "requester": "manager", "state": "working", "created": 1, "attempt": 1, "restarts": 0, "nudge_level": 0,

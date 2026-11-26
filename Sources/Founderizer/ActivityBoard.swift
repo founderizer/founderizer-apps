@@ -117,7 +117,7 @@ struct ActivityBoard: View {
 
     private func lanes(_ board: [ActivityColumn: [Job]], state: HubState) -> some View {
         let holds = (state.holds ?? []).filter { $0.state != "released" }
-        let limited = Set(state.agents.filter { $0.limit != nil }.map(\.name))
+        let limited = state.limitedTasks
         let subtasks = state.subtaskWaits
         let ended = EndedTasks(items: board[.done] ?? [])
         let waiting = WaitingTasks(items: board[.waiting] ?? [])
@@ -135,7 +135,7 @@ struct ActivityBoard: View {
                         // Only a card whose own task is in work: one that says that it stalled or lost its session
                         // rests, also while its agent works on another task. A job in work says nothing more; one
                         // whose task in work stalled or lost its session says so.
-                        let word = job.working?.stateWord(holds: holds, limited: limited.contains(job.working?.owner ?? ""))
+                        let word = job.working?.stateWord(holds: holds, limited: job.working.map { limited.contains($0.id) } ?? false)
                         jobCard(job, state: state, why: word == TaskWords.working ? nil : word, works: word == TaskWords.working,
                                 lane: width)
                             .transition(.laneCard)
@@ -149,7 +149,7 @@ struct ActivityBoard: View {
                         // the check of its result holds it, who checks it (`Job.checkWords`).
                         let lead = job.open.filter { $0.parked_until != nil }.min { ($0.parked_until ?? 0) < ($1.parked_until ?? 0) } ?? job.open.first
                         jobCard(job, state: state, why: job.wait != nil ? nil : job.checkWords ?? lead.map {
-                            why($0, holds: holds, limited: limited.contains($0.owner), subtasks: subtasks[$0.id], now: state.time)
+                            why($0, holds: holds, limited: limited.contains($0.id), subtasks: subtasks[$0.id], now: state.time)
                         }, lane: width).transition(.laneCard)
                     }
                     laterRows(waiting, state: state)

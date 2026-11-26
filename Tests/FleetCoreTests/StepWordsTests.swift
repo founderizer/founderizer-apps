@@ -11,12 +11,17 @@ import Testing
         return try JSONDecoder().decode(RuntimeEvent.self, from: JSONSerialization.data(withJSONObject: base.merging(fields) { _, new in new }))
     }
 
-    private func state(_ tasks: [[String: Any]], holds: [[String: Any]] = [], limited: Bool = false) throws -> HubState {
+    private static var hold: [String: Any] { ["since": 999_000.0, "until": 1_010_000.0, "reset_known": true, "task": NSNull()] }
+
+    private func state(_ tasks: [[String: Any]], holds: [[String: Any]] = [], limited: Bool = false,
+                       features: [String]? = nil) throws -> HubState {
         var agent: [String: Any] = ["name": "atlas", "role": "worker", "runtime": "claude", "can": []]
-        if limited { agent["limit"] = ["since": 999_000.0, "until": 1_010_000.0, "reset_known": true, "task": NSNull()] }
-        return try HubState.decode(JSONSerialization.data(withJSONObject: [
+        if limited { agent["limit"] = Self.hold }
+        var fields: [String: Any] = [
             "schema_version": 1, "db": "test-db", "time": 1_000_000.0, "agents": [agent], "tasks": tasks, "holds": holds,
-            "outcomes": [], "notes": [], "needs": [], "permissions": [], "messages": [], "reports": []]))
+            "outcomes": [], "notes": [], "needs": [], "permissions": [], "messages": [], "reports": []]
+        if let features { fields["ui_features"] = features }
+        return try HubState.decode(JSONSerialization.data(withJSONObject: fields))
     }
 
     private func task(_ fields: [String: Any]) -> [String: Any] {
@@ -105,9 +110,10 @@ import Testing
         #expect(StepWords.running(in: timeline, attempt: 3) == nil)
     }
 
-    /// "Resumes at 02:30" only while nothing else holds the task: a hold of his that is not released and its agent's usage
-    /// limit say their own words, and a hold that he released does not. The rule of an ask's row and of the task's panel;
-    /// fails when the rule counts a released hold, or says "Until" over a pause.
+    /// "Resumes at 02:30" only while nothing else holds the task: a hold of his that is not released and a usage limit
+    /// that holds it (on a hub with `task_limit` its own `limit`, else its agent's) say their own words, and a hold that
+    /// he released does not. The rule of an ask's row and of the task's panel; fails when the rule counts a released
+    /// hold, says "Until" over a pause, or reads the agent's limit on a hub that gives the task its own.
     @Test func aParkedTaskSaysUntilOnlyWhileNothingElseHoldsIt() throws {
         let parked = task(["parked_until": 1_003_600.0])
         let hold: [String: Any] = ["id": 1, "task": 7, "kind": "pause", "state": "stopped", "attempt": 1]
@@ -119,6 +125,10 @@ import Testing
         #expect(released.tasks[0].parkedUntil(in: released) == 1_003_600.0)
         let limited = try state([parked], limited: true)
         #expect(limited.tasks[0].parkedUntil(in: limited) == nil)
+        let ownHold = try state([task(["parked_until": 1_003_600.0, "limit": Self.hold])], features: [TaskLimit.feature])
+        #expect(ownHold.tasks[0].parkedUntil(in: ownHold) == nil)
+        let agentHold = try state([parked], limited: true, features: [TaskLimit.feature])
+        #expect(agentHold.tasks[0].parkedUntil(in: agentHold) == 1_003_600.0)
         let over = try state([task(["parked_until": 1_003_600.0, "state": "completed"])])
         #expect(over.tasks[0].parkedUntil(in: over) == nil)
     }

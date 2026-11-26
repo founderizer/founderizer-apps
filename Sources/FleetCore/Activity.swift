@@ -147,10 +147,10 @@ extension HubState {
     /// card of several tasks stands where its tasks stood.
     var taskColumns: [Int: ActivityColumn] {
         let held = Set((holds ?? []).filter { $0.state != "released" }.map(\.task))
-        let limited = Set(agents.filter { $0.limit != nil }.map(\.name))
+        let limited = limitedTasks
         let owner = ownerOnly, subtasks = subtaskWaits
         return Dictionary(tasks.map { task in
-            (task.id, task.activityColumn(held: held.contains(task.id) || limited.contains(task.owner), needsOwner: owner.contains(task.id),
+            (task.id, task.activityColumn(held: held.contains(task.id) || limited.contains(task.id), needsOwner: owner.contains(task.id),
                                           waitsForSubtasks: subtasks[task.id] != nil))
         }) { first, _ in first }
     }

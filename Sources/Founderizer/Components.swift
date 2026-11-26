@@ -787,11 +787,11 @@ private struct CenteredColumn: Layout {
 
 extension FleetTask {
     /// **A task's state in one word, the same in its panel, over its guidance box, in an agent's panel and on the phone**
-    /// (T-12; fix round 2): `TaskWords.state` in FleetCore, with its hold and its agent's usage limit from the fleet's
-    /// state. One task read "Limited" in its panel and "Working" over its guidance box at the same moment, and
+    /// (T-12; fix round 2): `TaskWords.state` in FleetCore, with its hold and the usage limit that holds it
+    /// (`HubState.limit(of:)`) from the fleet's state. One task read "Limited" in its panel and "Working" over its guidance box at the same moment, and
     /// "Delivered" in its agent's panel where its thread said "Checked".
     func stateWord(in state: HubState?) -> String {
-        stateWord(holds: state?.holds ?? [], limited: state?.agents.first(where: { $0.name == owner })?.limit != nil)
+        stateWord(holds: state?.holds ?? [], limited: state?.limit(of: self) != nil)
     }
 
     /// Its state word from its own fields alone, with no hold and no usage limit.

@@ -32,14 +32,15 @@ struct ActivityTests {
          "answered": answered ?? NSNull(), "question": question ?? NSNull()]
     }
 
+    /// A usage-limit hold of the hub, as an agent's `limit` and as a task's own (owner API 1.330).
+    private static var hold: [String: Any] { ["since": now - 60, "until": now + 3600, "reset_known": true, "task": NSNull()] }
+
     private func hub(_ tasks: [[String: Any]], holds: [[String: Any]] = [], limited: [String] = [], outcomes: [[String: Any]] = [],
                      needs: [[String: Any]] = [], shell: [String] = [], features: [String] = []) throws -> HubState {
         let agents: [[String: Any]] = ["manager", "vps", "studio"].map { name in
             var agent: [String: Any] = ["name": name, "role": name == "manager" ? "manager" : "worker", "runtime": "codex",
                                         "can": shell.contains(name) ? ["shell"] : []]
-            if limited.contains(name) {
-                agent["limit"] = ["since": Self.now - 60, "until": Self.now + 3600, "reset_known": true, "task": NSNull()]
-            }
+            if limited.contains(name) { agent["limit"] = Self.hold }
             return agent
         }
         return try HubState.decode(JSONSerialization.data(withJSONObject: [
@@ -100,6 +101,15 @@ struct ActivityTests {
         #expect(ids(board, .inProgress) == [3])
         #expect(ids(board, .done) == [7])
         #expect(ids(board, .waiting).first == 6)                 // only the owner can check a stop that was not confirmed: first
+        // A hub with `task_limit` (owner API 1.330): a task's own limit holds it, and its agent's limit (the hold of the
+        // agent's own route) holds none of the tasks whose own limit is null. Fails when the board reads the agent's
+        // limit on every hub.
+        var screen = task(9, "working", started: start, last: start)
+        screen["limit"] = Self.hold
+        let served = try hub([task(5, "working", owner: "studio", started: start, last: start), screen],
+                             limited: ["studio"], features: [TaskLimit.feature]).activity(agent: nil, period: .all, calendar: Self.utc)
+        #expect(ids(served, .inProgress) == [5])
+        #expect(ids(served, .waiting) == [9])
     }
 
     @Test func anOutcomeThatTheOwnerMustRecordNeedsThemAlsoAfterTheTaskEndedAndBeforeThePeriod() throws {
@@ -151,6 +161,15 @@ struct ActivityTests {
         #expect(waiting.later.map { $0.jobs.map(\.id) } == [["task 4", "task 2"], ["task 3"], ["task 1"]])     // the soonest first
         #expect(Set(waiting.cards.map(\.id)) == ["task 5", "task 6", "ask a", "task 8", "task 9", "task 10", "task 11", "task 13"])
         #expect(waiting.cards.first?.id == "task 9")                                             // what waits for him first
+        // A hub with `task_limit` (owner API 1.330): a parked task that its own limit holds keeps its card, and one whose
+        // agent alone is held (the hold of the agent's own route) is behind "later".
+        var held = task(2, "working", started: start, last: start + 1, parked: Self.now + 600)
+        held["limit"] = Self.hold
+        let served = try hub([task(1, "working", owner: "studio", started: start, last: start, parked: Self.now + 600), held],
+                             limited: ["studio"], features: [TaskLimit.feature])
+        let later = WaitingTasks(items: served.board(period: .all, calendar: Self.utc)[.waiting] ?? [], calendar: Self.utc)
+        #expect(later.later.map { $0.jobs.map(\.id) } == [["task 1"]])
+        #expect(later.cards.map(\.id) == ["task 2"])
     }
 
     /// A lead's task whose session does no work now waits for its open subtasks, and names their agents; it is work again

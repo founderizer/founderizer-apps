@@ -3,13 +3,13 @@ import Foundation
 extension FleetTask {
     /// **Until when its agent parked it, while nothing else holds it**: it waits on nothing else (`parkedOnly`: parked,
     /// `working`, no question or thing that it waits on), no hold of the owner's that is not released, and no usage
-    /// limit of its agent; nil for every other task, which says its own wait. The rule of the row of an ask in a chat
+    /// limit (`HubState.limit(of:)`); nil for every other task, which says its own wait. The rule of the row of an ask in a chat
     /// (`ChatAskRow`) and of the task's own panel (`TaskPanel`), which say "Resumes at 02:30"; the Tasks board's words
     /// (`ActivityBoard.why`) keep the same rule on their own list of the holds that are not released.
     public func parkedUntil(in state: HubState?) -> Double? {
         guard parkedOnly, let until = parked_until,
               state?.holds?.contains(where: { $0.task == id && $0.state != "released" }) != true,
-              state?.agents.first(where: { $0.name == owner })?.limit == nil else { return nil }
+              state?.limit(of: self) == nil else { return nil }
         return until
     }
 
@@ -60,6 +60,44 @@ extension FleetTask {
     static let ownersOpenings = ["The owner asked for this in their own words, in ", "The owner asked for this in his own words, in "]
 }
 
+
+/// **Whether a usage limit holds a task: one rule for every screen of both apps** (owner API 1.330; the owner, 24 November
+/// 2026: an agent's usage was wrong, and the fleet had wrong data about that agent). An agent can run its screen tasks
+/// on another account. A hold of that route now keeps only those tasks, and the agent's `limit` is the hold of its own
+/// route only. So a task's wait comes from its own `limit` on a hub that sends it (`feature`): nil there is no wait,
+/// also while its agent's `limit` is set. A hub before it sends no task `limit`, and its agent's `limit` decides, as
+/// before. The agent's own row and chat read the agent's `limit` alone, on every hub.
+public enum TaskLimit {
+    /// `ui_features` of a hub that gives each task its own `limit` (`GET /ui/state`, `GET /ui/mobile` and the phone's
+    /// task page).
+    public static let feature = "task_limit"
+
+    /// Whether the hub of these feature names gives each task its own `limit`.
+    public static func served(_ features: [String]?) -> Bool { features?.contains(feature) == true }
+
+    /// The hold that keeps a task waiting now: `task`, its own `limit`, on a hub that serves it; else `agent`, the
+    /// `limit` of the task's agent.
+    public static func holding(task: RuntimeLimit?, agent: RuntimeLimit?, served: Bool) -> RuntimeLimit? {
+        served ? task : agent
+    }
+}
+
+extension HubState {
+    /// **The usage limit that holds `task` now**, or nil (`TaskLimit`): the reading of every task's "Usage limit", its
+    /// mark, its column on the board and the limit line of its thread.
+    public func limit(of task: FleetTask) -> RuntimeLimit? {
+        TaskLimit.holding(task: task.limit, agent: agents.first { $0.name == task.owner }?.limit,
+                          served: TaskLimit.served(ui_features))
+    }
+
+    /// **The tasks that a usage limit holds now**, by id: `limit(of:)` for each task of this reading, with one look at
+    /// the features and the agents, for a list that reads many tasks (the board, the jobs).
+    public var limitedTasks: Set<Int> {
+        let served = TaskLimit.served(ui_features)
+        let agents = Dictionary(self.agents.compactMap { agent in agent.limit.map { (agent.name, $0) } }) { first, _ in first }
+        return Set(tasks.lazy.filter { TaskLimit.holding(task: $0.limit, agent: agents[$0.owner], served: served) != nil }.map(\.id))
+    }
+}
 
 /// **The files that a task's guidance takes** (`FleetTask.guidanceFiles`).
 public enum GuidanceFiles: Equatable, Sendable {

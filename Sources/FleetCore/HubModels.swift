@@ -347,6 +347,11 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     /// **The person of a narrowed pair whose work this task is** (`tasks.scope_person`), or nil: no agent outside that
     /// pair may read it, so no feedback of the owner's names it (`HubState.feedback(onTask:)`).
     public let scope_person: Int?
+    /// **The usage-limit hold that keeps this task waiting now** (owner API 1.330, feature `task_limit`), in the shape
+    /// of its agent's `limit`, or nil: no such hold keeps it, it ended, or the hub is older. A hold of an agent's screen
+    /// route keeps only its screen tasks, and the agent's own `limit` is then nil. Read it through `HubState.limit(of:)`,
+    /// which knows whether the hub sends it (`TaskLimit`).
+    public let limit: RuntimeLimit?
 
     public var isTerminal: Bool { ["completed", "failed", "rejected", "canceled"].contains(state) }
     /// Who checks the result, by the name the app gives everywhere: an agent's capitalised ("Accepted by Manager"),
@@ -361,7 +366,7 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
 
 extension FleetTask {
     /// **The task's one state word** (`TaskWords.state`), from the fleet's own state: the owner's hold on it, and whether
-    /// its agent's usage limit holds it.
+    /// a usage limit holds it (`HubState.limit(of:)`).
     public func stateWord(holds: [TaskHold], limited: Bool) -> String {
         let hold = holds.first { $0.task == id && $0.state != "released" }
         return TaskWords.state(state, accepted: accepted, requester: requester, waitingOn: waiting_on,
@@ -419,10 +424,10 @@ extension FleetTask {
         }
     }
 
-    /// Its mark from the fleet's state: an outcome that is not known, the owner's holds, and whether its agent's usage
-    /// limit holds it.
+    /// Its mark from the fleet's state: an outcome that is not known, the owner's holds, and whether a usage limit
+    /// holds it (`HubState.limit(of:)`).
     public func mark(in state: HubState?) -> (symbol: String, words: String, attention: Bool, inWork: Bool) {
-        mark(holds: state?.holds ?? [], limited: state?.agents.first(where: { $0.name == owner })?.limit != nil,
+        mark(holds: state?.holds ?? [], limited: state?.limit(of: self) != nil,
              outcomeUnknown: state?.outcomeUnknown(id) == true)
     }
 
@@ -443,7 +448,7 @@ extension FleetTask {
 
     /// Its mark's colour from the fleet's state, as `mark(in:)`.
     public func tint(in state: HubState?) -> MarkTint {
-        tint(holds: state?.holds ?? [], limited: state?.agents.first(where: { $0.name == owner })?.limit != nil,
+        tint(holds: state?.holds ?? [], limited: state?.limit(of: self) != nil,
              outcomeUnknown: state?.outcomeUnknown(id) == true)
     }
 }

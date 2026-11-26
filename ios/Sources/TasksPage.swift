@@ -137,20 +137,31 @@ struct TaskStateLine: View {
 }
 
 extension MobileStore {
-    /// A task's one state word against what this phone read last: the fleet's holds and its agent's usage limit.
+    /// **The usage limit that holds a task now, by FleetCore's one rule** (`TaskLimit`, owner API 1.330): `own`, the
+    /// task's own `limit`, on a hub that sends it, else the `limit` of its agent `owner`, from `snapshot`.
+    nonisolated static func limit(_ own: RuntimeLimit?, owner: String, in snapshot: MobileSnapshot?) -> RuntimeLimit? {
+        TaskLimit.holding(task: own, agent: snapshot?.agents.first { $0.name == owner }?.limit,
+                          served: TaskLimit.served(snapshot?.ui_features))
+    }
+
+    /// The usage limit that holds a task now, by what this phone read last: a head, and the task itself on its page.
+    func limit(of head: MobileTaskHead) -> RuntimeLimit? { Self.limit(head.limit, owner: head.owner, in: snapshot) }
+    func limit(of task: FleetTask) -> RuntimeLimit? { Self.limit(task.limit, owner: task.owner, in: snapshot) }
+
+    /// A task's one state word against what this phone read last: the fleet's holds and the usage limit that holds it.
     func stateWord(_ head: MobileTaskHead) -> String {
-        head.stateWord(holds: openHolds, limited: agent(head.owner)?.limit != nil)
+        head.stateWord(holds: openHolds, limited: limit(of: head) != nil)
     }
 
     /// The task itself, on its page: the same function, with the stall and the lost session that it carries.
     func stateWord(_ task: FleetTask) -> String {
-        task.stateWord(holds: openHolds, limited: agent(task.owner)?.limit != nil)
+        task.stateWord(holds: openHolds, limited: limit(of: task) != nil)
     }
 
     /// **A task's mark, the Mac's, on every screen of the phone** (fix round 3, item 27): its symbol, in the brand's green
     /// for work and a checked result, orange where it needs someone, red for a result that failed, muted otherwise.
     func mark(_ head: MobileTaskHead) -> (symbol: String, color: Color) {
-        let unknown = openOutcomes.contains { $0.task == head.id }, limited = agent(head.owner)?.limit != nil
+        let unknown = openOutcomes.contains { $0.task == head.id }, limited = limit(of: head) != nil
         let mark = head.mark(holds: openHolds, limited: limited, outcomeUnknown: unknown)
         // The board's own rule for its colour (`FleetTask.tint`), from the same mark.
         let tint: FleetTask.MarkTint = unknown ? .attention
@@ -164,7 +175,7 @@ extension MobileStore {
     /// board draws them, with the task's outcome that is not known first — T-437 was an orange "?" on Needs you and a
     /// grey pause elsewhere.
     func mark(_ task: FleetTask) -> (symbol: String, color: Color) {
-        let unknown = openOutcomes.contains { $0.task == task.id }, limited = agent(task.owner)?.limit != nil
+        let unknown = openOutcomes.contains { $0.task == task.id }, limited = limit(of: task) != nil
         return (task.mark(holds: openHolds, limited: limited, outcomeUnknown: unknown).symbol,
                 Self.color(task.tint(holds: openHolds, limited: limited, outcomeUnknown: unknown)))
     }

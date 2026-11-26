@@ -171,8 +171,30 @@ struct MobileReadTests {
         #expect(try word(["state": "something-new"]) == "Something-new")
     }
 
-    @Test("What holds a task is its word: a hold, the agent's usage limit, a stall")
+    /// A task's word by the phone's own rule (`MobileStore.limit`, FleetCore's `TaskLimit`), from a reading whose agent
+    /// `vps` has a hold of its own route or none, and whose head has its own hold or none (owner API 1.330).
+    private func heldWord(features: [String]?, agentHeld: Bool, taskHeld: Bool) throws -> String {
+        let hold: [String: Any] = ["since": 900.0, "until": 4000.0, "reset_known": true]
+        let read = try snapshot(agents: [agentFields(["name": "vps", "limit": agentHeld ? hold : nil])],
+                                ["tasks": [headFields(["needs": "screen", "limit": taskHeld ? hold : nil])],
+                                 "ui_features": features])
+        let head = try #require(read.tasks.first)
+        // The ask rows read the head as FleetCore's task, with the same hold (`askReading`, `markReading`).
+        #expect(head.fleetTask?.limit?.until == head.limit?.until)
+        return head.stateWord(holds: read.holds, limited: MobileStore.limit(head.limit, owner: head.owner, in: read) != nil)
+    }
+
+    /// **On a hub with `task_limit` a task's own `limit` alone says "Usage limit"** (owner API 1.330; the owner, 24
+    /// November 2026: an agent's usage was wrong): a desktop task that a hold of its screen route keeps waiting, while
+    /// its agent's `limit` (the hold of the agent's own route) is null; and no other task of an agent whose own route is
+    /// held. A hub without it gives no task `limit`, and the agent's `limit` decides, as before. Fails when the phone
+    /// reads the agent's `limit` on every hub: the held desktop task said "Working" for days.
+    @Test("What holds a task is its word: a hold, its usage limit, a stall")
     func whatHoldsATask() throws {
+        #expect(try heldWord(features: ["push", TaskLimit.feature], agentHeld: false, taskHeld: true) == "Usage limit")
+        #expect(try heldWord(features: [TaskLimit.feature], agentHeld: true, taskHeld: false) == "Working")
+        #expect(try heldWord(features: ["push"], agentHeld: true, taskHeld: false) == "Usage limit")
+        #expect(try heldWord(features: nil, agentHeld: false, taskHeld: true) == "Working")
         // The list said "Working" for each of these while the task's page and the Mac said what held it.
         #expect(try word(holds: [hold("pause", "held")]) == "Paused")
         #expect(try word(holds: [hold("stop", "requested")]) == "Stopping…")

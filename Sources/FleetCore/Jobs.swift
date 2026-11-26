@@ -234,7 +234,7 @@ public struct Job: Identifiable, Sendable {
     var firstTask: Int { tasks.map(\.id).min() ?? 0 }
 
     init(key: Key, id: String, title: String, agent: String, asked: Bool, standing: JobStanding,
-         columns: [Int: ActivityColumn], held: Set<Int>, limited: Set<String>, created: Double) {
+         columns: [Int: ActivityColumn], held: Set<Int>, limited: Set<Int>, created: Double) {
         self.key = key
         self.id = id
         self.title = title
@@ -272,7 +272,7 @@ public struct Job: Identifiable, Sendable {
         }
         counts = Counts(working: working, waiting: waiting, done: done, failed: failed)
         onlyLater = standing.column == .waiting && standing.wait == nil && !standing.open.isEmpty
-            && standing.open.allSatisfy { $0.parkedOnly && !held.contains($0.id) && !limited.contains($0.owner) }
+            && standing.open.allSatisfy { $0.parkedOnly && !held.contains($0.id) && !limited.contains($0.id) }
     }
 
     /// **One ended task as a job of its own**, for a column of tasks alone (`EndedTasks.init(_:calendar:)`).
@@ -409,7 +409,7 @@ extension HubState {
         let requests = Dictionary(needs.filter(\.isOpen).compactMap { need in need.ask.map { ($0, need) } }) { first, _ in first }
         let columns = taskColumns, waits = ownerWaits
         let held = Set((holds ?? []).filter { $0.state != "released" }.map(\.task))
-        let limited = Set(agents.filter { $0.limit != nil }.map(\.name))
+        let limited = limitedTasks
         var jobs: [Job] = []
         for key in order {
             let unsorted = members[key] ?? []

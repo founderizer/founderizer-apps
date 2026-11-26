@@ -635,13 +635,13 @@ struct TaskView<After: View>: View {
         guard errorStands, isFresh else { return nil }
         return (store.reading("machines") as MachineList?)?.machines.first { $0.agent == task.owner }
     }
-    /// The usage limit that holds this task now: its agent's, while the task is open and neither an outcome that is not
-    /// known nor a hold of the owner's comes first — the order of the task's mark (`FleetTask.mark`).
+    /// The usage limit that holds this task now (`HubState.limit(of:)`), while the task is open and neither an outcome
+    /// that is not known nor a hold of the owner's comes first — the order of the task's mark (`FleetTask.mark`).
     private var limitHolding: RuntimeLimit? {
         guard !task.isTerminal, !state.outcomeUnknown(task.id),
               state.holds?.contains(where: { $0.task == task.id && $0.state != "released" }) != true
         else { return nil }
-        return state.agents.first { $0.name == task.owner }?.limit
+        return state.limit(of: task)
     }
 
     /// **The thread comes in one frame, at its newest row** (T-06). A task opened again draws what it read last, at
@@ -756,10 +756,9 @@ struct TaskView<After: View>: View {
                     // (fix round 3, item 7; `FleetTask.mark`): the board's hourglass where a clock stood, and no line on a
                     // task that is over or that his hold holds first.
                     if let limit = limitHolding {
-                        let who = task.owner.agentLabel, mark = task.mark(in: state)
+                        let mark = task.mark(in: state)
                         Label(mark.words, systemImage: mark.symbol).font(ChatStyle.detail).foregroundStyle(.orange)
-                            .help(limit.reset_known ? "\(who) is at its usage limit until \(fleetComingTime(limit.until, now: state.time))."
-                                                    : "\(who) is at its usage limit.")
+                            .help(state.limitHover(limit, owner: task.owner) ?? "")
                     }
                     // **The day and the time it began, over the request it began with** (`ChatStamp`), as a chat
                     // stamps its first message; the request in the words of whoever asked (`TaskRequest`).
@@ -867,6 +866,22 @@ struct TaskView<After: View>: View {
                 }
             }
         }
+    }
+}
+
+extension HubState {
+    /// **The hover of a held task's "Usage limit" in its thread** (owner API 1.330; the owner, 24 November 2026: the
+    /// fleet had wrong data about an agent). Where the agent's own route is held, or on a hub without `task_limit`, the
+    /// agent is at its limit, and the hover says so. Where only the task's own hold keeps it (a hold of the agent's screen
+    /// route, while the agent itself works on), it says the usage bar's words, "Usage limit until 16:00", and nothing when
+    /// the time of the reset is not known: the line says "Usage limit" already.
+    func limitHover(_ limit: RuntimeLimit, owner: String) -> String? {
+        let until = limit.reset_known ? fleetComingTime(limit.until, now: time) : nil
+        guard !TaskLimit.served(ui_features) || agents.first(where: { $0.name == owner })?.limit != nil else {
+            return until.map { String(l10n: "Usage limit until \($0)") }
+        }
+        let who = owner.agentLabel
+        return until.map { String(l10n: "\(who) is at its usage limit until \($0).") } ?? String(l10n: "\(who) is at its usage limit.")
     }
 }
 

@@ -109,7 +109,8 @@ struct MobileAgent: Decodable, Identifiable, Sendable {
     let last_seen: Double?
     /// The agent's open tasks, counted by the hub.
     let open_tasks: Int
-    /// The hub holds this agent's work until its usage limit resets.
+    /// The hub holds this agent's work until its usage limit resets: the hold of its own route (owner API 1.330). A
+    /// hold of its screen route keeps only its screen tasks, and each of them says it (`MobileTaskHead.limit`).
     let limit: RuntimeLimit?
     /// At most four windows of the newest reading, highest share first on screen.
     let usage: [MobileUsageWindow]
@@ -231,6 +232,9 @@ struct MobileTaskHead: Decodable, Identifiable, Sendable {
     let parent: Int?
     let parked_until: Double?
     let ask: String?
+    /// **The usage-limit hold that keeps this task waiting now** (owner API 1.330, as `FleetTask.limit` on the Mac), or
+    /// nil: none, an ended head, or an older hub. Read it through `MobileStore.limit(_:owner:in:)` (`TaskLimit`).
+    let limit: RuntimeLimit?
 
     /// **The head as FleetCore's task**, for the rules that both apps share (what he asked for in a chat:
     /// `HubState.asks`, `ChatAskRow`). What the head does not carry is empty, as the hub writes it.
@@ -243,7 +247,8 @@ struct MobileTaskHead: Decodable, Identifiable, Sendable {
                                     "delivered": delivered, "checked_at": checked_at, "waiting_on": waiting_on,
                                     "follows": follows, "stalled_since": stalled_since, "missing_since": missing_since,
                                     "works": works, "doing": doing, "parent": parent, "parked_until": parked_until,
-                                    "ask": ask]
+                                    "ask": ask, "limit": limit.map { ["since": $0.since, "until": $0.until,
+                                                                      "reset_known": $0.reset_known] as [String: Any] }]
         for (key, value) in more { if let value { row[key] = value } }
         guard let data = try? JSONSerialization.data(withJSONObject: row) else { return nil }
         return try? JSONDecoder().decode(FleetTask.self, from: data)
@@ -432,7 +437,7 @@ struct MobileDevice: Decodable, Identifiable, Sendable {
 extension MobileTaskHead {
     /// **Its one state word, the Mac's** (`TaskWords.state` in FleetCore, which the Mac's panel, its thread and the
     /// phone all use; fix round 2, item 29): a hold's word while a hold stands ("Paused", "Stopping…", "Stop not
-    /// confirmed"), "Usage limit" while its agent's usage limit holds open work, a stall, a lost session, a checked
+    /// confirmed"), "Usage limit" while a usage limit holds open work (`TaskLimit`), a stall, a lost session, a checked
     /// result, who it waits for, and its own state. **The hold comes first, also before a result** (review B4i): a stop
     /// that its helper has not confirmed says "Stopping…" over "Canceled", as the Mac's thread says it. The phone's list
     /// said "Working" for a paused, a limited and a stalled task that its page and the Mac called otherwise. A hub from
