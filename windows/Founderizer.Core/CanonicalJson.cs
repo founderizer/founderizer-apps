@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -281,6 +282,22 @@ public static class OwnerStatement
 
     public static string Unpool(string fleet, string login, long at) =>
         Make("unpool", fleet, at, ("login", login.ToLowerInvariant()));
+
+    /// <summary>The secret is in the grantable pool by the hub's default (owner feature `pool_default`): what the owner's
+    /// computer signs by itself. The vault takes it as a `pool`, but never over the owner's own `unpool` of that secret,
+    /// which only their own `pool` ends, so a hub that is broken into cannot undo their "Only you" (vault.py).</summary>
+    public static string DefaultPool(string fleet, string login, long at) =>
+        Make("default_pool", fleet, at, ("login", login.ToLowerInvariant()));
+
+    /// <summary>The owner puts a new value under a reference that the central vault holds (owner feature
+    /// `secret_replace`). <paramref name="sha256"/> is of the sealed copy that this app made (<see cref="Checksum"/>), so
+    /// the statement is about that one copy and no other.</summary>
+    public static string Replace(string fleet, string login, string sha256, long at) =>
+        Make("replace", fleet, at, ("login", login.ToLowerInvariant()), ("sha256", sha256));
+
+    /// <summary>The SHA-256 of a sealed copy's text, in small hex: what a replace statement says of its copy.</summary>
+    public static string Checksum(string sealedCopy) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sealedCopy)));
 
     /// <summary>The owner's yes to one door call, for the Needs-you item <paramref name="need"/>.</summary>
     public static string DoorCall(string fleet, long need, string call, long at) =>

@@ -49,12 +49,12 @@ Mac, and a device route is all that the PC reaches.
 | `vault_access` | waits (2.3) | |
 | `runtime_switch` | waits (2.2) | |
 | `account_email` | waits (2.2) | |
-| `secrets` | waits (2.3) | |
+| `secrets` | waits (2.3) | the library is built (L5): the secure form as a model (`SecretForm`), the seal and the fingerprints; the key card is U4's, the pages are wave C's |
 | `login_create` | waits (2.3) | |
 | `login_capture` | waits (2.3) | |
 | `api_request` | waits (2.3) | |
 | `owner_knowledge` | built | `GET /ui/knowledge`, one file with its text |
-| `secret_grants` | waits (2.3) | |
+| `secret_grants` | waits (2.3) | the library is built (L5): `SecretAccess.ChangeAsync`, signed before `POST /ui/secrets/grant` for a give and after it for an end; the pages are wave C's |
 | `integrations` | waits (2.4) | |
 | `chat_apps` | waits (2.4) | |
 | `people` | waits (2.4) | |
@@ -90,8 +90,8 @@ Mac, and a device route is all that the PC reaches.
 | `attachment_knowledge` | waits (step 2) | |
 | `asking_and_waiting` | built | `TaskWords` and the task page's "Waiting on" or "Waiting for" (`Screens.Task`) |
 | `account_limits` | waits (2.2) | |
-| `secret_requests` | waits (2.3) | an item's `secret` is read (built); its answer is the secure form of 2.3 |
-| `signed_grants` | waits (2.3) | the statement writer is built (`OwnerStatement.Grant`) |
+| `secret_requests` | waits (2.3) | an item's `secret` is read (built); its answer is the secure form of 2.3, whose library is built (L5: a new key, a new value of a key that the fleet holds, a login with its 2FA). Until the key card (U4), an owner with only a PC cannot give one |
+| `signed_grants` | waits (2.3) | the statement writer is built (`OwnerStatement.Grant`), and the signing with its clock (L5: `VaultSigning`, `GrantClock`); the owner key in the TPM is U4's |
 | `agent_rename` | waits (2.2) | |
 | `agent_spelling` | built | owner API 1.339: `MobileAgent.Spelling`; `AgentBook.Of` takes each spelling only from a hub that serves it, and `AgentBook.Label` names the agent by it (`AgentSpellingTests`). `AgentBook.Spelling` is the rule of the add and rename commands' `spelling`, for the PC's rename (U3b) and Add agent when they come. **Two gaps.** A task that an agent opened from the owner's message begins with hub.py's own sentence, which keeps the id ("The owner asked for this in their own words, in devops's chat: …"); the Mac takes that sentence away (`FleetTask.ownersWords`), and the PC shows it in the task's first row (`Screens.Task` `Asks`) until piece 2 of the AI mark, which changes that row. Narrator's name of a chat's page is set when the page opens (`MainWindow.ShowPage`), so a spelling or a role that changes while that chat is open is named at its next opening |
 | `agent_memory` | waits (2.2) | |
@@ -110,7 +110,7 @@ Mac, and a device route is all that the PC reaches.
 | `door_calls` | waits (D5) | the PC's yes needs the QR's `bind` value; the statement writer and the binding are built |
 | `door_modes` | waits (D5) | the owner's signed mode of a server |
 | `door_mode_set` | waits (step 2) | |
-| `recovery_copy` | waits (D5) | needs the QR's `bind` value. **Built**: an item's `add_device` is read: the first option of a card with `add_device` 1, which opens the Add device picture on the Mac, stands grey and not enabled, and no route of the store sends it, as the row `door_setup` says |
+| `recovery_copy` | waits (D5) | needs the QR's `bind` value; the seal for the phone is built (L5: `RecoverySeal`). **Built**: an item's `add_device` is read: the first option of a card with `add_device` 1, which opens the Add device picture on the Mac, stands grey and not enabled, and no route of the store sends it, as the row `door_setup` says |
 | `server_ai_choice` | waits (2.1) | |
 | `manager_server` | waits (2.1) | the first run's server that joined goes to the manager with the chosen provider by itself, and the setup fills the window until the manager runs (piece U3); the server's page of a manager with no server is in the library for a new server at a provider, its join and its hand-over, the first run's server that did not join, and a free server of the fleet (piece L4b: `AgentServerStep`, `ManagerSetup.TakeServerAsync`); Other VPS there waits (its check is in `SetupStore`), and the drawing waits (U3b). Two departures from the Mac until wave C gives the PC the provider's row "Use this server" (the Mac's `MadeServers`, `firstToReuse`). First, the first run's server leaves the manager's mark only when a join of it ended well, where the Mac lets it go as the join starts. Second, the page also joins it by itself when the hub lists it free (`ServerList.TakesFirst`, and no "busy" in its `why`, as the Mac's reuse reads it), where the Mac's `installFirst` returns when the hub lists it (its provider's list offers it). The page joins it by itself once, as the Mac, also when the first run's own join of it stopped, and the mark keeps it from the claim on; after that join of the page stopped or a closed app cut it off, each opening of the page shows that stop with Try again (this PC's install records) and nothing joins by itself, and after Back from that stop the same opening offers only "Make the server" (the stop comes back at the next opening). With no row that offers the server by name, a device that is online at another address (it registered again in Tailscale) leaves the page on its first page with nothing of the server, and the only way on is a second paid server |
 | `knowledge_edit` | waits (step 2) | a write of the owner's knowledge stays on the Mac |
@@ -132,9 +132,10 @@ Mac, and a device route is all that the PC reaches.
 | `error_reports` | waits | `GET` and `POST /ui/error-reports`, the owner's switch of Settings › Help › Help improve Founderizer (UI-API.md 1.204; a group of General until 16 November 2026), and the Mac's own crashes; the Windows app has no such switch yet (lane "Error reports") |
 | `owner_key` | waits (2.1) | the owner's computer sends its own key with its address (owner API 1.169); a PC at the device level calls with its device key, which the hub's device rule takes as before, so step 1 needs nothing; the key file, the claim's header and `POST /ui/owner/key` are the first run of an owner with only Windows |
 | `owner_computer` | waits (2.1) | the owner's computer says that it is a Mac or a PC and what its app can do (owner API 1.273): `POST /ui/owner/computer` `{kind: "windows", can}` after the claim, after a new key, at each start and when `db` changes, with the names of the build's families; `owner_computer` of `GET /ui/state` and `GET /ui/mobile`. A PC at the device level is refused there (`device_not_allowed`) and needs nothing |
-| `central_vault` | waits (2.3) | |
-| `kept_pins` | waits (2.3) | the Mac signs each machine's kept pin again with the owner's key; a PC holds no owner key in step 1 |
-| `secret_replace` | waits (2.3) | Add secret puts a new value under a key that the list has, with the owner's signed statement |
+| `central_vault` | waits (2.3) | the library is built (L5): `VaultReading`, `VaultSealKey`, `VaultPlan`; the rounds that run the plan are L6's |
+| `pool_default` | waits (2.3) | the library is built (L5): `OwnerStatement.DefaultPool`, `VaultReading.PoolDue` (`standing.due`), `VaultSigning.PoolsAsync` (at most 32 a round, the ends first, a `default_pool` only while the clocks agree); L6's `VaultRound` calls it |
+| `kept_pins` | waits (2.3) | `VaultPlan` is built (L5), the round is L6's; the Mac signs each machine's kept pin again with the owner's key; a PC holds no owner key in step 1 |
+| `secret_replace` | waits (2.3) | Add secret puts a new value under a key that the list has, with the owner's signed statement: the library is built (L5: `OwnerStatement.Replace`, `SecretForm`) |
 | `contact_roles` | waits (2.4) | |
 | `connected_apps` | waits (2.4) | the Mac alone today: no device route |
 | `connect_offer` | not planned | Turn on runs a root step over the Mac's SSH and takes a Tailscale access token, and `/ui/connect*` is no device route |

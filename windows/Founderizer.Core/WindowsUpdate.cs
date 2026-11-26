@@ -160,10 +160,10 @@ public static class WindowsUpdate
         401 or 402 when !knowsFleet => new UpdateReading
         {
             Status = status,
-            Says = "Founderizer does not know which fleet this PC drives yet, so our channel has nothing to answer about. " +
-                   "Link your fleet, or take the newest build from our download page.",
+            Says = "Founderizer does not know your team yet, so our channel has nothing to answer about. " +
+                   "Link your team, or take the newest build from our download page.",
         },
-        401 or 402 => new UpdateReading { Status = status, Says = $"Our channel refused this fleet ({status}). Nothing changed on this PC." },
+        401 or 402 => new UpdateReading { Status = status, Says = $"Our channel refused your team ({status}). Nothing changed on this PC." },
         404 => new UpdateReading { Status = status, Says = "No build of Founderizer is published yet." },
         503 => new UpdateReading
         {

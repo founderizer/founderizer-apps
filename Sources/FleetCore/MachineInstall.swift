@@ -65,12 +65,17 @@ public struct InstallTarget: Equatable, Sendable {
     /// can report a Mac as a Linux server, and then the Linux rule keeps a key at port 22 at the first check; the root
     /// install's own fingerprint (`mac-server-pin-design.md`, P4) closes it.
     public var macServer: Bool
+    /// **The name under which this Mac knows the host key, where the connection goes to another form of the same node's
+    /// address** (the hub's root route, `HubRootRoute`: it connects to the node's own Tailscale address, and the owner's
+    /// own `ssh` met the key under the hub record's form, a MagicDNS name for example). Every `ssh` to this target then
+    /// reads the key under this name, strictly (`hostKeyOptions`), and keeps no new one. nil: the host itself.
+    public var hostKeyName: String?
 
     public init(host: String, user: String = "root", port: Int = 22, identityFile: String? = nil,
-                becomeRoot: Bool = false, portGivenFor: String? = nil, macServer: Bool = false) {
+                becomeRoot: Bool = false, portGivenFor: String? = nil, macServer: Bool = false, hostKeyName: String? = nil) {
         self.host = host; self.user = user; self.port = port
         self.identityFile = identityFile; self.becomeRoot = becomeRoot; self.portGivenFor = portGivenFor
-        self.macServer = macServer
+        self.macServer = macServer; self.hostKeyName = hostKeyName
     }
 
     /// **The port is no word of the hub's**: port 22, which on Linux only root's own `sshd` can hold (a port below
@@ -95,7 +100,11 @@ public struct InstallTarget: Equatable, Sendable {
     ///   before this rule (a fake one too) opens nothing: `ssh` reads such a line first, and the plain line only when
     ///   there is none (OpenSSH 10.3 here, "checking without port identifier", measured on 22 November 2026). An
     ///   unknown key is a plain refusal ("Host key verification failed").
+    ///
+    /// A target with a `hostKeyName` other than its host reads the key under that name, strictly, at any port: the line
+    /// of that name alone, as the line of port 22 above.
     public func hostKeyOptions(strict: Bool) -> [String] {
+        if let name = hostKeyName, name != host { return ["-o", "StrictHostKeyChecking=yes", "-o", "HostKeyAlias=\(name)"] }
         guard portIsOwners else { return ["-o", "StrictHostKeyChecking=yes", "-o", "HostKeyAlias=\(host)"] }
         return ["-o", "StrictHostKeyChecking=\(strict || macServer ? "yes" : "accept-new")"]
     }
@@ -114,11 +123,19 @@ public struct InstallTarget: Equatable, Sendable {
     /// - A changed key: the words of the install's own check (`ServerCheck.hostKeyChanged`), with the name of the line
     ///   that `ssh-keygen -R` takes: the address at port 22, else `"[address]:port"`, in quotes for the shell.
     /// - A key that this Mac does not know: his own first connection from Terminal.
+    ///
+    /// A target with a `hostKeyName` other than its host reads that name's own line at any port (`hostKeyOptions`): no
+    /// words of the port, and a changed key names that line for `ssh-keygen -R`.
     public func refusedHostKey(in lines: [String], server: String) -> String? {
         let said = lines.map { $0.lowercased() }
         guard said.contains(where: { $0.contains("host key verification failed") }) else { return nil }
+        let changed = said.contains(where: { $0.contains("remote host identification has changed") })
+        if let name = hostKeyName, name != host {
+            return changed ? ServerCheck.hostKeyChanged(name)
+                : String(l10n: "This Mac does not know the host key of \(server) yet. Connect to it once with ssh from Terminal.")
+        }
         if asksForItsPort { return Self.typeItsPort(server) }
-        if said.contains(where: { $0.contains("remote host identification has changed") }) {
+        if changed {
             guard port != 22 else { return ServerCheck.hostKeyChanged(host) }
             let line = "\"[\(host)]:\(port)\""
             return String(l10n: "\(host) answers with another host key than this Mac knows. If the server was rebuilt, run ssh-keygen -R \(line) on this Mac, then check again.")

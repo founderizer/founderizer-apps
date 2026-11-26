@@ -336,12 +336,13 @@ public sealed class InstallerTests
         var seen = new List<string?>();
         var answering = AnswerAsync(listener, 403, seen, 2);
         Assert.AreEqual(HubRead.Refuses, await Claim.ReadHubAsync(http, box, hub));
-        await answering.WaitAsync(TimeSpan.FromSeconds(10));
+        // The listener's end, whose requests have come already; the bound only stops a hang (SetupRig.HangWait).
+        await answering.WaitAsync(SetupRig.HangWait);
         CollectionAssert.AreEqual(new[] { "Bearer " + kept, "Bearer " + waiting }, seen);
 
         answering = AnswerAsync(listener, 503, seen, 1);
         Assert.AreEqual(HubRead.Silent, await Claim.ReadHubAsync(http, box, hub));
-        await answering.WaitAsync(TimeSpan.FromSeconds(10));
+        await answering.WaitAsync(SetupRig.HangWait);
         listener.Stop();
         Assert.AreEqual(HubRead.Silent, await Claim.ReadHubAsync(http, box, hub));
     }

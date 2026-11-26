@@ -247,15 +247,21 @@ public enum OwnerAccess {
     /// into root's `authorized_keys`, once, after a file that may not end with a new line, and nothing else in the file
     /// changes. It prints `inPlace` when the line is there, also when it was there before.
     public static func install(_ key: OwnerAccessKey, file: String = rootKeys) -> String {
-        let line = InstallPlan.quote(key.publicLine), file = InstallPlan.quote(file)
+        install(line: key.publicLine, file: file)
+    }
+
+    /// The same program for any one line of `authorized_keys` (the hub's root route puts the line of this Mac's own
+    /// key there with it, `HubRootRoute`), which prints `mark` when the line is there.
+    public static func install(line: String, file: String = rootKeys, mark: String = inPlace) -> String {
+        let line = InstallPlan.quote(line), file = InstallPlan.quote(file)
         return "f=\(file); umask 077; mkdir -p \"$(dirname \"$f\")\"; touch \"$f\"; "
             + "grep -qxF \(line) \"$f\" || { [ -z \"$(tail -c1 \"$f\")\" ] || echo >> \"$f\"; "
-            + "printf '%s\\n' \(line) >> \"$f\"; }; grep -qxF \(line) \"$f\" && echo \(inPlace)"
+            + "printf '%s\\n' \(line) >> \"$f\"; }; grep -qxF \(line) \"$f\" && echo \(mark)"
     }
 
     /// Whether the program's output says that the line is in place.
-    public static func isInPlace(_ output: String) -> Bool {
-        output.split(whereSeparator: \.isNewline).contains { $0.trimmingCharacters(in: .whitespaces) == inPlace }
+    public static func isInPlace(_ output: String, mark: String = inPlace) -> Bool {
+        output.split(whereSeparator: \.isNewline).contains { $0.trimmingCharacters(in: .whitespaces) == mark }
     }
 
     /// The access key that a copy carries, with the id of its fleet; nil when it carries none, or none that is a key. Of

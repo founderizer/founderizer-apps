@@ -26,7 +26,7 @@ public sealed class RootCatalogTests
             ("TailscaleSaysOther", VaultPins.TailscaleSaysOther("%@", "%@")), ("OtherVaultKey", VaultPins.OtherVaultKey("%@")),
             ("CannotRead", VaultPins.CannotRead("%@", "%@")), ("ItsVaultKey", VaultPins.ItsVaultKey),
             ("GaveNoReason", VaultInstall.GaveNoReason), ("NoKeyToRead", VaultInstall.NoKeyToRead),
-            ("NoConnection", VaultPins.NoConnection("%@")), ("OtherKey", VaultInstall.OtherKey),
+            ("NoConnection", VaultPins.NoConnection("%@")),
         };
         var missing = texts.Where(t => !keys.Contains(t.Text) && !pcKeys.Contains(t.Text)).Select(t => $"{t.Where}: \"{t.Text}\"").ToList();
         Assert.AreEqual(0, missing.Count, "not in the Mac's catalog:\n" + string.Join("\n", missing));

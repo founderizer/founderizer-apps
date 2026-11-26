@@ -369,7 +369,7 @@ public sealed class SetupStoreTests
         Assert.IsFalse(s.HandedOver, "the app ends here, before the hand-over");
         var joined = s.ManagersServer!.Name;
         // The change that ended the join writes the mark right after it: a few moments of real time at most.
-        for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)?.Joined is null; i++) await Task.Delay(10);
+        for (var i = 0; i < SetupRig.HangReads && Agents.ManagerSetupMark.Read(rig.Choices)?.Joined is null; i++) await Task.Delay(10);
         var kept = Agents.ManagerSetupMark.Read(rig.Choices);
         Assert.IsNotNull(kept, "the mark from the claim on");
         Assert.AreEqual(("juno", "db-1", "claude", joined), (kept.Agent, kept.Db, kept.Provider, kept.Joined));
@@ -401,7 +401,8 @@ public sealed class SetupStoreTests
         using var ended = new ManualResetEventSlim();
         await using var rig = new SetupRig(call =>
         {
-            if (call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)) ended.Wait(TimeSpan.FromSeconds(20));
+            // The join's call waits for the test to let it go; the bound only stops a hang (SetupRig.HangWait).
+            if (call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)) ended.Wait(SetupRig.HangWait);
             return null;
         })
         { Fleet = SetupRig.NewFleet() };
@@ -409,7 +410,7 @@ public sealed class SetupStoreTests
         {
             await Built(rig);
             var s = await rig.Until(x => x.ManagerInstall.Running && x.ManagersServer?.Address is not null, "the manager's join");
-            for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)?.Made is null; i++) await Task.Delay(10);
+            for (var i = 0; i < SetupRig.HangReads && Agents.ManagerSetupMark.Read(rig.Choices)?.Made is null; i++) await Task.Delay(10);
             var server = new Agents.FirstRunServer(s.ManagersServer!.Name, s.ManagersServer.Address!);
             var kept = Agents.ManagerSetupMark.Read(rig.Choices);
             Assert.AreEqual(("juno", "db-1", "claude", null as string, server), (kept?.Agent, kept?.Db, kept?.Provider, kept?.Joined, kept?.Made),
@@ -435,11 +436,11 @@ public sealed class SetupStoreTests
             }, mark);
             await setup.StepAsync();
             Assert.AreEqual(true, Agents.ManagerSetupMark.Read(rig.Choices)!.Made?.Tried, "its join by itself started");
-            for (var i = 0; i < 500 && records.Installs.All().All(r => r.Launch != "launch-2" || r.Runs); i++) await Task.Delay(10);
+            for (var i = 0; i < SetupRig.HangReads && records.Installs.All().All(r => r.Launch != "launch-2" || r.Runs); i++) await Task.Delay(10);
             for (var read = 0; read < 2; read++) await setup.StepAsync();
             var own = records.Installs.All().Where(r => r.Launch == "launch-2").ToList();
             Assert.AreEqual((1, InstallOutcome.Done), (own.Count, own[0].Outcome), "one join of that server, which ended well");
-            for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)!.Made is not null; i++) await Task.Delay(10);
+            for (var i = 0; i < SetupRig.HangReads && Agents.ManagerSetupMark.Read(rig.Choices)!.Made is not null; i++) await Task.Delay(10);
             Assert.IsNull(Agents.ManagerSetupMark.Read(rig.Choices)!.Made, "the mark lets it go at the end of a join that ended well");
         }
         finally
@@ -460,7 +461,8 @@ public sealed class SetupStoreTests
         using var ended = new ManualResetEventSlim();
         await using var rig = new SetupRig(call =>
         {
-            if (call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)) ended.Wait(TimeSpan.FromSeconds(20));
+            // The join's call waits for the test to let it go; the bound only stops a hang (SetupRig.HangWait).
+            if (call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)) ended.Wait(SetupRig.HangWait);
             return null;
         })
         { Fleet = SetupRig.NewFleet() };
@@ -468,7 +470,7 @@ public sealed class SetupStoreTests
         {
             await Built(rig);
             await rig.Until(x => x.ManagerInstall.Running && x.ManagersServer?.Address is not null, "the manager's join");
-            for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)?.Made is null; i++) await Task.Delay(10);
+            for (var i = 0; i < SetupRig.HangReads && Agents.ManagerSetupMark.Read(rig.Choices)?.Made is null; i++) await Task.Delay(10);
             var mark = Agents.ManagerSetupMark.Read(rig.Choices)!;
             Assert.IsNotNull(mark.Made, "the server is in the mark while its join runs");
 
@@ -510,7 +512,8 @@ public sealed class SetupStoreTests
         {
             if (!call.Program.Contains("fleet-machine-name=", StringComparison.Ordinal)) return null;
             if (Interlocked.Increment(ref watched) == 1) return StandInRemote.Said($"fleet-machine-name=worker-2\nTo authenticate, visit:\n{link}");
-            approved.Wait(TimeSpan.FromSeconds(10));
+            // The second watch waits for the test's yes; the bound only stops a hang (SetupRig.HangWait).
+            approved.Wait(SetupRig.HangWait);
             return StandInRemote.Said("fleet-machine-name=worker-2\nfleet-on-network\n100.64.0.12");
         }) { Fleet = SetupRig.NewFleet() };
         rig.Calls.JoinLine = "curl -fsS http://100.64.0.9:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh -s -- --advertise-tags=tag:founderizer";
@@ -632,7 +635,8 @@ public sealed class SetupStoreTests
             {
                 case 1: clock!.Ahead = TimeSpan.FromSeconds(300); return StandInRemote.Said("Founderizer step 14: security updates");
                 case 2: clock!.Ahead = TimeSpan.FromSeconds(600); return StandInRemote.Said("Founderizer step 15: this server's own hardening");
-                default: finish.Wait(TimeSpan.FromSeconds(20)); return StandInRemote.Said("READY");
+                // The last step waits for the test to let it go; the bound only stops a hang (SetupRig.HangWait).
+                default: finish.Wait(SetupRig.HangWait); return StandInRemote.Said("READY");
             }
         });
         try

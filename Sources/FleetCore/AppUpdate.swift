@@ -374,7 +374,7 @@ public struct AppUpdateChannel: Sendable {
     public func read(installed: AppVersion?,
                      system: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion) async -> AppUpdateReading {
         guard let site = URL(string: channel), site.scheme == "https", site.host != nil else {
-            return AppUpdateReading(status: 0, says: String(l10n: "This fleet names a release channel that is not an HTTPS address, so Founderizer asked nothing."))
+            return AppUpdateReading(status: 0, says: String(l10n: "Your team names a release channel that is not an HTTPS address, so Founderizer asked nothing."))
         }
         guard !keys.isEmpty else {
             return AppUpdateReading(status: 0, says: String(l10n: "This build of Founderizer carries no release key, so it refuses every update. That is the safe state: an app that cannot check an update takes none."))
@@ -432,11 +432,11 @@ public struct AppUpdateChannel: Sendable {
                 // Not a lapse: this Mac has not been told which fleet it drives, so our side has nothing to look
                 // up. A Mac that has just downloaded the app is in exactly this state, and has nothing to update.
                 return AppUpdateReading(status: status,
-                                        says: String(l10n: "Founderizer does not know which fleet this Mac drives yet, so our channel has nothing to answer about. Link your fleet, or take the newest build from our download page."))
+                                        says: String(l10n: "Founderizer does not know your team yet, so our channel has nothing to answer about. Link your team, or take the newest build from our download page."))
             }
             // What the channel answered, in a few plain words (T-35, fix round 2), and no word of a subscription:
             // Founderizer has none. Only today's channel answers this, to a fleet whose hub holds no token.
-            return AppUpdateReading(status: status, says: String(l10n: "Our channel refused this fleet (\(status)). Nothing changed on this Mac."), refused: true)
+            return AppUpdateReading(status: status, says: String(l10n: "Our channel refused your team (\(status)). Nothing changed on this Mac."), refused: true)
         case 404:
             return AppUpdateReading(status: status, says: String(l10n: "No build of Founderizer is published yet."))
         case 503:

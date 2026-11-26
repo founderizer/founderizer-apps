@@ -367,7 +367,8 @@ public sealed class RequestCardAsTheMacTests
 
     /// <summary>No mark of his answer stands, only the plain check with no words, where the Mac draws no AnsweredMarkView
     /// and its folded card's value is empty: a card that he answered in his own words, a key request that a saved key
-    /// answered (the key card), and a card whose answer is on its way while the reading still has it open. Breaks if one
+    /// answered (the key card) or that he answered in his own words (the hub's time of them), and a card whose answer is
+    /// on its way while the reading still has it open. Breaks if one
     /// of them says that the agent has his answer, or takes the mark of its task.</summary>
     [TestMethod]
     public void NoMarkStandsForWordsAKeyOrAnAnswerOnItsWay()
@@ -380,7 +381,12 @@ public sealed class RequestCardAsTheMacTests
         key["chosen"] = null;
         key["answer"] = "Saved.";
         key["secret"] = new JsonObject { ["kind"] = "api_key", ["env"] = "SHOP_KEY", ["saved"] = "bws://0f8fad5b-d9cb-469f-a165-70867728950e" };
-        CollectionAssert.AreEqual(new[] { AnswerMark.Plain, AnswerMark.Plain }, MarksOf(true, words, key));
+        var clarified = Pressed(54, Marks(task: 11));       // Needs clarification of a key request: the hub writes its time
+        clarified["kind"] = "secret";
+        clarified["chosen"] = null;
+        clarified["answer"] = "Which shop?";
+        clarified["secret"] = new JsonObject { ["kind"] = "api_key", ["env"] = "SHOP_KEY", ["clarified"] = 1763700000.5 };
+        CollectionAssert.AreEqual(new[] { AnswerMark.Plain, AnswerMark.Plain, AnswerMark.Plain }, MarksOf(true, words, key, clarified));
 
         var open = Pressed(53, Marks(task: 11));
         open["answer"] = null;

@@ -1,0 +1,6635 @@
+{
+  "about" : "The vault's core on the owner's computer (windows-app-plan-v2.md, 5.6, piece L5), made by FleetCore for fixed inputs: an age seal, the recovery code and its copy for a phone, the salted fingerprints, the owner access key, the form's secrets, and the readings of GET /ui/vault with what the seal and the plan decide. Every key here is a test key of a fixed label.",
+  "grant_clock" : [
+    {
+      "at" : 1763700000,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763700000
+    },
+    {
+      "at" : 1763700001,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763700000
+    },
+    {
+      "at" : 1763700002,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763699000
+    },
+    {
+      "at" : 1763699000,
+      "fleet" : "fedcba9876543210",
+      "now" : 1763699000
+    },
+    {
+      "at" : 1763700100,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763700100
+    },
+    {
+      "at" : 1763617300,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763617300
+    },
+    {
+      "at" : 1763700099,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763700099
+    },
+    {
+      "at" : 1763700100,
+      "fleet" : "0123456789abcdef",
+      "now" : 1763617302
+    }
+  ],
+  "look" : {
+    "card" : [
+      {
+        "act" : "take",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : "goes",
+        "holds" : true,
+        "look" : "goes",
+        "settled" : false,
+        "took" : true
+      },
+      {
+        "act" : "take",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : "goes",
+        "holds" : true,
+        "look" : "goes",
+        "settled" : false,
+        "took" : false
+      },
+      {
+        "act" : "take",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : "saved",
+        "holds" : true,
+        "look" : "saved",
+        "settled" : false,
+        "took" : true
+      },
+      {
+        "act" : "take",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : null,
+        "holds" : true,
+        "look" : "saved",
+        "settled" : false,
+        "took" : false
+      },
+      {
+        "act" : "settle",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : true,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : false,
+        "form_open" : true,
+        "given" : null,
+        "holds" : false,
+        "look" : "saved",
+        "settled" : true,
+        "took" : null
+      },
+      {
+        "act" : "take",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : true,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : false,
+        "form_open" : true,
+        "given" : "saved",
+        "holds" : false,
+        "look" : "saved",
+        "settled" : true,
+        "took" : false
+      },
+      {
+        "act" : "take",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : "goes",
+        "holds" : true,
+        "look" : "goes",
+        "settled" : false,
+        "took" : true
+      },
+      {
+        "act" : "settle",
+        "collapsed" : true,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : null,
+        "holds" : true,
+        "look" : "goes",
+        "settled" : false,
+        "took" : null
+      },
+      {
+        "act" : "take",
+        "collapsed" : false,
+        "collapsed_expanded" : false,
+        "folds" : false,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : true,
+        "form_open" : true,
+        "given" : "failed",
+        "holds" : true,
+        "look" : "failed",
+        "settled" : false,
+        "took" : true
+      },
+      {
+        "act" : "end",
+        "collapsed" : false,
+        "collapsed_expanded" : false,
+        "folds" : true,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : false,
+        "form_open" : true,
+        "given" : null,
+        "holds" : false,
+        "look" : null,
+        "settled" : false,
+        "took" : null
+      },
+      {
+        "act" : "take",
+        "collapsed" : false,
+        "collapsed_expanded" : false,
+        "folds" : true,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : false,
+        "form_open" : true,
+        "given" : null,
+        "holds" : false,
+        "look" : null,
+        "settled" : false,
+        "took" : false
+      },
+      {
+        "act" : "settle",
+        "collapsed" : false,
+        "collapsed_expanded" : false,
+        "folds" : true,
+        "folds_expanded" : false,
+        "folds_open" : false,
+        "form_answered" : false,
+        "form_open" : true,
+        "given" : null,
+        "holds" : false,
+        "look" : null,
+        "settled" : false,
+        "took" : null
+      }
+    ],
+    "looks" : [
+      {
+        "busy" : false,
+        "done" : null,
+        "look" : null,
+        "saving" : false,
+        "warned" : false
+      },
+      {
+        "busy" : false,
+        "done" : null,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : false
+      },
+      {
+        "busy" : true,
+        "done" : null,
+        "look" : null,
+        "saving" : false,
+        "warned" : false
+      },
+      {
+        "busy" : true,
+        "done" : null,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : false
+      },
+      {
+        "busy" : false,
+        "done" : null,
+        "look" : null,
+        "saving" : false,
+        "warned" : true
+      },
+      {
+        "busy" : false,
+        "done" : null,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : true
+      },
+      {
+        "busy" : true,
+        "done" : null,
+        "look" : null,
+        "saving" : false,
+        "warned" : true
+      },
+      {
+        "busy" : true,
+        "done" : null,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : true
+      },
+      {
+        "busy" : false,
+        "done" : false,
+        "look" : "failed",
+        "saving" : false,
+        "warned" : false
+      },
+      {
+        "busy" : false,
+        "done" : false,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : false
+      },
+      {
+        "busy" : true,
+        "done" : false,
+        "look" : "goes",
+        "saving" : false,
+        "warned" : false
+      },
+      {
+        "busy" : true,
+        "done" : false,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : false
+      },
+      {
+        "busy" : false,
+        "done" : false,
+        "look" : "failed",
+        "saving" : false,
+        "warned" : true
+      },
+      {
+        "busy" : false,
+        "done" : false,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : true
+      },
+      {
+        "busy" : true,
+        "done" : false,
+        "look" : "goes",
+        "saving" : false,
+        "warned" : true
+      },
+      {
+        "busy" : true,
+        "done" : false,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : true
+      },
+      {
+        "busy" : false,
+        "done" : true,
+        "look" : "saved",
+        "saving" : false,
+        "warned" : false
+      },
+      {
+        "busy" : false,
+        "done" : true,
+        "look" : "saved",
+        "saving" : true,
+        "warned" : false
+      },
+      {
+        "busy" : true,
+        "done" : true,
+        "look" : "saved",
+        "saving" : false,
+        "warned" : false
+      },
+      {
+        "busy" : true,
+        "done" : true,
+        "look" : "saved",
+        "saving" : true,
+        "warned" : false
+      },
+      {
+        "busy" : false,
+        "done" : true,
+        "look" : "failed",
+        "saving" : false,
+        "warned" : true
+      },
+      {
+        "busy" : false,
+        "done" : true,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : true
+      },
+      {
+        "busy" : true,
+        "done" : true,
+        "look" : "goes",
+        "saving" : false,
+        "warned" : true
+      },
+      {
+        "busy" : true,
+        "done" : true,
+        "look" : "goes",
+        "saving" : true,
+        "warned" : true
+      }
+    ]
+  },
+  "made_by" : "app/Tests/FleetCoreTests/VaultVectorsTests.swift",
+  "owner_access" : {
+    "fingerprint" : "SHA256:4sAr7zzLwHIbZwPUKExn2VOs5jC2Rm6AhFhomDL4fCU",
+    "private_file" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n",
+    "public_line" : "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHjXWCnffQ9rCLdpbFDmdPJOMa/IJPv0b62uagEHQwrQ founderizer-owner-access",
+    "read" : [
+      {
+        "name" : "line ends of Windows",
+        "seed_hex" : "efcdc5dce57ff04807b39162cebe92277a8ea4383d881e71c727c9b73d1c403c",
+        "text" : "{BEGIN}\r\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\r\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\r\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\r\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\r\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\r\n{END}\r\n"
+      },
+      {
+        "name" : "another key",
+        "seed_hex" : "fe05c44aedc1b0741e36c40860cc69b16ee43a6d3f91bdea226b1db7ec67307e",
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACBPlkOWxDHCOduoaofoLSXzIyZNLiCgJUEs3tjXF5zITwAAAKC82WxJvNls\nSQAAAAtzc2gtZWQyNTUxOQAAACBPlkOWxDHCOduoaofoLSXzIyZNLiCgJUEs3tjXF5zITw\nAAAED+BcRK7cGwdB42xAhgzGmxbuQ6bT+Rveoiax237Gcwfk+WQ5bEMcI526hqh+gtJfMj\nJk0uIKAlQSze2NcXnMhPAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n"
+      },
+      {
+        "name" : "the public blob's half changed",
+        "seed_hex" : null,
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawm3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n"
+      },
+      {
+        "name" : "the private part's public half changed",
+        "seed_hex" : null,
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp33wPawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n"
+      },
+      {
+        "name" : "the two check numbers differ",
+        "seed_hex" : null,
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1cx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n"
+      },
+      {
+        "name" : "the private half changed",
+        "seed_hex" : null,
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAeykWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n"
+      },
+      {
+        "name" : "the comment's length changed into the padding",
+        "seed_hex" : "efcdc5dce57ff04807b39162cebe92277a8ea4383d881e71c727c9b73d1c403c",
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGWZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQF\n{END}\n"
+      },
+      {
+        "name" : "the padding changed",
+        "seed_hex" : "efcdc5dce57ff04807b39162cebe92277a8ea4383d881e71c727c9b73d1c403c",
+        "text" : "{BEGIN}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0AAAAKDHkT1dx5E9\nXQAAAAtzc2gtZWQyNTUxOQAAACB411gp330Pawi3aWxQ5nTyTjGvyCT79G+trmoBB0MK0A\nAAAEDvzcXc5X/wSAezkWLOvpIneo6kOD2IHnHHJ8m3PRxAPHjXWCnffQ9rCLdpbFDmdPJO\nMa/IJPv0b62uagEHQwrQAAAAGGZvdW5kZXJpemVyLW93bmVyLWFjY2VzcwECAwQE\n{END}\n"
+      }
+    ],
+    "seed_hex" : "efcdc5dce57ff04807b39162cebe92277a8ea4383d881e71c727c9b73d1c403c"
+  },
+  "reading" : {
+    "access_reasons" : {
+      "agent_without_key" : "This agent has no agent key yet.",
+      "another" : "Founderizer cannot give vault access now.",
+      "broker_status_unknown" : "Founderizer has no recent vault status from its server.",
+      "broker_without_callers" : "The server's vault cannot serve more than one agent yet.",
+      "helper_without_broker_callers" : "Founderizer on its server is not updated for a shared vault yet.",
+      "no_vault_store" : "Its server has no vault store.",
+      "vault_store_mismatch" : "The server's vault key is not the key that Founderizer recorded for it."
+    },
+    "addresses" : [
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://exa mple.com"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/ a"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : false,
+        "table" : null,
+        "text" : "HTTPS://example.com"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com:99999",
+        "text" : "https://example.com:99999"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com:"
+      },
+      {
+        "host" : "[::1]",
+        "is_address" : true,
+        "table" : "https://[::1]:8443",
+        "text" : "https://[::1]:8443/x"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://user:pw@example.com"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://@example.com"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://ex%61mple.com",
+        "text" : "https://ex%61mple.com/x"
+      },
+      {
+        "host" : "münchen.example",
+        "is_address" : true,
+        "table" : "https://xn--mnchen-3ya.example",
+        "text" : "https://münchen.example/ü"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com?x"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https:example.com"
+      },
+      {
+        "host" : "",
+        "is_address" : false,
+        "table" : null,
+        "text" : "https:///x"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : false,
+        "table" : null,
+        "text" : "//example.com"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com#f"
+      },
+      {
+        "host" : "a_b.example.com",
+        "is_address" : true,
+        "table" : "https://a_b.example.com",
+        "text" : "https://a_b.example.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://example.com:80a"
+      },
+      {
+        "host" : ".",
+        "is_address" : true,
+        "table" : "https://.",
+        "text" : "https://."
+      },
+      {
+        "host" : "127.0.0.1",
+        "is_address" : true,
+        "table" : null,
+        "text" : "http://127.0.0.1:8080/"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://example.com\\x"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/\"q\""
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/%zz"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com:443",
+        "text" : "https://example.com:0443/a"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/a@b"
+      },
+      {
+        "host" : "EXAMPLE.com",
+        "is_address" : true,
+        "table" : "https://EXAMPLE.com:443",
+        "text" : "https://EXAMPLE.com:443"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://exa\"mple.com"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/a|b"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/{x}"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : true,
+        "table" : "https://example.com",
+        "text" : "https://example.com/#a#b"
+      },
+      {
+        "host" : "",
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://"
+      },
+      {
+        "host" : "h",
+        "is_address" : true,
+        "table" : null,
+        "text" : "http://h"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : ""
+      },
+      {
+        "host" : "example.com",
+        "is_address" : false,
+        "table" : null,
+        "text" : "ftp://example.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "example.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://exa<mple.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://example.com:-1"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://[::1"
+      },
+      {
+        "host" : "exa$mple.com",
+        "is_address" : true,
+        "table" : "https://exa$mple.com",
+        "text" : "https://exa$mple.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://exa%zzmple.com"
+      },
+      {
+        "host" : "[::ffff:127.0.0.1]",
+        "is_address" : true,
+        "table" : "https://[::ffff:127.0.0.1]",
+        "text" : "https://[::ffff:127.0.0.1]/"
+      },
+      {
+        "host" : "example.com",
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://a@b@example.com"
+      },
+      {
+        "host" : null,
+        "is_address" : false,
+        "table" : null,
+        "text" : "https://exa^mple.com"
+      }
+    ],
+    "provider_key_sites" : [
+      "platform.claude.com",
+      "api.x.ai"
+    ],
+    "provider_sites" : [
+      "claude.ai",
+      "claude.com",
+      "chatgpt.com",
+      "auth.openai.com",
+      "x.ai"
+    ],
+    "trims" : {
+      "newlines" : [
+        10,
+        11,
+        12,
+        13,
+        133,
+        8232,
+        8233
+      ],
+      "python_space" : [
+        9,
+        10,
+        11,
+        12,
+        13,
+        28,
+        29,
+        30,
+        31,
+        32,
+        133,
+        160,
+        5760,
+        8192,
+        8193,
+        8194,
+        8195,
+        8196,
+        8197,
+        8198,
+        8199,
+        8200,
+        8201,
+        8202,
+        8232,
+        8233,
+        8239,
+        8287,
+        12288
+      ],
+      "whitespaces" : [
+        9,
+        32,
+        160,
+        5760,
+        8192,
+        8193,
+        8194,
+        8195,
+        8196,
+        8197,
+        8198,
+        8199,
+        8200,
+        8201,
+        8202,
+        8203,
+        8239,
+        8287,
+        12288
+      ],
+      "whitespaces_and_newlines" : [
+        9,
+        10,
+        11,
+        12,
+        13,
+        32,
+        133,
+        160,
+        5760,
+        8192,
+        8193,
+        8194,
+        8195,
+        8196,
+        8197,
+        8198,
+        8199,
+        8200,
+        8201,
+        8202,
+        8203,
+        8232,
+        8233,
+        8239,
+        8287,
+        12288
+      ]
+    }
+  },
+  "recovery" : {
+    "codes" : [
+      {
+        "grouped" : "4TRJ-GGQ0-SECH-P9M5-W1HM-WJDY-6V",
+        "identity_sha256" : "d9994f23c800ac84b21764a7ae382fc4e8f7efe320860f22ffd1ed1bd3934259",
+        "normalized" : "4TRJGGQ0SECHP9M5W1HMWJDY6V",
+        "random_hex" : "e4dad8d23050b7e039ae4c117669f445fce15174bc52ad9e46db",
+        "recipient" : "age194arjh9lqnf08ndstx4rk5td4vvuya9wtn79dyaueter3xdmqujqkvcnz3"
+      },
+      {
+        "grouped" : "FGVX-AP9S-T4H5-YAEP-75XY-FW67-78",
+        "identity_sha256" : "ec53ea5d03e2741cf8537213e30ed259be9c9429acfb431aab8b85c65b9b111f",
+        "normalized" : "FGVXAP9ST4H5YAEP75XYFW6778",
+        "random_hex" : "af70fbbd2ad64959da4431e5beea6e56c785fdfe4f1cc6c7e7e8",
+        "recipient" : "age1tpkl0k2y5vs6ffhe3mt4d0662ulpxc5jg27esmmy46myvl08csxq7zp4nv"
+      }
+    ],
+    "seal" : {
+      "box" : "BJbCLWLEm7CE4+Tj3f7xXJu4OeELAA1tlXdY19zplcwoFIfBoPN7RgC+tppT0dfFLp3Ks6JnaUi9jWeTQnpjpmIh8IgcZtgmmxAq9aKmulXIKJja4ohLxQamTbX6oA3Pl2f4bK30cIR8W8TLmtqhCjP2wYHCnoY=",
+      "code" : "4TRJGGQ0SECHP9M5W1HMWJDY6V",
+      "device" : "ana-iphone",
+      "ephemeral_private_hex" : "266254831592185226ce6bdf88e435ff2bc8645ca9f93c4c586171b98f60f634",
+      "info" : "founderizer recovery copy v1",
+      "nonce_hex" : "21f0881c66d8269b102af5a2",
+      "phone_private_hex" : "41665d7b18f8d4dc433be4b743200dc9dde3c773518fedb949a375907603b25e",
+      "phone_public" : "BMtoG+i1wX1HkG6wBYbsKO7JY1Lrm60avS0qiB10K0TsRFNZT2rJsWPLKM28FO2u3PIlPDvGo4RFke3GflygYek="
+    },
+    "typed" : [
+      {
+        "normalized" : "4TRJGGQ0SECHP9M5W1HMWJDY6V",
+        "text" : "4trj-ggq0-sech-p9m5-w1hm-wjdy-6v"
+      },
+      {
+        "normalized" : "4TRJGGQ0SECHP9M5W1HMWJDY6V",
+        "text" : "4TRJ GGQ0 SECH P9M5 W1HM WJDY 6V"
+      },
+      {
+        "normalized" : "0110GGQ0SECHP9M5W1HMWJDY6V",
+        "text" : "0ILO-GGQ0SECHP9M5W1HMWJDY6V"
+      },
+      {
+        "normalized" : null,
+        "text" : "4TRJGGQ0SECHP9M5W1HMWJDY6V0"
+      },
+      {
+        "normalized" : null,
+        "text" : "UTRJGGQ0SECHP9M5W1HMWJDY6V"
+      }
+    ]
+  },
+  "request" : {
+    "entries" : [
+      {
+        "env" : null,
+        "kind" : null,
+        "note" : null,
+        "title" : "example.com · ana@example.com"
+      },
+      {
+        "env" : null,
+        "kind" : null,
+        "note" : "",
+        "title" : "example.com · ANA@example.com"
+      },
+      {
+        "env" : null,
+        "kind" : null,
+        "note" : null,
+        "title" : "example.com · other@example.com"
+      },
+      {
+        "env" : null,
+        "kind" : null,
+        "note" : "its own",
+        "title" : "example.com · ana@example.com"
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "kind" : "api_key",
+        "note" : null,
+        "title" : "EXAMPLE_KEY"
+      }
+    ],
+    "holds" : [
+      {
+        "holds" : true,
+        "value" : "correct horse",
+        "words" : "is it correct horse?"
+      },
+      {
+        "holds" : false,
+        "value" : "secret12",
+        "words" : "mysecret12"
+      },
+      {
+        "holds" : true,
+        "value" : "secret12",
+        "words" : "secret12!"
+      },
+      {
+        "holds" : true,
+        "value" : "secret12",
+        "words" : "x secret12a, secret12"
+      },
+      {
+        "holds" : false,
+        "value" : "short",
+        "words" : "short"
+      },
+      {
+        "holds" : true,
+        "value" : "  secret12\n",
+        "words" : "the secret12 one"
+      },
+      {
+        "holds" : false,
+        "value" : "password",
+        "words" : "passwords"
+      },
+      {
+        "holds" : false,
+        "value" : "secret12",
+        "words" : "secret12②"
+      },
+      {
+        "holds" : true,
+        "value" : "sécret12",
+        "words" : "the sécret12 one"
+      }
+    ],
+    "notes" : [
+      {
+        "cut" : "plain",
+        "cut_note" : "plain",
+        "length" : 5,
+        "note_length" : 5,
+        "one_line" : "plain",
+        "text" : "plain"
+      },
+      {
+        "cut" : "…",
+        "cut_note" : "…",
+        "length" : 1,
+        "note_length" : 3,
+        "one_line" : "…",
+        "text" : "…"
+      },
+      {
+        "cut" : "ﬁne",
+        "cut_note" : "ﬁne",
+        "length" : 3,
+        "note_length" : 4,
+        "one_line" : "ﬁne",
+        "text" : "ﬁne"
+      },
+      {
+        "cut" : "é",
+        "cut_note" : "é",
+        "length" : 2,
+        "note_length" : 1,
+        "one_line" : "é",
+        "text" : "é"
+      },
+      {
+        "cut" : "👩‍👩‍👧",
+        "cut_note" : "👩‍👩‍👧",
+        "length" : 5,
+        "note_length" : 5,
+        "one_line" : "👩‍👩‍👧",
+        "text" : "👩‍👩‍👧"
+      },
+      {
+        "cut" : "a\r\nb c",
+        "cut_note" : "a\r\nb c",
+        "length" : 6,
+        "note_length" : 6,
+        "one_line" : "a b c",
+        "text" : "a\r\nb c"
+      },
+      {
+        "cut" : "  two  words ",
+        "cut_note" : "  two  words ",
+        "length" : 13,
+        "note_length" : 13,
+        "one_line" : "two  words",
+        "text" : "  two  words "
+      },
+      {
+        "cut" : "………………………………………………………………………………",
+        "cut_note" : "…………………………",
+        "length" : 80,
+        "note_length" : 240,
+        "one_line" : "………………………………………………………………………………………………………………………………………………………………………………",
+        "text" : "……………………………………………………………………………………………………………………………………………………………………………………………………………………"
+      },
+      {
+        "cut" : "👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧",
+        "cut_note" : "👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧",
+        "length" : 300,
+        "note_length" : 300,
+        "one_line" : "👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧",
+        "text" : "👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧👩‍👩‍👧"
+      }
+    ],
+    "requests" : [
+      {
+        "account" : null,
+        "env" : "EXAMPLE_KEY",
+        "fits" : [
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "form_address" : "https://api.example.com/v1",
+        "give" : {
+          "atlas" : "use",
+          "nova" : "read"
+        },
+        "json" : "{\"kind\": \"api_key\", \"env\": \"EXAMPLE_KEY\", \"site\": \"https://api.example.com/v1\", \"give\": {\"atlas\": \"use\", \"nova\": \"read\", \"iris\": \"own\"}}",
+        "kind" : "api_key",
+        "note" : null,
+        "note_goes" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "replaces" : null,
+        "saved" : null,
+        "site" : "https://api.example.com/v1"
+      },
+      {
+        "account" : "ana@example.com",
+        "env" : null,
+        "fits" : [
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "form_address" : "https://example.com/sign-in",
+        "give" : {
+
+        },
+        "json" : "{\"kind\": \"login\", \"site\": \"https://example.com/sign-in\", \"account\": \" ana@example.com \", \"note\": \"The second shop\", \"replaces\": \"bws://00000003-0000-4000-8000-000000000003\"}",
+        "kind" : "login",
+        "note" : "The second shop",
+        "note_goes" : [
+          true,
+          true,
+          false,
+          false,
+          false
+        ],
+        "replaces" : null,
+        "saved" : null,
+        "site" : "https://example.com/sign-in"
+      },
+      {
+        "account" : null,
+        "env" : null,
+        "fits" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "form_address" : "",
+        "give" : {
+
+        },
+        "json" : "{\"env\": \"example_key\", \"site\": \"ftp://example.com\", \"give\": {\"atlas\": 3}, \"saved\": \"nope\", \"note\": \"two\\nlines\", \"account\": \"\"}",
+        "kind" : "api_key",
+        "note" : null,
+        "note_goes" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "replaces" : null,
+        "saved" : null,
+        "site" : null
+      },
+      {
+        "account" : null,
+        "env" : "EXAMPLE_KEY",
+        "fits" : [
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "form_address" : "",
+        "give" : {
+
+        },
+        "json" : "{\"kind\": \"api_key\", \"env\": \"EXAMPLE_KEY\", \"replaces\": \"bws://00000003-0000-4000-8000-000000000003\", \"saved\": \"bws://00000004-0000-4000-8000-000000000004\", \"clarified\": 12.5}",
+        "kind" : "api_key",
+        "note" : null,
+        "note_goes" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "replaces" : "bws://00000003-0000-4000-8000-000000000003",
+        "saved" : "bws://00000004-0000-4000-8000-000000000004",
+        "site" : null
+      },
+      {
+        "account" : null,
+        "env" : "EXAMPLE_KEY",
+        "fits" : [
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "form_address" : "",
+        "give" : {
+
+        },
+        "json" : "{\"kind\": \"api_key\", \"env\": \"EXAMPLE_KEY\", \"replaces\": \"bws://NOPE\", \"note\": \"nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn\"}",
+        "kind" : "api_key",
+        "note" : null,
+        "note_goes" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "replaces" : null,
+        "saved" : null,
+        "site" : null
+      },
+      {
+        "account" : null,
+        "env" : "EXAMPLE_KEY",
+        "fits" : [
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "form_address" : "",
+        "give" : {
+
+        },
+        "json" : "{\"kind\": \"api_key\", \"env\": \"EXAMPLE_KEY\", \"note\": \"…………………………………………………………………………………………………………………………………………………………………………………\"}",
+        "kind" : "api_key",
+        "note" : null,
+        "note_goes" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "replaces" : null,
+        "saved" : null,
+        "site" : null
+      },
+      {
+        "account" : null,
+        "env" : "EXAMPLE_KEY",
+        "fits" : [
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "form_address" : "",
+        "give" : {
+
+        },
+        "json" : "{\"kind\": \"api_key\", \"env\": \"EXAMPLE_KEY\", \"site\": \"https://evil.example.com/v1\", \"replaces\": \"bws://00000003-0000-4000-8000-000000000003\"}",
+        "kind" : "api_key",
+        "note" : null,
+        "note_goes" : [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "replaces" : "bws://00000003-0000-4000-8000-000000000003",
+        "saved" : null,
+        "site" : "https://evil.example.com/v1"
+      }
+    ]
+  },
+  "rows" : {
+    "cases" : [
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : null,
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : null,
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : null,
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : null,
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : null,
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : null,
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : null,
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "use",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+          "atlas" : "use"
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+          "atlas" : "use"
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+          "atlas" : "use"
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "read",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "use"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "use",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+          "atlas"
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "use"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      },
+      {
+        "changes" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "kept" : [
+          "atlas"
+        ],
+        "later" : [
+          [
+            "atlas",
+            "read"
+          ]
+        ],
+        "now" : {
+          "atlas" : "own",
+          "other" : "use"
+        },
+        "own" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "proposal" : {
+          "atlas" : "read"
+        },
+        "proposed" : [
+
+        ],
+        "raised" : {
+
+        },
+        "rows" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "set" : {
+          "atlas" : "read",
+          "door" : "use"
+        },
+        "touched" : [
+          "atlas"
+        ]
+      }
+    ],
+    "holders" : [
+      "atlas",
+      "nova"
+    ]
+  },
+  "seal" : {
+    "is_sealed" : [
+      {
+        "sealed" : true,
+        "text" : "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpOXVDNE5nWWxzQXZiVjhU\nVHVtZk02NG96SE8vYU01bUFHQ2RMeDE1bVNVCm4zMXdpUjJ2azk5cUFnUkphUlpE\nMko5OS9GOGwvN0x5TUlGZEE5Y3ZlaTgKLS0tIEFwcXExQ0xwRXJoSFJRc1EyYzBo\nbTMxeXNVb0VjSXdKZUx5OG1LajlhT28KR/2bhZcf/e60A7ttsC/1A3W7CxFgBRbW\nkliTFN4zsjOEcUy8Zt85U+rGBH3oiGsFYr+AEbjSDl7eqzmz8n+AJL6vge1xA+tS\npmZnmzhYQ/vyC37q7VRYdddCpid3PsjWfaWWp/G/E7WwGII6A7GYhRwi7yhm5BRw\ntA/Z4qgwJZwJs1p0emsMXbKIa0o=\n-----END AGE ENCRYPTED FILE-----\n"
+      },
+      {
+        "sealed" : false,
+        "text" : "-----BEGIN AGE ENCRYPTED FILE-----\r\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpOXVDNE5nWWxzQXZiVjhU\r\nVHVtZk02NG96SE8vYU01bUFHQ2RMeDE1bVNVCm4zMXdpUjJ2azk5cUFnUkphUlpE\r\nMko5OS9GOGwvN0x5TUlGZEE5Y3ZlaTgKLS0tIEFwcXExQ0xwRXJoSFJRc1EyYzBo\r\nbTMxeXNVb0VjSXdKZUx5OG1LajlhT28KR/2bhZcf/e60A7ttsC/1A3W7CxFgBRbW\r\nkliTFN4zsjOEcUy8Zt85U+rGBH3oiGsFYr+AEbjSDl7eqzmz8n+AJL6vge1xA+tS\r\npmZnmzhYQ/vyC37q7VRYdddCpid3PsjWfaWWp/G/E7WwGII6A7GYhRwi7yhm5BRw\r\ntA/Z4qgwJZwJs1p0emsMXbKIa0o=\r\n-----END AGE ENCRYPTED FILE-----\r\n"
+      },
+      {
+        "sealed" : false,
+        "text" : "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpOXVDNE5nWWxzQXZiVjhU\nVHVtZk02NG96SE8vYU01bUFHQ2RMeDE1bVNVCm4zMXdpUjJ2azk5cUFnUkphUlpE\nMko5OS9GOGwvN0x5TUlGZEE5Y3ZlaTgKLS0tIEFwcXExQ0xwRXJoSFJRc1EyYzBo\nbTMxeXNVb0VjSXdKZUx5OG1LajlhT28KR/2bhZcf/e60A7ttsC/1A3W7CxFgBRbW\nkliTFN4zsjOEcUy8Zt85U+rGBH3oiGsFYr+AEbjSDl7eqzmz8n+AJL6vge1xA+tS\npmZnmzhYQ/vyC37q7VRYdddCpid3PsjWfaWWp/G/E7WwGII6A7GYhRwi7yhm5BRw\ntA/Z4qgwJZwJs1p0emsMXbKIa0o=\n-----END AGE ENCRYPTED FILE-----"
+      },
+      {
+        "sealed" : false,
+        "text" : "-----BEGIN AGE ENCRYPTED FILE-----\nYWdl\n-----END AGE ENCRYPTED FILE-----\n"
+      },
+      {
+        "sealed" : false,
+        "text" : "plain text"
+      }
+    ],
+    "longest_sealed" : 11848,
+    "max_copy" : 16384,
+    "recipients" : [
+      {
+        "public_key_hex" : "3d89b8943e46a236a9b328fe1deea8f339f8b3c25ad78ffa25fded5b2b288474",
+        "text" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "public_key_hex" : null,
+        "text" : "age18kym39p7g63rd2dnqrlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "public_key_hex" : null,
+        "text" : "AGE18KYM39P7G63RD2DN9RLPMM4G7VUL3V7ZTTTCL739LHK4K2EGS36QFGZJ5V"
+      },
+      {
+        "public_key_hex" : null,
+        "text" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5"
+      },
+      {
+        "public_key_hex" : null,
+        "text" : "age1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+      }
+    ],
+    "sealed_lengths" : [
+      {
+        "count" : 0,
+        "length" : 341
+      },
+      {
+        "count" : 1,
+        "length" : 341
+      },
+      {
+        "count" : 2,
+        "length" : 345
+      },
+      {
+        "count" : 3,
+        "length" : 345
+      },
+      {
+        "count" : 100,
+        "length" : 475
+      },
+      {
+        "count" : 12000,
+        "length" : 16591
+      },
+      {
+        "count" : 65536,
+        "length" : 89086
+      },
+      {
+        "count" : 65537,
+        "length" : 89110
+      },
+      {
+        "count" : 200000,
+        "length" : 271240
+      }
+    ],
+    "seals" : [
+      {
+        "ephemeral_hex" : "4494289ff7303cf7225d98d8886445c470f59efb8e139df13d2b53f961a50248",
+        "file_key_hex" : "1837479b5924a260248e89f756c43f2e",
+        "length" : 0,
+        "name" : "an empty value",
+        "nonce_hex" : "7f6ce9b80adccd438dc5543ef3bf2677",
+        "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+        "sealed" : "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBTdC9JMUVEbitqVmx0eVdO\nblJybkRwank2cmxUVFN2Q1JjdjVYWGFkU3lVCkd6T1NwRmdUZ2VmMnB0bVhFQm5Z\naGR3aWRDYktqRnBoYk1VU3o2SEZiQjQKLS0tIEI1cFl4VlBjeEhXaHZlMDJIa3hU\ndEZmMTUwaU1LTFlXMmZFWW82ZTJ3RkUKf2zpuArczUONxVQ+878md9GfgcL6rXj9\nxbNmiBKfFBs=\n-----END AGE ENCRYPTED FILE-----\n",
+        "sealed_sha256" : "324304ca745b3fa4f3ba878e8d052fba80721a1d49b240437f5ded379668f296",
+        "value_b64" : ""
+      },
+      {
+        "ephemeral_hex" : "aab8e521b1b7fca2559f69b601532398cb33e7af232c9c7c1d04fd436fc0ba08",
+        "file_key_hex" : "a0a4576f1fa365300454d7c4a98e1fb4",
+        "length" : 108,
+        "name" : "a login's item",
+        "nonce_hex" : "47fd9b85971ffdeeb403bb6db02ff503",
+        "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+        "sealed" : "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpOXVDNE5nWWxzQXZiVjhU\nVHVtZk02NG96SE8vYU01bUFHQ2RMeDE1bVNVCm4zMXdpUjJ2azk5cUFnUkphUlpE\nMko5OS9GOGwvN0x5TUlGZEE5Y3ZlaTgKLS0tIEFwcXExQ0xwRXJoSFJRc1EyYzBo\nbTMxeXNVb0VjSXdKZUx5OG1LajlhT28KR/2bhZcf/e60A7ttsC/1A3W7CxFgBRbW\nkliTFN4zsjOEcUy8Zt85U+rGBH3oiGsFYr+AEbjSDl7eqzmz8n+AJL6vge1xA+tS\npmZnmzhYQ/vyC37q7VRYdddCpid3PsjWfaWWp/G/E7WwGII6A7GYhRwi7yhm5BRw\ntA/Z4qgwJZwJs1p0emsMXbKIa0o=\n-----END AGE ENCRYPTED FILE-----\n",
+        "sealed_sha256" : "a77e04072f962414c73370ae1576ac79691ae07c61d7f587311f3a8df10f6130",
+        "value_b64" : "eyJwYXNzd29yZCI6ImNvcnJlY3QgaG9yc2UgYmF0dGVyeSBzdGFwbGUiLCJ1cmwiOiJodHRwczovL2V4YW1wbGUuY29tL3NpZ24taW4iLCJ1c2VybmFtZSI6ImFuYUBleGFtcGxlLmNvbSJ9"
+      },
+      {
+        "ephemeral_hex" : "4b544d64b2d490f511bd11de8ee7d2ab8a8238222cb9777a538e554c824dc3cb",
+        "file_key_hex" : "c2384049abd4bce7b569db9dcefb00d1",
+        "length" : 65537,
+        "name" : "two chunks",
+        "nonce_hex" : "3c2acb34abf1afb760dab25e62723460",
+        "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+        "sealed_sha256" : "01dba0f3e9d10f1db8e23c7af9fe5d1257086dad424b9c60cab443e78211a4ce",
+        "value_rule" : "byte i is i mod 251, for i from 0 to 65536"
+      }
+    ]
+  },
+  "secrets" : {
+    "max_label" : 60,
+    "max_value_bytes" : 11848,
+    "salts" : "{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"password\": \"00112233445566778899aabbccddeeff\", \"totp\": \"ffeeddccbbaa99887766554433221100\"}",
+    "secrets" : [
+      {
+        "env" : "",
+        "fingerprints" : [
+
+        ],
+        "kind" : "login",
+        "name" : "a login",
+        "password" : "correct horse battery staple",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "example.com · ana@example.com",
+        "totp" : "",
+        "url" : "https://Example.COM/sign-in",
+        "username" : " ana@example.com ",
+        "value" : "{\"password\":\"correct horse battery staple\",\"url\":\"https://Example.COM/sign-in\",\"username\":\"ana@example.com\"}",
+        "variable" : null,
+        "vault_problem" : "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than 8 characters or holds white space. Nothing was sent."
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+          {
+            "hash" : "63f9db1496ae8061dd666e3cc695742c4a72bc685d5e286718960aea62e3d16f",
+            "kind" : "password",
+            "len" : 14
+          },
+          {
+            "hash" : "81442a2022bc44f2c685b2d1cb21bc97b783916b0e494c78fec4c0dcd71eeee1",
+            "kind" : "totp",
+            "len" : 16
+          }
+        ],
+        "kind" : "login",
+        "name" : "a login with a seed",
+        "password" : "Tr0ub4dor&3xyz",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "app.example.com · ana",
+        "totp" : "jbsw y3dp-ehpk 3pxp=",
+        "url" : "https://app.example.com/login",
+        "username" : "ana",
+        "value" : "{\"password\":\"Tr0ub4dor&3xyz\",\"totp\":\"jbsw y3dp-ehpk 3pxp=\",\"url\":\"https://app.example.com/login\",\"username\":\"ana\"}",
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+          {
+            "hash" : "63f9db1496ae8061dd666e3cc695742c4a72bc685d5e286718960aea62e3d16f",
+            "kind" : "password",
+            "len" : 14
+          },
+          {
+            "hash" : "9a2948b66c8404afe2c3dc8983d2b252080bdf3e2c13012f30016fdd2490553e",
+            "kind" : "totp",
+            "len" : 65
+          },
+          {
+            "hash" : "81442a2022bc44f2c685b2d1cb21bc97b783916b0e494c78fec4c0dcd71eeee1",
+            "kind" : "totp",
+            "len" : 16
+          }
+        ],
+        "kind" : "login",
+        "name" : "a login with an otpauth seed",
+        "password" : "Tr0ub4dor&3xyz",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "app.example.com · ana",
+        "totp" : "otpauth://totp/Example:ana?secret=JBSWY3DPEHPK3PXP&issuer=Example",
+        "url" : "https://app.example.com/login",
+        "username" : "ana",
+        "value" : "{\"password\":\"Tr0ub4dor&3xyz\",\"totp\":\"otpauth://totp/Example:ana?secret=JBSWY3DPEHPK3PXP&issuer=Example\",\"url\":\"https://app.example.com/login\",\"username\":\"ana\"}",
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+
+        ],
+        "kind" : "login",
+        "name" : "a short password",
+        "password" : "short",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "",
+        "url" : "http://example.com:8080/ok",
+        "username" : "a",
+        "value" : "{\"password\":\"short\",\"url\":\"http://example.com:8080/ok\",\"username\":\"a\"}",
+        "variable" : null,
+        "vault_problem" : "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than 8 characters or holds white space. Nothing was sent."
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+
+        ],
+        "kind" : "login",
+        "name" : "a password with a space",
+        "password" : "two words here",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "",
+        "url" : "https://example.com",
+        "username" : "a",
+        "value" : "{\"password\":\"two words here\",\"url\":\"https://example.com\",\"username\":\"a\"}",
+        "variable" : null,
+        "vault_problem" : "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than 8 characters or holds white space. Nothing was sent."
+      },
+      {
+        "env" : "",
+        "fingerprints" : null,
+        "kind" : "login",
+        "name" : "not http",
+        "password" : "correct horse battery staple",
+        "problem" : "Give an address that starts with http:// or https://, with a host and no user name.",
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "",
+        "url" : "ftp://example.com",
+        "username" : "a",
+        "value" : null,
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : null,
+        "kind" : "login",
+        "name" : "a user part",
+        "password" : "correct horse battery staple",
+        "problem" : "Give an address that starts with http:// or https://, with a host and no user name.",
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "",
+        "url" : "https://user@example.com/x",
+        "username" : "a",
+        "value" : null,
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : null,
+        "kind" : "login",
+        "name" : "no address",
+        "password" : "correct horse battery staple",
+        "problem" : "Give an address that starts with http:// or https://, with a host and no user name.",
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "",
+        "url" : "example.com",
+        "username" : "a",
+        "value" : null,
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : null,
+        "kind" : "login",
+        "name" : "no user name",
+        "password" : "correct horse battery staple",
+        "problem" : "Give the user name.",
+        "table_address" : null,
+        "title" : "example.com · ",
+        "totp" : "",
+        "url" : "https://example.com",
+        "username" : "  ",
+        "value" : null,
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : null,
+        "kind" : "login",
+        "name" : "no password",
+        "password" : "",
+        "problem" : "Give the password.",
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "",
+        "url" : "https://example.com",
+        "username" : "a",
+        "value" : null,
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : null,
+        "kind" : "login",
+        "name" : "a seed that is not one",
+        "password" : "correct horse battery staple",
+        "problem" : "The authenticator seed can have only the letters A to Z and the digits 2 to 7, or be an otpauth:// address with such a secret.",
+        "table_address" : null,
+        "title" : "example.com · a",
+        "totp" : "18!",
+        "url" : "https://example.com",
+        "username" : "a",
+        "value" : null,
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+          {
+            "hash" : "63f9db1496ae8061dd666e3cc695742c4a72bc685d5e286718960aea62e3d16f",
+            "kind" : "password",
+            "len" : 14
+          }
+        ],
+        "kind" : "login",
+        "name" : "an AI provider's sign-in site",
+        "password" : "Tr0ub4dor&3xyz",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "claude.ai. · a",
+        "totp" : "",
+        "url" : "https://Claude.AI./login",
+        "username" : "a",
+        "value" : "{\"password\":\"Tr0ub4dor&3xyz\",\"url\":\"https://Claude.AI./login\",\"username\":\"a\"}",
+        "variable" : null,
+        "vault_problem" : "This address is an AI provider's own sign-in site, and Founderizer Vault keeps no login for it: you sign in there with your own account. Nothing was sent."
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+
+        ],
+        "kind" : "login",
+        "name" : "a long title",
+        "password" : "correct horse battery staple",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "accounts.example.com · a.very.long.user.name.for.this.examp…",
+        "totp" : "",
+        "url" : "https://accounts.example.com/sign-in",
+        "username" : "a.very.long.user.name.for.this.example@example.com",
+        "value" : "{\"password\":\"correct horse battery staple\",\"url\":\"https://accounts.example.com/sign-in\",\"username\":\"a.very.long.user.name.for.this.example@example.com\"}",
+        "variable" : null,
+        "vault_problem" : "The central vault takes a value only with a fingerprint, and this one has none: it has fewer than 8 characters or holds white space. Nothing was sent."
+      },
+      {
+        "env" : "",
+        "fingerprints" : [
+          {
+            "hash" : "9d8ed425b64b4c6cc7b3c7be0930a4cf421e3b2ed2f16a820ccba96b30558564",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "login",
+        "name" : "a password beyond ASCII",
+        "password" : "contraseña-ñandú-🔑-\"quoted\"\\",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "example.com · ana",
+        "totp" : "",
+        "url" : "https://example.com",
+        "username" : "ana",
+        "value" : "{\"password\":\"contraseña-ñandú-🔑-\\\"quoted\\\"\\\\\",\"url\":\"https://example.com\",\"username\":\"ana\"}",
+        "variable" : null,
+        "vault_problem" : null
+      },
+      {
+        "env" : " openai_api_key ",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "OPENAI_API_KEY",
+        "totp" : "",
+        "url" : "",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"username\":\"\"}",
+        "variable" : "OPENAI_API_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key with an address",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : "https://api.example.com:8443",
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "https://api.example.com:8443/v1/hooks?x=1#f",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"url\":\"https://api.example.com:8443/v1/hooks?x=1#f\",\"username\":\"\"}",
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key with an http address",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : null,
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "http://api.example.com/v1",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"url\":\"http://api.example.com/v1\",\"username\":\"\"}",
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key of a key site",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : "https://platform.claude.com",
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "https://platform.claude.com/settings",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"url\":\"https://platform.claude.com/settings\",\"username\":\"\"}",
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key of a sign-in site",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : "https://chatgpt.com",
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "https://chatgpt.com",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"url\":\"https://chatgpt.com\",\"username\":\"\"}",
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : "This service address is an AI provider's own sign-in site, and Founderizer Vault takes no key with it. Give the address of the service's API, or no service address. Nothing was sent."
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key of a sign-in site in capitals and with a dot",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : "https://ChatGPT.COM.",
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "https://ChatGPT.COM./v1",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"url\":\"https://ChatGPT.COM./v1\",\"username\":\"\"}",
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : "This service address is an AI provider's own sign-in site, and Founderizer Vault takes no key with it. Give the address of the service's API, or no service address. Nothing was sent."
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : [
+          {
+            "hash" : "77791d395f0bc4e3bf63c92e4978294af63c08b9b92b0f5ba55062a5166bff14",
+            "kind" : "password",
+            "len" : 28
+          }
+        ],
+        "kind" : "api_key",
+        "name" : "an API key of a key site in capitals and with a dot",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : null,
+        "table_address" : "https://Platform.Claude.COM.",
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "https://Platform.Claude.COM./settings",
+        "username" : "",
+        "value" : "{\"password\":\"sk-test-0123456789abcdefghij\",\"url\":\"https://Platform.Claude.COM./settings\",\"username\":\"\"}",
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : null,
+        "kind" : "api_key",
+        "name" : "a value too long",
+        "password" : "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "problem" : "This secret is too long: a vault's sealed copy takes at most 11848 bytes.",
+        "table_address" : null,
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "",
+        "username" : "",
+        "value" : null,
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "PATH",
+        "fingerprints" : null,
+        "kind" : "api_key",
+        "name" : "a reserved name",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : "PATH is a name that a session sets itself. Give another name.",
+        "table_address" : null,
+        "title" : "PATH",
+        "totp" : "",
+        "url" : "",
+        "username" : "",
+        "value" : null,
+        "variable" : "PATH",
+        "vault_problem" : null
+      },
+      {
+        "env" : "FLEET_TOKEN",
+        "fingerprints" : null,
+        "kind" : "api_key",
+        "name" : "a name of a session",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : "FLEET_TOKEN is a name that a session sets itself. Give another name.",
+        "table_address" : null,
+        "title" : "FLEET_TOKEN",
+        "totp" : "",
+        "url" : "",
+        "username" : "",
+        "value" : null,
+        "variable" : "FLEET_TOKEN",
+        "vault_problem" : null
+      },
+      {
+        "env" : "1ABC",
+        "fingerprints" : null,
+        "kind" : "api_key",
+        "name" : "a name that is not one",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : "Give a variable name of 1 to 60 characters: the letters A to Z, the digits and _, with a letter first.",
+        "table_address" : null,
+        "title" : "1ABC",
+        "totp" : "",
+        "url" : "",
+        "username" : "",
+        "value" : null,
+        "variable" : "1ABC",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : null,
+        "kind" : "api_key",
+        "name" : "no key",
+        "password" : "",
+        "problem" : "Give the key.",
+        "table_address" : null,
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "",
+        "username" : "",
+        "value" : null,
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      },
+      {
+        "env" : "EXAMPLE_KEY",
+        "fingerprints" : null,
+        "kind" : "api_key",
+        "name" : "a key with a bad address",
+        "password" : "sk-test-0123456789abcdefghij",
+        "problem" : "Give a service address that starts with http:// or https://, with a host and no user name, or no address.",
+        "table_address" : null,
+        "title" : "EXAMPLE_KEY",
+        "totp" : "",
+        "url" : "https://",
+        "username" : "",
+        "value" : null,
+        "variable" : "EXAMPLE_KEY",
+        "vault_problem" : null
+      }
+    ],
+    "seeds" : [
+      {
+        "seed" : "JBSWY3DPEHPK3PXP",
+        "value" : "JBSWY3DPEHPK3PXP"
+      },
+      {
+        "seed" : "JBSWY3DPEHPK3PXP",
+        "value" : "jbsw y3dp-ehpk\t3pxp=="
+      },
+      {
+        "seed" : "JBSWY3DPEHPK",
+        "value" : "otpauth://totp/Example:ana?secret=JBSW%20Y3DP+EHPK&issuer=Example"
+      },
+      {
+        "seed" : "ABC",
+        "value" : "otpauth://totp/x?issuer=a&secret=&secret=abc"
+      },
+      {
+        "seed" : "",
+        "value" : "otpauth://totp/x#secret=NO?secret=X"
+      },
+      {
+        "seed" : "€Q%ZZ",
+        "value" : "otpauth://totp/x?a=1&secret=%E2%82%ACq%zz"
+      },
+      {
+        "seed" : "ABCD",
+        "value" : "otpauth://totp/x?secret=ab\ncd"
+      },
+      {
+        "seed" : "SEEDTWO",
+        "value" : "\u001fseed　two"
+      }
+    ]
+  },
+  "vault" : {
+    "clock" : [
+      {
+        "hub_time" : 1763700000,
+        "problem" : null,
+        "read_at" : 1763703600
+      },
+      {
+        "hub_time" : 1763700000,
+        "problem" : "This Mac's clock and the hub's clock differ by more than an hour.",
+        "read_at" : 1763703601
+      },
+      {
+        "hub_time" : 1763703601,
+        "problem" : "This Mac's clock and the hub's clock differ by more than an hour.",
+        "read_at" : 1763700000
+      },
+      {
+        "hub_time" : 1763700000,
+        "problem" : null,
+        "read_at" : null
+      }
+    ],
+    "grant_clock_ahead" : 82800,
+    "pin_refresh" : 604800,
+    "plans" : [
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no reading",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "nothing",
+          "vault" : null
+        },
+        "reading" : null
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no vault: the install",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "install",
+          "vault" : null
+        },
+        "reading" : "no vault"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : false,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no vault and no record of the hub's machine",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "nothing",
+          "vault" : null
+        },
+        "reading" : "no vault"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : true,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no vault, another owner",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "take_over",
+          "vault" : {
+            "set_up" : "The central vault on the hub's server holds another Mac's owner key."
+          }
+        },
+        "reading" : "no vault"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : {
+            "failures" : 6,
+            "last" : 1763699940,
+            "reason" : "It did not answer."
+          },
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no vault, the install gave up",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "nothing",
+          "vault" : {
+            "reason" : "It did not answer.",
+            "retry" : {
+              "step" : "install"
+            }
+          }
+        },
+        "reading" : "no vault"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : {
+            "failures" : 2,
+            "last" : 1763699940,
+            "reason" : "It did not answer."
+          },
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no vault, the install waits",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "nothing",
+          "vault" : null
+        },
+        "reading" : "no vault"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : false,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "this computer holds no key",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "take_over",
+          "vault" : {
+            "set_up" : null
+          }
+        },
+        "reading" : "a vault with its recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age1htcw5mteeurflwun3pk6c9qzm4vr669cpvsu5xaadhjcl650jv2qd7h6x5",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "this computer pinned another key",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "take_over",
+          "vault" : {
+            "set_up" : "The hub names another vault key than the one this Mac pinned."
+          }
+        },
+        "reading" : "a vault with its recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "no recovery key",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "recover",
+          "vault" : null
+        },
+        "reading" : "a vault with no recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : {
+            "failures" : 6,
+            "last" : 1763699940,
+            "reason" : "It did not answer."
+          },
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : {
+            "failures" : 0,
+            "last" : 1763692800,
+            "reason" : "It did not answer."
+          },
+          "update_known" : true
+        },
+        "name" : "no recovery key, its tries gave up",
+        "plan" : {
+          "machines" : [
+            "worker-1",
+            "worker-2"
+          ],
+          "servers" : [
+
+          ],
+          "step" : "trust",
+          "vault" : {
+            "reason" : "It did not answer.",
+            "retry" : {
+              "step" : "recover"
+            }
+          }
+        },
+        "reading" : "a vault with no recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "the trust of a new server and a stale pin",
+        "plan" : {
+          "machines" : [
+            "worker-1",
+            "worker-2"
+          ],
+          "servers" : [
+
+          ],
+          "step" : "trust",
+          "vault" : null
+        },
+        "reading" : "a vault with its recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+            "worker-2" : {
+              "failures" : 6,
+              "last" : 1763699940,
+              "reason" : "It did not answer."
+            }
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "a server whose trust gave up",
+        "plan" : {
+          "machines" : [
+            "worker-1"
+          ],
+          "servers" : [
+            {
+              "machine" : "worker-2",
+              "reason" : "It did not answer."
+            }
+          ],
+          "step" : "trust",
+          "vault" : null
+        },
+        "reading" : "a vault with its recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+            "worker-2"
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "a server removed here",
+        "plan" : {
+          "machines" : [
+            "worker-1"
+          ],
+          "servers" : [
+            {
+              "machine" : "worker-2",
+              "reason" : "You removed this server on this Mac, so Founderizer does not trust its vault by itself. Select Try again to trust it."
+            }
+          ],
+          "step" : "trust",
+          "vault" : null
+        },
+        "reading" : "a vault with its recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+            "worker-2" : "age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw"
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+            "worker-1" : 1763699400
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "a pin signed today",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "nothing",
+          "vault" : null
+        },
+        "reading" : "a vault with its recovery key"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : null,
+          "update_known" : true
+        },
+        "name" : "the program is behind",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "update",
+          "vault" : null
+        },
+        "reading" : "a vault whose program is behind"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : {
+            "failures" : 6,
+            "last" : 1763696399,
+            "reason" : "It did not answer."
+          },
+          "update_known" : true
+        },
+        "name" : "the update gave up an hour ago",
+        "plan" : {
+          "servers" : [
+
+          ],
+          "step" : "update",
+          "vault" : {
+            "reason" : "The central vault does not run the program of the hub's release yet: It did not answer.",
+            "retry" : {
+              "step" : "update"
+            }
+          }
+        },
+        "reading" : "a vault whose program is behind"
+      },
+      {
+        "facts" : {
+          "confirmed_pins" : {
+
+          },
+          "confirmed_recovery" : null,
+          "hub_on_record" : true,
+          "install" : null,
+          "key_held" : true,
+          "now" : 1763700000,
+          "other_owner" : false,
+          "pin" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "removed" : [
+
+          ],
+          "removed_known" : true,
+          "servers" : {
+
+          },
+          "signed_at" : {
+
+          },
+          "update" : {
+            "failures" : 6,
+            "last" : 1763699940,
+            "reason" : "It did not answer."
+          },
+          "update_known" : true
+        },
+        "name" : "the update gave up a minute ago",
+        "plan" : {
+          "machines" : [
+            "worker-1",
+            "worker-2"
+          ],
+          "servers" : [
+
+          ],
+          "step" : "trust",
+          "vault" : {
+            "reason" : "The central vault does not run the program of the hub's release yet: It did not answer.",
+            "retry" : {
+              "step" : "update"
+            }
+          }
+        },
+        "reading" : "a vault whose program is behind"
+      }
+    ],
+    "readings" : [
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [{\"machine\": \"worker-1\", \"carrier\": \"atlas\", \"broker_recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"pinned\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"matches\": true, \"missing\": [], \"kept_pin_at\": 1763000000}, {\"machine\": \"worker-2\", \"carrier\": \"nova\", \"broker_recipient\": \"age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw\", \"pinned\": null, \"matches\": false, \"missing\": [\"not_pinned\"]}, {\"machine\": \"worker-3\", \"broker_recipient\": \"not a key\", \"matches\": \"yes\", \"missing\": [\"no_broker_access\"]}, {\"carrier\": \"x\"}], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}, \"program\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "machines" : [
+          {
+            "broker_recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9",
+            "can_be_trusted" : true,
+            "carrier" : "atlas",
+            "is_trusted" : true,
+            "kept_pin_at" : 1763000000,
+            "kept_pin_known" : true,
+            "machine" : "worker-1",
+            "matches" : true,
+            "missing" : [
+
+            ],
+            "pinned" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+          },
+          {
+            "broker_recipient" : "age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw",
+            "can_be_trusted" : true,
+            "carrier" : "nova",
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-2",
+            "matches" : false,
+            "missing" : [
+              "not_pinned"
+            ],
+            "pinned" : null
+          },
+          {
+            "broker_recipient" : null,
+            "can_be_trusted" : false,
+            "carrier" : null,
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-3",
+            "matches" : false,
+            "missing" : [
+              "no_broker_access"
+            ],
+            "pinned" : null
+          }
+        ],
+        "name" : "a vault with its recovery key",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [{\"machine\": \"worker-1\", \"carrier\": \"atlas\", \"broker_recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"pinned\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"matches\": true, \"missing\": [], \"kept_pin_at\": 1763000000}, {\"machine\": \"worker-2\", \"carrier\": \"nova\", \"broker_recipient\": \"age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw\", \"pinned\": null, \"matches\": false, \"missing\": [\"not_pinned\"]}, {\"machine\": \"worker-3\", \"broker_recipient\": \"not a key\", \"matches\": \"yes\", \"missing\": [\"no_broker_access\"]}, {\"carrier\": \"x\"}], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}, \"program\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "machines" : [
+          {
+            "broker_recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9",
+            "can_be_trusted" : true,
+            "carrier" : "atlas",
+            "is_trusted" : true,
+            "kept_pin_at" : 1763000000,
+            "kept_pin_known" : true,
+            "machine" : "worker-1",
+            "matches" : true,
+            "missing" : [
+
+            ],
+            "pinned" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+          },
+          {
+            "broker_recipient" : "age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw",
+            "can_be_trusted" : true,
+            "carrier" : "nova",
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-2",
+            "matches" : false,
+            "missing" : [
+              "not_pinned"
+            ],
+            "pinned" : null
+          },
+          {
+            "broker_recipient" : null,
+            "can_be_trusted" : false,
+            "carrier" : null,
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-3",
+            "matches" : false,
+            "missing" : [
+              "no_broker_access"
+            ],
+            "pinned" : null
+          }
+        ],
+        "name" : "a vault with no recovery key",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "no_recovery"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : null,
+          "grants" : [
+
+          ],
+          "items" : null,
+          "ok" : false,
+          "owner_keys" : null,
+          "pins" : {
+
+          },
+          "pool" : [
+
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : null,
+          "source" : null
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": false, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a vault that does not answer",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "no_vault",
+          "no pin" : "no_vault",
+          "not served" : "no_vault",
+          "served, pinned" : "no_vault"
+        },
+        "trusted" : null
+      },
+      {
+        "central" : null,
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [{\"machine\": \"worker-1\", \"carrier\": \"atlas\", \"broker_recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"pinned\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"matches\": true, \"missing\": [], \"kept_pin_at\": 1763000000}, {\"machine\": \"worker-2\", \"carrier\": \"nova\", \"broker_recipient\": \"age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw\", \"pinned\": null, \"matches\": false, \"missing\": [\"not_pinned\"]}, {\"machine\": \"worker-3\", \"broker_recipient\": \"not a key\", \"matches\": \"yes\", \"missing\": [\"no_broker_access\"]}, {\"carrier\": \"x\"}], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"0123456789abcdef\"}",
+        "machines" : [
+          {
+            "broker_recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9",
+            "can_be_trusted" : true,
+            "carrier" : "atlas",
+            "is_trusted" : true,
+            "kept_pin_at" : 1763000000,
+            "kept_pin_known" : true,
+            "machine" : "worker-1",
+            "matches" : true,
+            "missing" : [
+
+            ],
+            "pinned" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+          },
+          {
+            "broker_recipient" : "age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw",
+            "can_be_trusted" : true,
+            "carrier" : "nova",
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-2",
+            "matches" : false,
+            "missing" : [
+              "not_pinned"
+            ],
+            "pinned" : null
+          },
+          {
+            "broker_recipient" : null,
+            "can_be_trusted" : false,
+            "carrier" : null,
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-3",
+            "matches" : false,
+            "missing" : [
+              "no_broker_access"
+            ],
+            "pinned" : null
+          }
+        ],
+        "name" : "no vault",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "no_vault",
+          "no pin" : "no_vault",
+          "not served" : "no_vault",
+          "served, pinned" : "no_vault"
+        },
+        "trusted" : null
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "no fleet",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age1lehx8htsx7rxmcwej3uqfhxrnqyeew7vwvy8n7gastmpar4jdf7sjfytg2",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [{\"machine\": \"worker-1\", \"carrier\": \"atlas\", \"broker_recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"pinned\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"matches\": true, \"missing\": [], \"kept_pin_at\": 1763000000}, {\"machine\": \"worker-2\", \"carrier\": \"nova\", \"broker_recipient\": \"age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw\", \"pinned\": null, \"matches\": false, \"missing\": [\"not_pinned\"]}, {\"machine\": \"worker-3\", \"broker_recipient\": \"not a key\", \"matches\": \"yes\", \"missing\": [\"no_broker_access\"]}, {\"carrier\": \"x\"}], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age1lehx8htsx7rxmcwej3uqfhxrnqyeew7vwvy8n7gastmpar4jdf7sjfytg2\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+          {
+            "broker_recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9",
+            "can_be_trusted" : true,
+            "carrier" : "atlas",
+            "is_trusted" : true,
+            "kept_pin_at" : 1763000000,
+            "kept_pin_known" : true,
+            "machine" : "worker-1",
+            "matches" : true,
+            "missing" : [
+
+            ],
+            "pinned" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+          },
+          {
+            "broker_recipient" : "age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw",
+            "can_be_trusted" : true,
+            "carrier" : "nova",
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-2",
+            "matches" : false,
+            "missing" : [
+              "not_pinned"
+            ],
+            "pinned" : null
+          },
+          {
+            "broker_recipient" : null,
+            "can_be_trusted" : false,
+            "carrier" : null,
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-3",
+            "matches" : false,
+            "missing" : [
+              "no_broker_access"
+            ],
+            "pinned" : null
+          }
+        ],
+        "name" : "a vault of another key",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "other_key"
+        },
+        "trusted" : null
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"Fleet\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a fleet that is no id, and a vault's fleet",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [{\"machine\": \"worker-1\", \"carrier\": \"atlas\", \"broker_recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"pinned\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"matches\": true, \"missing\": [], \"kept_pin_at\": 1763000000}, {\"machine\": \"worker-2\", \"carrier\": \"nova\", \"broker_recipient\": \"age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw\", \"pinned\": null, \"matches\": false, \"missing\": [\"not_pinned\"]}, {\"machine\": \"worker-3\", \"broker_recipient\": \"not a key\", \"matches\": \"yes\", \"missing\": [\"no_broker_access\"]}, {\"carrier\": \"x\"}], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}, \"program\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}",
+        "machines" : [
+          {
+            "broker_recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9",
+            "can_be_trusted" : true,
+            "carrier" : "atlas",
+            "is_trusted" : true,
+            "kept_pin_at" : 1763000000,
+            "kept_pin_known" : true,
+            "machine" : "worker-1",
+            "matches" : true,
+            "missing" : [
+
+            ],
+            "pinned" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+          },
+          {
+            "broker_recipient" : "age1ukj3mlxdy98vz4j5skjynjzct3se6fgjecsr8l5444jwg364j4wsawkqmw",
+            "can_be_trusted" : true,
+            "carrier" : "nova",
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-2",
+            "matches" : false,
+            "missing" : [
+              "not_pinned"
+            ],
+            "pinned" : null
+          },
+          {
+            "broker_recipient" : null,
+            "can_be_trusted" : false,
+            "carrier" : null,
+            "is_trusted" : false,
+            "kept_pin_at" : null,
+            "kept_pin_known" : false,
+            "machine" : "worker-3",
+            "matches" : false,
+            "missing" : [
+              "no_broker_access"
+            ],
+            "pinned" : null
+          }
+        ],
+        "name" : "a vault whose program is behind",
+        "pool_due" : [
+
+        ],
+        "program_behind" : true,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : null,
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": 7}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a hub whose address is no text",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : null,
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": \"x\"}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a hub whose ssh is no object",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : null,
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"ssh\": {\"user\": \"root\", \"port\": 22.5}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a hub whose port has a fraction",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : null,
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"ssh\": {\"user\": 0, \"port\": 22}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a hub whose user is no text",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [{\"machine\": \"worker-1\", \"carrier\": \"atlas\", \"broker_recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"pinned\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"matches\": true, \"missing\": [], \"kept_pin_at\": 1763000000.0}], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22.0}}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1.0, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3e0, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+          {
+            "broker_recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9",
+            "can_be_trusted" : true,
+            "carrier" : "atlas",
+            "is_trusted" : true,
+            "kept_pin_at" : 1763000000,
+            "kept_pin_known" : true,
+            "machine" : "worker-1",
+            "matches" : true,
+            "missing" : [
+
+            ],
+            "pinned" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+          }
+        ],
+        "name" : "whole numbers written with a fraction of zero and an exponent",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"standing\": {\"grants\": [], \"pool\": [], \"due\": [{\"login\": \"bws://00000005-0000-4000-8000-000000000005\", \"in\": false}, {\"login\": \"bws://00000006-0000-4000-8000-000000000006\", \"in\": true}, {\"login\": \"not a reference\", \"in\": true}, {\"login\": \"bws://00000007-0000-4000-8000-000000000007\"}, {\"login\": \"bws://00000008-0000-4000-8000-000000000008\", \"in\": 1}, 3]}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "the pool statements owed",
+        "pool_due" : [
+          {
+            "in" : false,
+            "login" : "bws://00000005-0000-4000-8000-000000000005"
+          },
+          {
+            "in" : true,
+            "login" : "bws://00000006-0000-4000-8000-000000000006"
+          }
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      },
+      {
+        "central" : {
+          "fleet" : "0123456789abcdef",
+          "grants" : [
+            {
+              "agent" : "atlas",
+              "login" : "bws://00000001-0000-4000-8000-000000000001",
+              "machine" : "worker-1"
+            }
+          ],
+          "items" : 3,
+          "ok" : true,
+          "owner_keys" : 1,
+          "pins" : {
+            "worker-1" : {
+              "at" : 1763600000,
+              "recipient" : "age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9"
+            }
+          },
+          "pool" : [
+            "bws://00000002-0000-4000-8000-000000000002"
+          ],
+          "recipient" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v",
+          "recovery" : "age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6",
+          "source" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "fleet_id" : "0123456789abcdef",
+        "held" : {
+          "worker-1" : [
+            "bws://00000001-0000-4000-8000-000000000001"
+          ],
+          "worker-2" : [
+
+          ]
+        },
+        "hub" : {
+          "address" : "100.64.0.1",
+          "machine" : "hub",
+          "port" : 22,
+          "user" : "root"
+        },
+        "json" : "{\"db\": \"db-1\", \"read_at\": 1763699990.5, \"machines\": [], \"held\": {\"worker-1\": [\"bws://00000001-0000-4000-8000-000000000001\", \"not a reference\"], \"worker-2\": []}, \"hub\": {\"machine\": \"hub\", \"address\": \"100.64.0.1\", \"ssh\": {\"user\": \"root\", \"port\": 22}}, \"standing\": {\"due\": \"bws://00000005-0000-4000-8000-000000000005\"}, \"fleet\": \"0123456789abcdef\", \"central\": {\"ok\": true, \"recipient\": \"age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v\", \"fleet\": \"0123456789abcdef\", \"owner_keys\": 1, \"pins\": {\"worker-1\": {\"recipient\": \"age1gxx3hnwmdp8yxv2ar39hqh5e8uzxf7j5s24g8fp3p9hkcq4mtpdss9r4c9\", \"at\": 1763600000}, \"bad\": 3, \"wrong\": {\"recipient\": 5}, \"late\": {\"at\": \"soon\"}}, \"recovery\": \"age16schk0vgt5xs8z934mj55yd998mgux62478v243nac7cj5z2nf6sj62xm6\", \"grants\": [{\"login\": \"bws://00000001-0000-4000-8000-000000000001\", \"agent\": \"atlas\", \"machine\": \"worker-1\"}, {\"login\": \"nope\", \"agent\": \"x\", \"machine\": \"y\"}, 7], \"pool\": [\"bws://00000002-0000-4000-8000-000000000002\", \"nope\"], \"items\": 3, \"source\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}",
+        "machines" : [
+
+        ],
+        "name" : "a standing whose due is no list",
+        "pool_due" : [
+
+        ],
+        "program_behind" : false,
+        "seal_key" : {
+          "another pin" : "other_key",
+          "no pin" : "no_pin",
+          "not served" : "no_vault",
+          "served, pinned" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+        },
+        "trusted" : "age18kym39p7g63rd2dn9rlpmm4g7vul3v7ztttcl739lhk4k2egs36qfgzj5v"
+      }
+    ],
+    "resign_wait" : 86400,
+    "retry_every" : 3600,
+    "statements" : [
+      {
+        "at" : 1790000000,
+        "fleet" : "0123456789abcdef",
+        "kind" : "default_pool",
+        "login" : "BWS://00000009-0000-4000-8000-000000000009",
+        "statement" : "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"kind\":\"default_pool\",\"login\":\"bws://00000009-0000-4000-8000-000000000009\",\"v\":1}"
+      },
+      {
+        "at" : 1790000000,
+        "fleet" : "0123456789abcdef",
+        "kind" : "unpool",
+        "login" : "BWS://00000009-0000-4000-8000-000000000009",
+        "statement" : "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"kind\":\"unpool\",\"login\":\"bws://00000009-0000-4000-8000-000000000009\",\"v\":1}"
+      }
+    ],
+    "tries_most" : 6,
+    "tries_wait" : 600
+  }
+}

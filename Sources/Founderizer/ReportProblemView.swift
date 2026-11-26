@@ -157,7 +157,7 @@ struct ReportProblemView: View {
                     }
                 }
             } else {
-                LoadingLine(String(l10n: "Checking your fleet…"), waits: false).frame(minHeight: FormMetrics.row)
+                LoadingLine(String(l10n: "Checking your team…"), waits: false).frame(minHeight: FormMetrics.row)
             }
         } accessory: {
             // **Its words, its size and its place from the first frame** (T-01, T-13): it went grey for the window's

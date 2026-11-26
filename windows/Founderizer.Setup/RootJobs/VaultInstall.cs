@@ -98,9 +98,10 @@ public static class VaultInstall
     /// <c>CentralVaultPins.refusal</c>, M2 of the validation of 23 November 2026). The vault's keys never change in an install
     /// or an update, so at an update, or at the app's own install, a key that is not the pin that this PC holds comes only
     /// from a fault, and the pin stays. Only the owner's Set up (<paramref name="setUp"/>) and a first install, with no pin
-    /// held, write a pin.</summary>
+    /// held, write a pin. The rule is L5's one copy (<c>CentralVaultPin.Refusal</c>), which the pins file applies itself at
+    /// each pin (<c>ICentralVaultPins.Pin</c>).</summary>
     public static string? PinRefusal(string printed, string? held, bool setUp) =>
-        !setUp && held is not null && held != printed ? OtherKey : null;
+        Founderizer.Owner.Vault.CentralVaultPin.Refusal(printed, held, setUp);
 
     /// <summary>**Whether this PC's own Tailscale names the connection's host and the host of this PC's hub address as one
     /// node**, before any step reads the central vault as root there: its install and its update, which pin the key that
@@ -113,9 +114,6 @@ public static class VaultInstall
         if (TailnetNodes.Node(address, tailscaleStatus) is not { } hubs) return VaultPins.TailscaleSaysOther(address, machine);
         return TailnetNodes.Node(targetHost, tailscaleStatus) == hubs ? null : VaultPins.TailscaleSaysOther(targetHost, machine);
     }
-
-    /// <summary>The Mac's words of a hub that names another vault key than the one this PC pinned (<c>VaultPlan.otherKey</c>).</summary>
-    internal const string OtherKey = "The hub names another vault key than the one this PC pinned.";
 
     /// <summary>The Mac's words of an install that refused with none, and of one whose answer the app cannot read.</summary>
     internal const string GaveNoReason = "It gave no reason.";

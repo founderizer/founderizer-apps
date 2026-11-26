@@ -461,7 +461,8 @@ public sealed record NeedSecret(string Kind, string? Env, string? Site, IReadOnl
         }
         var saved = Text("saved");
         if (saved is not null && !Patterns.SecretReference().IsMatch(saved)) saved = null;
-        var clarified = value.TryGetProperty("clarified", out var words) && words.ValueKind == JsonValueKind.True;
+        // The hub writes the time of his words there: any value says that words answered the request, as in Swift.
+        var clarified = value.TryGetProperty("clarified", out var words) && words.ValueKind != JsonValueKind.Null;
         return new NeedSecret(kind, env, site, give, saved, clarified);
     }
 

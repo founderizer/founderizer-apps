@@ -336,7 +336,7 @@ struct AppUpdateTests {
                 .read(installed: AppVersion(name: "2026.10.1", build: 12), system: Self.sonoma)
             #expect(reading.refused)
             #expect(!reading.offered)
-            #expect(reading.says == "Our channel refused this fleet (\(status)). Nothing changed on this Mac.")
+            #expect(reading.says == "Our channel refused your team (\(status)). Nothing changed on this Mac.")
             #expect(reading.says.split(separator: " ").count <= 12)
             for word in ["subscription", "lapsed", "plan", "account", "pay"] { #expect(!reading.says.lowercased().contains(word)) }
         }
@@ -349,7 +349,7 @@ struct AppUpdateTests {
             .read(installed: AppVersion(name: "2026.10.1", build: 12), system: Self.sonoma)
         #expect(!reading.refused)
         #expect(!reading.offered)
-        #expect(reading.says.contains("does not know which fleet"))
+        #expect(reading.says.contains("does not know your team yet"))
     }
 
     @Test func nothingPublishedAndOurOwnFailureEachSayTheirOwnLine() async throws {

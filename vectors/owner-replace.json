@@ -1,0 +1,17 @@
+{
+  "about": "The owner's signed replace of a value under a reference that the central vault holds (vault.py STATEMENTS 'replace', OwnerStatement.replace): the login in small letters, the SHA-256 of the sealed copy's text, the canonical statement and its ECDSA P-256 signature (RFC 6979), which vault.owner_signed takes.",
+  "made_by": "app/vectors/makers/vault_core.py",
+  "public_key": "BPPKvE7UEoCSaPCciMG/FVQYpHgSdcb4f0cd78oDMD/xThTDJYTuBvz3BdaUuA8h/82Q9DhSeWYvvA/ig492DSc=",
+  "login_given": "bws://0000000A-0000-4000-8000-00000000000A",
+  "sealed": "-----BEGIN AGE ENCRYPTED FILE-----\nZXhhbXBsZQ==\n-----END AGE ENCRYPTED FILE-----\n",
+  "fields": {
+    "v": 1,
+    "kind": "replace",
+    "fleet": "0123456789abcdef",
+    "login": "bws://0000000a-0000-4000-8000-00000000000a",
+    "sha256": "70f3a334ed385505fe3b14a95e56c2b8445117094032a1236fe32c67d8b7c806",
+    "at": 1790000000
+  },
+  "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"kind\":\"replace\",\"login\":\"bws://0000000a-0000-4000-8000-00000000000a\",\"sha256\":\"70f3a334ed385505fe3b14a95e56c2b8445117094032a1236fe32c67d8b7c806\",\"v\":1}",
+  "signature": "MEUCIQDEQBZfMiJr9OqQGOIkw4gVX2oyKgLSsZxu4/N8DexWBAIgc+XhepJB/EjUScECHfVfUfsO8B9yDY21TJSXaofpvPo="
+}

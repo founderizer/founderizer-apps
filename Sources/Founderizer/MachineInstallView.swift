@@ -18,19 +18,23 @@ struct InstallTargets {
         /// 22 November 2026 has none, so its port, when it is not 22, is checked as a port of the hub's record: with
         /// the host key of its address's port 22, never one that an earlier run kept for that port.
         var portGivenFor: String?
+        /// The name under which this Mac knows the host key (`InstallTarget.hostKeyName`): the hub's root route keeps the
+        /// node's own address with the hub record's form of it. None on a connection that an install kept.
+        var hostKeyName: String?
     }
 
     static func remember(_ target: InstallTarget, machine: String, hub: URL) {
         var all = read()
         all[name(machine, hub: hub)] = Kept(host: target.host, user: target.user, port: target.port,
-                                            identityFile: target.identityFile, portGivenFor: target.portGivenFor)
+                                            identityFile: target.identityFile, portGivenFor: target.portGivenFor,
+                                            hostKeyName: target.hostKeyName)
         if let data = try? JSONEncoder().encode(all) { AppDefaults.store.set(data, forKey: key) }
     }
 
     static func target(machine: String, hub: URL) -> InstallTarget? {
         guard let kept = read()[name(machine, hub: hub)] else { return nil }
         let target = InstallTarget(host: kept.host, user: kept.user, port: kept.port, identityFile: kept.identityFile,
-                                   portGivenFor: kept.portGivenFor)
+                                   portGivenFor: kept.portGivenFor, hostKeyName: kept.hostKeyName)
         return target.isValid ? target : nil
     }
 

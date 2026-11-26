@@ -2135,6 +2135,24 @@ public sealed partial class OwnerStore : IAsyncDisposable
         return Regenerated(await client.OwnerPostAsync(call, route, body, bodyType, answerType, requestId, cancel));
     }
 
+    /// <summary>An owner read with <paramref name="call"/>, which the caller took from <see cref="Call"/> and checked: it goes
+    /// to that call's hub, with its key and its generation, whatever the store reads meanwhile (the Mac passes a hub and a
+    /// generation to each call of a form). A changed generation reads the fleet again, and the answer says so.</summary>
+    public async Task<OwnerAnswer<T>> OwnerGetAsync<T>(OwnerCall call, string route, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type,
+                                                       IReadOnlyList<(string Name, string Value)>? query = null,
+                                                       int limit = HubClient.OwnerReadLimit, CancellationToken cancel = default)
+        where T : class =>
+        Regenerated(await client.OwnerGetAsync(call, route, type, query, limit, cancel));
+
+    /// <summary>An owner write with <paramref name="call"/>, which the caller took from <see cref="Call"/> and checked, as the
+    /// read with a call of its own.</summary>
+    public async Task<OwnerAnswer<TAnswer>> OwnerPostAsync<TBody, TAnswer>(OwnerCall call, string route, TBody body,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TBody> bodyType,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TAnswer> answerType, Guid? requestId = null,
+        CancellationToken cancel = default)
+        where TAnswer : class =>
+        Regenerated(await client.OwnerPostAsync(call, route, body, bodyType, answerType, requestId, cancel));
+
     private OwnerAnswer<T> Regenerated<T>(OwnerAnswer<T> answer) where T : class
     {
         if (answer.IsGenerationChanged) _ = RefreshAsync();

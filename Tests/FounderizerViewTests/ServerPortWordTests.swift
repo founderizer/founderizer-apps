@@ -1,4 +1,4 @@
-import FleetCore
+@testable import FleetCore
 import Foundation
 import Testing
 @testable import Founderizer
@@ -16,8 +16,8 @@ import Testing
     private static let status = #"""
     {"BackendState": "Running",
      "Self": {"DNSName": "owner-mac.tail1234.ts.net.", "TailscaleIPs": ["100.70.0.1"]},
-     "Peer": {"a": {"DNSName": "hub-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.2"]},
-              "b": {"DNSName": "web-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.3"]}}}
+     "Peer": {"a": {"DNSName": "hub-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.2"], "OS": "linux"},
+              "b": {"DNSName": "web-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.3"], "OS": "linux"}}}
     """#
 
     /// One row of the hub's list of servers, with the fleet's record of its SSH (owner API 1.173).
@@ -302,7 +302,12 @@ import Testing
     /// that calls a Mac Linux takes the guard away; the seed opens an SSH session before it asks the guard. The key
     /// swap's step (`keySwapStep`) and the gate's step (`keySwapGate`) on the hub's own row take `hubTarget` too (the
     /// Vault area's read of the gate piece, 23 November 2026, MUST 1): bug, the hub's record and a first label alone
-    /// choose the machine where the owner's root session runs `configure`.
+    /// choose the machine where the owner's root session runs `configure`. The TCP step and `rootRun` take `hubTarget`
+    /// too (the Door area's read of 25 November 2026: bug, where the node check fails they send the owner's keys to the
+    /// hub's named address), and the trust step of the hub's own server with no kept connection takes
+    /// `hubTarget` first, also with a record of root: bugs, those steps stop with the owner's step ("add this Mac's key
+    /// …, then select Try again") and the owner's Try again runs no route, so the words are false; the trust step of a hub whose
+    /// root holds only this Mac's key offers the owner's keys, and root refuses it (the tester's case).
     @Test func eachRootReadOfTheCentralVaultTakesHubTarget() throws {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Founderizer/CentralVaultSection.swift")
@@ -333,6 +338,24 @@ import Testing
         let end = try #require(source.range(of: "\n    }\n", range: trust.upperBound..<source.endIndex))
         let body = source[trust.lowerBound..<end.lowerBound]
         #expect(body.contains("try await trustTarget(name, kind: kind, database: database)") && !body.contains("self.target("))
+        let pre = try #require(body.range(of: "if let own = reading?.hub, own.machine == name, routes(name) {"),
+                               "the trust step of the hub's own server takes the route first, a record of root too")
+        #expect(body.contains("do { _ = try await hubTarget(name, database: database, record: own.reach) } catch let stop as RouteStop {"))
+        // each press of the owner's ends the route's hold (`pressed`)
+        for press in ["    func retry(_ store: FleetStore)", "    func retry(server machine: String,", "    func retryKeySwap(server",
+                      "    func takeOver(", "    func rootRun("] {
+            let start = try #require(source.range(of: press), "\(press) is gone")
+            let end = try #require(source.range(of: "\n    }\n", range: start.upperBound..<source.endIndex))
+            #expect(source[start.lowerBound..<end.lowerBound].contains("pressed()"), "\(press)")
+        }
+        #expect(pre.lowerBound < (body.range(of: "try await trustTarget(")?.lowerBound ?? body.startIndex))
+        for name in ["keepTCPWindow", "rootRun"] {
+            let start = try #require(source.range(of: "func \(name)("), "\(name) is gone")
+            let end = try #require(source.range(of: "\n    }\n", range: start.upperBound..<source.endIndex))
+            let body = source[start.lowerBound..<end.lowerBound]
+            #expect(body.contains("hubTarget(machine, database: database, record: reading?.hub?.reach)")
+                    && !body.contains("self.target("), "\(name)")
+        }
         #expect(body.contains("let (target, mac, os) = try await trustTarget(") &&
                 body.contains("MacVaultPin(kind: kind, os: os, record:"), "the guard takes the trust step's OS")
         let seed = try #require(source.range(of: "private func seed("), "seed is gone")
@@ -368,27 +391,265 @@ import Testing
                 "only Remove server clears the record: in removed, and in the read for a press before the fleet was known")
     }
 
-    /// **The central vault's install, update and owner-key read take only the hub's machine** (`CentralVaultModel.
-    /// hubTarget`): this Mac's Tailscale names the connection's host and this Mac's hub address as one device, and the
-    /// record's user is root. Bugs: the update round runs at the address of the hub's record alone, and pins the key
-    /// that the root there prints as the central vault's; it runs as the record's `fleet` (`hub.sh` records the hub's
-    /// own user), whose own `authorized_keys` can hold a forced command that prints the hub's key in root's place (M1
-    /// of the validation of 23 November 2026).
+    /// What the root route's stand-ins were asked: each `ssh`, and each read of the owner access key.
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var made: [[String]] = []
+        private var reads = 0
+        var ssh: [[String]] { lock.withLock { made } }
+        var keyReads: Int { lock.withLock { reads } }
+        /// Notes one `ssh`, and gives how many came before it.
+        func note(_ arguments: [String]) -> Int { lock.withLock { made.append(arguments); return made.count - 1 } }
+        func read() { lock.withLock { reads += 1 } }
+    }
+
+    private static let rootAnswer = LocalShell.Answer(status: 0, output: "founderizer-root=0\nfounderizer-app-key-in-place\n")
+    private static let refusedAnswer = LocalShell.Answer(status: 255, output: "root@100.80.1.2: Permission denied (publickey).\r\n")
+
+    /// The hub's root route with stand-ins (`RootRoute`): `ssh` answers `answers` in their order (the last one again),
+    /// the owner access key is `key`, this Mac's own key file is a stand-in in `folder`, and the ledger of app mode and
+    /// the key's folder are the test's own, in `folder` too.
+    private static func route(_ calls: Calls, _ answers: [LocalShell.Answer], key: OwnerAccessKey? = nil,
+                              folder: URL, run: ShellRunner? = nil, known: [String] = []) -> RootRoute {
+        let appKey = folder.appendingPathComponent("founderizer_ed25519").path
+        try? "stand-in\n".write(toFile: appKey, atomically: true, encoding: .utf8)
+        return RootRoute(appKey: appKey, appLine: { "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample founderizer@mac" },
+                         ownerAccess: { _ in calls.read(); return key },
+                         run: run ?? { _, arguments, _, _ in answers[min(calls.note(arguments), answers.count - 1)] },
+                         ledger: SSHKeyLedger(folder: folder.appendingPathComponent("ssh")), folder: folder,
+                         known: { known.contains($0) })
+    }
+
+    /// A stand-in `ssh` whose `known_hosts` holds the hub's key under `known` alone: root answers where the call reads
+    /// the key under that name (its `HostKeyAlias`, else its host), and `ssh` refuses an unknown host key elsewhere.
+    private static func knownHosts(_ calls: Calls, _ known: String) -> ShellRunner {
+        { _, arguments, _, _ in
+            _ = calls.note(arguments)
+            let alias = arguments.first { $0.hasPrefix("HostKeyAlias=") }.map { String($0.dropFirst("HostKeyAlias=".count)) }
+            let host = arguments.first { $0.hasPrefix("root@") }.map { String($0.dropFirst("root@".count)) }
+            return (alias ?? host) == known ? Self.rootAnswer
+                : LocalShell.Answer(status: 255, output: "No ED25519 host key is known for \(alias ?? host ?? "").\r\nHost key verification failed.\r\n")
+        }
+    }
+
+    private static func folder() throws -> URL {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("root-route-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
+    /// The words of the stop that `body` threw, or nil when it threw none.
+    private static func stop(_ body: () async throws -> InstallTarget) async -> String? {
+        do { _ = try await body(); return nil } catch { return (error as? LocalizedError)?.errorDescription ?? "\(error)" }
+    }
+
+    /// **The root route runs only for the hub's own machine, and only where this Mac's Tailscale names its address and
+    /// this Mac's hub address as one node and gives that node's system as Linux** (`CentralVaultModel.hubTarget`,
+    /// `rootRoute`): before that no SSH session opens, no owner access key is read, and nothing is kept. A hub on a Mac
+    /// keeps its root record as before, and its record of another user stops with the words of no record. Bugs: the
+    /// update round runs at the address of the hub's record alone, and pins the key that the root there prints as the
+    /// central vault's; the route probes root on a server that is not the hub, and offers it the fleet's owner access
+    /// key; a record of `fleet` (`hub.sh` records the hub's own user) is taken as it is, whose own `authorized_keys` can
+    /// hold a forced command that prints the hub's key in root's place (M1 of the validation of 23 November 2026); on a
+    /// hub on a Mac the route logs in as root, which macOS refuses, every 10 minutes, and its words name /root.
     @Test func theCentralVaultsStepsTakeOnlyTheHubsMachine() async throws {
         _ = try await ViewHost.onMainLoop { 0 }          // the test's defaults, before anything reads them
-        let status = Self.status
-        let model = await CentralVaultModel(hub: Self.hub())
-        let hubs = try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
-            address: "100.80.1.2", user: "root", port: 22), status: { status })
-        #expect(hubs.host == "100.80.1.2")
-        await #expect(throws: (any Error).self) {
-            try await model.hubTarget("web-box", database: "view-test", record: MachineReach(
-                address: "100.80.1.3", user: "root", port: 22), status: { status })
+        let status = Self.status, folder = try Self.folder(), calls = Calls(), hub = Self.hub()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try #require(OwnerAccessKey(seed: Data(repeating: 7, count: 32)))
+        let route = Self.route(calls, [Self.rootAnswer], key: key, folder: folder)
+        let model = await CentralVaultModel(hub: hub)
+        for user in ["root", "fleet"] {
+            #expect(await Self.stop { try await model.hubTarget("web-box", database: "view-test", record: MachineReach(
+                address: "100.80.1.3", user: user, port: 22), status: { status }, route: route) } != nil)
         }
-        await #expect(throws: (any Error).self) {
-            try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
-                address: "100.80.1.2", user: "fleet", port: 22), status: { status })
+        let elsewhere = #"{"BackendState": "Running", "Peer": {"b": {"DNSName": "web-box.tail1234.ts.net.", "TailscaleIPs": ["100.80.1.3"]}}}"#
+        #expect(await Self.stop { try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
+            address: "100.80.1.2", user: "fleet", port: 22), status: { elsewhere }, route: route) } != nil)
+        // a hub on a Mac: no route
+        let mac = status.replacingOccurrences(of: #""TailscaleIPs": ["100.80.1.2"], "OS": "linux""#,
+                                              with: #""TailscaleIPs": ["100.80.1.2"], "OS": "macOS""#)
+        #expect(await Self.stop { try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
+            address: "100.80.1.2", user: "owner-example", port: 22), status: { mac }, route: route) }
+                == "The fleet has no SSH connection to hub-box on record. Record one on its page in Servers.")
+        #expect(try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
+            address: "100.80.1.2", user: "root", port: 22), status: { mac }, route: route) == InstallTarget(host: "100.80.1.2"))
+        #expect(calls.ssh.isEmpty && calls.keyReads == 0)
+        let kept = await MainActor.run { ["web-box", "hub-box"].map { InstallTargets.target(machine: $0, hub: hub) } }
+        #expect(kept == [nil, nil])
+    }
+
+    /// **A root record of the hub's machine, with no connection that this Mac keeps, gets this Mac's own key from the
+    /// route, at the node's own address, and the connection is kept when root answers** (the tester's report of 25
+    /// November 2026: root held the app's key, and the record's connection offered only the keys of the owner's agent and
+    /// configuration, so root refused each try of the install). The install after it runs in app mode with that key,
+    /// and a kept connection comes first after it. Bugs: the route runs only for a record of another user, so a root
+    /// record offers only the owner's keys and root refuses this Mac (the tester's fault); the route connects to the
+    /// record's first label, which `ssh` looks up through DNS; the route keeps nothing, so each step of each round
+    /// probes again; the route runs again over a kept connection.
+    @Test func aRootRecordOfTheHubOffersThisMacsKeyAndKeepsTheConnection() async throws {
+        _ = try await ViewHost.onMainLoop { 0 }
+        let status = Self.status, folder = try Self.folder(), calls = Calls(), hub = Self.hub()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let route = Self.route(calls, [Self.rootAnswer], folder: folder)
+        let model = await CentralVaultModel(hub: hub)
+        let record = MachineReach(address: "hub-box", user: "root", port: 22)
+        let target = try await model.hubTarget("hub-box", database: "view-test", record: record, status: { status }, route: route)
+        let root = InstallTarget(host: "100.80.1.2", user: "root", port: 22, identityFile: route.appKey)
+        #expect(target == root && calls.ssh.count == 1 && calls.keyReads == 0)
+        let probe = try #require(calls.ssh.first)
+        #expect(probe.contains("root@100.80.1.2") && probe.contains(route.appKey) && probe.contains("StrictHostKeyChecking=yes"))
+        #expect(await MainActor.run { InstallTargets.target(machine: "hub-box", hub: hub) } == root)
+        // the install's own run: app mode with this Mac's key alone, as the ledger now says (`SSHCall.key`, with the
+        // route's key file, which is the stand-in here and `AppSSHKey.path()` in the app)
+        #expect(SSHCall.key(for: target, ledger: route.ledger, appKey: route.appKey) == .file(route.appKey))
+        // the kept connection comes first: no second probe
+        #expect(try await model.hubTarget("hub-box", database: "view-test", record: record, status: { status },
+                                          route: route) == root)
+        #expect(calls.ssh.count == 1)
+    }
+
+    /// **A record of the hub's own user is no dead end any more: the route tries root at its address and port, and the
+    /// fleet's owner access key after root refused this Mac's own key, and keeps the connection once this Mac's own key
+    /// got in after it** (`rootRoute`; the Setup area's read of a hub that moved: `hub.sh` writes no key, and only the
+    /// owner access key may be in root's file). Bugs: the record of `fleet` stops each root step for ever; the route
+    /// ignores the record's port; it keeps a connection that names the owner access key's file, which is gone after the
+    /// call, or one that root refuses.
+    @Test func aFleetRecordOfTheHubTriesRootAtItsAddressAndPort() async throws {
+        _ = try await ViewHost.onMainLoop { 0 }
+        let status = Self.status, folder = try Self.folder(), calls = Calls(), hub = Self.hub()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try #require(OwnerAccessKey(seed: Data(repeating: 7, count: 32)))
+        let route = Self.route(calls, [Self.refusedAnswer, Self.rootAnswer, Self.rootAnswer], key: key, folder: folder)
+        let model = await CentralVaultModel(hub: hub)
+        let target = try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
+            address: "100.80.1.2", user: "fleet", port: 2222), status: { status }, route: route)
+        let root = InstallTarget(host: "100.80.1.2", user: "root", port: 2222, identityFile: route.appKey)
+        #expect(target == root && calls.ssh.count == 3 && calls.keyReads == 1)
+        #expect(calls.ssh.allSatisfy { $0.contains("root@100.80.1.2") && $0.contains("2222") && $0.contains("HostKeyAlias=100.80.1.2") })
+        #expect(await MainActor.run { InstallTargets.target(machine: "hub-box", hub: hub) } == root)
+        #expect(route.ledger.confined(SSHKeyLedger.Account(address: "100.80.1.2", user: "root", port: 2222)))
+    }
+
+    /// **Where the route does not reach root for a record of root, the step goes on with the owner's own keys, as before
+    /// the route, and keeps nothing** (`rootRoute`; the Door area's read of 25 November 2026, MUST 2). Bugs: a hub whose
+    /// root takes only the owner's agent key, which worked before the route, stops each root step at the route's
+    /// refusal; a hub whose host key this Mac knows only under the record's name stops at the route's host key.
+    @Test func aRootRecordGoesOnWithTheOwnersKeysWhereRootRefusesThisMacs() async throws {
+        _ = try await ViewHost.onMainLoop { 0 }
+        let status = Self.status, folder = try Self.folder(), calls = Calls(), hub = Self.hub()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try #require(OwnerAccessKey(seed: Data(repeating: 7, count: 32)))
+        let route = Self.route(calls, [Self.refusedAnswer], key: key, folder: folder)
+        let model = await CentralVaultModel(hub: hub)
+        let record = MachineReach(address: "100.80.1.2", user: "root", port: 22)
+        for _ in 0..<2 {
+            #expect(try await model.hubTarget("hub-box", database: "view-test", record: record, status: { status },
+                                              route: route) == InstallTarget(host: "100.80.1.2"))
         }
+        #expect(calls.ssh.count == 2, "the second step within the wait opens no session of the route")
+        let unknown = Calls(), other = await CentralVaultModel(hub: hub)
+        let hostKey = LocalShell.Answer(status: 255, output: "Host key verification failed.\r\n")
+        #expect(try await other.hubTarget("hub-box", database: "view-test", record: record, status: { status },
+                                          route: Self.route(unknown, [hostKey], key: key, folder: folder))
+                == InstallTarget(host: "100.80.1.2"))
+        #expect(unknown.ssh.count == 1 && unknown.keyReads == 0)
+        #expect(await MainActor.run { InstallTargets.target(machine: "hub-box", hub: hub) } == nil)
+    }
+
+    /// **Where root refuses the keys of a record of another user, or this Mac does not know the host key, nothing is
+    /// kept, the step stops with the owner's own step, the other steps of the round open no SSH session, and a press of
+    /// the owner's tries again at once** (`rootRoute`, `rootRouteStops`, `pressed`). Bugs: the stop says "Record one on
+    /// its page in Servers", a page that has no field for the hub's own server (the owner's fault of 23 and 25 November
+    /// 2026); a connection is kept after a refusal; each root step of a round logs in again, and the server's fail2ban
+    /// shuts this Mac out; Try again shows the old words for 10 minutes and tries nothing; the owner access key goes to
+    /// a host whose key this Mac does not know, and the words give no command to meet that key.
+    @Test func whenRootRefusesNothingIsKeptAndTheWordsSayTheStep() async throws {
+        _ = try await ViewHost.onMainLoop { 0 }
+        let status = Self.status, folder = try Self.folder(), hub = Self.hub()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = try #require(OwnerAccessKey(seed: Data(repeating: 7, count: 32)))
+        let record = MachineReach(address: "100.80.1.2", user: "fleet", port: 22)
+        let refused = Calls()
+        let route = Self.route(refused, [Self.refusedAnswer], key: key, folder: folder)
+        let model = await CentralVaultModel(hub: hub)
+        let step = HubRootRoute.refused("hub-box", target: InstallTarget(host: "100.80.1.2"))
+        for _ in 0..<2 {
+            #expect(await Self.stop { try await model.hubTarget("hub-box", database: "view-test", record: record,
+                                                                status: { status }, route: route) } == step)
+        }
+        #expect(refused.ssh.count == 2 && refused.keyReads == 1, "the second step within the wait opens no session")
+        await model.pressed()
+        #expect(await Self.stop { try await model.hubTarget("hub-box", database: "view-test", record: record,
+                                                            status: { status }, route: route) } == step)
+        #expect(refused.ssh.count == 4, "a press of the owner's tries again at once")
+        let unknown = Calls(), other = await CentralVaultModel(hub: Self.hub())
+        let hostKey = LocalShell.Answer(status: 255, output: "No ED25519 host key is known for 100.80.1.2.\r\nHost key verification failed.\r\n")
+        let words = await Self.stop { try await other.hubTarget("hub-box", database: "view-test", record: record,
+                                                                status: { status },
+                                                                route: Self.route(unknown, [hostKey], key: key, folder: folder)) }
+        #expect(words?.contains("run ssh root@100.80.1.2 once") == true)
+        #expect(unknown.ssh.count == 1 && unknown.keyReads == 0)
+        #expect(await MainActor.run { InstallTargets.target(machine: "hub-box", hub: hub) } == nil)
+    }
+
+    /// **The route connects to the node's own address and reads the host key where this Mac's `known_hosts` has it for
+    /// that node: the address's line, else the line of the node's whole name in this Mac's own Tailscale**
+    /// (`HubRootRoute.hostKeyName`, `InstallTarget.hostKeyName`; the Vault area's read of 1f5e0c113 and the Door area's):
+    /// a key that the owner's `ssh` met under the MagicDNS name opens the route and the install after it, and a key met
+    /// under the node's address does too, also where the record is a name. Bugs: a Mac that knows the key only under the
+    /// node's address (an earlier install, or the route's own `ssh root@<address>`) stops where the record is a name; the route reads the key under the node's address alone, which the
+    /// owner's `known_hosts` does not hold, so the tester's hub falls back to the owner's keys and "Permission denied"
+    /// again; the kept connection forgets the name, so the install right after the route stops at the host key.
+    @Test func theRouteReadsTheHostKeyWhereThisMacKnowsIt() async throws {
+        _ = try await ViewHost.onMainLoop { 0 }
+        let status = Self.status, folder = try Self.folder(), name = "hub-box.tail1234.ts.net"
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let cases: [(record: String, line: String, alias: String?)] = [("hub-box", name, name), (name, "100.80.1.2", nil),
+                                                                       ("100.80.1.2", "100.80.1.2", nil)]
+        for (record, line, alias) in cases {
+            let calls = Calls(), hub = Self.hub()
+            let route = Self.route(calls, [], folder: folder, run: Self.knownHosts(calls, line), known: [line])
+            let model = await CentralVaultModel(hub: hub)
+            let target = try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
+                address: record, user: "root", port: 22), status: { status }, route: route)
+            let root = InstallTarget(host: "100.80.1.2", user: "root", port: 22, identityFile: route.appKey, hostKeyName: alias)
+            #expect(target == root && calls.ssh.count == 1, "\(line)")
+            #expect(await MainActor.run { InstallTargets.target(machine: "hub-box", hub: hub) } == root, "\(line)")
+            // the install's own `ssh` reads the same line
+            let install = CentralVaultRemote.arguments(target: target, program: "true", ledger: route.ledger)
+            #expect(try await Self.knownHosts(Calls(), line)("/usr/bin/ssh", install, nil, 60) == Self.rootAnswer, "\(line)")
+        }
+    }
+
+    /// **A first label is never the name under which the route reads the host key, and where this Mac knows neither the
+    /// node's address nor its whole name the words give `ssh root@<the node's address>`** (`HubRootRoute.hostKeyName`;
+    /// the Door area's read of 25 November 2026). Bug: the route reads the key of the record's string, a short label
+    /// whose line in `known_hosts` can belong to another machine, and keeps root's connection on that word.
+    @Test func aFirstLabelIsNeverTheHostKeyName() async throws {
+        _ = try await ViewHost.onMainLoop { 0 }
+        let status = Self.status, folder = try Self.folder(), hub = Self.hub(), calls = Calls()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = await CentralVaultModel(hub: hub)
+        let words = await Self.stop { try await model.hubTarget("hub-box", database: "view-test", record: MachineReach(
+            address: "hub-box", user: "fleet", port: 22), status: { status },
+            route: Self.route(calls, [], folder: folder, run: Self.knownHosts(calls, "hub-box"), known: ["hub-box"])) }
+        #expect(words?.contains("run ssh root@100.80.1.2 once") == true && calls.ssh.count == 1)
+        #expect(calls.ssh.first?.contains("HostKeyAlias=hub-box") == false)
+        #expect(await MainActor.run { InstallTargets.target(machine: "hub-box", hub: hub) } == nil)
+    }
+
+    /// **The install has a way to the hub's machine with the record's address alone** (`CentralVaultModel.hubOnRecord`),
+    /// where the root route tries root. Bug: a hub whose record names an address and no user plans no install, so the
+    /// route never runs for it.
+    @Test func theInstallHasAWayWithTheRecordsAddressAlone() {
+        func own(_ address: String?, _ user: String?) -> VaultHub {
+            VaultHub(machine: "hub-box", address: address, ssh: user.map { VaultHub.SSH(user: $0, port: 22) })
+        }
+        #expect(CentralVaultModel.hubOnRecord(own("100.80.1.2", nil), kept: false))
+        #expect(CentralVaultModel.hubOnRecord(own("100.80.1.2", "fleet"), kept: false))
+        #expect(CentralVaultModel.hubOnRecord(own(nil, nil), kept: true))
+        #expect(!CentralVaultModel.hubOnRecord(own(nil, "root"), kept: false))
     }
 
     /// **The trust step reads a server as a Mac only when the hub's list and this Mac's own Tailscale both say so**
@@ -416,6 +677,12 @@ import Testing
             address: "100.80.1.4", user: "owner-example", port: 22), status: { status })
         #expect(!linux.mac && !linux.target.macServer)
         #expect(mac.mac && mac.target.macServer && !mac.target.becomeRoot && mac.target.user == "owner-example")
+        // a record of root of a server that is not the hub offers the owner's own keys, as before the hub's root route:
+        // owner mode, with no key file alone (the Vault area's review of 25 November 2026: bug, each root record offers
+        // this Mac's own key alone, and a server whose root holds only the owner's personal key refuses each step)
+        let owners = CentralVaultRemote.arguments(target: linux.target, program: "true", ledger: SSHKeyLedger())
+        #expect(linux.target.identityFile == nil && !owners.contains("-i") && !owners.contains("IdentitiesOnly=yes")
+                && !owners.starts(with: ["-F", "/dev/null"]))
         // the Mac server pin's guard takes the node's own `OS` from this same read (`MacVaultPin`)
         #expect(linux.os == ["linux"] && mac.os == ["macOS"])
     }

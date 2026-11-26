@@ -1625,6 +1625,16 @@
         }
       }
     },
+    "%@ refused the SSH login of this Mac as %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ rechazó el inicio de sesión SSH de este Mac como %@."
+          }
+        }
+      }
+    },
     "%@ refused the token." : {
       "localizations" : {
         "es" : {
@@ -6160,16 +6170,6 @@
         }
       }
     },
-    "Checking your fleet…" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprobando tu equipo…"
-          }
-        }
-      }
-    },
     "Checking your hub" : {
       "localizations" : {
         "es" : {
@@ -6186,6 +6186,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Comprobando tu servidor"
+          }
+        }
+      }
+    },
+    "Checking your team…" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprobando tu equipo…"
           }
         }
       }
@@ -9110,12 +9120,12 @@
         }
       }
     },
-    "Founderizer does not know which fleet this Mac drives yet, so our channel has nothing to answer about. Link your fleet, or take the newest build from our download page." : {
+    "Founderizer does not know your team yet, so our channel has nothing to answer about. Link your team, or take the newest build from our download page." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Founderizer aún no sabe qué equipo maneja este Mac, así que nuestro canal no tiene nada que responder. Vincula tu equipo o descarga la versión más reciente desde nuestra página de descargas."
+            "value" : "Founderizer aún no conoce tu equipo, así que nuestro canal no tiene nada que responder. Vincula tu equipo o descarga la versión más reciente desde nuestra página de descargas."
           }
         }
       }
@@ -15310,12 +15320,12 @@
         }
       }
     },
-    "Our channel refused this fleet (%lld). Nothing changed on this Mac." : {
+    "Our channel refused your team (%lld). Nothing changed on this Mac." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nuestro canal rechazó este equipo (%lld). No cambió nada en este Mac."
+            "value" : "Nuestro canal rechazó tu equipo (%lld). No cambió nada en este Mac."
           }
         }
       }
@@ -23410,6 +23420,46 @@
         }
       }
     },
+    "The root login on %@ gave no answer that Founderizer can read." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El inicio de sesión de root en %@ no dio ninguna respuesta que Founderizer pueda leer."
+          }
+        }
+      }
+    },
+    "The root user of %@ refused this Mac's key. Add ~/.ssh/founderizer_ed25519.pub to /root/.ssh/authorized_keys in the console of your server provider (for example Hetzner). Its SSH server must let root log in with a key (PermitRootLogin). Then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El usuario root de %@ rechazó la clave de este Mac. Añade ~/.ssh/founderizer_ed25519.pub a /root/.ssh/authorized_keys en la consola de tu proveedor de servidores (por ejemplo, Hetzner). Su servidor SSH debe permitir que root inicie sesión con una clave (PermitRootLogin). Después vuelve a intentarlo."
+          }
+        }
+      }
+    },
+    "The root user of %@ refused this Mac's key. In Terminal, run ssh-copy-id -i ~/.ssh/founderizer_ed25519.pub %@ if you can still log in there, or add ~/.ssh/founderizer_ed25519.pub to /root/.ssh/authorized_keys in the console of your server provider (for example Hetzner). Its SSH server must let root log in with a key (PermitRootLogin). Then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El usuario root de %@ rechazó la clave de este Mac. En Terminal, ejecuta ssh-copy-id -i ~/.ssh/founderizer_ed25519.pub %@ si aún puedes iniciar sesión allí, o añade ~/.ssh/founderizer_ed25519.pub a /root/.ssh/authorized_keys en la consola de tu proveedor de servidores (por ejemplo, Hetzner). Su servidor SSH debe permitir que root inicie sesión con una clave (PermitRootLogin). Después vuelve a intentarlo."
+          }
+        }
+      }
+    },
+    "The root user of %@ still refuses this Mac's key, which is now in /root/.ssh/authorized_keys there. Make sure that its SSH server reads that file and lets root log in with a key, then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El usuario root de %@ sigue rechazando la clave de este Mac, que ya está en /root/.ssh/authorized_keys en ese servidor. Asegúrate de que su servidor SSH lee ese archivo y permite que root inicie sesión con una clave, y después vuelve a intentarlo."
+          }
+        }
+      }
+    },
     "The same agents keep it. Nobody sees the old or the new value." : {
       "localizations" : {
         "es" : {
@@ -24440,6 +24490,16 @@
         }
       }
     },
+    "This Mac does not know the host key of %@ yet. In Terminal, run ssh %@ once, check the key and answer yes, then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este Mac aún no conoce la clave de host de %@. En Terminal, ejecuta ssh %@ una vez, comprueba la clave y responde yes, y después vuelve a intentarlo."
+          }
+        }
+      }
+    },
     "This Mac forgets it, and you delete it in Tailscale so nothing can use it again." : {
       "localizations" : {
         "es" : {
@@ -24626,6 +24686,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El escritorio de este Mac"
+          }
+        }
+      }
+    },
+    "This Mac's key file %@ is not there, so Founderizer tried no login." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo de clave de este Mac, %@, no está, así que Founderizer no intentó ningún inicio de sesión."
           }
         }
       }
@@ -24986,16 +25056,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este equipo indica un canal con el que esta app no puede conectar."
-          }
-        }
-      }
-    },
-    "This fleet names a release channel that is not an HTTPS address, so Founderizer asked nothing." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este equipo indica un canal de versiones que no es una dirección HTTPS, así que Founderizer no lo consultó."
           }
         }
       }
@@ -29076,6 +29136,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tus servidores"
+          }
+        }
+      }
+    },
+    "Your team names a release channel that is not an HTTPS address, so Founderizer asked nothing." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu equipo indica un canal de versiones que no es una dirección HTTPS, así que Founderizer no lo consultó."
           }
         }
       }

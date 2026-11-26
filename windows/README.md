@@ -20,6 +20,7 @@ seven pictures that the owner approved (`windows-app-pictures.md` in the plans f
 | `Founderizer.Setup/Install/` | the install of a server and the claim of a new hub from the owner's PC (step 2, piece L3): the Mac's `InstallPlan`, `MachineInstaller`, `ServerCheck` and their reads, over `IRemote`; held to `../vectors/remote-install.json` and `install-reads.json` | any OS |
 | `Founderizer.Setup/RootJobs/` | the root jobs of the owner's PC (step 2, piece L6): the Mac's sweeps (the owner's access line, the join's hardening, the agents' browser parts), the vault's install and pins and the key registration's proof over `IRemote`; held to `../vectors/remote-root.json` and `remote-vault.json` | any OS |
 | `Founderizer.Setup/FirstRun/`, `Founderizer.Setup/Agents/`, `Founderizer.Owner/Reads/` | the first run and the manager's setup as models (step 2, piece L4): the Mac's `FirstRunModel` and its page models, the build, Start again, the records, the password once, the agent setup and its sign-in, and the reads of `GET /ui/servers`, `/ui/machines` and `/ui/team`; held to `../vectors/setup-words.json` and `remote-password.json` | any OS |
+| `Founderizer.Owner/Vault/` | the vault's core (step 2, piece L5): the seal, the recovery code, the fingerprints, the secure form as a model, the owner's signatures and their order, the reading of the vault and its plan, the owner access key; held to `../vectors/vault-seal.json` and `owner-replace.json` | any OS |
 | `Founderizer.SelfCheck/` | a small program that runs the vectors, published with Native AOT: the proof that the library and BouncyCastle work with no JIT | any OS |
 | `PARITY.md`, `parity.py` | each feature name of the hub and its state on Windows, and the script that prints each name with no line | |
 | `../vectors/` | the shared test vectors and `make_vectors.py`, which makes them with the hub's own code | |
@@ -889,6 +890,50 @@ and `reading.agents`, and `GET /ui/machines`' `access`, which `Founderizer.Owner
 the SSH layer (`HostKeys`, L1), for every call: a root job takes no new key at any port, because every one runs under
 `Known`, and at a port of the hub's record it compares the server's key with the host's port 22 line.
 
+### The vault's core: `Founderizer.Owner/Vault` (step 2, piece L5)
+
+For the window's pieces U4 and U5, for L6's `VaultRound`, and for wave C's Secrets pages. The Mac's `AgeSeal`,
+`RecoveryCode`, `RecoverySeal`, `Secrets`, the checks of `SecretSaveChecks`, `KeySaveLook` and `KeySaveCard`,
+`CentralVault` (its reading and its routes), `CentralVaultPlan`, `OwnerAccessKey`, `GrantClock` and the view files
+`GrantSigning.swift` and `SecretEntryView.swift` without its drawing. Held to `../vectors/vault-seal.json`, which
+FleetCore's own code writes (`Tests/FleetCoreTests/VaultVectorsTests.swift`), and to `owner-replace.json`, which the
+vault's own code makes (`../vectors/makers/vault_core.py`, which also holds the vector's fingerprints to the vault's).
+The sentences that a view file of the Mac holds (`VaultWords`) are held to the Mac's catalog. These names stay.
+
+- **The secure form**: `SecretPreset.Of(need)` (null for a request that gives no form), then `new SecretForm(preset,
+  VaultCalls.Of(store), pins, signing, KeyInText.Contains, names.Label, say)`; `StartAsync()` as it opens and at Try
+  again, `Edit(fields => …)`, `SetKind`, `SetAccess(agent, grant)`, `SetNote`, `SaveAsync()`, `AnswerWithAsync(reference,
+  entry)` for one of `FitsAsync()`, `TryAgainAsync()` for the steps that failed, `DeclineAsync()`, `ClarifyAsync(words)`,
+  `Close()`. It shows `Phase`, `Login`, `Access`, `Message`, `Busy`, `Saving`, `Progress` and `Look`; `Changed` and `Done`
+  say when. While `Busy`, `Edit`, `SetKind`, `SetAccess` and `SetNote` change nothing. It answers every kind of request: a
+  new key, a new value of a key that the fleet holds, and a login with its 2FA. `KeySaveCard` is the card around it. It
+  opens with the vault's key only where that key is the one that this PC pinned (`VaultReading.Trusted`), as the Mac's.
+- **What it needs**: `pins = new CentralVaultPinsFile(path)`; L6's install pins the key that it printed with
+  `pins.Pin(printed, hub, fleet, setUp)`, which writes it only where `CentralVaultPin.Refusal` lets it (at the owner's Set
+  up, where no pin is kept, or the same key again) and else gives the words of why not. A pins file that does not read
+  throws (`InvalidDataException`), at a read and at a pin. `signing = new VaultSigning(calls, fleet => the owner key, new
+  GrantClockFile(path))`: the owner key (the TPM's, U4) comes by the fleet's id, or null, and stays the caller's, which
+  disposes it. `calls` is the store's; the form holds them to the hub, the key and the generation of its opening
+  (`IVaultCalls.Held`).
+- **Access**: `SecretAccess.ChangeAsync(calls, signing, reference, agent, label, level)` is the one way to give a secret and
+  to take it back, in its one order. `VaultSigning.PoolAsync` signs the pool: before `POST /ui/resources` for a share, after
+  it for its end. `VaultSigning.PoolsAsync(reading.PoolDue)` signs and sends what the hub's default owes (owner feature
+  `pool_default`): L6's `VaultRound` calls it when the plan has no step, as the Mac's round does. At most 32 a round, the
+  ends first, a `default_pool` only while the clocks agree, one read of the key; a refusal of the vault goes on to the
+  next statement, and any other failure ends the round's batch.
+- **The vault**: `VaultRoutes.ReadingAsync`, `SaltsAsync`, `TeamAsync` (the lines and the catalog), `ClockAsync`, and the
+  writes; `VaultPlan.Of(reading, facts)` (the step, the row of the vault, the rows of the servers), `VaultTries`,
+  `VaultSealKey.Of`, `RecoveryKeeping.Kept(box, fleet)`, `OwnerAccessKeeping.Kept(box, fleet)` (each makes a new code or key
+  only where the box says that none is there, and writes it with `ISecretBox.WriteNew`, so a second start or a read that
+  said "none" by mistake replaces nothing), `RecoverySeal.Seal` for a phone's copy. The rounds that run the plan's steps
+  are L6's.
+- **A value's life**: it is in the form's `Login` and nowhere else; the form is empty from the hub's answer to
+  `POST /ui/secrets/add` on, and the bytes of the item are cleared at the end of each try. What stays for Try again is the
+  copy that is sealed to the vault. No type that holds a value prints it or has a JSON form.
+- **Not here**: `KeyInText` (Founderizer.Core, with the key hold); the part "Value" and its mark (`KeyValueMark`), the list
+  of secrets and the words of `VaultMachine.why` (wave C's pages); the import; a store's key (a request for one gives no
+  form, and no form changes such a key's value, because the PC has no door).
+
 ### The first run in the window (step 2, piece U1)
 
 How the window draws the library's first run, for the window pieces after it (U2, U3, U6 and on).
@@ -1013,6 +1058,12 @@ files), with no server and no network:
 dotnet test app/windows/Founderizer.Setup.Tests/Founderizer.Setup.Tests.csproj
 ```
 
+The tests of `Founderizer.Owner` (the owner's reads and the vault's core, over a stand-in hub):
+
+```bash
+dotnet test app/windows/Founderizer.Owner.Tests/Founderizer.Owner.Tests.csproj
+```
+
 The self-check, published with Native AOT (on this Mac `osx-arm64`; on a PC `win-x64` or `win-arm64`):
 
 ```bash
@@ -1110,6 +1161,16 @@ process at a time.
   `ClaimCode.IsPrivateAddress` reads exactly four numbers of one byte each (Swift's drops a part that is no number).
   The check of a server tries the app's own key alone, and its refusal asks for the password once: the PC has no key
   files of the owner's, so neither the Mac's key files nor its count of tries (`KeyTries`) are here.
+- **The vault's core (piece L5)** differs from the Mac's in five ways. The clock is read at the hub for each signature that
+  waits for it (`GET /ui/state?head=1`), where the Mac takes its last read of the state: the PC's own reading can be old,
+  because the hub answers 304 while nothing changes. So a hub that does not say its time now signs nothing. The form holds
+  the store's call of its opening (its hub, key and generation), and sends nothing once the store shows another hub or
+  generation, where the Mac's form goes on at the hub of its opening. A pins file that does not read throws, where the
+  Mac's defaults have no such state. An address with a
+  bracketed host that is no IPv6 address, a port beyond 64 bits, or a host that Punycode changes is refused or gives no row
+  of the table of services. And a write waits 15 seconds for its answer, as each write of this client, where the Mac's
+  vault client waits 20: a save that the hub did not confirm goes again under the same reference, and each other step
+  again with Try again.
 
 ## Before the first release
 

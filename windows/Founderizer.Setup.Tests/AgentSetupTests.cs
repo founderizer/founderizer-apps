@@ -656,10 +656,11 @@ public sealed class AgentSetupTests
             }, mark);
         }
 
-        /// <summary>Waits until <paramref name="holds"/> is true of the setup's view, at most a few seconds of real time.</summary>
+        /// <summary>Waits until <paramref name="holds"/> is true of the setup's view: at most <see cref="SetupRig.HangReads"/>
+        /// reads, a bound that only stops a hang.</summary>
         public async Task Until(ManagerSetup setup, Func<ManagerSetupView, bool> holds, string what)
         {
-            for (var i = 0; i < 500; i++)
+            for (var i = 0; i < SetupRig.HangReads; i++)
             {
                 if (holds(setup.View)) return;
                 await Task.Delay(10);

@@ -304,10 +304,22 @@ internal sealed class SetupRig : IAsyncDisposable
         Store.ChooseServers();
     }
 
-    /// <summary>Waits until <paramref name="holds"/> is true of the store's state, at most a few seconds of real time.</summary>
+    /// <summary>**The most reads of a wait in these tests**, 10 ms each (30 s of real time). The bound only stops a hang: a
+    /// step that takes milliseconds on this computer can take seconds on a shared Azure lane, so a bound near the time that a
+    /// step needs makes a test that fails by chance, and such a failure can stop a ship run (a run of these tests that took
+    /// 18 s in place of 9, 26 November 2026, failed a wait of 5 s).</summary>
+    public const int HangReads = 3_000;
+
+    /// <summary>**The longest that a wait of these tests holds** (30 s, <see cref="HangReads"/> reads of 10 ms): a stand-in's
+    /// call that the test lets go, or a wait for an end that has come already. One rule in these tests: no hang guard
+    /// under 30 s, as the bound only stops a hang.</summary>
+    public static readonly TimeSpan HangWait = TimeSpan.FromMilliseconds(HangReads * 10);
+
+    /// <summary>Waits until <paramref name="holds"/> is true of the store's state: at most <see cref="HangReads"/> reads, a
+    /// bound that only stops a hang.</summary>
     public async Task<SetupState> Until(Func<SetupState, bool> holds, string what)
     {
-        for (var i = 0; i < 500; i++)
+        for (var i = 0; i < HangReads; i++)
         {
             if (holds(Store.State)) return Store.State;
             await Task.Delay(10);
