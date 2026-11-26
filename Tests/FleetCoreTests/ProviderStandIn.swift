@@ -60,6 +60,15 @@ final class ProviderStandIn: @unchecked Sendable {
     }
 }
 
+/// **The reads that a call starts after it ended** (`CloudServers.Follow`), each a task that a test waits for with
+/// `done`, so that what they sent is in the stand-in's calls before the test reads them.
+final class Follows: @unchecked Sendable {
+    private let lock = NSLock()
+    private var tasks: [Task<Void, Never>] = []
+    var follow: CloudServers.Follow { { [self] body in lock.withLock { tasks.append(Task { await body() }) } } }
+    func done() async { for task in lock.withLock({ tasks }) { await task.value } }
+}
+
 /// A credential kept in memory instead of this Mac's keychain, which a test never touches.
 final class MemoryShelf: CredentialShelf, @unchecked Sendable {
     private let lock = NSLock()

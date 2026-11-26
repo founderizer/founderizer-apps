@@ -36,9 +36,11 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
         /// could not be reached, or its answer was not understood. A server can be there.
         case notKnown = "not_known"
         /// Nothing: the call was not sent, the provider refused it, or the app deleted what the provider had made
-        /// (also when the build's page ended it while the app waited for the new server to come up). **One case is
-        /// not told apart**: a provider's own fault answer (a 502) is a refusal to this app (`CloudError.refused`),
-        /// and a provider can have made the server all the same.
+        /// (also when the build's page ended it while the app waited for the new server to come up). A provider's own
+        /// fault answer (a 5xx) is `nothing` only when the provider held the server that it made all the same, by the
+        /// call's own mark, and this app deleted it (`CloudServers.madeMeanwhile`); every other end of such an answer,
+        /// and of a call with no answer, is `notKnown` (`CloudError.unsure`, `unreachable`; finding 3 of the checked
+        /// audit of 24 November 2026), and the app reads on for that server for ten minutes (`CloudServers.followUp`).
         case nothing
         /// A step failed after the provider made something, and the app could not delete all of it: the server, its
         /// firewall, or both (`CloudError.leftBehind`).
@@ -57,9 +59,9 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
             guard let error = error as? CloudError else { return .notKnown }
             switch error {
             case .leftBehind: return .leftBehind
-            case .unreachable, .notUnderstood: return .notKnown
-            case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .noRoom, .full, .taken,
-                 .notReady, .notAServerName, .notAPublicKey, .notAnAuthKey: return .nothing
+            case .unreachable, .notUnderstood, .unsure: return .notKnown
+            case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .takenBack, .noRoom,
+                 .full, .taken, .notReady, .notAServerName, .notAPublicKey, .notAnAuthKey: return .nothing
             }
         }
     }

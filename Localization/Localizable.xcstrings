@@ -255,6 +255,26 @@
         }
       }
     },
+    "%@ answered with a fault of its own (%@), but it had made %@ all the same, so this app deleted it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ respondió con un error propio (%2$@), pero había creado %3$@ de todos modos, así que esta app lo borró."
+          }
+        }
+      }
+    },
+    "%@ answered with a fault of its own (%@), so it may have made %@ all the same. While this app is open, it looks for %@ for an hour and deletes it if it comes. If you quit it sooner, delete the %@ %@ at %@ if it is there." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ respondió con un error propio (%2$@), así que puede que haya creado %3$@ de todos modos. Mientras esta app esté abierta, busca %4$@ durante una hora y lo borra si aparece. Si la cierras antes, borra el %5$@ %6$@ en %7$@ si está allí."
+          }
+        }
+      }
+    },
     "%@ answers with another host key than this Mac knows. If the server was rebuilt, run ssh-keygen -R %@ on this Mac, then check again." : {
       "localizations" : {
         "es" : {
@@ -481,6 +501,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ no respondió a SSH en el puerto %2$@. Comprueba que el servidor esté encendido y que tu política de Tailscale, que mantiene otra herramienta, permita a este Mac conectar con él por %3$@."
+          }
+        }
+      }
+    },
+    "%@ did not answer the call that makes %@, but it had made it all the same, so this app deleted it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ no respondió a la petición que crea %2$@, pero lo había creado de todos modos, así que esta app lo borró."
+          }
+        }
+      }
+    },
+    "%@ did not answer the call that makes %@, so it may have made it all the same. While this app is open, it looks for %@ for an hour and deletes it if it comes. If you quit it sooner, delete the %@ %@ at %@ if it is there." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ no respondió a la petición que crea %2$@, así que puede que lo haya creado de todos modos. Mientras esta app esté abierta, busca %3$@ durante una hora y lo borra si aparece. Si la cierras antes, borra el %4$@ %5$@ en %6$@ si está allí."
           }
         }
       }
@@ -29120,6 +29160,16 @@
         }
       }
     },
+    "behind the firewall %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "detrás del cortafuegos %@"
+          }
+        }
+      }
+    },
     "default reasoning" : {
       "localizations" : {
         "es" : {
@@ -30036,6 +30086,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "sin datos de la semana"
+          }
+        }
+      }
+    },
+    "with the tag %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "con la etiqueta %@"
           }
         }
       }

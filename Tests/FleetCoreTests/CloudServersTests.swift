@@ -15,9 +15,9 @@ struct CloudServersTests {
     private static let berlin = TimeZone(identifier: "Europe/Berlin")!
 
     private static func servers(_ provider: CloudProvider, _ stand: ProviderStandIn, shelf: MemoryShelf? = nil,
-                                zone: TimeZone = berlin) -> CloudServers {
+                                zone: TimeZone = berlin, follows: Follows = Follows()) -> CloudServers {
         CloudServers(provider: provider, exchange: stand.exchange, shelf: shelf ?? MemoryShelf(Data(token.utf8)), zone: zone,
-                     pause: { _ in })
+                     pause: { _ in }, follow: follows.follow)
     }
 
     // MARK: - Where a server goes
@@ -347,9 +347,9 @@ struct CloudServersTests {
     }
 
     private static func make(_ provider: CloudProvider, _ stand: ProviderStandIn, use: CloudServerUse = .hub,
-                             zone: TimeZone = berlin) async throws -> CloudServer {
-        try await servers(provider, stand, zone: zone).createServer(name: "hub-1", use: use, publicKey: publicKey,
-                                                                     authKey: authKey)
+                             zone: TimeZone = berlin, follows: Follows = Follows()) async throws -> CloudServer {
+        try await servers(provider, stand, zone: zone, follows: follows).createServer(name: "hub-1", use: use,
+                                                                                       publicKey: publicKey, authKey: authKey)
     }
 
     @Test func aHetznerServerIsMadeNearTheMacBehindAFirewallThatLetsNothingIn() async throws {
@@ -514,7 +514,8 @@ struct CloudServersTests {
         }
         #expect(reason == "Hetzner refused: boom")
         #expect(left.count == 2 && left[0] == "the server hub-1" && left[1].hasPrefix("the firewall founderizer-hub-1-"))
-        #expect(hetzner.calls("DELETE", "/v1/firewalls/77").count == CloudServers.removeReads)
+        // The firewall stays while its server stays: a server left behind is never left open.
+        #expect(hetzner.calls("DELETE", "/v1/firewalls/77").isEmpty)
         #expect(failed?.errorDescription?.contains("delete it at Hetzner") == true)
     }
 
@@ -700,6 +701,7 @@ struct CloudServersTests {
         // A refusal can be the provider's own fault answer, after which the server can be there: the line alone. So
         // are a call whose end is not known, what could not be deleted, and the token's refusal.
         let alone: [any Error] = [CloudError.refused(.digitalOcean, "502 Bad Gateway"), CloudError.unreachable(.hetzner),
+                                  CloudError.unsure(.digitalOcean, says: "502 Bad Gateway", server: "hub-1", mark: "x"),
                                   CloudError.notUnderstood(.vultr), CloudError.leftBehind(.hetzner, reason: "x", left: ["y"]),
                                   CloudError.tokenNotAccepted(.hetzner), URLError(.timedOut)]
         for error in alone { #expect(!CloudStop.readsListAgain(after: error, called: true)) }
@@ -724,6 +726,188 @@ struct CloudServersTests {
         await #expect(throws: CloudError.notReady(.digitalOcean)) { try await Self.make(.digitalOcean, stuck) }
         #expect(stuck.calls("GET", Self.droplet).count == CloudServers.waitReads)
         #expect(stuck.calls.filter { $0.method == "DELETE" }.map(\.path) == [Self.droplet, "/v2/firewalls/\(Self.oceanFirewall)"])
+    }
+
+    /// **A fault answer of the provider's own (a 5xx), or no answer at all, to the call that makes the server**
+    /// (finding 3 of the checked audit of 24 November 2026): until then a 5xx was a refusal, the build's record said
+    /// nothing was left and freed the name, and a retry could install onto the server that the provider had made all
+    /// the same; a time-out took the firewall back. Now the servers that carry the call's own mark are read before
+    /// anything is taken back (its firewall at Hetzner, Vultr and Akamai, its tag at DigitalOcean): the one there is
+    /// deleted with the rest. Any other end takes nothing back, says that the end is not known, and reads on for that
+    /// server in a task of its own, which deletes it when it comes (the reads of the Vault and Door areas).
+    /// An end that is not known, of the server hub-1, with these words of the provider's, and with the call's own mark:
+    /// its firewall's name (the server's, then six letters of chance), which its words name.
+    private static func unsure(_ error: CloudError?, _ provider: CloudProvider, _ says: String?) -> Bool {
+        guard case .unsure(provider, says, "hub-1", let mark)? = error,
+              CloudServers.isFirewallName(mark, ofServer: "hub-1", at: provider) else { return false }
+        return error?.errorDescription?.contains(" \(CloudError.marked(mark, at: provider)) at \(provider.name) ") == true
+    }
+
+    @Test func aCreateWithNoSureAnswerReadsItsOwnMarkBeforeAnythingIsTakenBack() async throws {
+        func deleted(_ stand: ProviderStandIn) -> [String] { stand.calls.filter { $0.method == "DELETE" }.map(\.path) }
+        // DigitalOcean made the droplet and answered 502: the droplet with the call's tag goes.
+        let ocean = Self.digitalOcean()
+        ocean.clear("POST", "/v2/droplets")
+        ocean.answer("POST", "/v2/droplets", 502, "{\"id\":\"bad_gateway\",\"message\":\"502 Bad Gateway\"}")
+        ocean.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\"}]}")
+        let made = await #expect(throws: CloudError.self) { try await Self.make(.digitalOcean, ocean) }
+        #expect(made == .takenBack(.digitalOcean, says: "502 Bad Gateway", server: "hub-1"))
+        #expect(made.map(BuildRecord.AtProvider.after) == .nothing)
+        #expect(deleted(ocean) == [Self.droplet])
+        let tags = try #require(ocean.call("POST", "/v2/droplets")?.object?["tags"] as? [String])
+        #expect(tags.count == 2 && tags[0] == "founderizer-hub")
+        #expect(ocean.call("GET", "/v2/droplets")?.query.contains("tag_name=\(tags[1])") == true)
+        // The account's list shows such a droplet as this app's, so it is no server to choose (the Door area's read of
+        // 318167959, SHOULD 4).
+        let listed = ProviderStandIn()
+        listed.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\",\"tags\":[\"founderizer-hub\","
+                      + "\"\(tags[1])\"]}]}")
+        #expect(try await Self.servers(.digitalOcean, listed).servers().map(\.madeFor) == ["hub"])
+        // A 500 with no droplet of the tag yet: nothing now, the end is not known, and the droplet that comes at the
+        // third read after it goes.
+        let late = Self.digitalOcean(), follows = Follows()
+        late.clear("POST", "/v2/droplets")
+        late.answer("POST", "/v2/droplets", 500, "{\"id\":\"server_error\",\"message\":\"try again\"}")
+        for _ in 0..<3 { late.answer("GET", "/v2/droplets", 200, "{\"droplets\":[]}") }
+        late.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\"}]}")
+        let notYet = await #expect(throws: CloudError.self) { try await Self.make(.digitalOcean, late, follows: follows) }
+        #expect(Self.unsure(notYet, .digitalOcean, "try again"))
+        #expect(notYet?.errorDescription?.contains("with the tag founderizer-hub-1-") == true)
+        #expect(notYet.map(BuildRecord.AtProvider.after) == .notKnown)
+        await follows.done()
+        #expect(late.calls("GET", "/v2/droplets").count == 4 && deleted(late) == [Self.droplet])
+        // Hetzner: the server behind the call's firewall goes first, then the firewall.
+        let hetzner = Self.hetzner()
+        hetzner.clear("POST", "/v1/servers")
+        hetzner.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
+        hetzner.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                       + "\"server\":{\"id\":1001}}]}}")
+        await #expect(throws: CloudError.takenBack(.hetzner, says: "service unavailable", server: "hub-1")) {
+            try await Self.make(.hetzner, hetzner)
+        }
+        #expect(deleted(hetzner) == ["/v1/servers/1001", "/v1/firewalls/77"])
+        // A deletion whose action ends in an error leaves that server, and the call says so.
+        let stays = Self.hetzner()
+        stays.clear("POST", "/v1/servers")
+        stays.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
+        stays.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                     + "\"server\":{\"id\":1001}}]}}")
+        stays.clear("GET", "/v1/actions/601")
+        stays.answer("GET", "/v1/actions/601", 200, "{\"action\":{\"id\":601,\"status\":\"error\","
+                     + "\"error\":{\"code\":\"action_failed\",\"message\":\"not deleted\"}}}")
+        let left = await #expect(throws: CloudError.self) { try await Self.make(.hetzner, stays) }
+        guard case .leftBehind(.hetzner, let reason, let what)? = left else {
+            Issue.record("not left behind: \(String(describing: left))"); return
+        }
+        // Said in the provider's words, not as deleted; and the server keeps its firewall, which is named too.
+        #expect(reason == CloudError.refused(.hetzner, "service unavailable").errorDescription)
+        #expect(what.count == 2 && what.first == "the server hub-1" && what.last?.hasPrefix("the firewall founderizer-hub-1-") == true)
+        // A refusal that is no fault of the provider's is read as before: no read, the firewall goes.
+        let refused = Self.hetzner()
+        refused.clear("POST", "/v1/servers")
+        refused.answer("POST", "/v1/servers", 422, "{\"error\":{\"code\":\"invalid_input\",\"message\":\"invalid\"}}")
+        await #expect(throws: CloudError.refused(.hetzner, "invalid")) { try await Self.make(.hetzner, refused) }
+        #expect(refused.calls("GET", "/v1/firewalls/77").isEmpty && deleted(refused) == ["/v1/firewalls/77"])
+        // The call for the server got no answer (a time-out, a Back press): no server behind the firewall in ten
+        // minutes of reads, and the firewall stays for one that can still come.
+        let lost = Self.hetzner(), waited = Follows()
+        lost.clear("POST", "/v1/servers")
+        lost.answer("POST", "/v1/servers", ProviderStandIn.dropped)
+        lost.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[]}}")
+        let none = await #expect(throws: CloudError.self) { try await Self.make(.hetzner, lost, follows: waited) }
+        #expect(Self.unsure(none, .hetzner, nil))
+        #expect(none?.errorDescription?.contains("behind the firewall founderizer-hub-1-") == true)
+        await waited.done()
+        #expect(lost.calls("GET", "/v1/firewalls/77").count == 1 + CloudServers.followReads && deleted(lost).isEmpty)
+        // Vultr: only the instance of that name behind the call's own group goes, with the group.
+        let vultr = Self.vultr()
+        vultr.clear("POST", "/v2/instances")
+        vultr.answer("POST", "/v2/instances", 504, "{\"error\":\"Gateway Timeout\"}")
+        vultr.answer("GET", "/v2/instances", 200, "{\"instances\":[{\"id\":\"\(Self.vultrInstance)\",\"label\":\"hub-1\","
+                     + "\"firewall_group_id\":\"\(Self.vultrFirewall)\"},{\"id\":\"another\",\"label\":\"hub-1\","
+                     + "\"firewall_group_id\":\"another-group\"}]}")
+        vultr.answer("DELETE", "/v2/firewalls/\(Self.vultrFirewall)", 204, "")
+        await #expect(throws: CloudError.takenBack(.vultr, says: "Gateway Timeout", server: "hub-1")) {
+            try await Self.make(.vultr, vultr)
+        }
+        #expect(deleted(vultr) == ["/v2/instances/\(Self.vultrInstance)", "/v2/firewalls/\(Self.vultrFirewall)"])
+        // Akamai: the Linode among its firewall's devices goes, with the firewall.
+        let akamai = Self.akamai()
+        akamai.clear("POST", "/v4/linode/instances")
+        akamai.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
+        akamai.answer("GET", "/v4/networking/firewalls/\(Self.akamaiFirewall)/devices", 200,
+                      "{\"data\":[{\"entity\":{\"id\":\(Self.linode),\"type\":\"linode\"}}]}")
+        await #expect(throws: CloudError.takenBack(.akamai, says: "Please try again", server: "hub-1")) {
+            try await Self.make(.akamai, akamai)
+        }
+        #expect(deleted(akamai) == ["/v4/linode/instances/\(Self.linode)", "/v4/networking/firewalls/\(Self.akamaiFirewall)"])
+        // Akamai's devices cannot be read: nothing is taken back, its firewall least of all, and none of the reads
+        // after it deletes anything that it could not read.
+        let unread = Self.akamai(), reads = Follows()
+        unread.clear("POST", "/v4/linode/instances")
+        unread.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
+        unread.answer("GET", "/v4/networking/firewalls/\(Self.akamaiFirewall)/devices", 500, "{\"errors\":[{\"reason\":\"x\"}]}")
+        let unsure = await #expect(throws: CloudError.self) { try await Self.make(.akamai, unread, follows: reads) }
+        #expect(Self.unsure(unsure, .akamai, "Please try again"))
+        #expect(unsure.map(BuildRecord.AtProvider.after) == .notKnown)
+        await reads.done()
+        #expect(deleted(unread).isEmpty)
+        // Two servers with the call's mark: not this call's alone, so nothing goes, now or later.
+        let two = Self.hetzner(), later = Follows()
+        two.clear("POST", "/v1/servers")
+        two.answer("POST", "/v1/servers", 502, "{\"error\":{\"code\":\"unavailable\",\"message\":\"bad gateway\"}}")
+        two.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                   + "\"server\":{\"id\":1001}},{\"type\":\"server\",\"server\":{\"id\":1002}}]}}")
+        let twice = await #expect(throws: CloudError.self) { try await Self.make(.hetzner, two, follows: later) }
+        #expect(Self.unsure(twice, .hetzner, "bad gateway"))
+        await later.done()
+        #expect(deleted(two).isEmpty && two.calls("GET", "/v1/firewalls/77").count == 1 + CloudServers.followReads)
+        // A gateway's own page is no words: its status is (the validation of c64b10b03, S5).
+        let page = Self.hetzner()
+        page.clear("POST", "/v1/servers")
+        page.answer("POST", "/v1/servers", 502, "<html><body><h1>502 Bad Gateway</h1></body></html>")
+        page.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[]}}")
+        let paged = await #expect(throws: CloudError.self) { try await Self.make(.hetzner, page) }
+        #expect(Self.unsure(paged, .hetzner, "it answered 502 and said nothing"))
+        // A Linode that does not go keeps its firewall, which Akamai would delete in front of it (its S1).
+        let held = Self.akamai()
+        held.clear("POST", "/v4/linode/instances")
+        held.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
+        held.answer("GET", "/v4/networking/firewalls/\(Self.akamaiFirewall)/devices", 200,
+                    "{\"data\":[{\"entity\":{\"id\":\(Self.linode),\"type\":\"linode\"}}]}")
+        held.clear("DELETE", "/v4/linode/instances/\(Self.linode)")
+        held.answer("DELETE", "/v4/linode/instances/\(Self.linode)", 500, "{\"errors\":[{\"reason\":\"busy\"}]}")
+        let kept = await #expect(throws: CloudError.self) { try await Self.make(.akamai, held) }
+        guard case .leftBehind(.akamai, _, let both)? = kept else { Issue.record("not left behind: \(String(describing: kept))"); return }
+        #expect(both.count == 2 && deleted(held) == ["/v4/linode/instances/\(Self.linode)"])
+        // A server that comes later and does not go at once: the reads go on until it goes (its read of 318167959, MUST 1).
+        let stubborn = Self.akamai(), on = Follows()
+        stubborn.clear("POST", "/v4/linode/instances")
+        stubborn.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
+        stubborn.answer("GET", "/v4/networking/firewalls/\(Self.akamaiFirewall)/devices", 200, "{\"data\":[]}")
+        stubborn.answer("GET", "/v4/networking/firewalls/\(Self.akamaiFirewall)/devices", 200,
+                        "{\"data\":[{\"entity\":{\"id\":\(Self.linode),\"type\":\"linode\"}}]}")
+        stubborn.clear("DELETE", "/v4/linode/instances/\(Self.linode)")
+        stubborn.answer("DELETE", "/v4/linode/instances/\(Self.linode)", 500, "{\"errors\":[{\"reason\":\"busy\"}]}")
+        stubborn.answer("DELETE", "/v4/linode/instances/\(Self.linode)", 200, "{}")
+        let late2 = await #expect(throws: CloudError.self) { try await Self.make(.akamai, stubborn, follows: on) }
+        #expect(Self.unsure(late2, .akamai, "Please try again"))
+        await on.done()
+        #expect(deleted(stubborn) == ["/v4/linode/instances/\(Self.linode)", "/v4/linode/instances/\(Self.linode)",
+                                      "/v4/networking/firewalls/\(Self.akamaiFirewall)"])
+        // Hetzner refuses to delete a server that it is still making: the deletion is asked again (its S6).
+        let locked = Self.hetzner()
+        locked.clear("POST", "/v1/servers")
+        locked.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
+        locked.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                      + "\"server\":{\"id\":1001}}]}}")
+        locked.clear("DELETE", "/v1/servers/1001")
+        locked.answer("DELETE", "/v1/servers/1001", 423, "{\"error\":{\"code\":\"locked\",\"message\":\"server is locked\"}}")
+        locked.answer("DELETE", "/v1/servers/1001", 200, "{\"action\":{\"id\":601,\"command\":\"delete_server\",\"status\":\"running\"}}")
+        await #expect(throws: CloudError.takenBack(.hetzner, says: "service unavailable", server: "hub-1")) {
+            try await Self.make(.hetzner, locked)
+        }
+        #expect(deleted(locked) == ["/v1/servers/1001", "/v1/servers/1001", "/v1/firewalls/77"])
     }
 
     // MARK: - What is not right

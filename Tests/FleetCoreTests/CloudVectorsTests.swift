@@ -177,6 +177,37 @@ struct CloudVectorsTests {
         failed.answer("DELETE", "/v1/firewalls/77", 422, "{\"error\":{\"code\":\"resource_in_use\",\"message\":\"firewall still applied\"}}")
         failed.answer("DELETE", "/v1/firewalls/77", 204, "")
         add("a server that fails is taken back, and the key stays", make(), failed)
+        // A fault answer of Hetzner's own: the servers behind the call's firewall are read first, and the one there goes,
+        // then the firewall.
+        let fault = hetzner()
+        fault.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
+        fault.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                     + "\"server\":{\"id\":1001}}]}}")
+        fault.answer("DELETE", "/v1/servers/1001", 200, "{\"action\":{\"id\":601,\"command\":\"delete_server\",\"status\":\"running\"}}")
+        fault.answer("GET", "/v1/actions/601", 200, "{\"action\":{\"id\":601,\"status\":\"success\"}}")
+        fault.answer("DELETE", "/v1/firewalls/77", 204, "")
+        add("a fault answer to the server: the server behind the call's firewall goes, then the firewall", make(), fault)
+        // No answer at all to the call for the server: none behind its firewall now, nor in the reads after it, so
+        // nothing is taken back and the firewall stays.
+        let lost = hetzner()
+        lost.answer("POST", "/v1/servers", ProviderStandIn.dropped)
+        lost.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[]}}")
+        add("no answer to the server and none behind its firewall: nothing is taken back", make(), lost)
+        // Hetzner refuses to delete a server that it is still making (locked): the deletion is asked again.
+        let locked = hetzner()
+        locked.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
+        locked.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                      + "\"server\":{\"id\":1001}}]}}")
+        locked.answer("DELETE", "/v1/servers/1001", 423, "{\"error\":{\"code\":\"locked\",\"message\":\"server is locked\"}}")
+        locked.answer("DELETE", "/v1/servers/1001", 200, "{\"action\":{\"id\":601,\"command\":\"delete_server\",\"status\":\"running\"}}")
+        locked.answer("GET", "/v1/actions/601", 200, "{\"action\":{\"id\":601,\"status\":\"success\"}}")
+        locked.answer("DELETE", "/v1/firewalls/77", 204, "")
+        add("a server found while Hetzner still makes it: its deletion is asked again while locked", make(), locked)
+        // A gateway's own page of HTML is said by its status, not as its text.
+        let page = hetzner()
+        page.answer("POST", "/v1/servers", 502, "<html><body><h1>502 Bad Gateway</h1></body></html>")
+        page.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[]}}")
+        add("a gateway's page of HTML is said by its status", make(), page)
         let full = hetzner()
         full.answer("POST", "/v1/servers", 422, "{\"error\":{\"code\":\"placement_error\",\"message\":\"no capacity\"}}")
         full.answer("DELETE", "/v1/firewalls/77", 204, "")
@@ -388,6 +419,20 @@ struct CloudVectorsTests {
         stuck.answer("DELETE", droplet, 204, "")
         stuck.answer("DELETE", "/v2/firewalls/\(oceanFirewall)", 204, "")
         add("a droplet that never runs is deleted with its firewall", make(), stuck)
+        // A fault answer of DigitalOcean's own: the droplets with the call's tag are read, and the one there goes.
+        let gateway = digitalOcean()
+        gateway.answer("POST", "/v2/droplets", 502, "{\"id\":\"bad_gateway\",\"message\":\"502 Bad Gateway\"}")
+        gateway.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\"}]}")
+        gateway.answer("DELETE", droplet, 204, "")
+        add("a 502 to the droplet: the droplet with the call's tag goes", make(), gateway)
+        // None with its tag yet: the end is not known, and the droplet that comes at a later read goes.
+        let late = digitalOcean()
+        late.answer("POST", "/v2/droplets", 500, "{\"id\":\"server_error\",\"message\":\"try again\"}")
+        late.answer("GET", "/v2/droplets", 200, "{\"droplets\":[]}")
+        late.answer("GET", "/v2/droplets", 200, "{\"droplets\":[]}")
+        late.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\"}]}")
+        late.answer("DELETE", droplet, 204, "")
+        add("a 500 to the droplet and none with its tag yet: the one that comes later goes", make(), late)
 
         let droplets = "{\"droplets\":["
             + "{\"id\":31,\"name\":\"api\",\"status\":\"active\",\"memory\":2048,\"size_slug\":\"s-1vcpu-2gb\","
@@ -502,6 +547,17 @@ struct CloudVectorsTests {
         refused.answer("POST", "/v2/instances", 400, "{\"error\":\"Server add failed: plan is sold out\",\"status\":400}")
         refused.answer("DELETE", "/v2/firewalls/\(vultrFirewall)", 204, "")
         add("an instance that Vultr refuses: the firewall goes", make(), refused)
+        // A fault answer of Vultr's own: the instance of that name behind the call's own group goes, with the group, and
+        // another of that name behind another group stays.
+        let timeout = vultr()
+        timeout.answer("POST", "/v2/firewalls", 201, "{\"firewall_group\":{\"id\":\"\(vultrFirewall)\"}}")
+        timeout.answer("POST", "/v2/instances", 504, "{\"error\":\"Gateway Timeout\"}")
+        timeout.answer("GET", "/v2/instances", 200, "{\"instances\":[{\"id\":\"\(vultrInstance)\",\"label\":\"hub-1\","
+                       + "\"firewall_group_id\":\"\(vultrFirewall)\"},{\"id\":\"another\",\"label\":\"hub-1\","
+                       + "\"firewall_group_id\":\"another-group\"}]}")
+        timeout.answer("DELETE", "/v2/instances/\(vultrInstance)", 204, "")
+        timeout.answer("DELETE", "/v2/firewalls/\(vultrFirewall)", 204, "")
+        add("a 504 to the instance: the one behind the call's own group goes, with the group", make(), timeout)
         let stuck = vultr()
         stuck.answer("POST", "/v2/firewalls", 201, "{\"firewall_group\":{\"id\":\"\(vultrFirewall)\"}}")
         stuck.answer("POST", "/v2/instances", 202, "{\"instance\":{\"id\":\"\(vultrInstance)\"}}")
@@ -603,6 +659,21 @@ struct CloudVectorsTests {
         made.answer("GET", "/v4/linode/instances/\(linode)", 200, "{\"id\":\(linode),\"status\":\"running\","
                     + "\"ipv4\":[\"192.168.140.2\",\"10.0.0.3\",\"172.20.0.1\",\"198.51.100.88\"]}")
         add("a Linode behind a firewall that drops all that comes in", make(), made)
+        // A fault answer of Akamai's own, and its firewall's devices cannot be read: nothing is taken back, the firewall
+        // least of all, because Akamai deletes a firewall that a Linode uses.
+        let unread = akamai()
+        unread.answer("POST", "/v4/networking/firewalls", 200, "{\"id\":\(akamaiFirewall)}")
+        unread.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
+        unread.answer("GET", "/v4/networking/firewalls/\(akamaiFirewall)/devices", 500, "{\"errors\":[{\"reason\":\"x\"}]}")
+        add("a 500 to the Linode and devices that cannot be read: nothing is taken back", make(), unread)
+        // A Linode that does not go keeps its firewall, which Akamai would delete in front of it.
+        let stays = akamai()
+        stays.answer("POST", "/v4/networking/firewalls", 200, "{\"id\":\(akamaiFirewall)}")
+        stays.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
+        stays.answer("GET", "/v4/networking/firewalls/\(akamaiFirewall)/devices", 200,
+                     "{\"data\":[{\"entity\":{\"id\":\(linode),\"type\":\"linode\"}}]}")
+        stays.answer("DELETE", "/v4/linode/instances/\(linode)", 500, "{\"errors\":[{\"reason\":\"busy\"}]}")
+        add("a Linode found that does not go keeps its firewall", make(), stays)
         let refused = akamai()
         refused.answer("POST", "/v4/networking/firewalls", 200, "{\"id\":\(akamaiFirewall)}")
         refused.answer("POST", "/v4/linode/instances", 400, "{\"errors\":[{\"reason\":\"Region is not available\",\"field\":\"region\"}]}")
@@ -647,8 +718,10 @@ struct CloudVectorsTests {
 
     static func run(_ one: Case) async -> (result: Any, error: [String: Any]?, kept: String?) {
         let shelf = MemoryShelf(one.held.map { Data($0.utf8) })
+        // The reads that a call starts after it ended are in the case's requests: the case waits for them.
+        let follows = Follows()
         let servers = CloudServers(provider: one.provider, exchange: one.stand.stand.exchange, shelf: shelf, zone: zone,
-                                   pause: { _ in })
+                                   pause: { _ in }, follow: follows.follow)
         var result: Any = NSNull()
         var thrown: [String: Any]?
         do {
@@ -708,6 +781,7 @@ struct CloudVectorsTests {
         } catch {
             thrown = ["case": "other"]
         }
+        await follows.done()
         return (result, thrown, shelf.held.map { String(decoding: $0, as: UTF8.self) })
     }
 
@@ -736,6 +810,11 @@ struct CloudVectorsTests {
         case .rateLimited: named["case"] = "rate_limited"
         case .unreachable: named["case"] = "unreachable"
         case .refused(_, let says): named["case"] = "refused"; named["says"] = shown(says)
+        case .takenBack(_, let says, let server):
+            named["case"] = "taken_back"; named["says"] = says.map(shown) as Any? ?? NSNull(); named["server"] = server
+        case .unsure(_, let says, let server, let mark):
+            named["case"] = "unsure"; named["says"] = says.map(shown) as Any? ?? NSNull(); named["server"] = server
+            named["mark"] = shown(mark)
         case .notUnderstood: named["case"] = "not_understood"
         case .noRoom: named["case"] = "no_room"
         case .full: named["case"] = "full"
@@ -762,7 +841,11 @@ struct CloudVectorsTests {
                     "ssh-ed25519 not-base64!", "ssh-ed25519 AAAA"]
         let errors: (CloudProvider) -> [CloudError] = { provider in
             [.notAToken(provider), .noToken(provider), .tokenNotAccepted(provider), .readOnlyToken(provider),
-             .rateLimited(provider), .unreachable(provider), .refused(provider, "an example refusal"), .notUnderstood(provider),
+             .rateLimited(provider), .unreachable(provider), .refused(provider, "an example refusal"),
+             .unsure(provider, says: "an example fault", server: "worker-3", mark: "founderizer-worker-3-k3j9x2"),
+             .unsure(provider, says: nil, server: "worker-3", mark: "fz-worker-3-k3j9x2"),
+             .takenBack(provider, says: "an example fault", server: "worker-3"), .takenBack(provider, says: nil, server: "worker-3"),
+             .notUnderstood(provider),
              .noRoom(provider), .full(provider), .taken(provider), .notReady(provider),
              .leftBehind(provider, reason: "It failed.", left: ["the server hub-1"]),
              .leftBehind(provider, reason: "It failed.", left: ["the server hub-1", "the firewall founderizer-hub-1-abc123"])]
@@ -842,7 +925,7 @@ struct CloudVectorsTests {
             "constants": ["ubuntu": CloudServers.ubuntu, "join_key_life": CloudServers.joinKeyLife,
                           "wait_reads": CloudServers.waitReads, "remove_reads": CloudServers.removeReads,
                           "hub_memory_mb": ServerCheck.hubMemory.megabytes, "agent_memory_mb": ServerCheck.agentMemory.megabytes,
-                          "apt_lock_wait": InstallPlan.aptLockWait],
+                          "apt_lock_wait": InstallPlan.aptLockWait, "follow_reads": CloudServers.followReads],
         ]
     }
 
