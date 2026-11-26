@@ -177,15 +177,17 @@ extension HubClient {
         }
     }
 
-    /// `POST /ui/backups/confirm`: this Mac saved that copy and checked it. Only the copy the hub served last is
-    /// taken, so a copy that was never saved never clears the warning.
+    /// `POST /ui/backups/confirm`: this Mac saved that copy and checked it. Only a copy that the hub served is taken, so
+    /// a copy that was never saved never clears the warning. `keyed` says whether the copy that was kept carries the
+    /// fleet's access key (`OwnerAccess.withKey`): only such a copy answers the hub's warnings (UI-API.md 1.346), and
+    /// `maker` who saved it, this Mac app.
     @discardableResult
     public func confirmCopy(hub: URL, database: String, client: String, requestID: UUID = UUID(),
-                            sha256: String, bytes: Int64) async throws -> FleetHealth.Backup {
+                            sha256: String, bytes: Int64, keyed: Bool, maker: String = "mac") async throws -> FleetHealth.Backup {
         guard FleetHealth.Backup.isDigest(sha256), bytes > 0 else { throw HubError.invalidResponse }
         let data = try await ownerCommand("ui/backups/confirm", hub: hub, database: database, client: client,
                                           requestID: requestID,
-                                          fields: ["sha256": sha256, "bytes": Int(bytes)])
+                                          fields: ["sha256": sha256, "bytes": Int(bytes), "keyed": keyed, "maker": maker])
         let receipt = try JSONDecoder().decode(CopyReceipt.self, from: data)
         guard receipt.ok, receipt.backup.sha256 == sha256, receipt.backup.bytes == bytes else {
             throw HubError.invalidResponse

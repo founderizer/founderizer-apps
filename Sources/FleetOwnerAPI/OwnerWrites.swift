@@ -610,14 +610,23 @@ extension OwnerTools {
             place = try Self.intoFolder(folder, Self.hubFileName(answer, fallback: fallback))
         }
         try Self.keep(coming, as: place, newIn: folder)     // before the confirmation: a refusal confirms nothing
-        let receipt = try hub.command("/ui/backups/confirm", ["sha256": .string(digest), "bytes": .int(Int64(bytes))],
+        // This program never adds the fleet's access key (only the app keeps it), so the hub records a copy with no key
+        // (UI-API.md 1.346), as `owner_mcp.py`'s `take_backup` does.
+        let receipt = try hub.command("/ui/backups/confirm", ["sha256": .string(digest), "bytes": .int(Int64(bytes)),
+                                                              "keyed": .bool(false), "maker": .string("command")],
                                       "the confirmation of the copy", requestID: args["request_id"])
         var result = receipt?.object ?? [:]
         result["path"] = .string(place)
         result["bytes"] = .int(Int64(bytes))
         result["sha256"] = .string(digest)
+        result["keyed"] = .bool(false)
+        result["note"] = .string(Self.copyNoKey)
         return .object(result)
     }
+
+    /// `owner_mcp.py`'s COPY_NO_KEY: what `take_backup`'s result says of the key.
+    static let copyNoKey = "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new "
+        + "Mac: only a copy that the Founderizer app keeps has it."
 
     /// `owner_mcp.py`'s COPY_SLOW: a copy that did not arrive within one tool call's time.
     static let copySlow = "The copy did not arrive in \(Int(Transfer.copyTotal) / 60) minutes, the most that one tool "

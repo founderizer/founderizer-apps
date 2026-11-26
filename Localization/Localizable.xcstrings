@@ -8210,12 +8210,12 @@
         }
       }
     },
-    "Every copy goes here. Founderizer keeps the newest %lld and deletes the older ones." : {
+    "Every copy goes here. Founderizer keeps the newest %lld and deletes the older ones, but not the last one with the key to your servers." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Todas las copias van aquí. Founderizer guarda las %lld más recientes y elimina las más antiguas."
+            "value" : "Todas las copias van aquí. Founderizer guarda las %lld más recientes y elimina las más antiguas, salvo la última que tiene la clave de tus servidores."
           }
         }
       }
@@ -17910,6 +17910,16 @@
         }
       }
     },
+    "Saved to %@, with your records but not the key that opens your servers from a new Mac. Press %@ again. If this comes back, report a problem." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardada en %@, con tus registros pero sin la clave que abre tus servidores desde un Mac nuevo. Pulsa %@ de nuevo. Si vuelve a pasar, notifica un problema."
+          }
+        }
+      }
+    },
     "Saved to Downloads" : {
       "localizations" : {
         "es" : {
@@ -20760,6 +20770,16 @@
         }
       }
     },
+    "The access key did not go into the copy:" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clave de acceso no entró en la copia:"
+          }
+        }
+      }
+    },
     "The access was not given (%@). Start Connect again." : {
       "localizations" : {
         "es" : {
@@ -22716,6 +22736,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "La última actualización de Founderizer en este servidor no terminó."
+          }
+        }
+      }
+    },
+    "The last copy holds your records but not the key that opens your servers from a new Mac. Founderizer tries again with the next copy. If this stays, report a problem." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La última copia guarda tus registros, pero no la clave que abre tus servidores desde un Mac nuevo. Founderizer lo volverá a intentar con la próxima copia. Si esto sigue así, notifica un problema."
           }
         }
       }

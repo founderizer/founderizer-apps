@@ -299,7 +299,8 @@ final class ReportProblemModel {
         trouble = found
         facts = ProblemReport.facts(app: ProblemReport.appVersion(), system: ProblemReport.systemVersion(),
                                     fleet: fleet, hub: ProblemReport.hubRelease(releases, revision: revision),
-                                    screen: screen, trouble: macError ?? hubRows.lastError)
+                                    // last, why the access key did not go into a copy (the backup key contract, S3)
+                                    screen: screen, trouble: macError ?? hubRows.lastError ?? store.copies.keyCause)
             + (hubRows.hubErrors.map { [ProblemReport.Fact(name: "Hub errors", value: $0)] } ?? [])
             + [ProblemReport.Fact(name: "Checks", value: found.reportLine)]
     }

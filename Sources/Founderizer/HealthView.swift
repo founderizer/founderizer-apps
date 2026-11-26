@@ -178,9 +178,11 @@ struct HealthView: View {
         let schedule = store.copies.schedule
         let gone = !schedule.hasFolder
         return FormMarkRow(title: String(l10n: "A copy of your fleet"), state: .bad,
-                           words: gone ? String(l10n: "No folder") : String(l10n: "Not kept"),
+                           // A copy kept with no key was kept: its mark says what it lacks (the validator's S2).
+                           words: gone ? String(l10n: "No folder")
+                               : schedule.keyMissing ? String(l10n: "No key") : String(l10n: "Not kept"),
                            detail: gone ? String(l10n: "Founderizer has no folder to put a copy in, so it keeps none.")
-                               : schedule.failure,
+                               : schedule.failureWords,
                            act: gone ? (String(l10n: "Choose a folder"), { store.copies.choose() })
                                : (String(l10n: "Open Backup"), { store.destination = .settings(.backup) }),
                            identifier: "health-copy")
@@ -481,8 +483,11 @@ final class FleetCopyModel {
     private(set) var failure: String?
     /// When `failure` came: a copy kept after it ends its warning (`CopySchedule.warning`).
     private(set) var failedAt: Date?
-    /// The system's own words for a copy the hub did not record: behind the line, never in it.
+    /// The system's own words for a copy the hub did not record, or for a key that did not go in: behind the line, never
+    /// in it.
     private(set) var cause: String?
+    /// Where the owner wants the copy: his Mac's save panel (`panel`), or a test's own place.
+    @ObservationIgnored var place: @MainActor (FleetCopy) -> URL? = FleetCopyModel.panel
 
     func save(store: FleetStore) async {
         guard !busy, let database = store.state?.db else { return }
@@ -496,16 +501,28 @@ final class FleetCopyModel {
         do {
             let copy = try await client.takeCopy(hub: hub, database: database)
             taken = copy
-            guard let kept = Self.place(copy) else {
+            guard let kept = place(copy) else {
                 said = String(l10n: "Nothing was saved, so your fleet still has no confirmed copy.")
                 return
             }
-            // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`).
-            try FileManager.default.moveItem(at: OwnerAccess.withKey(copy.file) ?? copy.file, to: kept)
+            // The copy that he keeps carries the fleet's access key, his way back after a lost Mac (`OwnerAccess`). A copy
+            // whose key did not go in is kept all the same, and the hub hears that it has none (the audit's finding 1).
+            let withKey = OwnerAccess.keyed(copy.file, key: store.copies.accessKey)
+            try FileManager.default.moveItem(at: withKey.file ?? copy.file, to: kept)
+            store.copies.saved(kept.lastPathComponent, keyed: withKey.file != nil, cause: withKey.cause,
+                               hub: hub.absoluteString)
             do {
                 try await client.confirmCopy(hub: hub, database: database, client: store.installation,
-                                             sha256: copy.sha256, bytes: copy.bytes)
-                said = String(l10n: "Saved to \(kept.path) and confirmed with your hub.")
+                                             sha256: copy.sha256, bytes: copy.bytes, keyed: withKey.file != nil)
+                if withKey.file != nil {
+                    said = String(l10n: "Saved to \(kept.path) and confirmed with your hub.")
+                } else {
+                    // A cause that stays gives the same copy again, so the line also sends him to Report a problem,
+                    // which carries the cause (`FleetCopyKeeper.keyCause`); the button's help says it too.
+                    failure = String(l10n: "Saved to \(kept.path), with your records but not the key that opens your servers from a new Mac. Press \(FleetHealth.Warning.Act.saveCopy.label) again. If this comes back, report a problem.")
+                    failedAt = Date()
+                    cause = withKey.cause
+                }
             } catch {
                 // The copy is on his disk, which is the half that matters; only the hub's record is missing.
                 failure = String(l10n: "Saved to \(kept.path), but your hub did not record it. Press \(FleetHealth.Warning.Act.saveCopy.label) again.")
@@ -520,7 +537,7 @@ final class FleetCopyModel {
 
     /// Where the owner wants it. His Mac's own save panel, and nowhere this app chose for him — and the panel is
     /// where the question "what does it save?" is answered in full, because that is where he is looking.
-    private static func place(_ copy: FleetCopy) -> URL? {
+    static func panel(_ copy: FleetCopy) -> URL? {
         let panel = NSSavePanel()
         panel.title = String(l10n: "Save a copy of your fleet")
         panel.prompt = String(l10n: "Save")

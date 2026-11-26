@@ -111,6 +111,68 @@ struct CopyFolderTests {
                          "founderizer-0f1e2d3c4b5a6978-9.zip"])
     }
 
+    /// **The newest copy with the access key never goes** (G7 H4 and the audit's finding 1, 24 November 2026): seven
+    /// newer copies with no key (a key's step that failed, or the phone's copies) pushed the last copy that gives a new
+    /// Mac the servers back out of his folder. It stays beyond the seven, and so does each newer copy whose key nobody
+    /// can say now (an iCloud placeholder of another device's copy), which may be the one with the key; nothing else
+    /// does, and the Where row counts what stays. The copies are read newest first, up to the first with the key, and
+    /// only when one would go. The bugs that it catches: a prune by name and date alone; a prune that keeps every copy
+    /// with no key; one that reads each copy at each copy kept.
+    @Test func theNewestCopyWithTheKeyNeverGoes() {
+        let found = copies(10)
+        func name(_ n: Int) -> String { "founderizer-0f1e2d3c4b5a6978-\(n).zip" }
+        var asked: [String] = []
+        let lastHasIt = { (file: String) -> Bool? in asked.append(file); return file == name(9) }
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: lastHasIt) == [name(7), name(8)])
+        #expect(asked == (0...9).map(name))
+        let weighed = found.map { (name: $0.name, at: $0.at, bytes: Int64(10)) }
+        #expect(CopyFolder.kept(weighed, keeping: 7, fleet: fleet, keyed: lastHasIt)?.count == 8)
+        let unread = { (file: String) -> Bool? in file == name(8) ? nil : file == name(9) }
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: unread) == [name(7)])
+        let unreadOlder = { (file: String) -> Bool? in file == name(9) ? nil : file == name(8) }
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: unreadOlder) == [name(7), name(9)])
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: { _ in false }) == [name(7), name(8), name(9)])
+        asked = []
+        let newestHasIt = { (file: String) -> Bool? in asked.append(file); return true }
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: newestHasIt) == [name(7), name(8), name(9)])
+        #expect(CopyFolder.toDelete(copies(7), keeping: 7, fleet: fleet, keyed: newestHasIt).isEmpty)
+        #expect(asked == [name(0)])
+    }
+
+    /// **A copy with the key that this Mac kept stays, also when iCloud took its bytes back** (the validators' M1 of 25
+    /// November 2026, case A). Newest first: seven copies with no key that this Mac kept; then copy 7, a placeholder that
+    /// no record knows (another device's); copy 8, local with no key; and copy 9, K, the only copy with the key, whose
+    /// bytes iCloud took back. Nothing can read K's key now, but this Mac kept K and its record says so
+    /// (`CopyKept.keyed(fleet:)`), by the name that the placeholder stands for: K stays, and copy 7, newer and
+    /// unreadable, stays too; only copy 8 goes. The bug that it catches: the record is not asked, and only the newest
+    /// unreadable copy is spared, so the only copy with the key goes.
+    @Test func aCopyWithTheKeyThatThisMacKeptStaysWhenICloudTookItsBytes() {
+        func name(_ n: Int) -> String { "founderizer-0f1e2d3c4b5a6978-\(n).zip" }
+        let placeholder = { (n: Int) in ".\(name(n)).icloud" }
+        let found: [(name: String, at: Date)] = (0..<10).map { n in
+            (n == 7 || n == 9 ? placeholder(n) : name(n), now.addingTimeInterval(Double(-n) * 3600))
+        }
+        var known = Dictionary(uniqueKeysWithValues: (0..<7).map { (name($0), false) })
+        known[name(8)] = false
+        known[name(9)] = true
+        let keyed = CopyFolder.keyed(known: known) { file in CopyFolder.real(file) == file ? false : nil }
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: keyed) == [name(8)])
+    }
+
+    /// **A copy that nobody can read among the newest seven takes no place of an older one** (the validators' M1, case
+    /// B, and the second reader's case). Newest first: copy 6 is another device's placeholder with no key, inside the
+    /// seven; copies 7 and 8 are placeholders beyond the seven, 8 with the only key; 9 is local with no key. No record
+    /// knows 7 or 8, so both stay (either may hold the key), and only 9 goes. The bug that it catches: the one
+    /// unreadable copy that the rule spared is used up inside the seven, and the copy with the key beyond them goes.
+    @Test func anUnreadableCopyAmongTheNewestSevenTakesNoPlaceOfAnOlderOne() {
+        func name(_ n: Int) -> String { "founderizer-0f1e2d3c4b5a6978-\(n).zip" }
+        let found: [(name: String, at: Date)] = (0..<10).map { n in
+            ([6, 7, 8].contains(n) ? ".\(name(n)).icloud" : name(n), now.addingTimeInterval(Double(-n) * 3600))
+        }
+        let keyed = CopyFolder.keyed(known: [:]) { file in CopyFolder.real(file) == file ? false : nil }
+        #expect(CopyFolder.toDelete(found, keeping: 7, fleet: fleet, keyed: keyed) == [name(9)])
+    }
+
     @Test func nothingGoesUntilThereAreMoreThanHeIsTold() {
         for count in 0...7 { #expect(CopyFolder.toDelete(copies(count), keeping: 7, fleet: fleet).isEmpty) }
     }
@@ -203,6 +265,26 @@ struct CopyDefaultTests {
 struct CopyKeptTests {
     private let one = "http://100.64.0.1:8787", two = "http://100.64.0.2:8787"
     private let mib: Int64 = 1 << 20
+
+    /// **The record of the copies that this Mac kept, with or without the key, is the fleet's** (the validators' M1 of 25
+    /// November 2026): a restored or rebuilt hub keeps its fleet id and its copies stay in the folder, so a new generation
+    /// (`forget(hub:)`) keeps it; another fleet's names are not this fleet's; and a prune keeps only the names that are
+    /// still in the folder, so it does not grow. The bugs that it catches: a record by hub address, which a restore
+    /// forgets; a record that grows with each copy for ever.
+    @Test func theRecordOfKeyedCopiesIsTheFleetsAndKeepsOnlyWhatIsThere() {
+        let defaults = TestDefaults("copy-kept-keyed")
+        let fleet = "0f1e2d3c4b5a6978", other = "0123456789abcdef"
+        CopyKept.keep(copy: "founderizer-\(fleet)-1.zip", keyed: true, fleet: fleet, in: defaults)
+        CopyKept.keep(copy: "founderizer-\(fleet)-2.zip", keyed: false, fleet: fleet, in: defaults)
+        CopyKept.keep(copy: "founderizer-\(other)-1.zip", keyed: true, fleet: other, in: defaults)
+        CopyKept.keep(at: Date(), hub: one, database: "first", in: defaults)
+        CopyKept.forget(hub: one, in: defaults)
+        #expect(CopyKept.keyed(fleet: fleet, in: defaults)
+                == ["founderizer-\(fleet)-1.zip": true, "founderizer-\(fleet)-2.zip": false])
+        CopyKept.keepOnly(["founderizer-\(fleet)-1.zip", "founderizer-\(other)-1.zip"], fleet: fleet, in: defaults)
+        #expect(CopyKept.keyed(fleet: fleet, in: defaults) == ["founderizer-\(fleet)-1.zip": true])
+        #expect(CopyKept.keyed(fleet: other, in: defaults) == ["founderizer-\(other)-1.zip": true])
+    }
 
     /// The bug that it catches: a second hub's first copy waits a day for the first hub's last one, and its page says the
     /// first hub's copies; or the copy of one hub takes the place of the other's.

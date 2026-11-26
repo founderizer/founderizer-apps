@@ -179,8 +179,28 @@ public enum OwnerAccess {
     /// Puts the fleet's access key into this copy, when the copy has none. The fleet is the one that the copy's own
     /// manifest names. `key` gives the key of a fleet; the app's is the keychain's, which makes one when it keeps none.
     public static func add(to copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept) throws {
-        let fleet = try ChosenCopy.read(copy).manifest.fleet_id
+        let fleet = try self.fleet(of: copy)
         try ZipArchive.add(Data(try key(fleet).privateFile.utf8), named: member, to: copy)
+    }
+
+    /// **The fleet of a copy, and nothing else of its manifest** (the audit's finding 1, 24 November 2026): the key's
+    /// step read the manifest with the restore's own check (`ChosenCopy.read`: format 1, a fixed list of members, its
+    /// limits), and the hub releases before the app. So a hub that added a member to the manifest would have made every
+    /// older Mac keep its copies with no key and no word, until the last copy with the key went. Only `fleet_id` is read
+    /// here, from `fleet.json` (at most 1 MiB), and it must be a fleet's id: 1 to 64 lowercase hex characters.
+    static func fleet(of copy: URL) throws -> String {
+        struct Fleet: Decodable { let fleet_id: String }
+        let fleet: String
+        do {
+            let manifest = try ZipArchive.member(FleetManifest.manifestMember, in: copy, limit: 1 << 20)
+            fleet = try JSONDecoder().decode(Fleet.self, from: manifest).fleet_id
+        } catch {
+            throw RestoreError.notACopy
+        }
+        guard !fleet.isEmpty, fleet.count <= 64, fleet.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else {
+            throw RestoreError.notACopy
+        }
+        return fleet
     }
 
     /// **The copy with the fleet's access key in it**, as a second file beside the copy, in the folder that this app made
@@ -188,17 +208,34 @@ public enum OwnerAccess {
     /// and never into the copy itself, so a write that stops halfway costs no copy, and the second file counts only
     /// once it reads as a copy that carries the key.
     public static func withKey(_ copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept) -> URL? {
+        keyed(copy, key: key).file
+    }
+
+    /// `withKey`, with why the key did not go in when it did not (the validator's S3 of 25 November 2026): the system's
+    /// or this app's own words of the failure, which Report a problem carries (`FleetCopyKeeper.keyCause`). A failure of
+    /// the keychain names its item and status, and one of the copy names what the zip did not allow; neither holds the
+    /// key.
+    public static func keyed(_ copy: URL, key: (String) throws -> OwnerAccessKey = OwnerAccessKeychain.kept)
+        -> (file: URL?, cause: String?) {
         let made = copy.deletingLastPathComponent().appendingPathComponent("with-key-" + copy.lastPathComponent)
         try? FileManager.default.removeItem(at: made)
         do {
             try FileManager.default.copyItem(at: copy, to: made)
             try add(to: made, key: key)
             guard self.key(in: made) != nil else { throw ZipArchive.Trouble.damaged }
-            return made
+            return (made, nil)
         } catch {
             try? FileManager.default.removeItem(at: made)
-            return nil
+            let said = (error as? LocalizedError)?.errorDescription
+            return (nil, String(l10n: "The access key did not go into the copy:") + " "
+                         + (said ?? "\(type(of: error)).\(error)"))
         }
+    }
+
+    /// Whether this file is a zip that lists the access key's member: read from its central directory, so no key is
+    /// read into memory (retention's question, `FleetCopyKeeper.carriesKey`). `withKey` checked the key when it wrote it.
+    public static func carries(_ copy: URL) -> Bool {
+        (try? ZipArchive.names(in: copy))?.contains(member) == true
     }
 
     /// What `install`'s program prints once the key's line is in the file.
@@ -221,11 +258,12 @@ public enum OwnerAccess {
         output.split(whereSeparator: \.isNewline).contains { $0.trimmingCharacters(in: .whitespaces) == inPlace }
     }
 
-    /// The access key that a copy carries, with the id of its fleet; nil when it carries none, or none that is a key.
+    /// The access key that a copy carries, with the id of its fleet; nil when it carries none, or none that is a key. Of
+    /// the manifest only the fleet is read (`fleet(of:)`), as the key's step reads it.
     public static func key(in copy: URL) -> (fleet: String, key: OwnerAccessKey)? {
-        guard let chosen = try? ChosenCopy.read(copy),
+        guard let fleet = try? fleet(of: copy),
               let found = try? ZipArchive.member(member, in: copy, limit: 4096),
               let text = String(data: found, encoding: .utf8), let key = OwnerAccessKey(privateFile: text) else { return nil }
-        return (chosen.manifest.fleet_id, key)
+        return (fleet, key)
     }
 }

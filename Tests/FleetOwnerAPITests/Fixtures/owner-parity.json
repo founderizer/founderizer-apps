@@ -30005,6 +30005,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-fleet-20261114T000000Z.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -30054,6 +30056,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -30128,6 +30132,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/one.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -30177,6 +30183,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "6f1c2a3b-0000-4000-8000-00000000000a",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -30442,6 +30450,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -30648,6 +30658,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -30697,6 +30709,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -30859,6 +30873,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -30908,6 +30924,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -31070,6 +31088,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -31119,6 +31139,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -31281,6 +31303,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -31330,6 +31354,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -31492,6 +31518,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -31541,6 +31569,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -31703,6 +31733,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -31752,6 +31784,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -31914,6 +31948,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -31963,6 +31999,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -32125,6 +32163,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/safe.txt",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -32174,6 +32214,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -32336,6 +32378,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -32385,6 +32429,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -32547,6 +32593,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/kept name.txt",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -32596,6 +32644,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -32758,6 +32808,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -32807,6 +32859,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -32969,6 +33023,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -33018,6 +33074,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -33180,6 +33238,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -33229,6 +33289,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -33391,6 +33453,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/a\\b.txt",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -33440,6 +33504,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -33602,6 +33668,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -33651,6 +33719,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -33813,6 +33883,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/founderizer-1763078400.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -33862,6 +33934,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -34024,6 +34098,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/plain-name.txt",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -34073,6 +34149,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
@@ -34585,6 +34663,8 @@
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },
      "bytes": 32,
+     "keyed": false,
+     "note": "This copy has no access key of the fleet, so it cannot reach the fleet's servers from a new Mac: only a copy that the Founderizer app keeps has it.",
      "ok": true,
      "path": "<tmp>/copies/one.zip",
      "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
@@ -34634,6 +34714,8 @@
      "body": {
       "bytes": 32,
       "db": "g1",
+      "keyed": false,
+      "maker": "command",
       "request_id": "<rid1>",
       "sha256": "eb78452722131c56841595c4681f40f34e6d225bd24c53489580f8581e9eac3d"
      },

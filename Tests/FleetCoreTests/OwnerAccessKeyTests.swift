@@ -257,6 +257,37 @@ struct OwnerAccessKeyTests {
                                                     OwnerAccess.member])
     }
 
+    /// **A copy of a later hub takes the key** (the audit's finding 1, 24 November 2026). The key's step read the copy's
+    /// manifest with the restore's own check (format 1, a fixed list of members), and the hub releases before the app:
+    /// a hub that added a member to the manifest would have made every older Mac keep its copies with no key and no word,
+    /// until the last copy with the key went. Here the manifest is of format 2 and lists a member that this app does not
+    /// know: the restore's check refuses it, and the key goes in all the same, for the fleet that it names. The bug that
+    /// it catches: the key's step reads more of the manifest than the fleet.
+    @Test func aCopyOfALaterHubTakesTheKey() throws {
+        let folder = try folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let copy = folder.appendingPathComponent("founderizer-0f1e2d3c4b5a6978-20261125T120000Z.zip")
+        let made = try run("/usr/bin/python3", ["-c", """
+            import json, sys, zipfile
+            source, path = zipfile.ZipFile(sys.argv[1]), sys.argv[2]
+            manifest = json.loads(source.read("fleet.json"))
+            manifest["format"] = 2
+            manifest["files"]["later/member.json"] = {"bytes": 2, "sha256": "0" * 64}
+            with zipfile.ZipFile(path, "w") as z:
+                for name in source.namelist():
+                    z.writestr(name, json.dumps(manifest) if name == "fleet.json" else source.read(name))
+                z.writestr("later/member.json", "{}")
+            """, try fixtureCopy(in: folder).path, copy.path])
+        #expect(made.status == 0, "python said: \(made.output)")
+        #expect(throws: RestoreError.otherFormat(2)) { try ChosenCopy.read(copy) }
+        let key = try #require(OwnerAccessKey(seed: Self.seed))
+        var asked: [String] = []
+        let kept = try #require(OwnerAccess.withKey(copy) { fleet in asked.append(fleet); return key })
+        #expect(asked == ["0f1e2d3c4b5a6978"])
+        #expect(OwnerAccess.key(in: kept)?.key == key)
+        #expect(OwnerAccess.key(in: kept)?.fleet == "0f1e2d3c4b5a6978")
+    }
+
     @Test func aKeyThatCannotBeHadCostsNoCopy() throws {
         struct NoKeychain: Error {}
         let folder = try folder()

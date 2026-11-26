@@ -36,19 +36,37 @@ public struct CopySchedule: Equatable, Sendable {
     /// retry every few seconds would ask his hub for one all day.
     public var failedAt: Date?
     public var failure: String?
+    /// The failure is a copy that was kept with no access key (`noKey`): a flag, never a compare of the stored words,
+    /// which stay in the language of the day that they were written.
+    public var keyMissing: Bool
 
     public init(on: Bool = false, every: CopyEvery = .day, hasFolder: Bool = false, keptAt: Date? = nil,
-                failedAt: Date? = nil, failure: String? = nil) {
+                failedAt: Date? = nil, failure: String? = nil, keyMissing: Bool = false) {
         self.on = on
         self.every = every
         self.hasFolder = hasFolder
         self.keptAt = keptAt
         self.failedAt = failedAt
         self.failure = failure
+        self.keyMissing = keyMissing
     }
 
     /// How long a failure holds the next attempt back.
     public static let afterAFailure: TimeInterval = 60 * 60
+
+    /// **The failure of an automatic copy that was kept with no access key** (the audit's finding 1, 24 November 2026):
+    /// its records are a real copy, so it is kept and confirmed, and the next is due on the day as always; but a new Mac
+    /// cannot reach the fleet's servers with it, so the row says so until a copy with the key is kept
+    /// (`OwnerAccess.withKey`). The hub's "Your copy is old" counts only copies with the key. A cause that stays (a
+    /// keychain that refuses the item, a copy too large for the key's step) gives the same copy again, so the line also
+    /// sends him to Report a problem, which carries the cause (`FleetCopyKeeper.keyCause`).
+    public static var noKey: String {
+        String(l10n: "The last copy holds your records but not the key that opens your servers from a new Mac. Founderizer tries again with the next copy. If this stays, report a problem.")
+    }
+
+    /// The words of the automatic copy's failure: the key's own words in the language of today when the copy was kept
+    /// with no key, else the stored ones.
+    public var failureWords: String? { keyMissing ? Self.noKey : failure }
 
     /// The warning of the row Keep a copy automatically (Settings › Backup): the failure of the copy that he took
     /// himself with Save copy (`saved`, at `savedAt`) while no copy was kept after it, else the failure of the automatic
@@ -57,7 +75,7 @@ public struct CopySchedule: Equatable, Sendable {
     /// press (the second reader's N9, 22 November 2026).
     public func warning(saved: String?, savedAt: Date?) -> String? {
         if let saved, !(keptAt.flatMap { kept in savedAt.map { kept > $0 } } ?? false) { return saved }
-        return on ? failure : nil
+        return on ? failureWords : nil
     }
 
     /// What this Mac should do about a copy now.
@@ -226,16 +244,57 @@ public enum CopyKept {
 
     // A failure is a hub's own: another hub's page never says it (the validator's and the second reader's points of
     // 23 November 2026).
-    public static func failure(hub: String, in defaults: UserDefaults) -> (words: String, at: Date)? {
+    /// The failure of one hub's automatic copy: its words, its time, whether it is a copy kept with no access key, and
+    /// then why the key did not go in (for a report; never the key).
+    public static func failure(hub: String, in defaults: UserDefaults)
+        -> (words: String, at: Date, keyMissing: Bool, cause: String?)? {
         guard let all = defaults.dictionary(forKey: failuresKey), let one = all[key(hub)] as? [String: Any],
               let words = one["words"] as? String, let at = one["at"] as? Double else { return nil }
-        return (words, Date(timeIntervalSince1970: at))
+        return (words, Date(timeIntervalSince1970: at), one["kind"] as? String == noKeyKind, one["cause"] as? String)
     }
 
-    public static func keep(failure words: String, at: Date, hub: String, in defaults: UserDefaults) {
+    static let noKeyKind = "no_key"
+
+    public static func keep(failure words: String, at: Date, hub: String, keyMissing: Bool = false, cause: String? = nil,
+                            in defaults: UserDefaults) {
         var all = defaults.dictionary(forKey: failuresKey) ?? [:]
-        all[key(hub)] = ["words": words, "at": at.timeIntervalSince1970] as [String: Any]
+        var one: [String: Any] = ["words": words, "at": at.timeIntervalSince1970]
+        if keyMissing { one["kind"] = noKeyKind }
+        if let cause { one["cause"] = cause }
+        all[key(hub)] = one
         defaults.set(all, forKey: failuresKey)
+    }
+
+    // **Which copies this Mac kept with the fleet's access key, and which without** (the validators' M1 of 25 November
+    // 2026): retention must know it without a read, also when iCloud has taken the copy's bytes back. The record is the
+    // fleet's (its id is in the copy's name; "" for the app's fallback names), never a hub address's, and a new
+    // generation does not forget it: a restored or rebuilt hub keeps its fleet id, and its copies stay in the folder. A
+    // prune keeps only the names that are still in the folder (`keepOnly`), so it holds about as many names as the folder
+    // holds copies of this Mac's.
+    static let keyedKey = "copyKeyedByFleet"
+
+    /// {name: carries the key} of the copies of this fleet that this Mac kept.
+    public static func keyed(fleet: String?, in defaults: UserDefaults) -> [String: Bool] {
+        (defaults.dictionary(forKey: keyedKey)?[fleet ?? ""] as? [String: Bool]) ?? [:]
+    }
+
+    /// One copy that this Mac kept under this name, with or without the key.
+    public static func keep(copy name: String, keyed: Bool, fleet: String?, in defaults: UserDefaults) {
+        var all = defaults.dictionary(forKey: keyedKey) ?? [:]
+        var names = (all[fleet ?? ""] as? [String: Bool]) ?? [:]
+        names[name] = keyed
+        all[fleet ?? ""] = names
+        defaults.set(all, forKey: keyedKey)
+    }
+
+    /// Only the names of this fleet that are still in the folder (`names`, as `CopyFolder.real` gives them) stay.
+    public static func keepOnly(_ names: Set<String>, fleet: String?, in defaults: UserDefaults) {
+        var all = defaults.dictionary(forKey: keyedKey) ?? [:]
+        guard let known = all[fleet ?? ""] as? [String: Bool] else { return }
+        let staying = known.filter { names.contains($0.key) }
+        guard staying.count != known.count else { return }
+        all[fleet ?? ""] = staying
+        defaults.set(all, forKey: keyedKey)
     }
 
     public static func clearFailure(hub: String, in defaults: UserDefaults) {
@@ -281,10 +340,48 @@ public enum CopyFolder {
     /// and as one of the seven it pushed a day of his own fleet out. `fleet` is nil when the kept copy's name gave
     /// none (the app's own fallback name, when a hub sent no name): then the fallback names are the group, so that
     /// those copies have a limit too.
-    public static func toDelete(_ files: [(name: String, at: Date)], keeping: Int, fleet: String?) -> [String] {
+    ///
+    /// **The newest copy known to carry the fleet's access key never goes** (G7 H4 and the audit's finding 1, 24 November
+    /// 2026; the validators' M1 of 25 November 2026). Only a copy with the key gives a new Mac the fleet's servers back,
+    /// and seven copies with no key (a key's step that failed, or the phone's copies, which never carry it) pushed the
+    /// last one out. `keyed` says of a name whether its copy carries the key: true, false, or nil when nobody can say now
+    /// (`keyed(known:read:)`: this Mac's own record of the copies that it kept, else a read of the copy's bytes, which are
+    /// not on this Mac for an iCloud placeholder of another device's copy). Beyond the newest `keeping`, the newest copy
+    /// known to carry the key stays, and so does each copy newer than it whose key nobody can say now, because any of
+    /// them may be the one that carries it. In the ordinary state the newest copy carries the key and nothing more stays.
+    /// `keyed` is asked newest first, and only when a copy would go, up to the first copy known to carry the key. Its
+    /// default, false, reads every copy as one with no key.
+    public static func toDelete(_ files: [(name: String, at: Date)], keeping: Int, fleet: String?,
+                                keyed: (String) -> Bool? = { _ in false }) -> [String] {
         guard keeping >= 0, let group = group(fleet) else { return [] }
-        let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }
-        return ours.dropFirst(keeping).map(\.name)
+        let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }.map(\.name)
+        let spared = spared(ours, keeping: keeping, keyed: keyed)
+        return ours.dropFirst(keeping).filter { !spared.contains($0) }
+    }
+
+    /// The names beyond the newest `keeping` of `ours` (newest first) that stay for the key (`toDelete`).
+    private static func spared(_ ours: [String], keeping: Int, keyed: (String) -> Bool?) -> Set<String> {
+        guard ours.count > keeping else { return [] }
+        var spared: Set<String> = []
+        for (place, name) in ours.enumerated() {
+            switch keyed(name) {
+            case true?:
+                if place >= keeping { spared.insert(name) }
+                return spared
+            case nil:
+                if place >= keeping { spared.insert(name) }
+            case false?:
+                continue
+            }
+        }
+        return spared
+    }
+
+    /// **Whether a copy carries the key, as retention reads it**: this Mac's record of the copies that it kept
+    /// (`CopyKept.keyed(fleet:)`, by the name that the copy has, a placeholder's by the name that it stands for), with no
+    /// read; else `read`, which gives nil when the copy's bytes are not on this Mac.
+    public static func keyed(known: [String: Bool], read: @escaping (String) -> Bool?) -> (String) -> Bool? {
+        { name in known[real(name)] ?? read(name) }
     }
 
     /// Which names `toDelete` and `kept` count for a copy kept with this fleet's name: that fleet's copies, or the app's
@@ -349,13 +446,18 @@ public enum CopyFolder {
     }
 
     /// **The copies that stay after a prune, weighed**, from the same list and the same group that `toDelete` reads, with
-    /// each file's size: the newest `keeping` copies of `fleet`, a placeholder of iCloud counted as the copy it stands
-    /// for. A copy of another fleet in the folder is none of them. nil when no copy stays.
-    public static func kept(_ files: [(name: String, at: Date, bytes: Int64)], keeping: Int, fleet: String?) -> Kept? {
+    /// each file's size: the newest `keeping` copies of `fleet`, and those that stay for the key (`keyed`, as `toDelete`
+    /// reads it), a placeholder of iCloud counted as the copy it stands for. A copy of another fleet in the folder is
+    /// none of them. nil when no copy stays.
+    public static func kept(_ files: [(name: String, at: Date, bytes: Int64)], keeping: Int, fleet: String?,
+                            keyed: (String) -> Bool? = { _ in false }) -> Kept? {
         guard let group = group(fleet) else { return nil }
-        let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }.prefix(max(keeping, 0))
-        guard let newest = ours.first else { return nil }
-        return Kept(newest: newest.bytes, count: ours.count, total: ours.reduce(0) { $0 + $1.bytes })
+        let keeping = max(keeping, 0)
+        let ours = files.filter { group(real($0.name)) }.sorted { $0.at > $1.at }
+        let spared = spared(ours.map(\.name), keeping: keeping, keyed: keyed)
+        let staying = ours.enumerated().filter { $0.offset < keeping || spared.contains($0.element.name) }.map(\.element)
+        guard let newest = staying.first else { return nil }
+        return Kept(newest: newest.bytes, count: staying.count, total: staying.reduce(0) { $0 + $1.bytes })
     }
 
     /// **The Where row of Settings › Backup: the folder, and the size of the copies in it** (the owner, 22 November 2026:
