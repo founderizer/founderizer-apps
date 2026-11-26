@@ -79,4 +79,8 @@ internal static partial class Patterns
 
     [GeneratedRegex(@"\Ahttps://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]{1,400}\z", RegexOptions.CultureInvariant)]
     internal static partial Regex NotesAddress();
+
+    /// <summary>An agent's name as the owner types it (<see cref="AgentBook"/>): ASCII letters, digits and "-".</summary>
+    [GeneratedRegex(@"\A[A-Za-z][A-Za-z0-9-]*\z", RegexOptions.CultureInvariant)]
+    internal static partial Regex Spelling();
 }

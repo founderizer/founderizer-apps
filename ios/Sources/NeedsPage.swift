@@ -28,8 +28,9 @@ struct NeedsPage: View {
     /// he pressed with a check that draws itself in the place of the ring that turned while it went (F10, B1; his "Yes,
     /// as drawn" of 22 November 2026), and one soft tap. **Words that he wrote have no check** (the owner, 14 November
     /// 2026: "when I typed a custom answer instead of choosign one of the suggested ones, do not show the CHECK
-    /// animation because it is misleading"): their ring goes. The store forgets the answer at the reading that folds
-    /// the item; the page keeps it until the fold ends. **Before that, his answer waits 5 seconds on its folded card,
+    /// animation because it is misleading"): their ring goes. The store keeps an answer that the hub took until a new
+    /// request for its item or a change of generation, and one on its way while a send carries it; the page keeps its
+    /// copy until the fold ends. **Before that, his answer waits 5 seconds on its folded card,
     /// with Undo** (`MobileStore.hold`; his "Yes, Undo there too" of 21 November 2026): the item stays.
     @State private var given: [Int: MobileStore.GivenAnswer] = [:]
     @State private var givenAt: [Int: ContinuousClock.Instant] = [:]
@@ -48,18 +49,21 @@ struct NeedsPage: View {
                     LoadingLine(String(l10n: "Reading the hub…"))
                         .padding(.horizontal, 16).padding(.vertical, 12)
                 }
+                let going = goingAnswers
+                let openIDs = Set(store.openNeeds.map(\.id))
                 ForEach(Self.drawn(shown ?? store.openNeeds, open: store.openNeeds)) { need in
                     let folds = folding.contains(need.id)
+                    let answer = Self.kept(given[need.id], of: need.id, going: going, open: openIDs)
                     // **An answered item folds away** (items 76 and 95): its height goes to nothing over 250 ms, easing
                     // out, its content clipped to what is left of it and fading, and the items under it rise into the
                     // room it frees, never over it.
                     Fold(shown: folds ? 0 : 1) {
-                        NeedCard(store: store, need: need, header: true, given: given[need.id])
+                        NeedCard(store: store, need: need, header: true, given: answer)
                             .padding(.bottom, NeedCard.gap)
                     }
                     .clipped()
                     .opacity(folds ? 0 : 1)
-                    .allowsHitTesting(!folds && given[need.id] == nil)
+                    .allowsHitTesting(!folds && answer == nil)
                     .accessibilityHidden(folds)
                     .accessibilityIdentifier("need-\(need.id)")
                 }
@@ -172,6 +176,17 @@ struct NeedsPage: View {
                 }
             }
         }
+    }
+
+    /// **His answer that an item draws: the store's while it has one, the page's copy while the item folds away, and
+    /// none on an item that the hub still lists as open with no answer of his on its way or taken** (`given`). The copy
+    /// follows the store's answers by an onChange call, and SwiftUI drops a call of one onChange that comes after others
+    /// in one frame (`NeedCard.followAnswer`): a copy whose removal was dropped would hold the open card folded with its
+    /// check, and it would take no touch.
+    nonisolated static func kept(_ copy: MobileStore.GivenAnswer?, of id: Int, going: [Int: MobileStore.GivenAnswer],
+                                 open: Set<Int>) -> MobileStore.GivenAnswer? {
+        if let answer = going[id] { return answer }
+        return open.contains(id) ? nil : copy
     }
 
     /// His answers that the store has on their way or taken, for the items on the page.
@@ -328,6 +343,10 @@ struct NeedCard: View {
     /// His answer folds the card from the form that it had when the fold began, at rest or open (`folding`), until it
     /// opens again; nil while no answer folds it.
     @State private var foldFrom: Bool?
+    /// One more at the end of each fold of his answer: the fold looks at the state once more then (`followAnswer`).
+    /// **Not tested**: the frame test (`aCardOpensAgainAfterChangesInOneFrame`) changes whether an answer stands only
+    /// once in its frame, so it passes without this look; the case is two such changes in one frame.
+    @State private var foldChecks = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Who asks and when, over the card: on Needs you.
     var header = false
@@ -410,16 +429,32 @@ struct NeedCard: View {
         .onChange(of: header && need.isOpen && goes == nil && standsOpen, initial: true) { _, now in
             if now { expanded = true }
         }
-        // his answer comes or goes: the open card folds, or opens again, over the same 250 ms
-        .onChange(of: goes) { before, now in
-            if let now { going = now }
-            guard need.isOpen, (before == nil) != (now == nil) else { return }
-            // the fold starts from the form that the card had; the way back opens to the form that it has now (after
-            // "Not sent" or a refusal it stands open), so nothing changes in the frame where the way back ends
-            foldFrom = rests
-            withAnimation(.easeOut(duration: 0.25)) { answerShare = now == nil ? 0 : 1 } completion: {
-                if goingNow == nil { foldFrom = nil }
-            }
+        // the line of his answer, which the fold keeps while the card opens again
+        .onChange(of: goes) { _, now in if let now { going = now } }
+        // his answer comes or goes: the open card folds, or opens again, over the same 250 ms (`followAnswer`)
+        .onChange(of: goes != nil) { _, _ in followAnswer() }
+        .onChange(of: foldChecks) { _, _ in followAnswer() }
+    }
+
+    /// **The open card's fold follows whether an answer of his stands now** (`goingNow`), over 250 ms: the fold starts
+    /// from the form that the card had; the way back opens to the form that it has now (after "Not sent" or a refusal
+    /// it stands open), so nothing changes in the frame where the way back ends. **SwiftUI drops a call of one onChange
+    /// that comes after others in one frame** (its log: "action tried to update multiple times per frame"): under load
+    /// the end of his wait, the send, the receipt and the reading after it changed his answer in one frame, and the card
+    /// that the hub still lists as open stood folded with no options (the ship runs of 24 and 25 November 2026). So the
+    /// fold follows a change of whether an answer stands, which changed once there; it reads the state as it is now; and
+    /// the end of each fold looks once more (`foldChecks`), so a change whose call was dropped is followed. **Each look
+    /// takes the line of the answer that stands now** (`going`): a dropped call of the line's own onChange left the
+    /// line of an earlier answer, which the 250 ms fade showed as the card opened. A drop in the frame that opens the
+    /// card can still show it, since no answer stands then.
+    private func followAnswer() {
+        if let now = goingNow, now != going { going = now }
+        let answered = goingNow != nil
+        guard need.isOpen, (answerShare > 0) != answered else { return }
+        foldFrom = rests
+        withAnimation(.easeOut(duration: 0.25)) { answerShare = answered ? 1 : 0 } completion: {
+            if goingNow == nil { foldFrom = nil }
+            foldChecks += 1
         }
     }
 

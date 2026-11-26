@@ -96,8 +96,9 @@ public struct ChatWaiting: Equatable, Sendable {
 
     /// **Whether the turn that took his message is over** (hub 1.110, `agents[].turn_ended_after`): the hub says when
     /// he sent the newest message that the agent had read at its last turn end, so a message sent at or before that
-    /// time was read in a turn that has ended. nil, from an agent whose turns the hub does not know (every agent but
-    /// the manager) or from an older hub, says nothing, and the wait stays as it was.
+    /// time was read in a turn that has ended. nil, from an agent whose turns the hub does not know (one with no owner
+    /// chat, or whose helper does not report its turns yet, helper feature `chat_turns`; on a hub before UI-API 1.309,
+    /// every agent but the manager) or from an older hub, says nothing, and the wait stays as it was.
     public static func turnIsOver(sent: Double, turnEndedAfter: Double?) -> Bool {
         guard let turnEndedAfter else { return false }
         return sent <= turnEndedAfter
@@ -137,9 +138,10 @@ extension FleetAgent {
     /// (`pushed`) is no reply. **A message that the agent read in a turn that has ended is not worked on** (hub 1.110,
     /// `turn_ended_after`): the manager did what three messages of 10 November 2026 asked in turns of 20 seconds and,
     /// as they told it, wrote no reply, and "Thinking" turned under them for more than an hour. The hub knows the
-    /// turns of the manager's session only; for every other agent this is a fact about the message, not a claim that
-    /// the agent works. **For the manager, his answer to one of its Needs-you items is such a message too**, on a hub
-    /// that counts it (`chatWaits(on:in:)`, hub 1.283).
+    /// turns of each agent's owner chat whose helper reports them (UI-API 1.309, helper feature `chat_turns`; before
+    /// it, of the manager's session only); for an agent whose turns it does not know, this is a fact about the message,
+    /// not a claim that the agent works. **For the manager, his answer to one of its Needs-you items is such a message
+    /// too**, on a hub that counts it (`chatWaits(on:in:)`, hub 1.283).
     /// `answers`: false leaves his answers out for every agent (`ChatWaiting.asksWaitOn`).
     public func pendingChat(in state: HubState, answers: Bool = true) -> PendingChat? {
         let waited = state.messages.filter {

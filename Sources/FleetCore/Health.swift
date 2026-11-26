@@ -103,6 +103,10 @@ extension FleetHealth.Warning {
         /// version (the owner, 4 November 2026: "why woudl we want to update one but not the others? there should be
         /// a button to update the fleet").
         case updateFleet([String])
+        /// Settings › Help, where the switch Help improve Founderizer stands: the second button of the hub's own faults
+        /// while that switch is off (the owner, 25 November 2026, of "The hub hit an error" while error reports are off:
+        /// "show a button there to be able to go to the telemetry setting t send it automatically").
+        case openReports
     }
 
     public var act: Act { act(manager: nil) }
@@ -158,7 +162,8 @@ extension FleetHealth.Warning {
         case "circles_stuck": return String(l10n: "Some work runs in circles")
         case "reports_undecided": return String(l10n: "Reports wait for a decision")
         // The hub's own faults (UI-API.md 1.167; the owner's yes of 14 November 2026 to the picture E1). Its button is
-        // the default's, Report a problem, which carries them.
+        // the default's, Report a problem, which carries them; while the switch that sends them is off, its block has
+        // a second one to that switch (`blocks`, `reportsOff`).
         case "hub_fault": return String(l10n: "The hub hit an error")
         default: return kind.replacingOccurrences(of: "_", with: " ").capitalized
         }
@@ -224,8 +229,9 @@ extension FleetHealth {
     }
 
     /// The warnings in blocks, in the order the hub gave the first of each; `manager` names the buttons that open the
-    /// manager's chat (`Warning.act(manager:)`).
-    public static func blocks(_ warnings: [Warning], manager: String? = nil) -> [Block] {
+    /// manager's chat (`Warning.act(manager:)`). `reportsOff`: the hub's reading of the switch Help improve Founderizer
+    /// says off, so the block of the hub's own faults gets the button to that switch beside Report a problem.
+    public static func blocks(_ warnings: [Warning], manager: String? = nil, reportsOff: Bool = false) -> [Block] {
         var order: [String] = [], groups: [String: [Warning]] = [:]
         for (index, warning) in warnings.enumerated() {
             let key = warning.agent.flatMap { _ in isUpdate(warning.kind) ? "update" : nil }
@@ -240,9 +246,10 @@ extension FleetHealth {
             let silent = group.contains { $0.kind == "helper_offline" }
             let said = group.filter { !(silent && $0.kind == "machine_stale") }
             // Each button once, and no two with one label.
-            let acts = group.map { $0.act(manager: manager) }.reduce(into: [Warning.Act]()) { acts, act in
+            var acts = group.map { $0.act(manager: manager) }.reduce(into: [Warning.Act]()) { acts, act in
                 if !acts.contains(where: { $0.label == act.label }) { acts.append(act) }
             }
+            if reportsOff, group.contains(where: { $0.kind == "hub_fault" }) { acts.append(.openReports) }
             // A hub from before 16 November 2026 gives manager_down "Start it again." and the fix "Start the session
             // of Manager again.", and no app has that start now: its row's button is Report a problem.
             let details = said.map { $0.kind == "manager_down" ? ManagerSession.bandWords($0.detail) : $0.detail }
@@ -293,6 +300,8 @@ extension FleetHealth.Warning.Act {
         case .openMachine(let name): String(l10n: "Open \(name.capitalized)")
         case .tellUs: String(l10n: "Report a problem")
         case .updateFleet: String(l10n: "Update fleet")
+        // The switch's own name (Settings › Help).
+        case .openReports: String(l10n: "Help improve Founderizer")
         }
     }
 

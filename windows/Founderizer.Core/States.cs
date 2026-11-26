@@ -67,8 +67,9 @@ public sealed record AgentStatus(AgentState State, string? AttentionWords = null
         if (agent.Active == false) return new(AgentState.Setup);
         if (!agent.HelperIsRecent(snapshot.Time)) return new(AgentState.Offline);
         if (agent.Limit is not null) return new(AgentState.Limited);
+        var names = AgentBook.Of(snapshot);             // one book for all its tasks
         var marks = snapshot.Tasks.Where(t => t.Owner == agent.Name)
-            .Select(t => TaskMark.Of(t, snapshot.Holds, AgentBook.Of(snapshot), limited: false)).ToList();
+            .Select(t => TaskMark.Of(t, snapshot.Holds, names, limited: false)).ToList();
         if (thinking || marks.Any(m => m.InWork)) return new(AgentState.Working);
         if (marks.FirstOrDefault(m => m.Attention) is { } waiting) return new(AgentState.Attention, waiting.Words);
         return new(AgentState.Online);

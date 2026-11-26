@@ -120,8 +120,9 @@ struct MobileAgent: Decodable, Identifiable, Sendable {
     /// names the provider alone.
     let machine: String?
     /// When he sent the newest chat message that it had read at its last turn end (hub 1.110), as on the Mac
-    /// (`FleetAgent.turn_ended_after`): its turn that took a message sent up to then is over. nil for every agent but
-    /// the manager, before the first such message, and from an older hub.
+    /// (`FleetAgent.turn_ended_after`): its turn that took a message sent up to then is over. nil for an agent with no
+    /// owner chat, or whose helper does not report its turns yet (helper feature `chat_turns`; on a hub before UI-API
+    /// 1.309, every agent but the manager), before the first such message, and from an older hub.
     let turn_ended_after: Double?
     /// **Since when its chat waits for an answer** (owner feature `chat_waits`, hub 1.142): when he sent his newest chat
     /// message to it, while no report of the agent names that message and the agent has written none without a name
@@ -201,7 +202,8 @@ struct MobilePreview: Decodable, Sendable {
 struct MobileTaskHead: Decodable, Identifiable, Sendable {
     let id: Int
     let title: String
-    let state: String
+    /// Its state; a null is "", as on the Mac (`FleetTask.state`), so one row with no state does not fail the reading.
+    @TextOrNull var state: String
     let owner: String
     let requester: String
     let goal: String?

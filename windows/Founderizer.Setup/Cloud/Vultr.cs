@@ -16,8 +16,9 @@ namespace Founderizer.Setup.Cloud;
 /// first, which lets nothing in while it has no rule; then the instance on the offer the owner said yes to (or the first
 /// offer); then the instance, read until it is active with its public address. Vultr's plans were read where they are
 /// free a moment before, so a refusal is said in Vultr's own words, and no other offer is tried.</summary>
-internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause)
-    : CloudServers(CloudProvider.Vultr, handler, box, zone, pause)
+internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause,
+                    Action<Func<Task>>? follow)
+    : CloudServers(CloudProvider.Vultr, handler, box, zone, pause, follow)
 {
     /// <summary>Vultr lets a user's key read the account only with the billing permission, so the write that follows,
     /// which any key that may add things can make, is the whole check.</summary>
@@ -37,7 +38,7 @@ internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan
         made.Firewall = firewallId;
         try
         {
-            var answer = await call.SendAsync("POST", "instances", null, new JsonObject
+            var answer = await CreateCallAsync("instances", new JsonObject
             {
                 ["activation_email"] = false,
                 ["backups"] = "disabled",
@@ -51,8 +52,9 @@ internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan
                 ["sshkey_id"] = new JsonArray(keyId),
                 ["tags"] = new JsonArray(Tag(order.Use)),
                 ["user_data"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(userData)),
-            }, cancel).ConfigureAwait(false);
-            if (Json.String(Json.At(Json.At(answer, "instance"), "id")) is not { Length: > 0 } id)
+            }, made, call, cancel).ConfigureAwait(false);
+            if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
+            if (Json.String(Json.At(Json.At(answer.Object, "instance"), "id")) is not { Length: > 0 } id)
                 throw new CloudException(CloudFailure.NotUnderstood, Provider);
             made.Server = id;
             var ipv4 = await WaitAsync(id, call, cancel).ConfigureAwait(false);
@@ -62,6 +64,15 @@ internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan
         {
             throw await UndoAsync(made, error, call).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>The instances of the call's name behind its firewall group.</summary>
+    private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
+    {
+        if (made.Firewall is not { } firewall) return [];
+        var read = await call.SendAsync("GET", "instances", [("label", made.Name), ("per_page", "500")], null, cancel).ConfigureAwait(false);
+        return (AllObjects(Json.At(read, "instances")) ?? []).Where(i => Json.String(Json.At(i, "firewall_group_id")) == firewall)
+            .Select(i => Json.String(Json.At(i, "id"))).OfType<string>().ToList();
     }
 
     /// <summary>The id of this app's SSH key at Vultr: found by the key itself (Vultr lists its keys without a

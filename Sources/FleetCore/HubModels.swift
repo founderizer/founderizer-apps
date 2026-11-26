@@ -178,9 +178,10 @@ public struct FleetAgent: Decodable, Identifiable, Sendable {
     public let placed: Bool
     /// **When he sent the newest chat message that it had read at its last turn end** (hub 1.110): its turn that took
     /// a message sent up to then is over, so the chat stops saying that it works on that message
-    /// (`ChatWaiting.turnIsOver`). nil for an agent whose turns the hub does not know (every agent but the manager),
-    /// before the first such message, while a usage limit holds it (a turn that the limit cut ends too, and the chat
-    /// then says "Usage limit" as before), and from an older hub.
+    /// (`ChatWaiting.turnIsOver`). nil for an agent whose turns the hub does not know (one with no owner chat, or whose
+    /// helper does not report its turns yet, helper feature `chat_turns`; on a hub before UI-API 1.309, every agent but
+    /// the manager), before the first such message, while a usage limit holds it (a turn that the limit cut ends too,
+    /// and the chat then says "Usage limit" as before), and from an older hub.
     public let turn_ended_after: Double?
     /// **His newest chat message to it is late** (hub 1.144): no session read it in two minutes, or a session read
     /// it and wrote no reply for as long. Its server can answer all that time, so nothing else says that the agent
@@ -275,7 +276,10 @@ public struct FleetTask: Decodable, Identifiable, Sendable {
     @TextOrNull public var goal: String
     public let owner: String
     public let requester: String
-    public let state: String
+    /// Its state as the hub writes it. **A null is "" (a state that this app does not know)**: no writer of the hub makes
+    /// one, but a block of older tasks can hold such a row (owner API 1.330), and the one strict field made the whole
+    /// reading fail, as `goal` did.
+    @TextOrNull public var state: String
     public let created: Double
     public let attempt: Int
     public let restarts: Int

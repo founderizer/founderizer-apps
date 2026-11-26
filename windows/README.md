@@ -437,13 +437,15 @@ renamed or removed without a word to the screens lane.
     from `PcNetwork.Packages`: the window downloads it, checks `InstallerOrganisation` and `InstallerCountry` with the
     revocation check (section 8.2), and starts Windows' installer. `FleetReach.Keeps`, `Hidden`, `Unseen` and
     `Unreached` say why a server that joined is out of this PC's sight.
-  - **A provider**: `CloudServers.For(provider, handler, box, zone, pause)` gives an `ICloud`: `CheckTokenAsync`
+  - **A provider**: `CloudServers.For(provider, handler, box, zone, pause, follow)` gives an `ICloud`: `CheckTokenAsync`
     (the token checked by a read and by writes that make nothing, then kept in the box under
     `provider.BoxName()`), `OffersAsync(use, except)` (each type that fits, at its cheapest and nearest place; a
     `CloudOffer` with its words `Size`, `Choice`, `Row`, `Brief`, `Pick`, `Amount`), `ServersAsync()` (a
     `CloudExisting` with its `Summary`), `MakeAsync(new CloudOrder(name, use, publicKey, authKey, offer))` (behind a
     firewall that lets nothing in, on the network from its first boot; a step that fails takes back what it made, or
-    says what is left), `DeleteAsync(id, accepted)`, `FirewallsAsync`, `DeleteFirewallsAsync`, `DeleteFirewallAsync`,
+    says what is left; after a 5xx or no answer to the call for the server, the servers with the call's own mark are
+    read first: the one there is taken back (`TakenBack`), else nothing is (`Unsure`), and the reads go on for the mark
+    for an hour in a task that `follow` starts), `DeleteAsync(id, accepted)`, `FirewallsAsync`, `DeleteFirewallsAsync`, `DeleteFirewallAsync`,
     `DeleteKeyAsync`. A stop is a `CloudException`; `CloudStop` says whether it asks for the token again or reads the
     list again. `CloudJoin.WaitAsync` waits for a new server on the network for its key's hour. The page's link for a
     token is `provider.TokenPage()`. The rules of the list that need the install's systems, the hub's list or this
@@ -836,8 +838,9 @@ build's own code (rule 12). Namespace `Founderizer.Setup.RootJobs`. These names 
   `../vectors/server-browser-ports.json`, by the Mac's `ServerBrowserVectorsTests.swift`, holds them), **the
   owner's access line** (`AccessLine(records).RoundAsync(hub, servers, publicLine, connections, tailscaleStatus, run, now)`,
   every `AccessLine.Every` = 900 s; the key's public line comes from the caller, as plain text, and a text that is not one
-  line "`ssh-ed25519 <base64> founderizer-owner-access`" with a base64 that reads (`AccessLine.IsAccessLine`) throws before
-  any program is made or any server is reached: the Mac makes the line from the key. Each mark is the fingerprint of the
+  line "`ssh-ed25519 <base64> founderizer-owner-access`" with the canonical base64 of an Ed25519 key's 51 bytes
+  (`AccessLine.IsAccessLine`) throws before any program is made or any server is reached: the Mac makes the line from the
+  key. Each mark is the fingerprint of the
   line's own key (`AccessLine.Fingerprint`, the Mac's `OwnerAccessKey.fingerprint`), never one given beside it, which could
   be another key's), **the connection**
   (`ServerRecords(machines, own, keptOf).RootConnectionAsync(server, tailscaleStatus)`, the one way of a root job to a

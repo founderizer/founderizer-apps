@@ -18,8 +18,9 @@ namespace Founderizer.Setup.Cloud;
 /// and the first boot's script; then the Linode, read until it runs. The Linode takes Akamai's older kind of network
 /// interface by name (<c>legacy_config</c>), because a firewall that a Linode is made with stands in front of that kind
 /// only. Akamai keeps no SSH key of its own: a Linode takes the key's text when it is made.</summary>
-internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause)
-    : CloudServers(CloudProvider.Akamai, handler, box, zone, pause)
+internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause,
+                     Action<Func<Task>>? follow)
+    : CloudServers(CloudProvider.Akamai, handler, box, zone, pause, follow)
 {
     /// <summary>Any token of the account may read its own profile, whatever products it was given.</summary>
     private protected override Task ReadCheckAsync(CloudCall call, CancellationToken cancel) =>
@@ -43,7 +44,7 @@ internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpa
         made.Firewall = firewallId.ToString(CultureInfo.InvariantCulture);
         try
         {
-            var linode = await call.SendAsync("POST", "linode/instances", null, new JsonObject
+            var answer = await CreateCallAsync("linode/instances", new JsonObject
             {
                 ["authorized_keys"] = new JsonArray(key.Line),
                 ["backups_enabled"] = false,
@@ -58,8 +59,9 @@ internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpa
                 ["root_pass"] = RootPassword(),
                 ["tags"] = new JsonArray(Tag(order.Use)),
                 ["type"] = chosen.Type,
-            }, cancel).ConfigureAwait(false);
-            if (Json.Long(Json.At(linode, "id")) is not { } id) throw new CloudException(CloudFailure.NotUnderstood, Provider);
+            }, made, call, cancel).ConfigureAwait(false);
+            if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
+            if (Json.Long(Json.At(answer.Object, "id")) is not { } id) throw new CloudException(CloudFailure.NotUnderstood, Provider);
             made.Server = id.ToString(CultureInfo.InvariantCulture);
             var ipv4 = await WaitAsync(id, call, cancel).ConfigureAwait(false);
             return new CloudServer(Provider, made.Server, made.Name, ipv4, chosen.Type, chosen.Location, chosen.Price, chosen.Currency,
@@ -69,6 +71,16 @@ internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpa
         {
             throw await UndoAsync(made, error, call).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>The Linodes among the call's firewall's devices.</summary>
+    private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
+    {
+        if (made.Firewall is not { } firewall) return [];
+        var read = await call.SendAsync("GET", Provider.FirewallPath(firewall) + "/devices", [("page_size", "500")], null, cancel).ConfigureAwait(false);
+        return (AllObjects(Json.At(read, "data")) ?? []).Select(d => Json.At(d, "entity") as JsonObject)
+            .Where(e => e is not null && Json.String(Json.At(e, "type")) == "linode").Select(e => Json.Long(Json.At(e, "id"))).OfType<long>()
+            .Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
     }
 
     /// <summary>The root password that Akamai asks of every Linode made from an image: 32 characters of chance, sent once

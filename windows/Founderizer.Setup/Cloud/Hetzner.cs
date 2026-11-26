@@ -14,8 +14,9 @@ namespace Founderizer.Setup.Cloud;
 /// <summary>Hetzner Cloud (the Mac's <c>CloudServers</c>, its Hetzner parts): a token sees its own project only; the
 /// firewall first, so the server has it from its first boot; the server on the first offer Hetzner takes; its creation
 /// read until it ends.</summary>
-internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause)
-    : CloudServers(CloudProvider.Hetzner, handler, box, zone, pause)
+internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause,
+                      Action<Func<Task>>? follow)
+    : CloudServers(CloudProvider.Hetzner, handler, box, zone, pause, follow)
 {
     private protected override Task ReadCheckAsync(CloudCall call, CancellationToken cancel) =>
         call.SendAsync("GET", "locations", null, null, cancel);
@@ -38,7 +39,7 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
         {
             foreach (var offer in offers)
             {
-                var answer = await call.AnswerAsync("POST", "servers", null, new JsonObject
+                var answer = await CreateCallAsync("servers", new JsonObject
                 {
                     ["firewalls"] = new JsonArray(new JsonObject { ["firewall"] = firewallId }),
                     ["image"] = Provider.Image(),
@@ -54,10 +55,10 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
                     ["ssh_keys"] = new JsonArray(keyId),
                     ["start_after_create"] = true,
                     ["user_data"] = userData,
-                }, cancel).ConfigureAwait(false);
+                }, made, call, cancel).ConfigureAwait(false);
                 // None free there after all, since the offers were read: the next offer.
                 if (answer.Code is "resource_unavailable" or "placement_error") continue;
-                if (!answer.Ok) throw call.Failure(answer);
+                if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
                 if (Json.At(answer.Object, "server") is not JsonObject server || Json.Long(Json.At(server, "id")) is not { } id)
                     throw new CloudException(CloudFailure.NotUnderstood, Provider);
                 made.Server = id.ToString(CultureInfo.InvariantCulture);
@@ -74,6 +75,15 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
         {
             throw await UndoAsync(made, error, call).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>The servers that the call's firewall stands in front of.</summary>
+    private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
+    {
+        if (made.Firewall is not { } firewall) return [];
+        var read = await call.SendAsync("GET", Provider.FirewallPath(firewall), null, null, cancel).ConfigureAwait(false);
+        return (AllObjects(Json.At(Json.At(read, "firewall"), "applied_to")) ?? [])
+            .Select(u => Json.Long(Json.At(Json.At(u, "server"), "id"))).OfType<long>().Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
     }
 
     /// <summary>The id of this app's SSH key at Hetzner: found by its fingerprint, or registered once.</summary>

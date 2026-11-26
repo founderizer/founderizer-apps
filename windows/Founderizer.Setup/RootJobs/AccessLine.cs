@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -78,7 +79,8 @@ public sealed partial class AccessLine(RootRecords records)
     public static bool IsInPlace(string output) => RootJob.Lines(output).Any(l => l == InPlaceWord);
 
     /// <summary>Whether this text is one line of the fleet's access key, as the Mac's <c>publicLine</c> makes it: its kind,
-    /// its base64, its comment, one space between them, and nothing else; the base64 one that reads.</summary>
+    /// its base64, its comment, one space between them, and nothing else; the base64 the canonical encoding of an Ed25519
+    /// public key (<see cref="Blob"/>).</summary>
     public static bool IsAccessLine(string? text) => text is not null && AccessLineShape().IsMatch(text) && Blob(text) is not null;
 
     /// <summary>**The fingerprint of the key of this line**, as <c>ssh-keygen -l</c> prints it and the Mac's
@@ -92,14 +94,24 @@ public sealed partial class AccessLine(RootRecords records)
         return "SHA256:" + Convert.ToBase64String(SHA256.HashData(Blob(publicLine)!)).Replace("=", "", StringComparison.Ordinal);
     }
 
-    /// <summary>The key's public half: the bytes of the line's base64, or null where they do not read.</summary>
+    /// <summary>**The key's public half**: the bytes of the line's base64, or null unless they are the 51 bytes of an Ed25519
+    /// public key (its type "<c>ssh-ed25519</c>" and its 32 bytes, each with its length before it, the Mac's
+    /// <c>publicBlob</c>) and the base64 is their canonical encoding. .NET reads a base64 whose last bits are not zero
+    /// ("AB==" as "AA=="), which OpenSSH refuses, so two texts would give one fingerprint and one of them no line in
+    /// root's file; and a blob of any other shape is no key that this fleet makes.</summary>
     private static byte[]? Blob(string line)
     {
         var parts = line.Split(' ');
         if (parts.Length != 3) return null;
-        try { return Convert.FromBase64String(parts[1]); }
+        byte[] blob;
+        try { blob = Convert.FromBase64String(parts[1]); }
         catch (FormatException) { return null; }
+        if (Convert.ToBase64String(blob) != parts[1] || blob.Length != KeyHead.Length + 32 || !blob.AsSpan().StartsWith(KeyHead)) return null;
+        return blob;
     }
+
+    /// <summary>The first 19 bytes of an Ed25519 public key in SSH's form: the type's length, the type, the key's length.</summary>
+    private static readonly byte[] KeyHead = [0, 0, 0, 11, .. Encoding.ASCII.GetBytes("ssh-ed25519"), 0, 0, 0, 32];
 
     [GeneratedRegex(@"\Assh-ed25519 [A-Za-z0-9+/]+=* founderizer-owner-access\z", RegexOptions.CultureInvariant)]
     private static partial Regex AccessLineShape();

@@ -25,6 +25,34 @@ import Testing
             "since": Self.now - 60, "until": Self.now + 3600, "reset_known": known]))
     }
 
+    /// **The thread's limit line stands while the rule's hold keeps the task, and nothing comes first**
+    /// (`HubState.limitHolding`): the task's own hold on a hub with `task_limit`, else its agent's; no line for a task
+    /// that ended or that his hold holds. Bugs: the line reads the agent's limit on every hub (a line on the agent's other
+    /// tasks, and none on the held desktop task); or it stands over his pause, or on an ended task.
+    @Test func theThreadsLimitLineIsTheRulesHold() throws {
+        func line(features: [String], agentHeld: Bool, taskHeld: Bool, state: String = "working",
+                  paused: Bool = false) throws -> RuntimeLimit? {
+            let limit: [String: Any] = ["since": Self.now - 60, "until": Self.now + 3600, "reset_known": true]
+            var agent: [String: Any] = ["name": "remy", "role": "worker", "runtime": "claude", "can": []]
+            if agentHeld { agent["limit"] = limit }
+            let task: [String: Any] = ["id": 9, "title": "Desktop work", "details": "", "done_when": "", "needs": "screen",
+                                       "goal": "", "owner": "remy", "requester": "manager", "state": state, "created": 1.0,
+                                       "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0,
+                                       "limit": taskHeld ? limit : NSNull()]
+            let holds: [[String: Any]] = paused ? [["id": 1, "task": 9, "kind": "pause", "state": "stopped", "attempt": 1]] : []
+            let state = try HubState.decode(JSONSerialization.data(withJSONObject: [
+                "schema_version": 1, "db": "test-db", "time": Self.now, "agents": [agent], "tasks": [task], "holds": holds,
+                "outcomes": [], "notes": [], "needs": [], "permissions": [], "messages": [], "reports": [],
+                "ui_features": features]))
+            return state.limitHolding(state.tasks[0])
+        }
+        #expect(try line(features: [TaskLimit.feature], agentHeld: false, taskHeld: true)?.until == Self.now + 3600)
+        #expect(try line(features: [TaskLimit.feature], agentHeld: true, taskHeld: false) == nil)
+        #expect(try line(features: [], agentHeld: true, taskHeld: false)?.until == Self.now + 3600)
+        #expect(try line(features: [TaskLimit.feature], agentHeld: false, taskHeld: true, state: "completed") == nil)
+        #expect(try line(features: [TaskLimit.feature], agentHeld: false, taskHeld: true, paused: true) == nil)
+    }
+
     @Test func theHoverNamesTheAgentOnlyWhenItsOwnRouteIsHeld() throws {
         let screen = try reading(features: [TaskLimit.feature], agentHeld: false)
         let words = try #require(screen.limitHover(try hold(), owner: "remy"))

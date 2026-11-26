@@ -19,7 +19,9 @@ namespace Founderizer.Setup.Cloud;
 /// that fits what it is for, near this PC; on the owner's private network from its first boot, with a single-use key
 /// that lives one hour; behind a provider firewall with no inbound rule at all; with this app's own SSH key. A step that
 /// fails takes away what this call made, the server and its firewall, and leaves the SSH key, which the next server uses
-/// again. The token stays in the secret box and goes to its provider and nowhere else.
+/// again; after the provider's own fault answer (a 5xx), or no answer, to the call that makes the server, the servers
+/// with the call's own mark are read first (<see cref="MadeMeanwhileAsync"/>). The token stays in the secret box and
+/// goes to its provider and nowhere else.
 ///
 /// <see cref="For"/> gives the provider's own class; each one's file holds what is its own.</summary>
 public abstract partial class CloudServers : ICloud
@@ -31,6 +33,11 @@ public abstract partial class CloudServers : ICloud
     internal static readonly TimeSpan WaitStep = TimeSpan.FromSeconds(3);
     /// <summary>How many times a firewall that a deleted server still holds is asked to go.</summary>
     internal const int RemoveReads = 10;
+    /// <summary>The reads after a call whose end is not known, and the wait before each: the join key's life, an hour, in
+    /// which a server that the provider made later can still join (the Mac's <c>followReads</c> and <c>followStep</c>,
+    /// held equal by the vectors).</summary>
+    internal const int FollowReads = CloudJoin.KeyLife / 30;
+    internal static readonly TimeSpan FollowStep = TimeSpan.FromSeconds(30);
     /// <summary>The memory that the server check asks of a hub's server and of a server for agents (the Mac's
     /// <c>ServerCheck.hubMemory</c> and <c>agentMemory</c>, held equal to them by the vectors).</summary>
     internal const int HubMemoryMb = 1800, AgentMemoryMb = 1800;
@@ -45,26 +52,31 @@ public abstract partial class CloudServers : ICloud
     protected TimeSpan Zone { get; }
     /// <summary>The wait between two reads of a server that is being made, which a test does not wait.</summary>
     protected Func<TimeSpan, CancellationToken, Task> Pause { get; }
+    /// <summary>How a call starts the reads that go on after it ended (<see cref="FollowUp"/>): a task of its own, which a
+    /// test can wait for.</summary>
+    private readonly Action<Func<Task>> follow;
 
     private protected CloudServers(CloudProvider provider, HttpMessageHandler handler, ISecretBox box, TimeSpan? zone,
-                                   Func<TimeSpan, CancellationToken, Task>? pause)
+                                   Func<TimeSpan, CancellationToken, Task>? pause, Action<Func<Task>>? follow)
     {
         Provider = provider;
         http = new ProviderHttp(handler);
         this.box = box;
         Zone = zone ?? TimeZoneInfo.Local.BaseUtcOffset;
         Pause = pause ?? ((time, cancel) => Task.Delay(time, cancel));
+        this.follow = follow ?? (body => _ = Task.Run(body));
     }
 
     /// <summary>The provider's own class, with the handler that all its HTTP goes through, the box that keeps its token,
-    /// this PC's standard time offset (the local one when null) and the wait between reads.</summary>
+    /// this PC's standard time offset (the local one when null), the wait between reads, and how a call starts the reads
+    /// after an end that is not known (a task of its own when null).</summary>
     public static ICloud For(CloudProvider provider, HttpMessageHandler handler, ISecretBox box, TimeSpan? zone = null,
-                             Func<TimeSpan, CancellationToken, Task>? pause = null) => provider switch
+                             Func<TimeSpan, CancellationToken, Task>? pause = null, Action<Func<Task>>? follow = null) => provider switch
     {
-        CloudProvider.Hetzner => new Hetzner(handler, box, zone, pause),
-        CloudProvider.DigitalOcean => new DigitalOcean(handler, box, zone, pause),
-        CloudProvider.Vultr => new Vultr(handler, box, zone, pause),
-        _ => new Akamai(handler, box, zone, pause),
+        CloudProvider.Hetzner => new Hetzner(handler, box, zone, pause, follow),
+        CloudProvider.DigitalOcean => new DigitalOcean(handler, box, zone, pause, follow),
+        CloudProvider.Vultr => new Vultr(handler, box, zone, pause, follow),
+        _ => new Akamai(handler, box, zone, pause, follow),
     };
 
     public bool IsHeld => HeldToken() is not null;
@@ -210,7 +222,7 @@ public abstract partial class CloudServers : ICloud
         return !(parts[0] == 10 || parts[0] == 127 || (parts[0] == 192 && parts[1] == 168) || (parts[0] == 172 && parts[1] is >= 16 and <= 31));
     });
 
-    /// <summary>The tag that says what this app made a server and its firewall for, at Vultr and at Akamai.</summary>
+    /// <summary>The tag that says what this app made a server and its firewall for, at DigitalOcean, Vultr and Akamai.</summary>
     internal static string Tag(CloudServerUse use) => "founderizer-" + Use(use);
 
     internal static string Use(CloudServerUse use) => use == CloudServerUse.Hub ? "hub" : "agent";
@@ -267,7 +279,9 @@ public abstract partial class CloudServers : ICloud
         throw new CloudException(CloudFailure.NotReady, Provider);
     }
 
-    /// <summary>What one call has made so far.</summary>
+    /// <summary>What one call has made so far. <see cref="FirewallName"/>, six letters of chance after the server's name,
+    /// is the call's own mark: at Hetzner, Vultr and Akamai the firewall is made first and the server is made behind it;
+    /// at DigitalOcean the droplet carries the name as its tag (<see cref="MadeBehindAsync"/>).</summary>
     private protected sealed class Made(string name, string firewallName)
     {
         public string Name { get; } = name;
@@ -276,37 +290,147 @@ public abstract partial class CloudServers : ICloud
         public string? Firewall { get; set; }
     }
 
-    /// <summary>Takes away what one call made, and says so when it could not. It runs to its end also when the call was
-    /// cancelled, so that a create the owner stopped still leaves no server running at his cost.</summary>
-    private protected async Task<Exception> UndoAsync(Made made, Exception error, CloudCall call)
+    /// <summary>**The servers that carry this call's own mark** (the Mac's <c>madeBehind</c>): at Hetzner the servers that
+    /// its firewall stands in front of, at Akamai the Linodes of its firewall's devices, at Vultr the instances of that
+    /// name behind its firewall group, at DigitalOcean the droplets with its tag. One read, and nothing else of the
+    /// account: a name alone can be another build's server, of another fleet in the same account or of another computer
+    /// of this fleet.</summary>
+    private protected abstract Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel);
+
+    /// <summary>The servers with the call's mark, or null when the read does not get through.</summary>
+    private async Task<IReadOnlyList<string>?> MarkedAsync(Made made, CloudCall call)
     {
-        var left = await RemoveAsync(made, call).ConfigureAwait(false);
-        if (left.Count == 0) return error;
-        return new CloudException(CloudFailure.LeftBehind, Provider, error.Message, left);
+        try { return await MadeBehindAsync(made, call, CancellationToken.None).ConfigureAwait(false); }
+        catch (Exception e) when (e is not OutOfMemoryException) { return null; }
     }
 
-    /// <summary>Deletes the server, then its firewall, and answers what is still there. A firewall goes only once no
-    /// server uses it, so it is asked again while the server's deletion runs.</summary>
-    private async Task<List<string>> RemoveAsync(Made made, CloudCall call)
+    /// <summary>**After the provider's own fault answer (a 5xx), or no answer at all, to the call that makes the server**
+    /// (finding 3 of the checked audit of 24 November 2026; the Mac's <c>madeMeanwhile</c>): the provider can have made
+    /// the server all the same, so the servers with this call's mark are read before anything is taken back, the
+    /// firewall included, with no cancel (the owner's stop of the call must not cut this read short). The one server
+    /// there is this call's: its id is what <see cref="UndoAsync"/> then deletes with the rest. Every other end throws
+    /// <paramref name="unsure"/>, and nothing is taken back: no such server yet (a gateway's 502 or 504, or a time-out,
+    /// while the provider goes on making it: a firewall taken back now would leave it with none), a read that does not
+    /// get through, or two of them. <see cref="FollowUp"/> reads on then.</summary>
+    private async Task<string> MadeMeanwhileAsync(Made made, CloudCall call, CloudException unsure)
+    {
+        if (await MarkedAsync(made, call).ConfigureAwait(false) is not { Count: 1 } marked)
+        {
+            FollowUp(made, call);
+            throw unsure;
+        }
+        return marked[0];
+    }
+
+    /// <summary>**A call that ended not knowing whether the provider made the server goes on reading for it**, in a task
+    /// of its own, while this app runs (the Mac's <c>followUp</c>: else a server that came later runs at the owner's cost,
+    /// with no record that finds it): every <see cref="FollowStep"/>, <see cref="FollowReads"/> times, the servers with
+    /// the call's mark. The one that comes is deleted with the call's firewall (<see cref="RemoveAsync"/>), and the reads
+    /// go on while it stays: a deletion that failed, or Hetzner's <c>locked</c> while it still makes the server. Two with
+    /// the mark are not the call's alone: nothing is deleted, and the reads go on. A firewall with no server stays: it
+    /// costs nothing, and a server can still come behind it.</summary>
+    private void FollowUp(Made made, CloudCall call)
+    {
+        var firewall = made.Firewall;
+        follow(async () =>
+        {
+            for (var read = 0; read < FollowReads; read++)
+            {
+                try { await Pause(FollowStep, CancellationToken.None).ConfigureAwait(false); }
+                catch (Exception e) when (e is not OutOfMemoryException) { return; }
+                if (await MarkedAsync(made, call).ConfigureAwait(false) is not { Count: 1 } marked) continue;
+                var found = new Made(made.Name, made.FirewallName) { Server = marked[0], Firewall = firewall };
+                // Done once the server is gone: a firewall that stays after it costs nothing.
+                if (!(await RemoveAsync(found, call).ConfigureAwait(false)).ServerStays) return;
+            }
+        });
+    }
+
+    /// <summary>**The call for the server** (the Mac's <c>create</c>), whose answer this PC may not get: a time-out, a
+    /// connection that ended, or a stop of the call while it was on its way. The provider can have made the server all
+    /// the same, so the servers with the call's mark are read as after a fault answer: the one there goes with the rest,
+    /// and the call ends as <c>TakenBack</c> with no words of the provider's; else it ends <c>Unsure</c>.</summary>
+    private protected async Task<CloudAnswer> CreateCallAsync(string path, JsonObject body, Made made, CloudCall call, CancellationToken cancel)
+    {
+        // A stop before the call goes sends nothing: what this call made is taken back, as before.
+        cancel.ThrowIfCancellationRequested();
+        try { return await call.AnswerAsync("POST", path, null, body, cancel).ConfigureAwait(false); }
+        catch (Exception e) when (e is CloudException { Failure: CloudFailure.Unreachable } || (e is OperationCanceledException && cancel.IsCancellationRequested))
+        {
+            var unsure = new CloudException(CloudFailure.Unsure, Provider, null, null, made.Name, made.FirewallName);
+            made.Server = await MadeMeanwhileAsync(made, call, unsure).ConfigureAwait(false);
+            throw new CloudException(CloudFailure.TakenBack, Provider, null, null, made.Name);
+        }
+    }
+
+    /// <summary>The error of a call for the server that the provider did not answer with one (the Mac's <c>failed</c>):
+    /// after the provider's own fault answer (a 5xx), the server that it made all the same is <c>made.Server</c>
+    /// (<see cref="MadeMeanwhileAsync"/>), and the error is <c>TakenBack</c>, or the call ends <c>Unsure</c>. Any other
+    /// refusal is the provider's, with no read.</summary>
+    private protected async Task<CloudException> FailedAsync(CloudAnswer answer, Made made, CloudCall call)
+    {
+        var fault = call.Failure(answer);
+        if (answer.Status < 500) return fault;
+        // The line's own brackets end the provider's words.
+        var says = (fault.Failure == CloudFailure.Refused ? fault.Says : fault.Message)?.TrimEnd('.') ?? "";
+        var unsure = new CloudException(CloudFailure.Unsure, Provider, says, null, made.Name, made.FirewallName);
+        made.Server = await MadeMeanwhileAsync(made, call, unsure).ConfigureAwait(false);
+        return new CloudException(CloudFailure.TakenBack, Provider, says, null, made.Name);
+    }
+
+    /// <summary>Takes away what one call made, and says so when it could not. It runs to its end also when the call was
+    /// cancelled, so that a create the owner stopped still leaves no server running at his cost. A call whose end is not
+    /// known (<c>Unsure</c>) takes nothing back: a server that the provider made all the same can stand behind the
+    /// firewall that this call made, and Akamai deletes a firewall that a Linode uses.</summary>
+    private protected async Task<Exception> UndoAsync(Made made, Exception error, CloudCall call)
+    {
+        if (error is CloudException { Failure: CloudFailure.Unsure }) return error;
+        var (left, _) = await RemoveAsync(made, call).ConfigureAwait(false);
+        if (left.Count == 0) return error;
+        // A server that the call found and could not delete is said in the provider's own words, never as deleted.
+        var said = error is CloudException { Failure: CloudFailure.TakenBack } back
+            ? back.Says is { } says ? new CloudException(CloudFailure.Refused, Provider, says) : new CloudException(CloudFailure.Unreachable, Provider)
+            : error;
+        return new CloudException(CloudFailure.LeftBehind, Provider, said.Message, left);
+    }
+
+    /// <summary>Deletes the server, then its firewall, and answers what is still there, and whether the server stays. A
+    /// firewall goes only once no server uses it, so it is asked again while the server's deletion runs. A server that
+    /// does not go keeps its firewall: Akamai deletes a firewall that a Linode uses, which would leave that server open.
+    /// Hetzner refuses to delete a server that it still makes (<c>locked</c>), so that deletion is asked again while it
+    /// is, and its deletion is an action: one that ends in an error leaves the server there.</summary>
+    private async Task<(List<string> Left, bool ServerStays)> RemoveAsync(Made made, CloudCall call)
     {
         var left = new List<string>();
+        var serverStays = false;
         var none = CancellationToken.None;
         if (made.Server is { } server)
         {
-            CloudAnswer? answer = null;
-            try { answer = await call.AnswerAsync("DELETE", Provider.ServerPath(server), null, null, none).ConfigureAwait(false); }
-            catch (CloudException) { }
+            async Task<CloudAnswer?> DeleteOnceAsync()
+            {
+                try { return await call.AnswerAsync("DELETE", Provider.ServerPath(server), null, null, none).ConfigureAwait(false); }
+                catch (CloudException) { return null; }
+            }
+            var answer = await DeleteOnceAsync().ConfigureAwait(false);
+            for (var read = 1; read < RemoveReads && answer?.Code == "locked"; read++)
+            {
+                try { await Pause(WaitStep, none).ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+                answer = await DeleteOnceAsync().ConfigureAwait(false);
+            }
             if (answer is not null && (answer.Ok || answer.Status == 404))
             {
                 if (Json.Long(Json.At(Json.At(answer.Object, "action"), "id")) is { } action)
                 {
                     try { await ActionWaitAsync(action, call, none).ConfigureAwait(false); }
-                    catch (CloudException) { }
+                    catch (CloudException) { serverStays = true; }
                 }
             }
-            else left.Add($"the server {made.Name}");
+            else serverStays = true;
+            if (serverStays) left.Add($"the server {made.Name}");
         }
-        if (made.Firewall is { } firewall)
+        if (made.Firewall is not null && serverStays) left.Add($"the firewall {made.FirewallName}");
+        else if (made.Firewall is { } firewall)
         {
             var gone = false;
             for (var read = 0; read < RemoveReads; read++)
@@ -321,7 +445,7 @@ public abstract partial class CloudServers : ICloud
             }
             if (!gone) left.Add($"the firewall {made.FirewallName}");
         }
-        return left;
+        return (left, serverStays);
     }
 
     /// <summary>Hetzner says a firewall is still in use while the server's deletion runs; Vultr and Akamai say it in words
@@ -532,7 +656,9 @@ internal sealed class CloudCall(CloudProvider provider, string token, ProviderHt
     private string Words(CloudAnswer answer)
     {
         var says = answer.Says.Replace(token, "(not shown)", StringComparison.Ordinal).Trim().Replace("\n", " ", StringComparison.Ordinal);
-        if (says.Length == 0) return $"it answered {answer.Status} and said nothing.";
+        // A gateway's own page (a 502 or 504 of HTML) is no words for the owner: its status is.
+        var page = says.StartsWith('<') || says.Contains("<html", StringComparison.OrdinalIgnoreCase);
+        if (says.Length == 0 || page) return $"it answered {answer.Status} and said nothing.";
         var shown = new StringInfo(says);
         return shown.LengthInTextElements > 300 ? shown.SubstringByTextElements(0, 300) : says;
     }

@@ -91,10 +91,8 @@ struct TaskPage: View {
             // **Only while the limit holds this task** (fix round 2, item 32): a task that ended is held by nothing,
             // and its page said its agent's limit in orange. **Its end only** (the lead's call on item 32): the head
             // over it says "Usage limit", and the line said it again with the year.
-            if !task.isTerminal, let limit = store.limit(of: task) {
-                fact(limit.reset_known ? String(l10n: "Until \(comingTime(limit.until, now: store.hubNow))")
-                         : String(l10n: "Until \(comingTime(limit.until, now: store.hubNow)) (estimate)"),
-                     symbol: "clock")
+            if let until = store.untilLine(task) {
+                fact(until, symbol: "clock")
             }
         }
     }

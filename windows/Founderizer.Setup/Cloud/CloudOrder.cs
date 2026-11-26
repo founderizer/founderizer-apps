@@ -193,25 +193,40 @@ public sealed record CloudFirewall(string Id, IReadOnlyList<string> Servers, boo
 /// server of this id for this token (gone, or of another project or account), with its answer.</summary>
 public sealed record CloudDeletion(bool Deleted, CloudException? NotThere = null);
 
-/// <summary>Why a step with a provider stopped (the Mac's <c>CloudError</c>).</summary>
+/// <summary>Why a step with a provider stopped (the Mac's <c>CloudError</c>). <c>Unsure</c>: the provider answered the
+/// call that makes the server with a fault of its own (a 5xx), or not at all, and this PC does not know whether the server
+/// is there (finding 3 of the checked audit of 24 November 2026); <c>TakenBack</c>: it had made the server all the same,
+/// and this app deleted it.</summary>
 public enum CloudFailure
 {
-    NotAToken, NoToken, TokenNotAccepted, ReadOnlyToken, RateLimited, Unreachable, Refused, NotUnderstood, NoRoom, Full,
-    Taken, NotReady, NotAServerName, NotAPublicKey, NotAnAuthKey, LeftBehind,
+    NotAToken, NoToken, TokenNotAccepted, ReadOnlyToken, RateLimited, Unreachable, Refused, Unsure, TakenBack, NotUnderstood,
+    NoRoom, Full, Taken, NotReady, NotAServerName, NotAPublicKey, NotAnAuthKey, LeftBehind,
 }
 
 /// <summary>A step with a provider that stopped, with the PC's words for it (the Mac's sentences with "PC" for "Mac").
 /// <see cref="Says"/> holds the provider's own words for a refusal, or the reason of a step that left things behind,
-/// with the token taken out; <see cref="Left"/> what is still there.</summary>
-public sealed class CloudException(CloudFailure failure, CloudProvider provider, string? says = null, IReadOnlyList<string>? left = null)
-    : Exception(Words(failure, provider, says, left ?? []))
+/// with the token taken out; <see cref="Left"/> what is still there. An end that is not sure, or a server taken back,
+/// names its <see cref="Server"/>; an end that is not sure also names the call's own <see cref="Mark"/>: its firewall,
+/// or at DigitalOcean the tag of its droplet, by which the owner tells that server from another of the same name in
+/// the provider's own pages (the Mac's <c>CloudError.unsure</c> and <c>takenBack</c>).</summary>
+public sealed class CloudException(CloudFailure failure, CloudProvider provider, string? says = null, IReadOnlyList<string>? left = null,
+                                   string? server = null, string? mark = null)
+    : Exception(Words(failure, provider, says, left ?? [], server, mark))
 {
     public CloudFailure Failure { get; } = failure;
     public CloudProvider Provider { get; } = provider;
     public string? Says { get; } = says;
     public IReadOnlyList<string> Left { get; } = left ?? [];
+    public string? Server { get; } = server;
+    public string? Mark { get; } = mark;
 
-    public static string Words(CloudFailure failure, CloudProvider provider, string? says, IReadOnlyList<string> left)
+    /// <summary>A call's own mark in the words of the provider's own pages: the firewall that its server stands behind, or
+    /// at DigitalOcean the tag that its droplet carries.</summary>
+    internal static string Marked(string? mark, CloudProvider provider) =>
+        provider == CloudProvider.DigitalOcean ? $"with the tag {mark}" : $"behind the firewall {mark}";
+
+    public static string Words(CloudFailure failure, CloudProvider provider, string? says, IReadOnlyList<string> left,
+                               string? server = null, string? mark = null)
     {
         var name = provider.Name();
         return failure switch
@@ -229,6 +244,13 @@ public sealed class CloudException(CloudFailure failure, CloudProvider provider,
             CloudFailure.RateLimited => $"{name} asks this PC to wait. Try again in a minute.",
             CloudFailure.Unreachable => $"{name} could not be reached. Check this PC's connection to the internet.",
             CloudFailure.Refused => $"{name} refused: {says}",
+            CloudFailure.Unsure when says is not null =>
+                $"{name} answered with a fault of its own ({says}), so it may have made {server} all the same. While this app is open, it looks for {server} for an hour and deletes it if it comes. If you quit it sooner, delete the {server} {Marked(mark, provider)} at {name} if it is there.",
+            CloudFailure.Unsure =>
+                $"{name} did not answer the call that makes {server}, so it may have made it all the same. While this app is open, it looks for {server} for an hour and deletes it if it comes. If you quit it sooner, delete the {server} {Marked(mark, provider)} at {name} if it is there.",
+            CloudFailure.TakenBack when says is not null =>
+                $"{name} answered with a fault of its own ({says}), but it had made {server} all the same, so this app deleted it.",
+            CloudFailure.TakenBack => $"{name} did not answer the call that makes {server}, but it had made it all the same, so this app deleted it.",
             CloudFailure.NotUnderstood => $"{name} answered something this app does not understand.",
             CloudFailure.NoRoom => $"{name} has no server free now.",
             CloudFailure.Full => $"{name} has no room for another server in your account.",

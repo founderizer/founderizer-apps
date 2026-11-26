@@ -148,6 +148,16 @@ extension MobileStore {
     func limit(of head: MobileTaskHead) -> RuntimeLimit? { Self.limit(head.limit, owner: head.owner, in: snapshot) }
     func limit(of task: FleetTask) -> RuntimeLimit? { Self.limit(task.limit, owner: task.owner, in: snapshot) }
 
+    /// **The line under a task's title on its page while a usage limit holds it**: its end only ("Until 16:00", or with
+    /// "(estimate)" when the provider gave no reset time), from the rule of every limit (`limit(_:owner:in:)`); nil for
+    /// a task that ended, which nothing holds (fix round 2, item 32), and for one that no limit holds.
+    nonisolated static func untilLine(_ task: FleetTask, in snapshot: MobileSnapshot?, now: Double) -> String? {
+        guard !task.isTerminal, let limit = limit(task.limit, owner: task.owner, in: snapshot) else { return nil }
+        let until = comingTime(limit.until, now: now)
+        return limit.reset_known ? String(l10n: "Until \(until)") : String(l10n: "Until \(until) (estimate)")
+    }
+    func untilLine(_ task: FleetTask) -> String? { Self.untilLine(task, in: snapshot, now: hubNow) }
+
     /// A task's one state word against what this phone read last: the fleet's holds and the usage limit that holds it.
     func stateWord(_ head: MobileTaskHead) -> String {
         head.stateWord(holds: openHolds, limited: limit(of: head) != nil)

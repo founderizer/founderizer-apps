@@ -224,7 +224,8 @@ struct HealthView: View {
     @ViewBuilder private func hubBlocks(_ reading: FleetHealth) -> some View {
         Group {
             // One block for each agent's server, each fact once (`FleetHealth.blocks`, which Report a problem draws too).
-            ForEach(Array(FleetHealth.blocks(reading.warnings, manager: store.state?.agents.first(where: { $0.role == "manager" })?.name).enumerated()), id: \.offset) { _, block in
+            ForEach(Array(FleetHealth.blocks(reading.warnings, manager: store.state?.agents.first(where: { $0.role == "manager" })?.name,
+                                             reportsOff: reportsOff).enumerated()), id: \.offset) { _, block in
                 if !block.updates.isEmpty {
                     updates(block, reading: reading)
                 } else {
@@ -300,6 +301,14 @@ struct HealthView: View {
         }
     }
 
+    /// **The switch Help improve Founderizer is off**, in the hub's reading of it (Settings › Help): the block of the hub's
+    /// own faults then has the button that opens it (the owner, 25 November 2026: "show a button there to be able to go to
+    /// the telemetry setting t send it automatically"). No reading, or a hub with no switch: no button.
+    private var reportsOff: Bool {
+        store.state?.ui_features?.contains(ErrorReportsState.feature) == true
+            && (store.reading(ErrorReportsModel.name) as ErrorReportsState?)?.send == false
+    }
+
     /// The widest of some words in the row's 13 points, at most 180, as on Agents.
     private static func width(_ texts: [String]) -> CGFloat {
         min(180, texts.map { ($0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width.rounded(.up) }.max() ?? 0)
@@ -360,6 +369,10 @@ struct HealthView: View {
             // reads the whole fleet itself and carries this reading with it, so this is the action, not a dead end.
             Button(act.label) { openWindow(id: FounderizerApp.reportWindow) }
                 .buttonStyle(FleetOutlineButtonStyle())
+        case .openReports:
+            // Settings › Help, where the switch stands, as the other buttons of a page open their page.
+            Button(act.label) { store.destination = .settings(.help) }
+                .buttonStyle(FleetOutlineButtonStyle()).accessibilityIdentifier("health-open-reports")
         }
     }
 
@@ -459,6 +472,11 @@ struct HealthView: View {
         guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
         if let result { reading = result; error = nil; failedSince = nil } else { self.error = failure; failedSince = failedSince ?? .now }
         answered = true
+        // The switch of the hub's own faults with each reading that has them: its button stands only while it is off.
+        if result?.warnings.contains(where: { $0.kind == "hub_fault" }) == true,
+           store.state?.ui_features?.contains(ErrorReportsState.feature) == true {
+            await ErrorReportsModel.of(store).read(store: store)
+        }
         // The servers of the agents to update, for their rows, where nothing has read them yet.
         if result?.warnings.contains(where: { FleetHealth.isUpdate($0.kind) }) == true,
            store.state?.ui_features?.contains(Servers.feature) == true,

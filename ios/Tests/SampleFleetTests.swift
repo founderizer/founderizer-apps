@@ -2434,6 +2434,40 @@ extension SampleFleetTests {
         }
     }
 
+    /// **A card opens again when his answer goes after several changes of it in one frame** (`NeedCard.followAnswer`):
+    /// SwiftUI drops a call of one onChange that comes after others in one frame (its log: "action tried to update
+    /// multiple times per frame"). The bug that this stops: the call of the change that took his answer away was
+    /// dropped, and the card that the hub still lists as open stood folded, with the line of an answer that no longer
+    /// waits and no options (the ship runs of 24 and 25 November 2026, where `aPressWaitsFiveSecondsThenGoesOnce` found
+    /// "card 8 did not open again"). Here five other options take the place of his first one, one after the other, and
+    /// then Undo, each followed by three yields of the main actor: with the old fold, the card stood folded in each of
+    /// three runs on 26 November 2026; with a draw of the window after each change, or with no pause, it opened.
+    @MainActor @Test("a card opens again when his answer goes after several changes of it in one frame",
+                     .timeLimit(.minutes(1)))
+    func aCardOpensAgainAfterChangesInOneFrame() async throws {
+        try await Self.withPictureHub { store, hub in
+            // no hold may go to the hub while the first fold draws, also on a slow run: the check below says none went
+            store.answerWait = .seconds(60)
+            let need = try #require(store.openNeeds.first { $0.id == 8 })
+            let window = CardWindow(NeedCard(store: store, need: need, header: true))
+            defer { window.close() }
+            try await Self.until { window.parts.keys.contains("need-option-8-1") }
+            store.hold(needID: 8, choice: 1)
+            try await Self.until { window.parts.keys.contains("need-undo-8") }
+            try #require(window.parts.keys.contains("need-undo-8"), "his press did not fold the card")
+            for choice in [2, 0, 1, 2, 0] {
+                store.hold(needID: 8, choice: choice)
+                for _ in 0..<3 { await Task.yield() }
+            }
+            store.undo(needID: 8)
+            for _ in 0..<3 { await Task.yield() }
+            try await Self.until { window.parts.keys.contains("need-option-8-1") }
+            #expect(window.parts.keys.contains("need-option-8-1") && !window.parts.keys.contains("need-undo-8"),
+                    "the card stood folded after the changes of his answer in one frame")
+            #expect(store.heldAnswer(to: 8) == nil && hub.answers.isEmpty)
+        }
+    }
+
     /// **The app's leave of the front sends every held answer at once, one after the other, and the end of their wait
     /// sends nothing more** (`MobileStore.setForeground`, `releaseHeldAnswers`): an app that ends in the background
     /// must not lose one. The bugs that this stops: an answer waits in memory and ends with the app; two answers that

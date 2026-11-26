@@ -93,6 +93,7 @@ Mac, and a device route is all that the PC reaches.
 | `secret_requests` | waits (2.3) | an item's `secret` is read (built); its answer is the secure form of 2.3 |
 | `signed_grants` | waits (2.3) | the statement writer is built (`OwnerStatement.Grant`) |
 | `agent_rename` | waits (2.2) | |
+| `agent_spelling` | built | owner API 1.339: `MobileAgent.Spelling`; `AgentBook.Of` takes each spelling only from a hub that serves it, and `AgentBook.Label` names the agent by it (`AgentSpellingTests`). `AgentBook.Spelling` is the rule of the add and rename commands' `spelling`, for the PC's rename (U3b) and Add agent when they come. **Two gaps.** A task that an agent opened from the owner's message begins with hub.py's own sentence, which keeps the id ("The owner asked for this in their own words, in devops's chat: …"); the Mac takes that sentence away (`FleetTask.ownersWords`), and the PC shows it in the task's first row (`Screens.Task` `Asks`) until piece 2 of the AI mark, which changes that row. Narrator's name of a chat's page is set when the page opens (`MainWindow.ShowPage`), so a spelling or a role that changes while that chat is open is named at its next opening |
 | `agent_memory` | waits (2.2) | |
 | `live_changes` | built | `GET /ui/wait`, `LiveToken`, `WakeCap`, `WakeBackoff`, `LiveWatch` |
 | `settings` | waits (step 2) | `/ui/settings` is no device route |
@@ -144,10 +145,14 @@ Mac, and a device route is all that the PC reaches.
 - **The background repair of servers that exist** (the Mac's sweep in `OwnerAccessSweep.swift` and `FleetStore.swift`: `ServerHardening`, `ServerMemory`, `ServerRestart`, `ServerUplink`, and the start guard for cloud-init's units that the area Setup, servers and owner tools builds now): **waits.** On a server that exists, the hub's own included, these root steps come only from the owner's Mac, so a fleet whose owner has only a PC gets each guard on new servers (the installers) and never on the servers that exist. The owner, 22 November 2026: "we need something reliable for ALL servers". It adds no element to a screen. Its order is rule 7 of section 0.1 of `~/dev/founderizer-plans/reliability-test-fleet-2026-11-21.md` (tested with the fault made on purpose, one server first, his fleet before the customers' track, one step takes it back), and its root part is read by the area Door and security, as the Mac's is. It needs the owner's computer on a PC (Windows step 2) before it can run. Piece L6 (the library, `Founderizer.Setup/RootJobs`) has the engine, the hardening, the browser parts and the access line, with the Mac's programs byte for byte; no round runs before the window's U4 starts it, and `ServerMemory`, `ServerRestart`, `ServerUplink` and `ServerLibraries` are the plan's L15.
 - **No first host key of a Mac, or of a server that the hub has not reported as Linux, at any port** (the Mac's
   `macServer` rule, `93d95edfb` and `b64e9670f`: such a key is the owner's own step, and `ssh` keeps none by itself):
-  no PC counterpart yet. No `HostKeyRule.TakeNew` call of the PC reaches such a server today: the PC's are the first
-  run's check, its password step and the install of a server that the owner typed, and every root job runs under
-  `Known`. The piece that first connects the PC to such a server (a Mac server's screen or vault, a server that the hub
-  reports as another kind) takes the rule.
+  no PC counterpart yet. Every `HostKeyRule.TakeNew` call of the PC is the first run's: its check (`ServerCheck`, the
+  server that the owner typed), its password or key step (`PasswordOnce.RunAsync` and `KeyAsync`, the same server), the
+  install of the hub's server (`Installer`, the server that the owner typed or, from `MakeFleet`, the one that the PC made
+  at the provider, also a try again), and the join of the manager's server, which the PC made at the provider
+  (`SetupStore.RunJoinAsync`). The Mac's own first install keeps a first key in the same way (`portGivenFor`), for a
+  server that no hub has reported yet. So no such call of the PC reaches a server of a hub's list, and every root job runs
+  under `Known`. The piece that first connects the PC to a server of the hub's list (a server's page check, a Mac server's
+  screen or vault) takes the Mac's rule.
 - **The line, the minutes and the bar of an install on the first run's build page** (F4 of the owner's feedback of 22
   November 2026, pieces 2 to 5; the Mac's `InstallPhases`, `InstallHold`, `MachineInstallModel.record` and
   `FleetBuildLine`): built, through the shared vectors (`install-reads.json`, `InstallVectorTests`). The line is the one
@@ -273,8 +278,8 @@ Mac, and a device route is all that the PC reaches.
   knowledge file's path in inline code is a value on Windows, where the Mac draws its badge.
 - **An agent by its name, with its role beside it** (the Mac's `AgentNames.label` and `AgentNames.role`; the owner's
   answers of 22 November 2026 to F16, option (a): "Each place of the Mac, iPhone and PC apps ...", and "The name with
-  the role in grey"): built. `AgentBook.Label` gives the name with capitals, and the role only when one word of it is
-  the name ("Fleet Manager"); `AgentBook.Role` gives the role beside it, and `AgentBook.Matches` still finds an agent by
+  the role in grey"): built. `AgentBook.Label` gives the owner's spelling of the name where the hub keeps one
+  (`agent_spelling`), else the name with capitals, and the role only when one word of it is the name ("Fleet Manager"); `AgentBook.Role` gives the role beside it, and `AgentBook.Matches` still finds an agent by
   its role. Every `Names.Label` follows ("From Wren · 14:32", "Message to Wren"). The pane's row draws the name, then
   " · " and the role, muted (`AgentRow.Role`, `AgentRowView`), and the chat's panel the name over the role
   (`AgentPanel.Role`, `Pages/Panels.cs`). The words are the vectors' (`swift-words.json`, `label` and `role`). The
@@ -292,3 +297,21 @@ Mac, and a device route is all that the PC reaches.
   (`WindowRulesTests`). The iPhone has no pointer, and nothing changes there. **While one cannot be pressed its mark is
   dimmed** (0.45, the Mac's): its mark has a brush of its own, which the style's disabled colour never reached, so a
   disabled Pause or Stop looked as one that acts, with its face and without it.
+- **A create after a 5xx or no answer is not "nothing there"** (finding 3 of the checked audit of 24 November 2026; the
+  Mac's `CloudServers.madeMeanwhile`, `followUp`, `failed`, `create` and `remove`, `CloudError.unsure` and `takenBack`,
+  and `BuildRecord.AtProvider.after`, `003053345` to `ee720b384`, with the vectors of `442ce8f17`): built. After the
+  provider's own fault answer (a 5xx), or no answer, to the call that makes the server, `CloudServers` reads the
+  servers with the call's own mark before it takes anything back (`MadeBehindAsync`: at Hetzner the servers behind the
+  call's firewall, at Akamai its firewall's Linodes, at Vultr the instances of that name behind its group, at
+  DigitalOcean the droplets with its tag, which the droplet now carries with the tag of what it is for). The one there
+  goes with the firewall (`TakenBack`, which the build's record reads as nothing); every other end takes nothing back
+  (`Unsure`, read as not known, so the name stays in use), and reads on for the mark every 30 seconds for the join
+  key's hour (`FollowUp`, `FollowReads`), which deletes the server that comes, again while it stays, and never two. A
+  server that does not go keeps its firewall; Hetzner's `locked` deletion is asked again; a gateway's page of HTML is
+  said by its status; the words are the Mac's catalog's (the vectors hold them). A 4xx stays a refusal with no read.
+  The PC's one difference: the Mac's Back on its way is a stop of the call (a cancel) on the PC, which ends as a call
+  with no answer; the PC's first run has no Back while a build runs (`SetupStore.Runs`), and a cancelled build changes
+  nothing of its page (`CloudStep`, as the Mac's build). Start again's firewall deletion is the Mac's and did not change:
+  a 5xx at Vultr or Akamai is asked again, at most 10 times, and there only a firewall that nothing but the deleted
+  servers uses is asked. **A limit, as on the Mac:** the reads run while the app runs; the mark is not kept in the
+  build's record, so a start of the app does not read for it again (the words tell the owner what to delete).

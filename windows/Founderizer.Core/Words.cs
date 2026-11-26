@@ -28,12 +28,26 @@ public sealed record ScreenContext(TimeZoneInfo Zone, CultureInfo Culture)
 /// <summary>An agent by its name (FleetCore's AgentNames; the owner's answers of 22 November 2026 to F16, option (a)):
 /// the apps name an agent by its name with capitals wherever they name it, and its role, its team.json `title`, stands
 /// beside the name where a place shows the agent as an entry of its own. A role that holds the name is the label alone
-/// ("Fleet Manager" for `manager`). One book for one reading of the hub.</summary>
+/// ("Fleet Manager" for `manager`). One book for one reading of the hub.
+///
+/// **His own capitals** (hub feature `agent_spelling`, owner API 1.339; the owner, 25 November 2026: "it doesn't let
+/// me use upper case the first letter of the bot! then everywhere it ends up showing lowercase and looks bad because it
+/// is a name!!"): the agent's id stays in small letters, and the hub keeps the name as he typed it beside it
+/// (`spelling`, "DevOps" for `devops`). His spelling takes the place of the name with capitals only: a role that holds
+/// the name stays the label ("Fleet Manager" for `manager`). The PC draws no name as a badge in a card's words
+/// (<see cref="CardValues"/>), so no matcher of names in words needs it.</summary>
 public sealed class AgentBook
 {
-    private readonly Dictionary<string, string> roles;
+    /// <summary>The hub's feature word (owner API 1.339): `agents[].spelling` in its readings, and `spelling` in the add
+    /// and rename commands.</summary>
+    public const string SpellingFeature = "agent_spelling";
 
-    public AgentBook(IEnumerable<(string Name, string? Title)> agents)
+    private readonly Dictionary<string, string> roles;
+    private readonly IReadOnlyDictionary<string, string> spellings;
+
+    /// <param name="agents">Each agent's name and its team.json `title` (null for none).</param>
+    /// <param name="spellings">Each agent's name as he typed it, from <see cref="Spellings"/>; none by default.</param>
+    public AgentBook(IEnumerable<(string Name, string? Title)> agents, IReadOnlyDictionary<string, string>? spellings = null)
     {
         roles = new Dictionary<string, string>();
         foreach (var (name, title) in agents)
@@ -41,19 +55,48 @@ public sealed class AgentBook
             var role = string.Join(' ', (title ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
             if (role.Length > 0) roles[name] = role;
         }
+        this.spellings = spellings ?? new Dictionary<string, string>();
     }
 
     public static AgentBook Of(MobileSnapshot? snapshot) =>
-        new((snapshot?.Agents ?? []).Select(a => (a.Name, a.Title)));
+        new((snapshot?.Agents ?? []).Select(a => (a.Name, a.Title)),
+            Spellings((snapshot?.Agents ?? []).Select(a => (a.Name, a.Spelling)), snapshot?.Offers(SpellingFeature) == true));
 
     public static readonly AgentBook Empty = new([]);
 
     public IReadOnlyDictionary<string, string> Roles => roles;
 
+    /// <summary>**The spellings of a reading** (FleetCore's `AgentNames.spellings`): each agent's `spelling` on a hub that
+    /// serves the feature, and none on any other hub. A spelling counts only where it is the agent's name in small
+    /// letters, with ASCII letters, digits and "-" only; one with no capital is no spelling, so the label keeps the
+    /// name with capitals (the hub's rule too).</summary>
+    public static IReadOnlyDictionary<string, string> Spellings(IEnumerable<(string Name, string? Spelling)> agents, bool served)
+    {
+        var found = new Dictionary<string, string>();
+        if (!served) return found;
+        foreach (var (name, spelling) in agents)
+            if (spelling is not null && spelling != name && spelling.ToLowerInvariant() == name && Patterns.Spelling().IsMatch(spelling))
+                found[name] = spelling;
+        return found;
+    }
+
+    /// <summary>**The spelling that a command sends beside the id** (FleetCore's `AgentNames.spelling(typed:id:served:)`):
+    /// the typed name, trimmed, on a hub that serves the feature, when it is the id in other capitals ("Nova" for
+    /// `nova`); null on any other hub, for a name in small letters, and for words that are not the id.</summary>
+    public static string? Spelling(string typed, string id, bool served)
+    {
+        var shown = typed.Trim();
+        return served && shown != id && shown.ToLowerInvariant() == id && Patterns.Spelling().IsMatch(shown) ? shown : null;
+    }
+
     /// <summary>The agent as the apps name it: its name with capitals ("web-dev" is "Web-Dev"), or its role when one word
-    /// of the role is the name ("Fleet Manager" for `manager`).</summary>
+    /// of the role is the name ("Fleet Manager" for `manager`). The name is his spelling where the hub keeps one
+    /// ("DevOps" for `devops`); the role that holds the name stays the label.</summary>
     public string Label(string name) =>
-        roles.TryGetValue(name, out var role) && Says(role, name) ? role : Capitalized(name);
+        roles.TryGetValue(name, out var role) && Says(role, name) ? role : Spelled(name);
+
+    /// <summary>The name alone, never the role: his spelling where the hub keeps one, else the name with capitals.</summary>
+    public string Spelled(string name) => spellings.TryGetValue(name, out var spelling) ? spelling : Capitalized(name);
 
     /// <summary>The role beside the label: after " · " in the pane's row, under the name on the agent's panel; null for an
     /// agent with no role, and for a role that is the label already ("Fleet Manager").</summary>

@@ -14,6 +14,8 @@
 #   azure-pc-make.sh elevated <since>    the starts with a full administrator's token of the user builder since that
 #                                        time (UTC), from Windows' audit of process creation: the run's record. On this
 #                                        PC an administrator's rise has no question (run 1 on the ARM VM proves it)
+#   azure-pc-make.sh now                 the PC's own clock (UTC, to the second): the run's start time for elevated,
+#                                        taken after the self-test
 #   azure-pc-make.sh probe               the first step of the run on this PC: one elevated start on purpose, asked
 #                                        from a limited process (probe.cmd, which explorer starts, asks for whoami.exe
 #                                        as an administrator); the list's line probe=<n> must have n of 1 or more.
@@ -53,7 +55,7 @@ while [ $# -gt 0 ]; do
         *) proof_die "unknown option $1" ;;
     esac
 done
-case "$command" in what-if|create|forward|elevated|probe) ;; *) sed -n '2,/^set /p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$command" in what-if|create|forward|elevated|probe|now) ;; *) sed -n '2,/^set /p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 key_file="${FZ_VM_KEY:-$HOME/.ssh/founderizer-windows-vm}"
 
 # The forward and the copy "azure": a PC that vm.sh's SSH parts and the other tools reach as they reach a VM's copy.
@@ -81,6 +83,16 @@ forward() {
     proof_say "copy azure: $address through 127.0.0.1:$port; the tools take FZ_PROOF_A_COPY=azure"
 }
 if [ "$command" = forward ]; then forward; exit 0; fi
+# The PC's own clock, to the second: the times that the list compares with the PC's events come from it, never from a
+# clock of this Mac.
+pc_now() { "$vm_sh" run '(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")' 2>/dev/null | tr -d '\r' | tail -1 || true; }
+if [ "$command" = now ]; then
+    use_copy azure
+    now="$(pc_now)"
+    [[ "$now" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || proof_die "the PC's clock could not be read: $now"
+    printf '%s\n' "$now"
+    exit 0
+fi
 if [ "$command" = probe ]; then
     # The list's own proof: a start that Windows elevates must be in it (its user is in the event's TargetUserName).
     # The rise is asked from a limited process, as a person's program asks it: on this PC a task of vm.sh desktop has
@@ -89,17 +101,21 @@ if [ "$command" = probe ]; then
     use_copy azure
     "$vm_sh" copy "$proof_here/probe.cmd" vm:C:/fz/proof-a/
     # The PC's own clock, to the second, just before the step: the list reads from there, so a rise from before it (a
-    # real probe two minutes before a self-test, say) is not in this one, and no clock of this Mac is compared with it.
-    pc_now() { "$vm_sh" run '(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")' 2>/dev/null | tr -d '\r' | tail -1 || true; }
+    # real probe two minutes before a self-test, say) is not in this one.
     since="$(pc_now)"
     [[ "$since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || proof_die "the PC's clock could not be read: $since"
     if [ -n "$from_full" ]; then
         # The self-test: the rig's own proof that the probe fails closed. probe.cmd from a task with builder's full
         # token, whose RunAs gives whoami.exe that token at once, with no rise: the list must refuse it. It never writes
-        # elevated-probe, and its task goes at any end.
-        unregister_full() { "$vm_sh" run 'Unregister-ScheduledTask -TaskName "fz-probe-full-token" -Confirm:$false -ErrorAction SilentlyContinue' >/dev/null 2>&1; }
+        # elevated-probe, and its task goes at any end. The task's name holds this run's process id, so that it never
+        # replaces another run's task; a removal that fails is said, and never turns the self-test's exit into 1.
+        full_task="fz-probe-full-token-$$"
+        unregister_full() {
+            "$vm_sh" run "Unregister-ScheduledTask -TaskName \"$full_task\" -Confirm:\$false -ErrorAction SilentlyContinue" >/dev/null 2>&1 ||
+                proof_say "$full_task could not be removed: remove it in the PC's Task Scheduler"
+        }
         trap unregister_full EXIT
-        "$vm_sh" run '$a = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c C:\fz\proof-a\probe.cmd"; $p = New-ScheduledTaskPrincipal -UserId "builder" -LogonType Interactive -RunLevel Highest; Register-ScheduledTask -TaskName "fz-probe-full-token" -Action $a -Principal $p -Force | Out-Null; Start-ScheduledTask -TaskName "fz-probe-full-token"; "probe.cmd started by a task with the full token"'
+        "$vm_sh" run "\$a = New-ScheduledTaskAction -Execute \"cmd.exe\" -Argument \"/c C:\\fz\\proof-a\\probe.cmd\"; \$p = New-ScheduledTaskPrincipal -UserId \"builder\" -LogonType Interactive -RunLevel Highest; Register-ScheduledTask -TaskName \"$full_task\" -Action \$a -Principal \$p | Out-Null; Start-ScheduledTask -TaskName \"$full_task\"; \"probe.cmd started by a task with the full token ($full_task)\""
     else
         "$vm_sh" desktop 'Start-Process explorer.exe -ArgumentList "C:\fz\proof-a\probe.cmd"; "probe.cmd started through explorer"'
     fi
@@ -108,8 +124,9 @@ if [ "$command" = probe ]; then
         sleep 5
         list="$(run_ps azure-pc-elevated.ps1 "since=$since" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
         if [ -n "$from_full" ]; then
-            # Once a whoami.exe is in the list, one more read: a rise in the self-test's time must be seen too.
-            printf '%s\n' "$list" | grep -q '^whoami.exe ' || continue
+            # Once its own task's whoami.exe is in the list, one more read: a rise in the self-test's time must be seen
+            # too. A stray whoami.exe of another start does not end the wait.
+            printf '%s\n' "$list" | grep -q "^whoami.exe .*\[from a task's cmd.exe\]" || continue
             sleep 5
             list="$(run_ps azure-pc-elevated.ps1 "since=$since" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
             break
@@ -121,8 +138,10 @@ if [ "$command" = probe ]; then
         printf '%s\n' "$list" | grep -qE '^probe=[1-9]' &&
             proof_die "self-test: a rise counted in its time, so it proves nothing: run it again when nothing else starts"
         printf '%s\n' "$list" | grep -qx 'probe=0' || proof_die "self-test: the list gave no line probe=0"
-        printf '%s\n' "$list" | grep -q '^whoami.exe .*refused: not a rise' ||
-            proof_die "self-test: no whoami.exe was refused as no rise (did the task run?)"
+        # The refused whoami.exe must be the one of its own task's chain (a cmd.exe that the Task Scheduler started),
+        # not a stray one of another start in its time.
+        printf '%s\n' "$list" | grep -q "^whoami.exe .*refused: not a rise .*\[from a task's cmd.exe\]" ||
+            proof_die "self-test: no whoami.exe of its task's cmd.exe was refused as no rise (did the task run?)"
         proof_say "self-test passed: the whoami.exe of a full token was refused and the list says probe=0; no elevated-probe was written"
         exit 0
     fi

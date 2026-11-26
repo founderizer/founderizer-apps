@@ -28,8 +28,10 @@ private func receiptRow(_ request: PendingRequest) -> [String: Any] {
      "event_id": 5, "created": 995.0, "client": request.client]
 }
 
-/// 27 October 2026: the hub's task for a duty's daily review had `goal: null`, and the whole state did not decode.
-@Test func aTaskWithANullGoalStillReads() throws {
+/// 27 October 2026: the hub's task for a duty's daily review had `goal: null`, and the whole state did not decode. A row
+/// with no state is the same fault: no writer of the hub makes one, but a block of older tasks can hold it (owner API
+/// 1.330). It reads as a state that this app does not know: waiting, open, with no word.
+@Test func aTaskWithANullGoalOrStateStillReads() throws {
     var object = try JSONSerialization.jsonObject(with: stateData()) as! [String: Any]
     var task = (object["tasks"] as! [[String: Any]])[0]
     task["goal"] = NSNull()
@@ -37,6 +39,12 @@ private func receiptRow(_ request: PendingRequest) -> [String: Any] {
     let state = try HubState.decode(JSONSerialization.data(withJSONObject: object))
     #expect(state.tasks[0].goal == "")
     #expect(try HubState.decode(stateData()).tasks[0].goal == "Test goal")
+    task["state"] = NSNull()
+    object["tasks"] = [task]
+    let stateless = try HubState.decode(JSONSerialization.data(withJSONObject: object)).tasks[0]
+    #expect(stateless.state == "" && !stateless.isTerminal)
+    #expect(stateless.activityColumn(held: false) == .waiting)
+    #expect(stateless.mark(holds: []).words == "" && !stateless.mark(holds: []).inWork)
 }
 
 @Test func resultIsNotAcceptedJustBecauseItIsCompleted() throws {

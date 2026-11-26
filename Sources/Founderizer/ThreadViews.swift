@@ -635,14 +635,8 @@ struct TaskView<After: View>: View {
         guard errorStands, isFresh else { return nil }
         return (store.reading("machines") as MachineList?)?.machines.first { $0.agent == task.owner }
     }
-    /// The usage limit that holds this task now (`HubState.limit(of:)`), while the task is open and neither an outcome
-    /// that is not known nor a hold of the owner's comes first — the order of the task's mark (`FleetTask.mark`).
-    private var limitHolding: RuntimeLimit? {
-        guard !task.isTerminal, !state.outcomeUnknown(task.id),
-              state.holds?.contains(where: { $0.task == task.id && $0.state != "released" }) != true
-        else { return nil }
-        return state.limit(of: task)
-    }
+    /// The usage limit that holds this task now, for the thread's limit line (`HubState.limitHolding`).
+    private var limitHolding: RuntimeLimit? { state.limitHolding(task) }
 
     /// **The thread comes in one frame, at its newest row** (T-06). A task opened again draws what it read last, at
     /// once. The first time, the column stays empty until the thread's reads have answered — every page of them — and
@@ -870,6 +864,16 @@ struct TaskView<After: View>: View {
 }
 
 extension HubState {
+    /// **The usage limit that holds `task` now, for its thread's limit line** (`HubState.limit(of:)`): while the task is
+    /// open and neither an outcome that is not known nor a hold of the owner's comes first, the order of the task's mark
+    /// (`FleetTask.mark`).
+    func limitHolding(_ task: FleetTask) -> RuntimeLimit? {
+        guard !task.isTerminal, !outcomeUnknown(task.id),
+              holds?.contains(where: { $0.task == task.id && $0.state != "released" }) != true
+        else { return nil }
+        return limit(of: task)
+    }
+
     /// **The hover of a held task's "Usage limit" in its thread** (owner API 1.330; the owner, 24 November 2026: the
     /// fleet had wrong data about an agent). Where the agent's own route is held, or on a hub without `task_limit`, the
     /// agent is at its limit, and the hover says so. Where only the task's own hold keeps it (a hold of the agent's screen

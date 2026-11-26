@@ -100,7 +100,9 @@ public sealed class CloudVectorTests
     private static JsonObject Error(CloudException e)
     {
         var named = new JsonObject { ["case"] = Same.Snake(e.Failure), ["words"] = e.Message };
-        if (e.Failure is CloudFailure.Refused or CloudFailure.LeftBehind) named["says"] = e.Says;
+        if (e.Failure is CloudFailure.Refused or CloudFailure.LeftBehind or CloudFailure.Unsure or CloudFailure.TakenBack) named["says"] = e.Says;
+        if (e.Failure is CloudFailure.Unsure or CloudFailure.TakenBack) named["server"] = e.Server;
+        if (e.Failure == CloudFailure.Unsure) named["mark"] = e.Mark;
         if (e.Failure == CloudFailure.LeftBehind) named["left"] = Same.Strings(e.Left);
         return named;
     }
@@ -119,8 +121,12 @@ public sealed class CloudVectorTests
             var box = new MemorySecretBox();
             if (one.GetProperty("held").ValueKind == JsonValueKind.String)
                 box.Write(at.BoxName(), Encoding.UTF8.GetBytes(one.GetProperty("held").GetString()!));
-            var cloud = CloudServers.For(at, stand, box, TimeSpan.FromHours(File.GetProperty("zone_hours").GetDouble()), (_, _) => Task.CompletedTask);
+            // The reads that a call starts after it ended are in the case's requests: the case waits for them.
+            var follows = new Follows();
+            var cloud = CloudServers.For(at, stand, box, TimeSpan.FromHours(File.GetProperty("zone_hours").GetDouble()), (_, _) => Task.CompletedTask,
+                                         follows.Follow);
             var (result, error) = Run(cloud, at, one.GetProperty("call")).GetAwaiter().GetResult();
+            follows.DoneAsync().GetAwaiter().GetResult();
             Same.Requests(one.GetProperty("requests"), stand.Calls, secrets, chance, problems, name);
             var expected = one.GetProperty("error");
             if (expected.ValueKind == JsonValueKind.Null)
@@ -225,7 +231,12 @@ public sealed class CloudVectorTests
                 new CloudException(CloudFailure.NotAToken, provider), new CloudException(CloudFailure.NoToken, provider),
                 new CloudException(CloudFailure.TokenNotAccepted, provider), new CloudException(CloudFailure.ReadOnlyToken, provider),
                 new CloudException(CloudFailure.RateLimited, provider), new CloudException(CloudFailure.Unreachable, provider),
-                new CloudException(CloudFailure.Refused, provider, "an example refusal"), new CloudException(CloudFailure.NotUnderstood, provider),
+                new CloudException(CloudFailure.Refused, provider, "an example refusal"),
+                new CloudException(CloudFailure.Unsure, provider, "an example fault", null, "worker-3", "founderizer-worker-3-k3j9x2"),
+                new CloudException(CloudFailure.Unsure, provider, null, null, "worker-3", "fz-worker-3-k3j9x2"),
+                new CloudException(CloudFailure.TakenBack, provider, "an example fault", null, "worker-3"),
+                new CloudException(CloudFailure.TakenBack, provider, null, null, "worker-3"),
+                new CloudException(CloudFailure.NotUnderstood, provider),
                 new CloudException(CloudFailure.NoRoom, provider), new CloudException(CloudFailure.Full, provider),
                 new CloudException(CloudFailure.Taken, provider), new CloudException(CloudFailure.NotReady, provider),
                 new CloudException(CloudFailure.LeftBehind, provider, "It failed.", ["the server hub-1"]),
@@ -289,6 +300,7 @@ public sealed class CloudVectorTests
             ["ubuntu"] = CloudServers.Ubuntu, ["join_key_life"] = CloudJoin.KeyLife, ["wait_reads"] = CloudServers.WaitReads,
             ["remove_reads"] = CloudServers.RemoveReads, ["hub_memory_mb"] = CloudServers.HubMemoryMb,
             ["agent_memory_mb"] = CloudServers.AgentMemoryMb, ["apt_lock_wait"] = CloudServers.AptLockWait,
+            ["follow_reads"] = CloudServers.FollowReads,
         }, "constants", problems);
         Same.None(problems, count);
     }

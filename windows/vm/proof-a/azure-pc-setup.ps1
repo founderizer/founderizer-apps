@@ -133,6 +133,10 @@ $sid = (Get-LocalUser -Name $user).SID.Value
 # token's elevation (event 4688), and azure-pc-elevated.ps1 lists the elevated ones of the run for its record.
 & auditpol.exe /set /subcategory:"Process Creation" /success:enable | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'the audit of process creation was not turned on' }
+# Windows' start (event 4608, at which the list empties its kinds) is in "Security State Change": on by default, and
+# turned on here so that the list does not depend on the image's default.
+& auditpol.exe /set /subcategory:"Security State Change" /success:enable | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'the audit of the starts of Windows was not turned on' }
 # Windows' page "Send diagnostic data to Microsoft" covers the whole desktop at each sign-in until somebody answers it
 # (seen on the build machines of ../cloud/README.md, 23 November 2026), over Founderizer's window: Windows' own policy
 # turns the page off, and the diagnostic data is "Required only", the smaller of the page's two choices.

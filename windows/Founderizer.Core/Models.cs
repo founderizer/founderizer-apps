@@ -54,7 +54,9 @@ public sealed record MobileCounts(long TasksOpen, long NeedsOpen, long Messages,
 /// a worker's or a lead's sessions record no outcome, and the owner checks its tasks' unknown outcomes
 /// (<see cref="TaskOutcome.ShellOff"/>). Null from a hub that does not send it, which reads as [], as the hub sends a
 /// missing list. `alive` is the sessions that its helper lists, comma-separated ("manager,owner-chat"): the setup of the
-/// owner's computer reads it for the end of a manager's first setup (step 2, piece L4).</summary>
+/// owner's computer reads it for the end of a manager's first setup (step 2, piece L4). `spelling` is its name as the
+/// owner typed it (hub feature `agent_spelling`), which <see cref="AgentBook"/> takes only from a hub that serves the
+/// feature.</summary>
 public sealed record MobileAgent(
     string Name,
     string Role,
@@ -72,8 +74,13 @@ public sealed record MobileAgent(
     double? WaitsSince = null,
     bool? ChatUndelivered = null,
     IReadOnlyList<string>? Can = null,
-    string? Alive = null)
+    string? Alive = null,
+    [property: JsonPropertyName("spelling")] JsonElement? RawSpelling = null)
 {
+    /// <summary>Its name as the owner typed it, or null: a value that is no text is none, as FleetCore's `try?` reads it,
+    /// and never refuses the reading.</summary>
+    [JsonIgnore] public string? Spelling => RawSpelling is { ValueKind: JsonValueKind.String } text ? text.GetString() : null;
+
     /// <summary>The helper answered in the last minute of the hub's own clock (helperIsRecent).</summary>
     public bool HelperIsRecent(double serverTime) =>
         LastSeen is { } seen && serverTime - seen >= -5 && serverTime - seen < 60;

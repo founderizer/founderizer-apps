@@ -257,6 +257,23 @@ public sealed class ManagerSetupTests
         Assert.AreEqual(1, hub.PostsTo("/move").Count, "the first list that answers goes on by itself");
     }
 
+    /// <summary>**The setup names its agent by the agent's label** (the Mac's <c>agentLabel</c> in <c>AgentSetupWizard</c>):
+    /// here the owner's spelling of the name on a hub that keeps it (`agent_spelling`), else the name with capitals; its
+    /// refusal of a server that the PC cannot read says that label. The bug: "juno's server" where every other place
+    /// says "JuNo".</summary>
+    [TestMethod]
+    public async Task The_setup_names_its_agent_by_the_agents_label()
+    {
+        var fleet = Fleet(features: ["servers", "machines", AgentBook.SpellingFeature]);
+        fleet = fleet with { Agents = [fleet.Agents[0] with { RawSpelling = JsonDocument.Parse("\"JuNo\"").RootElement }] };
+        var model = new AgentSetupModel(new SetupHub(), "juno");
+        Assert.AreEqual("Juno", model.Label, "before the first reading: the name with capitals");
+        await model.ReadAsync(fleet);
+        Assert.AreEqual("JuNo", model.Label);
+        await model.ReadAsync(fleet with { UiFeatures = ["servers", "machines"] });
+        Assert.AreEqual("Juno", model.Label, "a hub without the feature");
+    }
+
     /// <summary>**With "1 server" kept, the wait for the hub's reading of its own server ends by a count of reads, with
     /// its words over Try again, which waits again; the server that then takes the manager gets it by itself** (the Mac's
     /// <c>HubShareModel.countRead</c>, <c>readsMost</c> and <c>stop</c>). The bug: a hub that never reports its server's

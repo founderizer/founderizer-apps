@@ -169,6 +169,11 @@ struct MobileReadTests {
         #expect(try word(["state": "completed", "accepted": 0]) == "Not accepted")
         // A state that this app does not know is never shown as work, and never hidden.
         #expect(try word(["state": "something-new"]) == "Something-new")
+        // A row with no state (no writer of the hub makes one; a block of older tasks can hold it, owner API 1.330) is a
+        // state that this app does not know: the reading keeps every other row, as for a null goal on the Mac.
+        let stateless = try snapshot(agents: [agentFields()], ["tasks": [headFields(["state": NSNull()]), headFields(["id": 8])]])
+        #expect(stateless.tasks.map(\.state) == ["", "working"])
+        #expect(stateless.tasks.first?.isTerminal == false && stateless.tasks.first?.fleetTask?.state == "")
     }
 
     /// A task's word by the phone's own rule (`MobileStore.limit`, FleetCore's `TaskLimit`), from a reading whose agent
@@ -363,6 +368,30 @@ struct MobileReadTests {
                 == far.formatted(.dateTime.day().month(.abbreviated)))
     }
 
+    /// **A task's page says until when the hold that keeps it ends** (`MobileStore.untilLine`, by the rule of every
+    /// limit; owner API 1.330): its own hold on a hub with `task_limit`, with "(estimate)" when the provider gave no reset
+    /// time; else its agent's, as before; and no line for a task that ended. Fails when the page reads its agent's limit
+    /// on every hub (a line under a desktop task that its agent's own route does not hold, and none under the one that a
+    /// hold of the screen route keeps), or when an ended task keeps a line.
+    @Test("A task's page says until when its usage limit holds it")
+    func theTaskPagesUntilLine() throws {
+        func line(features: [String]?, agentHeld: Bool, taskHeld: Bool, known: Bool = true,
+                  state: String = "working") throws -> String? {
+            let hold: [String: Any] = ["since": 900.0, "until": 4000.0, "reset_known": known]
+            let read = try snapshot(agents: [agentFields(["name": "vps", "limit": agentHeld ? hold : nil])],
+                                    ["tasks": [headFields(["needs": "screen", "state": state, "limit": taskHeld ? hold : nil])],
+                                     "ui_features": features])
+            let task = try #require(read.tasks.first?.fleetTask)
+            return MobileStore.untilLine(task, in: read, now: read.time)
+        }
+        let until = "Until " + comingTime(4000, now: 1000)
+        #expect(try line(features: [TaskLimit.feature], agentHeld: false, taskHeld: true) == until)
+        #expect(try line(features: [TaskLimit.feature], agentHeld: false, taskHeld: true, known: false) == until + " (estimate)")
+        #expect(try line(features: [TaskLimit.feature], agentHeld: true, taskHeld: false) == nil)
+        #expect(try line(features: nil, agentHeld: true, taskHeld: false) == until)
+        #expect(try line(features: [TaskLimit.feature], agentHeld: false, taskHeld: true, state: "completed") == nil)
+    }
+
     @Test("A result that is not a success has its own word")
     func taskResults() throws {
         #expect(try head(["state": "failed"]).failedResult == "Failed")
@@ -555,6 +584,21 @@ struct MobileReadTests {
         let drawn = NeedsPage.drawn(kept, open: read)
         #expect(drawn.map(\.id) == [7, 8])
         #expect(drawn.map { $0.talk?.map(\.text) ?? [] } == [["Yes, the same customer."], []])
+    }
+
+    /// **Needs you draws no copy of his answer on a card that the hub still lists as open with none on its way**
+    /// (`NeedsPage.kept`): the page's copy follows the store's answers by an onChange call, and SwiftUI drops a call of
+    /// one onChange that comes after others in one frame. The bug that this stops: a copy whose removal was dropped
+    /// holds the open card folded, and it takes no touch. A card that folds away keeps the copy until its fold ends.
+    @Test func needsYouDrawsNoCopyOfAnAnswerOnAnOpenCardWithoutOne() {
+        let copy = MobileStore.GivenAnswer.option(1)
+        // the call that took it away did not run: the store has no answer, and the hub lists the card as open
+        #expect(NeedsPage.kept(copy, of: 8, going: [:], open: [7, 8]) == nil)
+        // the card folds away (the hub no longer lists it): the copy stays
+        #expect(NeedsPage.kept(copy, of: 8, going: [:], open: [7]) == copy)
+        // the store has his answer: the card draws that one, also over a copy of an earlier answer that stayed
+        #expect(NeedsPage.kept(copy, of: 8, going: [8: .option(2)], open: [7, 8]) == .option(2))
+        #expect(NeedsPage.kept(nil, of: 8, going: [8: .option(2)], open: [8]) == .option(2))
     }
 
     // MARK: The mark of an answered card

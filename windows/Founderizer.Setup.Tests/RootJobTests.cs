@@ -503,7 +503,7 @@ public sealed class RootJobTests
         List<ServerEntry> Servers(string address) => [Read(Row(address: address)), Read(Row(name: "hub").Replace("\"hub\":false", "\"hub\":true"))];
         ServerRecords Records(string address) => Listed(("app-1", address), ("hub", "100.80.1.2"));
         string Tailnet(string address) => Peers(("app-1", address), ("hub", "100.80.1.2"));
-        const string One = "ssh-ed25519 AAAA founderizer-owner-access", Two = "ssh-ed25519 BBBB founderizer-owner-access";
+        string One = KeyLine(1), Two = KeyLine(2);
         var line = new AccessLine(new RootRecords(folder));
         good = false;
         await line.RoundAsync(Hub, Servers("100.80.1.7"), One, Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time);
@@ -532,16 +532,20 @@ public sealed class RootJobTests
 
     /// <summary>The bug: the PC gets the line of the fleet's access key as text, where the Mac makes it from the key: a text
     /// with a new line puts a second line of its own into root's <c>authorized_keys</c> (<c>grep -F</c> and <c>printf</c>
-    /// take each line), and a text that starts with "-" is an option of <c>grep</c>.</summary>
+    /// take each line), and a text that starts with "-" is an option of <c>grep</c>; a base64 whose last bits are not zero
+    /// gives another text's fingerprint and a line that OpenSSH refuses; a blob that is not an Ed25519 key's 51 bytes is no
+    /// key of this fleet.</summary>
     [TestMethod]
     public async Task Only_a_line_of_the_fleets_access_key_makes_a_program_or_reaches_a_server()
     {
-        StringAssert.Contains(AccessLine.Program("ssh-ed25519 AAAAC3Nz+/0= founderizer-owner-access"), AccessLine.InPlaceWord);
+        var good = KeyLine(7);
+        StringAssert.Contains(AccessLine.Program(good), AccessLine.InPlaceWord);
         var reached = 0;
-        foreach (var bad in new[] { "ssh-ed25519 AAAA founderizer-owner-access\nssh-ed25519 BBBB other", "-e ssh-ed25519 AAAA founderizer-owner-access",
-                                    "ssh-ed25519 AAAA founderizer-owner-access\n", "command=\"sh\" ssh-ed25519 AAAA founderizer-owner-access",
-                                    "ssh-ed25519 AAAA founderizer-owner-access ", "ssh-rsa AAAA founderizer-owner-access", "",
-                                    "ssh-ed25519 AAAAA founderizer-owner-access" })
+        foreach (var bad in new[] { good + "\nssh-ed25519 BBBB other", "-e " + good, good + "\n", "command=\"sh\" " + good, good + " ",
+                                    "ssh-rsa" + good["ssh-ed25519".Length..], "", "ssh-ed25519 AAAAA founderizer-owner-access",
+                                    // a base64 whose last bits are not zero ("AB==" reads as "AA=="), and blobs of another shape
+                                    "ssh-ed25519 AB== founderizer-owner-access", "ssh-ed25519 AA== founderizer-owner-access",
+                                    KeyLine(7, size: 33), KeyLine(7, type: "ssh-ed25520") })
         {
             Assert.ThrowsExactly<ArgumentException>(() => AccessLine.Program(bad), bad);
             await Assert.ThrowsExactlyAsync<ArgumentException>(() => new AccessLine(new RootRecords(folder)).RoundAsync(
@@ -549,6 +553,15 @@ public sealed class RootJobTests
                 (_, _, _) => { reached++; return Task.FromResult(AccessLine.InPlaceWord); }, Time));
         }
         Assert.AreEqual(0, reached, "no server is reached with a text that is not the key's line");
+    }
+
+    /// <summary>A line of an Ed25519 key in SSH's form ("ssh-ed25519", its length, the 32 bytes and theirs), whose 32 bytes
+    /// are <paramref name="fill"/>; <paramref name="type"/> and <paramref name="size"/> make one of another shape.</summary>
+    private static string KeyLine(byte fill, string type = "ssh-ed25519", int size = 32)
+    {
+        var name = Encoding.ASCII.GetBytes(type);
+        byte[] blob = [0, 0, 0, (byte)name.Length, .. name, 0, 0, 0, 32, .. Enumerable.Repeat(fill, size)];
+        return "ssh-ed25519 " + Convert.ToBase64String(blob) + " founderizer-owner-access";
     }
 
     // ------------------------------------------------------------ the records and the connection

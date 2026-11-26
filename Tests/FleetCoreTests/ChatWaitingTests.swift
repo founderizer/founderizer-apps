@@ -222,7 +222,8 @@ struct ChatWaitingTests {
         #expect(waits(try state(turnEndedAfter: 3_000, reports: [named])) == nil)
         let unlinked = named.merging(["in_reply_to": NSNull()]) { _, new in new }
         #expect(waits(try state(turnEndedAfter: 3_000, reports: [unlinked])) == .spokenSince)
-        // Another agent's chat reports no turns: the manager's turn says nothing of it.
+        // Each agent's chat speaks by its own turn_ended_after (UI-API 1.309); Leo has none here, and the manager's
+        // turn says nothing of Leo's chat.
         #expect(waits(try state(turnEndedAfter: 3_000), "leo") == .waiting)
     }
 

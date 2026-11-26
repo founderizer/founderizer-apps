@@ -569,10 +569,14 @@ goes at once, as "When the PC's life does not go as planned" says below. Then, b
    also when the probe stops. That proves the fields of event 4688 and a rise with no question on Windows Server 2025.
    A console window shows while it runs. `probe --from-full-token` is the self-test, the rig's own proof that the probe
    fails closed (probe.cmd from a task with builder's full token, whose whoami.exe is no rise). It exits 0 only when
-   the list ran, a whoami.exe was refused as no rise and the list says `probe=0`, and 1 in every other case (no list,
-   an SSH fault, or a rise that counted in its time); it never writes `elevated-probe`. Run it before the run's start
-   time: its cmd.exe, powershell.exe and whoami.exe are OTHER lines in any `elevated` list whose `since` is before it.
-   Both read the list from the PC's own clock, to the second, just before their step.
+   the list ran, the whoami.exe of its own task's cmd.exe was refused as no rise and the list says `probe=0`, and 1
+   in every other case (no list, an SSH fault, or a rise that counted in its time); it never writes `elevated-probe`,
+   and its task (named with the run's process id) goes at any end. Run it before the run's start time: its cmd.exe,
+   powershell.exe and whoami.exe are OTHER lines in any `elevated` list whose `since` is before it. Then take the
+   run's start time from the PC's own clock, never from this Mac's: `start="$(app/windows/vm/proof-a/azure-pc-make.sh
+   now)"`, and at the end `azure-pc-make.sh elevated "$start"`. Both probe modes read the list from the PC's clock, to
+   the second, just before their step. Windows' starts (event 4608) need the audit of "Security State Change", which
+   `azure-pc-setup.ps1` turns on with the audit of process creation.
 3. The watcher, the setup through explorer (`elevation.ps1 -Want 3` passes for the app), and the pages to run 2's name
    page, as in run 1. There, the typer's stop once, with a test
    value of 598 characters (about 35 s of keys in the copy) and Notepad brought to the front by a timer during the
@@ -767,6 +771,17 @@ the copy was deleted at the end):
 | a self-test with a rise in its own time (`probe.cmd` through explorer 4 s after it started) | exit 1: "self-test: a rise counted in its time, so it proves nothing"; the second read after the first whoami.exe saw the rise 10 s later |
 | a restart of the copy inside `since` | "Windows started 2026-11-25 03:27:37Z: the kinds of all process ids are emptied" (event 4608) |
 | the read order by `RecordId` | not run: a clock that steps back cannot be made cheaply in a copy; the list no longer sorts by time |
+
+**The self-test's own chain, its task name, the audit of Windows' starts and `now`** (26 November 2026, 01:45 to
+01:46 UTC, `69936cb24`, a copy named `azure`; the copy was deleted at the end):
+
+| Check | Result |
+| --- | --- |
+| `azure-pc-elevated.ps1`, `azure-pc-setup.ps1` | 0 parse errors each |
+| the audits that the setup turns on, in the copy | "Security State Change: Success", "Process Creation: Success" |
+| `azure-pc-make.sh now` | "2026-11-26T01:45:49Z" (the PC's clock) |
+| the self-test with a stray full-token whoami.exe in its time (a task whose conhost.exe ran whoami.exe, 3 s after the self-test began) | exit 0. The stray whoami.exe came first (01:45:55Z), "refused: not a rise", with no mark, as "a task of builder"; the self-test did not stop its wait on it. Its own came at 01:45:59Z: "refused: not a rise ... [from a task's cmd.exe]". "probe=0", "self-test passed"; no `elevated-probe`; its task was named `fz-probe-full-token-11305`, and no task of the self-test was left |
+| a removal of the self-test's task that fails, and a self-test whose own task did not run | not run: they cannot be made cheaply in a copy; the code says each case (`proof_say` on the removal, `proof_die` on no marked whoami.exe) |
 
 ## Limits
 

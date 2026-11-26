@@ -33,6 +33,9 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent, bool 
     /// <summary>The agent of this setup.</summary>
     public string Agent { get; } = agent;
 
+    /// <summary>The agent as the apps name it (<see cref="AgentBook.Label"/>), from the newest reading.</summary>
+    public string Label { get; private set; } = AgentBook.Empty.Label(agent);
+
     /// <summary>The words of a step that the hub did not answer, of a server that the PC cannot read, of a code that did
     /// not reach the hub, and of a team that the activation could not read (the Mac's <c>AgentSetupWizard</c>).</summary>
     public const string NoAnswer = "The hub has not answered. Try again.";
@@ -73,6 +76,7 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent, bool 
     /// another generation, keeps its last answer of this generation, and the other still comes.</summary>
     public async Task<AgentReading> ReadAsync(MobileSnapshot fleet, CancellationToken cancel = default)
     {
+        Label = AgentBook.Of(fleet).Label(Agent);
         var features = fleet.UiFeatures ?? [];
         var servers = Reading?.Servers is { } lastServers && lastServers.Db == fleet.Db ? lastServers : null;
         var machines = Reading?.Machines is { } lastMachines && lastMachines.Db == fleet.Db ? lastMachines : null;
@@ -247,7 +251,7 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent, bool 
                 await InstallAgainAsync(server.Name, provider, cancel).ConfigureAwait(false);
                 break;
             case AgentSetupFlow.Start.InstallAgain:
-                Refusal = CannotReadServer(Agent);
+                Refusal = CannotReadServer(Label);
                 break;
             case AgentSetupFlow.Start.Prepare:
                 // A change to the other provider is a page of wave C: no card offers it (Cards), and a press gets nothing.

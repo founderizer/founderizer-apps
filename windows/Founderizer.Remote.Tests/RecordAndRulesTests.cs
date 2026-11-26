@@ -90,6 +90,53 @@ public sealed class RecordAndRulesTests
     }
 
     /// <summary>
+    /// **One folder is one record in any spelling** (Windows' and macOS's file systems do not tell case apart): two HostKeys
+    /// of one folder, named in two cases, take turns at the file, so neither writes over a key that the other kept. Bug: a
+    /// lock kept by the exact text of the path gives each spelling its own lock, two keeps at once each write the file that
+    /// they read, one key is lost, and the next TakeNew call to that server trusts whatever key comes first.
+    /// </summary>
+    [TestMethod]
+    public void Two_spellings_of_one_folder_never_lose_a_key_that_the_other_kept()
+    {
+        var folder = Local.Folder("founderizer-remote-record");
+        try
+        {
+            var spelled = Path.Combine(Path.GetDirectoryName(folder)!, Path.GetFileName(folder).ToUpperInvariant());
+            if (!Directory.Exists(spelled)) Assert.Inconclusive("This file system tells case apart: two spellings are two folders.");
+            var keys = new[] { new HostKeys(folder), new HostKeys(spelled) };
+            // A keep of the rule whose write fails gives Unknown, and nothing is kept (a virus scanner can hold the file for a
+            // moment), so the same call is made again, at most Tries times: a count, so that no time hides a real fault.
+            const int Each = 150, Tries = 20;
+            var verdicts = new HostKeyVerdict[2, Each];
+            using var start = new Barrier(2);
+            var sides = new Thread[2];
+            for (var s = 0; s < 2; s++)
+            {
+                var side = s;
+                sides[side] = new Thread(() =>
+                {
+                    start.SignalAndWait();
+                    for (var n = 0; n < Each; n++)
+                        for (var attempt = 0; attempt < Tries; attempt++)
+                        {
+                            verdicts[side, n] = keys[side].Check(At($"10.{side}.0.{n + 1}", 22), Blob("ssh-ed25519", (byte)(n + 1)), HostKeyRule.TakeNew);
+                            if (verdicts[side, n] != HostKeyVerdict.Unknown) break;
+                        }
+                });
+                sides[side].Start();
+            }
+            foreach (var side in sides) side.Join();
+            for (var side = 0; side < 2; side++)
+                for (var n = 0; n < Each; n++)
+                {
+                    Assert.AreEqual(HostKeyVerdict.Trusted, verdicts[side, n], $"side {side}, key {n}");
+                    Assert.IsNotNull(keys[1 - side].Find($"10.{side}.0.{n + 1}", 22), $"side {side}, key {n}: kept, then lost");
+                }
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    /// <summary>
     /// The removal of a server takes its key away and keeps the others, so the same address with a new server can be
     /// added again. Bug: a reinstalled server stays refused as changed, with no way back.
     /// </summary>

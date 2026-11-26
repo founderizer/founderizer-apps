@@ -44,8 +44,11 @@ public sealed class HostKeys
     /// <summary>The file's name in the app's folder.</summary>
     public const string FileName = "known-hosts.json";
 
-    // One lock for each file in this process, so two SshRemote of one folder never write over each other's key.
-    private static readonly ConcurrentDictionary<string, object> Locks = new(StringComparer.Ordinal);
+    // One lock for each file in this process, so two SshRemote of one folder never write over each other's key: kept by
+    // the whole path with no regard to case, which Windows' and macOS's file systems do not tell apart. Two locks of one
+    // file let two keeps at once each write the file that they read, and the key that is lost is then taken anew from
+    // whatever server answers first; one lock of two files only makes one wait for the other.
+    private static readonly ConcurrentDictionary<string, object> Locks = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly object gate;
 

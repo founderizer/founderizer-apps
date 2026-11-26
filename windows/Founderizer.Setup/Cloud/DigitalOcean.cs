@@ -12,10 +12,12 @@ using Founderizer.Setup.Network;
 namespace Founderizer.Setup.Cloud;
 
 /// <summary>DigitalOcean (the Mac's <c>CloudServers</c>, its DigitalOcean parts): a token sees its team's droplets in all
-/// its projects; the droplet first, on the first offer DigitalOcean takes, and its firewall at once; then the droplet,
-/// read until it runs, because DigitalOcean gives it its address only then.</summary>
-internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause)
-    : CloudServers(CloudProvider.DigitalOcean, handler, box, zone, pause)
+/// its projects; the droplet first, on the first offer DigitalOcean takes, with the tag of what it is for and the
+/// firewall's name as its tag (the call's own mark), and its firewall at once; then the droplet, read until it runs,
+/// because DigitalOcean gives it its address only then.</summary>
+internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, TimeSpan? zone, Func<TimeSpan, CancellationToken, Task>? pause,
+                           Action<Func<Task>>? follow)
+    : CloudServers(CloudProvider.DigitalOcean, handler, box, zone, pause, follow)
 {
     private protected override async Task ReadCheckAsync(CloudCall call, CancellationToken cancel)
     {
@@ -39,19 +41,20 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
             CloudAnswer? refusal = null;
             foreach (var offer in offers)
             {
-                var answer = await call.AnswerAsync("POST", "droplets", null, new JsonObject
+                var answer = await CreateCallAsync("droplets", new JsonObject
                 {
                     ["image"] = Provider.Image(),
                     ["name"] = made.Name,
                     ["region"] = offer.Location,
                     ["size"] = offer.Type,
                     ["ssh_keys"] = new JsonArray(keyId),
+                    ["tags"] = new JsonArray(Tag(order.Use), made.FirewallName),
                     ["user_data"] = userData,
-                }, cancel).ConfigureAwait(false);
+                }, made, call, cancel).ConfigureAwait(false);
                 // DigitalOcean's answer for a size that a region cannot take now: the next offer. Its other 422s (a
                 // limit) end the try at once, in its own words.
                 if (SaysUnavailable(answer)) { refusal = answer; continue; }
-                if (!answer.Ok) throw call.Failure(answer);
+                if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
                 if (Json.Long(Json.At(Json.At(answer.Object, "droplet"), "id")) is not { } id)
                     throw new CloudException(CloudFailure.NotUnderstood, Provider);
                 taken = (id, offer);
@@ -91,6 +94,14 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
             new JsonObject { ["destinations"] = Everywhere(), ["ports"] = "0", ["protocol"] = "tcp" },
             new JsonObject { ["destinations"] = Everywhere(), ["ports"] = "0", ["protocol"] = "udp" },
             new JsonObject { ["destinations"] = Everywhere(), ["protocol"] = "icmp" });
+    }
+
+    /// <summary>The droplets with the call's tag.</summary>
+    private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
+    {
+        var read = await call.SendAsync("GET", "droplets", [("tag_name", made.FirewallName), ("per_page", "200")], null, cancel).ConfigureAwait(false);
+        return (AllObjects(Json.At(read, "droplets")) ?? []).Select(d => Json.Long(Json.At(d, "id"))).OfType<long>()
+            .Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
     }
 
     /// <summary>The id of this app's SSH key at DigitalOcean: found by its fingerprint, or registered once.</summary>
@@ -174,7 +185,9 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
         throw new CloudException(CloudFailure.NotReady, Provider);
     }
 
-    /// <summary>DigitalOcean's droplets (up to 200), each with its project's name when the team has more than one project.</summary>
+    /// <summary>DigitalOcean's droplets (up to 200), each with its project's name when the team has more than one project,
+    /// and what this app made it for by its tag, so that the account's list shows a stray droplet as this app's and not
+    /// as a server to choose.</summary>
     private protected override async Task<IReadOnlyList<CloudExisting>> ListAsync(CloudCall call, CancellationToken cancel)
     {
         var listed = await call.SendAsync("GET", "droplets", [("per_page", "200")], null, cancel).ConfigureAwait(false);
@@ -193,7 +206,8 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
             found.Add(new CloudExisting(key, name, ipv4 is not null && IsIpv4(ipv4) ? ipv4 : null, Json.String(Json.At(droplet, "size_slug")) ?? "",
                                         Json.Int(Json.At(droplet, "memory")), Json.String(Json.At(image, "distribution"))?.ToLowerInvariant(),
                                         version, Json.String(Json.At(Json.At(droplet, "region"), "name")),
-                                        Json.String(Json.At(droplet, "status")) == "active", projects.GetValueOrDefault(key), null));
+                                        Json.String(Json.At(droplet, "status")) == "active", projects.GetValueOrDefault(key),
+                                        MadeFor(Json.AllStrings(Json.At(droplet, "tags")))));
         }
         return found;
     }

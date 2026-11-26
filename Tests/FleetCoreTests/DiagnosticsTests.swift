@@ -195,9 +195,18 @@ struct DiagnosticsTests {
 
     // ------------------------------------------------------------ System status (E1)
 
+    /// **While the switch Help improve Founderizer is off, the block of the hub's own faults has the button to that
+    /// switch beside Report a problem, and only then** (the owner, 25 November 2026: "show a button there to be able
+    /// to go to the telemetry setting t send it automatically"). The bugs that it catches: the button while the switch is
+    /// on, the button gone while it is off, and the button on a block of another warning.
     @Test func theHubsFaultWarningHasItsTitleAndOpensReportAProblem() {
         let warning = FleetHealth.Warning(kind: "hub_fault", detail: "3 times since 14:53.")
         #expect(warning.title == "The hub hit an error")
         #expect(warning.act == .tellUs)
+        let other = FleetHealth.Warning(kind: "integrity", detail: "The check failed.")
+        #expect(FleetHealth.blocks([warning, other], reportsOff: true).map(\.acts) == [[.tellUs, .openReports], [.tellUs]])
+        #expect(FleetHealth.blocks([warning, other], reportsOff: false).map(\.acts) == [[.tellUs], [.tellUs]])
+        #expect(FleetHealth.blocks([warning]).first?.acts == [.tellUs])
+        #expect(FleetHealth.Warning.Act.openReports.label == "Help improve Founderizer")
     }
 }

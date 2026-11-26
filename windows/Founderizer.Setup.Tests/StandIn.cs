@@ -92,6 +92,24 @@ internal sealed class StandIn : HttpMessageHandler
     }
 }
 
+/// <summary>**The reads that a cloud call starts after it ended** (<see cref="Founderizer.Setup.Cloud.CloudServers.For"/>'s
+/// <c>follow</c>, the Swift tests' <c>Follows</c>): each a task that a test waits for with <see cref="DoneAsync"/>, so
+/// that what they sent is in the stand-in's calls before the test reads them.</summary>
+internal sealed class Follows
+{
+    private readonly List<Task> tasks = [];
+
+    public void Follow(Func<Task> body)
+    {
+        lock (tasks) tasks.Add(Task.Run(body));
+    }
+
+    public Task DoneAsync()
+    {
+        lock (tasks) return Task.WhenAll(tasks.ToList());
+    }
+}
+
 /// <summary>A box that will not keep anything, as a box whose protection fails.</summary>
 internal sealed class RefusingBox(ISecretBox inner) : ISecretBox
 {

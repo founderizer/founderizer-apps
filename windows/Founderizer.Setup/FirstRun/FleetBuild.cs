@@ -355,6 +355,14 @@ public sealed class CloudStep(CloudDeps deps)
             if (kept is not null) { kept = kept.End(deps.Now(), cancelled: true); Keep(); }
             return;
         }
+        catch (Exception error) when (cancel.IsCancellationRequested)
+        {
+            // **A cancel ended this build** (Cancel set the step back already): what the end threw is no failure, and
+            // nothing of the page changes; the record says what the call left (the Mac's build). A stop of the call for
+            // the server ends as the provider's call with no answer (CloudServers.CreateCallAsync).
+            if (kept is not null) { kept = kept.CallEnded(After(error)).End(deps.Now(), cancelled: true); Keep(); }
+            return;
+        }
         catch (Exception error)
         {
             failure = error.Message;
@@ -379,12 +387,15 @@ public sealed class CloudStep(CloudDeps deps)
 
     private static string AppLaunchOf(CloudDeps deps) => deps.Builds.Launch;
 
-    /// <summary>What a call that ended with this error left at the provider (the Mac's <c>AtProvider.after</c>).</summary>
+    /// <summary>What a call that ended with this error left at the provider (the Mac's <c>AtProvider.after</c>). A
+    /// provider's own fault answer (a 5xx), or no answer, to the call for the server is <c>Nothing</c> only when the
+    /// provider held the server that it made all the same and this app deleted it (<c>TakenBack</c>); its other end
+    /// (<c>Unsure</c>) is <c>NotKnown</c>, and the name stays in use.</summary>
     public static AtProvider After(Exception error) => error switch
     {
         OperationCanceledException => AtProvider.Nothing,
         CloudException { Failure: CloudFailure.LeftBehind } => AtProvider.LeftBehind,
-        CloudException { Failure: CloudFailure.Unreachable or CloudFailure.NotUnderstood } => AtProvider.NotKnown,
+        CloudException { Failure: CloudFailure.Unreachable or CloudFailure.NotUnderstood or CloudFailure.Unsure } => AtProvider.NotKnown,
         CloudException => AtProvider.Nothing,
         _ => AtProvider.NotKnown,
     };
