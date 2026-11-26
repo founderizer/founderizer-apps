@@ -338,8 +338,7 @@ import SwiftUI
                 MainActor.assumeIsolated { AnswerHolds.shared.undo(need, store: store) }
             }
             // VoiceOver's focus was on what he pressed, which went: it hears his answer
-            let words = look.words == String(l10n: "Answered") ? look.words : String(l10n: "Answered: \(look.words)")
-            AccessibilityNotification.Announcement(words).post()
+            AccessibilityNotification.Announcement(look.announced).post()
             let show = { [weak badge] in
                 guard let badge else { return }
                 if hadKeys { badge.makeKeyAndOrderFront(nil) } else { badge.orderFront(nil) }
@@ -696,8 +695,7 @@ private struct NeedWindowCard: View {
         // his answer given in this window (`AnswerHolds.Place.window`), held or now on its way out of the hold
         let held = need.flatMap { AnswerHolds.shared.held($0, in: store) }.flatMap { $0.place == .window ? $0 : nil }
         let leaving = need.flatMap { AnswerHolds.shared.leaving($0, in: store) }.flatMap { $0.place == .window ? $0 : nil }
-        let answer: Answer = held.map { Answer.waits(AnswerBadge.Look($0.shown)) }
-            ?? (leaving != nil ? Answer.went : Answer.nothing)
+        let answer: Answer = held.map { Answer.waits($0.look) } ?? (leaving != nil ? Answer.went : Answer.nothing)
         ScrollView {
             if let need {
                 NeedRequestCard(store: store, need: need)

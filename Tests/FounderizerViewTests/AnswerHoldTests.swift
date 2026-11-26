@@ -10,12 +10,17 @@ import Vision
 @Suite(.serialized, .timeLimit(.minutes(2))) struct AnswerHoldTests {
     private static let now = Int(Date().timeIntervalSince1970)
 
-    /// A reading with the manager and DevOps, these requests and tasks, and the features of marks and task controls.
-    private static func reading(needs: [[String: Any]], tasks: [[String: Any]] = [], holds: [[String: Any]] = [])
-        throws -> Data {
+    /// A reading with the manager and DevOps (and `team`: more agents by name and role), these requests and tasks,
+    /// and the features of marks and task controls.
+    private static func reading(needs: [[String: Any]], tasks: [[String: Any]] = [], holds: [[String: Any]] = [],
+                                team: [(name: String, title: String)] = []) throws -> Data {
         let agents: [[String: Any]] = [
             ["name": "manager", "role": "manager", "title": "Fleet Manager", "runtime": "claude", "can": [], "placed": true],
             ["name": "devops", "role": "worker", "title": "DevOps", "runtime": "claude", "can": [], "placed": true]]
+            + team.map { agent -> [String: Any] in
+                ["name": agent.name, "role": "worker", "title": agent.title, "runtime": "claude", "can": [String](),
+                 "placed": true]
+            }
         return try JSONSerialization.data(withJSONObject: [
             "schema_version": 1, "db": "undo-\(UUID().uuidString)", "time": now, "agents": agents, "tasks": tasks,
             "holds": holds, "outcomes": [], "notes": [], "needs": needs, "permissions": [], "messages": [], "reports": [],
@@ -268,16 +273,20 @@ import Vision
     }
 
     /// **The badge says what he chose, as the folded card's line does** (F12; his rule of 14 November 2026): the ticked
-    /// options joined with "; ", with a check; then the words that he wrote on the next request, with no check. Bug: a
-    /// check before his own words.
+    /// options joined with "; ", with a check, and a role that an option names as that agent's name with its role
+    /// beside it, as the card reads it (F23, `HisAnswer.spoken`); then the words that he wrote on the next request,
+    /// with no check. Bugs: a check before his own words; a badge, and VoiceOver's words of it, that say the role where
+    /// the card says the agent. The role's option is the first one: "Give" opens a step only at a sentence's start
+    /// (`CardNames.opening`), so "Dark; Give Marketing write" keeps the role on the card and on the badge alike.
     @Test func theBadgeSaysWhatHeChose() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (ticked: String?, tickedCheck: Bool?, written: String?, writtenCheck: Bool?) in
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
             NSApp.accessibilitySetValue(true, forAttribute: enhanced)
             defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
             let hub = try LoopbackHub(state: Self.reading(needs: [
-                Self.need(58, ["title": "Choose the colours of the site", "options": ["Dark", "Orange", "Blue"], "multi": true]),
-                Self.need(59, ["title": "Name the new page"])]))
+                Self.need(58, ["title": "Choose the colours of the site",
+                               "options": ["Give Marketing write", "Orange", "Dark"], "multi": true]),
+                Self.need(59, ["title": "Name the new page"])], team: [("wren", "Marketing")]))
             defer { hub.stop() }
             let holds = AnswerHolds.shared
             holds.wait = .seconds(60)
@@ -304,7 +313,7 @@ import Vision
             ViewHost.turn(5) { holds.held[58] != nil }
             ViewHost.turn(0.5)
             let ticked = Self.reads("answer-badge", in: window).label
-            let tickedCheck = holds.held[58].map { AnswerBadge.Look($0.shown).check }
+            let tickedCheck = holds.held[58]?.look.check
             // his own words on the next request
             store.selectedNeed = 59
             guard let field = try ViewHost.middle(of: String(l10n: "Your answer"), in: window) else {
@@ -316,16 +325,31 @@ import Vision
             ViewHost.turn(5) { holds.held[59] != nil }
             ViewHost.turn(0.5)
             let written = Self.reads("answer-badge", in: window).label
-            let writtenCheck = holds.held[59].map { AnswerBadge.Look($0.shown).check }
+            let writtenCheck = holds.held[59]?.look.check
             // nothing stays held after the test
             if let need = store.state?.needs.first(where: { $0.id == 59 }) { holds.undo(need, store: store) }
             return (ticked, tickedCheck, written, writtenCheck)
         }
-        #expect(seen.ticked == "Choose the colours of the site, answered: Dark; Blue" && seen.tickedCheck == true,
-                "the ticked options, joined with \"; \", with a check")
-        #expect(seen.written == "Name the new page, answered: hello" && seen.writtenCheck == false,
-                "his own words, with no check")
+        #expect(seen.ticked == "Choose the colours of the site, answered: Give Wren · Marketing write; Dark",
+                "the ticked options joined with \"; \", and the role's agent by name, as on the card")
+        #expect(seen.tickedCheck == true, "a check before the ticked options")
+        #expect(seen.written == "Name the new page, answered: hello", "his own words")
+        #expect(seen.writtenCheck == false, "no check before his own words")
         #expect(screen.stayedHis)
+    }
+
+    /// **VoiceOver hears his own word "Answered" as his words** (a reader of F12): the announcement of a held answer
+    /// (the row of Needs you, the capsule of a card's own window) says "Answered" alone only for files alone. Bug: it
+    /// compared the words with "Answered", so his typed "Answered" was heard as an answer of files alone.
+    @Test func hisWordAnsweredIsHeardAsHisWords() throws {
+        let need = try HubState.decode(Self.reading(needs: [Self.need(60)])).needs[0]
+        let hub = try #require(URL(string: "http://127.0.0.1:9"))
+        let typed = AnswerBadge.Look(PendingRequest(hub: hub, database: "d", client: "c", needID: 60, text: "Answered"),
+                                     need: need, names: nil)
+        let files = AnswerBadge.Look(PendingRequest(hub: hub, database: "d", client: "c", needID: 60, attachments: [7],
+                                                    text: ""), need: need, names: nil)
+        #expect(typed.announced == "Answered: Answered", "his own word, after \"Answered:\"")
+        #expect(files.announced == "Answered", "files alone")
     }
 
     /// **A held answer whose wait ends while the hub cannot take it waits, and goes once it can** (review): another

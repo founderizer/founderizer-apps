@@ -14,12 +14,14 @@ import SwiftUI
 /// of its own (`NeedWindows`), and the job's detail card keeps Undo on the card's line (`NeedRequestCard.lineEnd`).
 ///
 /// - One line: a check for an option that he pressed or ticked, none for words that he wrote (his rule of 14 November
-///   2026); the words of the folded card's answer line, plain, cut with "…" at the sidebar's width less 12 points each
+///   2026); the words of the folded card's answer line, plain, as the card reads them (`Look`: the agent of a role that
+///   an option names by its name, with the role beside it), cut with "…" at the sidebar's width less 12 points each
 ///   side, and "Undo" in the colour of a link, with the hand, never cut. No title, no count, no close button.
 /// - The look of the hover tag (`HoverTag`): a capsule in `FleetStyle.lifted` with its one-point edge.
 /// - It comes up 8 points and fades in over 0.18 s, as his own message does, and fades out over 0.12 s; a new answer
-///   changes its words in place over 0.15 s (`AnyTransition.answerBadge`, `FleetMotion.badgeWords`). Under Reduce
-///   Motion it stands and goes in one frame.
+///   changes its words in place over 0.15 s (`AnyTransition.answerBadge`, `FleetMotion.badgeWords`), and the sidebar's
+///   line over it moves with it over the same times (`FleetView.sidebar`). Under Reduce Motion it stands and goes in
+///   one frame, and so does the line.
 /// - Edit › Undo (⌘Z) takes the answer back while the badge stands and it is the newest act that can be undone: the
 ///   window's undo manager holds it from the badge's coming to its going, so words typed after it are undone first.
 /// - VoiceOver reads one element, "<title>, answered: <words>", with the action Undo.
@@ -40,24 +42,36 @@ struct AnswerBadge: View {
     struct Look: Equatable {
         /// An option that he pressed or ticked: a check before the words. Words that he wrote have none.
         let check: Bool
-        /// The option's own words, the ticked options joined with "; ", his own words, or "Answered" for files alone.
+        /// The option's own words, the ticked options joined with "; ", his own words, or "Answered" for files alone,
+        /// as the folded card reads them (`HisAnswer.spoken`): a role that an agent's words name is that agent's name
+        /// with its role beside it, and his own words keep a role as he wrote it. VoiceOver reads the same words.
         let words: String
+        /// Files alone, with no words: the badge says "Answered".
+        let filesAlone: Bool
 
-        init(_ shown: PendingRequest) {
+        /// `names`: the request's names, as its card has them (`FleetStore.cardNames`).
+        init(_ shown: PendingRequest, need: OwnerNeed, names: CardNames?) {
             check = !shown.answersInWords
             let text = shown.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            words = text.isEmpty ? String(l10n: "Answered") : text
+            let typed = HisAnswer.typed(need, text, inWords: shown.answersInWords)
+            filesAlone = text.isEmpty
+            words = filesAlone ? String(l10n: "Answered") : HisAnswer.spoken(text, inWords: typed, names: names)
         }
+
+        /// What VoiceOver hears of the held answer (the row of Needs you, the capsule of a card's own window):
+        /// "Answered: <words>", and "Answered" alone only for files alone, also when his own words are "Answered".
+        var announced: String { filesAlone ? words : String(l10n: "Answered: \(words)") }
     }
 
     var body: some View {
         let shown = AnswerHolds.shared.onAnyPage(in: store)
+        let look = shown?.held.look
         ZStack {
-            if let shown {
-                AnswerBadgeCapsule(look: Look(shown.held.shown), title: shown.need.shownTitle) {
+            if let shown, let look {
+                AnswerBadgeCapsule(look: look, title: shown.need.shownTitle) {
                     Self.undo(shown.need, store: store)
                 }
-                .animation(reduceMotion ? nil : FleetMotion.badgeWords, value: Look(shown.held.shown))
+                .animation(reduceMotion ? nil : FleetMotion.badgeWords, value: look)
                 .transition(reduceMotion ? .identity : .answerBadge)
             }
         }

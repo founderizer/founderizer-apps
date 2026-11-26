@@ -440,6 +440,7 @@ struct FleetView: View {
         let agents = ChatList.order(listed.map(\.name), pinned: store.pinned)
             .compactMap { name in listed.first { $0.name == name } }
         let names = Set(agents.map(\.name))
+        let badgeShows = AnswerHolds.shared.onAnyPage(in: store) != nil
         return VStack(alignment: .leading, spacing: 2) {
             needsRow
             tasksRow
@@ -496,6 +497,11 @@ struct FleetView: View {
         // Needs you faded in.
         .animation(listedAgents.isEmpty || reduceMotion ? nil : .easeOut(duration: 0.2),
                    value: needsWaiting > 0)
+        // **The line over the badge of his held answer moves with the badge** (`AnswerBadge`): the agents' list gives
+        // it its room as it comes up, over 0.18 s, ease-out, and takes the room back as it fades, over 0.12 s; the line
+        // moved about 30 pt in one frame. Under Reduce Motion in one frame, as the badge itself.
+        .animation(reduceMotion ? nil : badgeShows ? FleetMotion.sent : .easeOut(duration: FleetMotion.cardOut),
+                   value: badgeShows)
         // **The selected row's fill moves to the row that he opens, over 0.18 s** (the owner's yes of 17 November 2026):
         // it stood on the new row in one frame. One fill for each group of rows, behind them (`selectionFill`).
         .animation(reduceMotion ? nil : FleetMotion.selection, value: selectedRow)

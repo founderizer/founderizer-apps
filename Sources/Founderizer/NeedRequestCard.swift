@@ -712,7 +712,8 @@ extension NeedAnswerBox {
         let store = store, id = need.id, hub = store.hub
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id,
                                    text: text.wrappedValue)
-        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown) {
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown,
+                                names: store.cardNames(for: need)) {
             // **It waits while the hub cannot take it**, as a press does (review): another answer can be on its way
             // when the wait ends, and a send then went nowhere
             guard await store.writable(), store.hub == hub, store.state?.db == database else { return }
@@ -738,7 +739,8 @@ extension NeedAnswerBox {
         }
         let shown = PendingRequest(hub: store.hub, database: database, client: store.installation, needID: need.id,
                                    choice: index, text: need.choices[index])
-        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown) {
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown,
+                                names: store.cardNames(for: need)) {
             await AnswerWaits.shared.press(need, choice: index, store: store)?.value
         }
     }
@@ -750,7 +752,8 @@ extension NeedAnswerBox {
         let store = store, need = need, hub = store.hub
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: need.id,
                                    choices: ticked, text: ticked.map { need.choices[$0] }.joined(separator: "; "))
-        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown, ticked: Set(ticked)) {
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown, ticked: Set(ticked),
+                                names: store.cardNames(for: need)) {
             // it waits while the hub cannot take it, as a press does (`holdOption`)
             guard await store.writable(), store.hub == hub, store.state?.db == database else { return }
             await store.answer(need, choices: ticked)
@@ -772,7 +775,8 @@ extension NeedAnswerBox {
         answered?(false, tops[index] ?? 0)
         let store = store, id = need.id, hub = store.hub, composer = composer
         let shown = PendingRequest(hub: hub, database: database, client: store.installation, needID: id, text: reply)
-        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown) { @MainActor in
+        AnswerHolds.shared.hold(need, store: store, place: holdPlace, shown: shown,
+                                names: store.cardNames(for: need)) { @MainActor in
             // The store's own pace for a write that waits for it (`FleetStore.writable`), and a file of the box that
             // still goes up: the reply carries the box's files.
             while !store.canWrite || composer.map({ Self.uploading(in: $0, store: store) }) == true {

@@ -253,13 +253,13 @@ struct NeedsBoard: View {
         choose(next)
     }
 
-    /// "Answered: <words>" of his answer to `id` that the app holds (`AnswerHolds`), as the badge says it; nil for none.
+    /// "Answered: <words>" of his answer to `id` that the app holds (`AnswerHolds`), as the badge says it
+    /// (`AnswerBadge.Look`); nil for none.
     private func heldAnswer(_ id: Int, in needs: [OwnerNeed]) -> String? {
         guard let need = needs.first(where: { $0.id == id }), let held = AnswerHolds.shared.held(need, in: store) else {
             return nil
         }
-        let words = held.shown.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return words.isEmpty ? String(l10n: "Answered") : String(l10n: "Answered: \(words)")
+        return held.look.announced
     }
 
     /// A click on a request's card puts it at hand.

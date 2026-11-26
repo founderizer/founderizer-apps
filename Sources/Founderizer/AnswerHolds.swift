@@ -53,6 +53,9 @@ import SwiftUI
         let place: Place
         /// What the card shows meanwhile: the answer, as an answer on its way shows (never saved, never sent).
         let shown: PendingRequest
+        /// What its badge says (`AnswerBadge.Look`): the answer as the card reads it, made once, at his press, with the
+        /// names that the card had then.
+        let look: AnswerBadge.Look
         /// The options that he had ticked, which Undo ticks again (`restored`).
         let ticked: Set<Int>
         fileprivate let mark: UUID
@@ -93,12 +96,13 @@ import SwiftUI
     /// one held answer for the whole app. A second press on the same request while one waits takes its place: the card
     /// is folded meanwhile, so only a key can make one. `place`: where he gave it (`Place`).
     func hold(_ need: OwnerNeed, store: FleetStore, place: Place = .card, shown: PendingRequest, ticked: Set<Int> = [],
-              go: @escaping @MainActor () async -> Void) {
+              names: CardNames? = nil, go: @escaping @MainActor () async -> Void) {
         guard let database = store.state?.db else { return }
         for other in held.keys.sorted() where other != need.id { release(other) }
         waits[need.id]?.cancel()
         let mark = UUID()
-        held[need.id] = Held(hub: store.hub, database: database, place: place, shown: shown, ticked: ticked, mark: mark,
+        held[need.id] = Held(hub: store.hub, database: database, place: place, shown: shown,
+                             look: AnswerBadge.Look(shown, need: need, names: names), ticked: ticked, mark: mark,
                              store: store, go: go)
         let wait = wait
         waits[need.id] = Task { @MainActor [weak self] in
