@@ -29147,6 +29147,926 @@
   },
   {
    "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"replayed\": false, \"name\": \"Example Labs\", \"logo\": null}"
+    }
+   ],
+   "arguments": {
+    "name": "Example Labs"
+   },
+   "name": "save_company: a name",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "logo": null,
+     "name": "Example Labs"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "name": "Example Labs",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"replayed\": false, \"name\": null, \"logo\": null}"
+    }
+   ],
+   "arguments": {
+    "name": null
+   },
+   "name": "save_company: no name",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "logo": null,
+     "name": null
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "name": null,
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {
+     "<tmp>/logo.png": "e3f8364e18e211d6fdb991500c4799fe7c5fb9cb58b29326db3722ef586ac347"
+    },
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"replayed\": false, \"name\": null, \"logo\": \"0ee47062d33686c6\"}"
+    }
+   ],
+   "arguments": {
+    "logo_file": "<tmp>/logo.png"
+   },
+   "name": "save_company: a logo that is a PNG of 64 x 64 already",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "logo": "0ee47062d33686c6",
+     "name": null,
+     "picture": "The picture went as it was: a PNG of 64 x 64 px."
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "png": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII=",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {
+     "logo.png": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII="
+     }
+    },
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {
+     "<tmp>/logo.png": "e3f8364e18e211d6fdb991500c4799fe7c5fb9cb58b29326db3722ef586ac347"
+    },
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"replayed\": false, \"name\": \" Example Labs \", \"logo\": \"0ee47062d33686c6\"}"
+    }
+   ],
+   "arguments": {
+    "logo_file": "<tmp>/logo.png",
+    "name": " Example Labs ",
+    "request_id": "6F1C2A3B-0000-4000-8000-00000000000A"
+   },
+   "name": "save_company: the name and the logo, with the agent's own request id",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "logo": "0ee47062d33686c6",
+     "name": " Example Labs ",
+     "picture": "The picture went as it was: a PNG of 64 x 64 px."
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "name": " Example Labs ",
+      "png": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII=",
+      "request_id": "6f1c2a3b-0000-4000-8000-00000000000a"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {
+     "logo.png": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII="
+     }
+    },
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"replayed\": false, \"name\": \"Example Labs\", \"logo\": null}"
+    }
+   ],
+   "arguments": {
+    "logo_file": null,
+    "name": "Example Labs"
+   },
+   "name": "save_company: no logo",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "logo": null,
+     "name": "Example Labs"
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "name": "Example Labs",
+      "png": null,
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {},
+   "name": "save_company: nothing",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "Give name, logo_file or both: a field left out stays as it is, so nothing was sent."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "logo_file": "<tmp>/missing.png"
+   },
+   "name": "save_company: a file that is not there",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "logo_file is not a file on this Mac."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<tmp>/dl"
+    ]
+   },
+   "answers": [],
+   "arguments": {
+    "logo_file": "<tmp>/dl"
+   },
+   "name": "save_company: a folder",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "logo_file is not a file on this Mac."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [
+     "dl"
+    ],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "logo_file": 7
+   },
+   "name": "save_company: a path that is no text",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "logo_file must be the path of a picture file on this Mac, or null to remove the logo."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "logo_file": "  "
+   },
+   "name": "save_company: an empty path",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "logo_file must be the path of a picture file on this Mac, or null to remove the logo."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {
+     "<tmp>/logo.png": "e3f8364e18e211d6fdb991500c4799fe7c5fb9cb58b29326db3722ef586ac347"
+    },
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "logo_file": "<tmp>/logo.png\u0000x"
+   },
+   "name": "save_company: a NUL in the path",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "path cannot hold a NUL character: name a file or a folder of this Mac."
+   },
+   "requests": [],
+   "setup": {
+    "files": {
+     "logo.png": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII="
+     }
+    },
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {
+     "<tmp>/big.bin": "0765445211e5f3faf9378e5dd89603fe38c13f5863158906ece6fd1369631087"
+    },
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "logo_file": "<tmp>/big.bin"
+   },
+   "name": "save_company: a file too large",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "logo_file is 26214401 bytes; a picture for the logo is at most 25 MiB."
+   },
+   "requests": [],
+   "setup": {
+    "files": {
+     "big.bin": {
+      "sparse": 26214401
+     }
+    },
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [],
+   "arguments": {
+    "name": "x",
+    "request_id": "nope"
+   },
+   "name": "save_company: a request id that is no UUID",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "request_id must be a UUID, or absent so that this server makes one."
+   },
+   "requests": [],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 404,
+     "text": "{\"error\": \"not found\"}"
+    }
+   ],
+   "arguments": {
+    "name": "Example Labs"
+   },
+   "name": "save_company: a hub of an older release",
+   "older_hub": 1,
+   "outcome": {
+    "refusal": "The hub refused the company's name and logo (404): not found"
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "name": "Example Labs",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 409,
+     "text": "{\"error\": \"This needs Founderizer for Teams, which this fleet does not have.\", \"code\": \"teams_off\"}"
+    }
+   ],
+   "arguments": {
+    "name": "Example Labs"
+   },
+   "name": "save_company: a fleet with no Teams",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "The hub refused the company's name and logo (409): This needs Founderizer for Teams, which this fleet does not have.\n{\n \"code\": \"teams_off\"\n}"
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "name": "Example Labs",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
+    "files": {
+     "<tmp>/logo.png": "e3f8364e18e211d6fdb991500c4799fe7c5fb9cb58b29326db3722ef586ac347"
+    },
+    "folders": [
+     "<home>/.founderizer"
+    ]
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 409,
+     "text": "{\"error\": \"hub generation changed; refresh state\"}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g2\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"ok\": true, \"replayed\": false, \"name\": null, \"logo\": \"0ee47062d33686c6\"}"
+    }
+   ],
+   "arguments": {
+    "logo_file": "<tmp>/logo.png"
+   },
+   "name": "save_company: a new generation, read again once",
+   "older_hub": 0,
+   "outcome": {
+    "result": {
+     "logo": "0ee47062d33686c6",
+     "name": null,
+     "picture": "The picture went as it was: a PNG of 64 x 64 px."
+    }
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g1",
+      "png": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII=",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": {
+      "db": "g2",
+      "png": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII=",
+      "request_id": "<rid1>"
+     },
+     "headers": {
+      "authorization": false,
+      "content-type": "application/json",
+      "origin": false,
+      "x-fleet-client": true,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "POST",
+     "path": "/ui/company",
+     "query": {}
+    }
+   ],
+   "setup": {
+    "files": {
+     "logo.png": {
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAKUlEQVR4nO3BAQ0AAAjAoNs/tOZwA5raAAAAAAAAAAAAAAAAAAAAgM8OgAMBAaai7cUAAAAASUVORK5CYII="
+     }
+    },
+    "folders": [],
+    "links": {}
+   },
+   "tool": "save_company"
+  },
+  {
+   "after": {
     "files": {
      "<tmp>/out/a.txt": "2852d7262f1fd6339a426560101d5840edf5b8999b90eb6b2eea86c8b9f7e298"
     },

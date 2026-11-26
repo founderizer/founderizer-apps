@@ -60,7 +60,7 @@ struct OwnerParityTests {
         let named = Set(Self.cases.map(\.tool))
         let both = Set(Fixture.table.tools.filter { $0.kind != .absent }.map(\.name))
         #expect(both.subtracting(named).isEmpty, "\(both.subtracting(named).sorted())")
-        #expect(both.count == 58 + 4 + 12)
+        #expect(both.count == 58 + 4 + 13)
         #expect(Self.cases.count > 100)
     }
 
@@ -87,6 +87,8 @@ struct OwnerParityTests {
                 let handle = try FileHandle(forWritingTo: place)
                 try handle.truncate(atOffset: UInt64(size))
                 try handle.close()
+            } else if let bytes = content["base64"]?.string {      // a file that is no text: a picture
+                try LocalFile.write(try #require(Data(base64Encoded: bytes)), to: work.path + "/" + file)
             } else {
                 // POSIX, as Python makes it: Foundation's file URL gives the name decomposed (NFD).
                 try LocalFile.write(Data(content.string!.utf8), to: work.path + "/" + file)

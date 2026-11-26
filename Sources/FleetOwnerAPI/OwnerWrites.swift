@@ -16,6 +16,8 @@ extension OwnerTools {
         "fleet_overview", "fleet_read", "search_history", "see_costs",
         "save_profile", "attach_file", "read_attachment", "take_backup", "grant_access", "share_resource",
         "send_message", "answer_needs_you", "decline_secret_request",
+        // the company's logo, drawn with the system's picture code (`CompanyLogo`, OwnerCompany.swift)
+        "save_company",
         // design 9's tools of a cloud (piece B2), in OwnerCloud.swift: no hub
         "cloud_look", "cloud_step", "cloud_remove",
     ]
@@ -35,6 +37,7 @@ extension OwnerTools {
         case "send_message": return try sendMessage(args, on: hub)
         case "answer_needs_you": return try answerNeed(args, on: hub)
         case "decline_secret_request": return try declineSecret(args, on: hub)
+        case "save_company": return try saveCompany(args, on: hub)
         default: throw OwnerRefusal(Self.notYet(name))
         }
     }
