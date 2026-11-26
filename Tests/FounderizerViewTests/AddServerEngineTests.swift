@@ -6,7 +6,7 @@ import Testing
 /// **One press of Add server's "Make the server"** (F3 of the owner's feedback of 22 November 2026, piece 2), through the
 /// engine that the page calls: a stand-in hub, and a provider's stand-in that counts the calls. The app's real build runs
 /// up to its wait for the new server, with no keychain, no key file, no network of this Mac and no real provider.
-@Suite(.serialized, .timeLimit(.minutes(2))) struct AddServerEngineTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct AddServerEngineTests {
     /// **Akamai's API as one server needs it**: two plans that fit, free in each region, a firewall and one Linode. It
     /// keeps each call. Synthetic data only.
     private final class ProviderCalls: @unchecked Sendable {

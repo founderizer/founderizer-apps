@@ -30,7 +30,7 @@
   "hello_sealed_base64": "AAECAwQFBgcICQoLZejbVEJyJbBqad6tzVD1eKNrzWTJULOe+sEW/kDs/ubA7qxWKoOw49bZVl7atHvDqJqu0TXjaVwgJucCyjVEd7tYkPfzkqG1N334W5niWErLXtbhFLl7kG41vnLD1QGAts+V2/v6zfSwcd/2CTbaODCrMK5cyo7DzP4m4TWGWiueTdXvMOTn/QExbjyZWk/PEDGHtF36LL46PGy2biFoNpvwyX58kRezIashgtqWbbY1Tr3ck8ngnurHIP4I84KGAOqth2V3AlfsCNLWJ4SkUDktBNyya3xy1y8k/W/S2sX/+ZRM7o83T8vlNUIAqaAGE1p9G+zc3AqrA8tGq1WoNy9D1Tw/4OtMJC34Lq7lttQ=",
   "list_json": "{\"id\":\"0f8fad5b-d9cb-469f-a165-70867728950e\",\"op\":\"list\"}",
   "list_sealed_base64": "AAECAwQFBgcICQoLbXiuIMDlSPHjUngX+9PtGlmEP5BGvYz6Ts2+qZ3ZS47/FbjrQCFI0frO/zuQMpB1rjrjGoMh/1FWqsMamkvyp4V0IV4JtD4fE+4opVZSjf1i2rWWf+GXRajC1HB9rgTr9NtT0lv4Kn5MhfowTzKWdgiUXaJI0PVZNgceCGNqN7f6tgdyCABbEyTZKI2GGfFy512wsz5DIEi6Wu6hWs5SbFr6boTLpcdsSI1C6xEim5wZNAoHRbzbp4Q/YUZHLDAaUerOxum9slz8ATvsQOD4z2VkPu4EizKl59AOYpugLTm8tAKjzbO+Lp8WMcY7S6SPbaGH9V+2gQStKBqSjTD6+ZmvM/YG32+vtMQtalTScDo=",
-  "messages_about": "One example of each message of the protocol after hello and the list request: name, box (where it goes; the accept's proof goes inside accept), key (a value of this file), nonce (hex, its own), json (the plain text, UTF-8 with no escape of non-ASCII), plain_length (its padded length), sealed_length and sealed_base64. Each end seals json, padded, with key and nonce and gets sealed_base64, and opens sealed_base64 and gets json, padded. Each end's test also WRITES each entry of write_and_compare from its parsed value with its own JSON writer and compares the bytes with json: Foundation and .NET escape '/', '+' and characters that are not ASCII unless they are told not to. A limit of a text counts Unicode code points (Python's len, the Mac's unicodeScalars, Windows' runes); the sealed size is a second limit. 'send 4000 at the edge' has a text of 4,000 code points whose sealed size is the most that fits; 'send 4000 over the edge' has 4,000 code points too, does not fit sealed, and has no nonce and no sealed bytes: each end refuses to seal it, with the code too_long (refused_with), which covers a text of more than 4,000 code points and a text that does not fit sealed. Each of the two texts also has a character above U+FFFF and a combining mark, so its 4,000 code points are 4,001 units of UTF-16 and 3,999 graphemes. 'send 4001' has 4,001 code points (4,001 units of UTF-16, 4,000 graphemes, as Swift's String.count counts them) and fits sealed: the hub opens it and refuses it with too_long (refused_with), so an end that counts graphemes takes a text that the hub refuses.",
+  "messages_about": "One example of each message of the protocol after hello and the list request: name, box (where it goes; the accept's proof goes inside accept), key (a value of this file), nonce (hex, its own), json (the plain text, UTF-8 with no escape of non-ASCII), plain_length (its padded length), sealed_length and sealed_base64. Each end seals json, padded, with key and nonce and gets sealed_base64, and opens sealed_base64 and gets json, padded. Each end's test also WRITES each entry of write_and_compare from its parsed value with its own JSON writer and compares the bytes with json: Foundation and .NET escape '/', '+' and characters that are not ASCII unless they are told not to. A limit of a text counts Unicode code points (Python's len, the Mac's unicodeScalars, Windows' runes); the sealed size is a second limit. 'send 4000 at the edge' has a text of 4,000 code points whose sealed size is the most that fits; 'send 4000 over the edge' has 4,000 code points too, does not fit sealed, and has no nonce and no sealed bytes: each end refuses to seal it, with the code too_long (refused_with), which covers a text of more than 4,000 code points and a text that does not fit sealed. Each of the two texts also has a character above U+FFFF and a combining mark, so its 4,000 code points are 4,001 units of UTF-16 and 3,999 graphemes. 'send 4001' has 4,001 code points (4,001 units of UTF-16, 4,000 graphemes, as Swift's String.count counts them) and fits sealed: the hub opens it and refuses it with too_long (refused_with), so an end that counts graphemes takes a text that the hub refuses. 'device' is the request of a member's phone (B9): its push token, its build's environment and its seal key for this one link (b64u); its answers are 'device answer' and one 'device refused <code>' for each code.",
   "write_and_compare": [
     "accept",
     "not ascii"
@@ -307,6 +307,86 @@
       "sealed_base64": "k7IFCzbYnJCmNqx9kuubYfGfuX4Fnc5+yJmk30URgIOW5eFtIADsywPR52ikIjBGomci0We6Qp/nAVflL2HMXABi9zxGLHsgfCvconQealN2pkRLBc5l3HrPnvQhSvtVVyku2GnDRu1Wkq0e74OZITZs44z474b++rvzfZnAPkdaAl+SPdwk5BY8+Sc7ws5fFMsvlRPU2E0fDh7VhYX2tXEW3oFWasH+SSelEBcS2j0nQnVBk09Rei+KIqnkgGPfVxcmpnNNGNokHO0jlqBcSgFBgtPj62eq48Of8GH9qjJvR8UK0Ox8bL71fSs7QZd+ksI79AAyGPPlVZHp+0OZB5HFSewyk+PX2JjWOhO2JCvRXAZYHwo9ugdotxRHJUqmLGSHkSREGbpCvCEtyVhztyOp7RLO1WqUeR3kwGXYeVnJ8+22Oget5dKbcIZdNe+Nardd02L3dpIdgMSd7hPMDV6oiU5YvfFmSRGJoX0F+3kn+UPgH2MlRfXSR+SMWDBhGFWmfXhrcg9YTibiogVgI5829xHgpb2iopUP1U6y6f0XIWKZxH1qTJ5Vm5ISJYDj/dpdC8MQQJkAQYc3W1Q4djAOKcJlYQmwHSgj6+XKAlziOjENcIENIvGNmsBNgoIWiCefP5LqoSjJF9pdN8mO8Gk1q5byjKpRm6R22ocD6mswE/x425UqPdgEGIn5WhRm1BXvLNFsFejePu9C7wfat0efkTrvUsjiodVDlMlYsKeEtSx6VVxY9bNlQWb/Aio8m/qsD4yCU/ht5Hhz+bFt75Zn9ylH5rwY1e8/EHLEpQoM7BFCp9zjU6AMYdhwHn6xZBjQGFfHpAfYza0KfRmKLknHN2XP0ealJyOroa+qRP2X6G4HamYT1VvAdzTfGptC0QnsVGVKMIKMBdTOc3VzQmxHDar0Iw6CWCtHLPYwFALlhbrL9UWQ8e2d9SCC/ZDmGFNKrXxdVo2gu3Tj4+5Lkp3iY92f8rzv8+w+sfTUoyDxMgF5L+YhszI6aFDA1QlSqZ6KxNq3rVrbI71rPWkspM4I9KL61233TguImQ=="
     },
     {
+      "name": "device",
+      "box": "box_up",
+      "key": "k_up",
+      "nonce": "928af5cc1ee2441f0b1b4fc9",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"op\":\"device\",\"count\":7,\"token\":\"b8dfa3dfceb11d71905cb75f532d89dfc70e217654f527e3918eb715cb5fcc70\",\"environment\":\"production\",\"seal\":\"_ivbir5OkiAVqoWBJDslhopEmIn_2UvAoKoOtXwd29c\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "kor1zB7iRB8LG0/JFzh24RlbF24/2d48cZaWA6UB6oklk5F77CcMkxKTsPoiFB+VdesJiQhp5ARKU1t9mn1bcndfPFmUCaUVQvyxEGsURe6u48pJH/6qjAIwbGBzK8BZdqp/i2MCIRiEfwSNkDkS/sQ48dAqNFrnLUT+N+oIU1hyHmjNo06a2z1zGPa12hX8xtOzVALfPT+oi48oyhAkdMhHiwVHEnhefGGQzmcHEHNC59q5VYxgFjxlK5IYbMMe/aLMV+PsPR2K9JWSo/dpub3Uy0rpyoy8KOdmP33xJblc3G42z6SV/K5KEocqg5o2qtHQdeQEq/SXJMUBee9FgcQL2z1v+wFCPKnM2f/H2zgjmk/B6j5aqTC8MTI="
+    },
+    {
+      "name": "device answer",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "f2e22e708a5fdfba8e815445",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":true}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "8uIucIpf37qOgVRFvgfT9GjMlitVSHWX8Mrcoin0f8L94c1vJ85VgfJhP3dkvBrJIa7w9u/Iz/t2xl38MDY8vzE/2H4tlmDYFFrzSGq2M2rd6IniBQm6Rb336gFSaYof20sgJegG6Qu6V8tWiCaMeWisfqlWx7qwuh4ymBJS4hzEgD9uwaXAKOx94zAQOyKQjq1pkxuEENShXDB72RbTsi+x6OdssWxB0F9h8juFDmdRyxf5/Tcqu5Sfm4wFiCy6XO9reyYcT6UgLr+OXsuRZKvCNlhIYVR7JwTWE6pV4z6S2iSUQZtQy966wBHCdi9mpIuI36rUZeIU008YcEC0RXQvDJRfUgClGzBQOUdSJe/kB+BhQ1U8SbfCldc="
+    },
+    {
+      "name": "device refused not_count",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "d0a0e5befee6a0e063835637",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":false,\"code\":\"not_count\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "0KDlvv7moOBjg1Y3ES71GVPNoew+EcO83OLxdmgdcTmzL/ETzMy3nS45CnImrmcYqNOb3m9W59ZsdPfNAlIOCR2+3Yya/lo3SuN3s9BQwYOtJeOnTICdJnzwOb/7BbAtF7Bopu18hnqBoNAUfuQ6nnqS4mUroNFYfqu/SmuG72WLhAdN6lxy5snnNcoS+rl4UOALTfUTgLUyXZBNDUuhjgtTSGPZftw5pMtAMHHQQqZFQYgrPrm2W2SSngFJjz2jr9407z5yCMSEin012NjdRbTnw+BO3+yxWR5XKGpBPMaPh0AIPiS3vRDS6GFWtNIIyX06ypEFKQTyHOzsBK1ZVH2+QcPllG+JJ/gJIdqUW0LQx7B8/1rcNxSYke0="
+    },
+    {
+      "name": "device refused order",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "94293fa7abd31f8c1e292e4c",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":false,\"code\":\"order\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "lCk/p6vTH4weKS5MW3HsdFKDeQm7HNDhxCIaOuWovIESzNtHqes9wbtb+R8+6kaHpPaaN0Evu//1QISgmpy3MnqqXV6y9iKHuYzsOYg3+RbUMUxm/E+iUGOUvs5dN8Gxoyb3BQdX8ZwkmoXqwEubx7Rs90yIig9vss7fG+N0il3/ZamT0YWBMTcGbcocUoJ+c+tj+RlKtzvtQEns0pAHYf6w5wn5+uI7OB4vaqvp0t+RlqWR14DgUjPvP0Lx3DchmSIn4caoXjcvYDeN58H/CYUKdHlzt9mdoogAdUTahM4NnDXOvE2t9qhPUaiighouFjm9svFppdjgyWh1Lnq2qNv+B2I5b3Y66N+/s0Yn1qGQ8Na8uRK633rl09U="
+    },
+    {
+      "name": "device refused not_token",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "acf044fd321f17c8fc2f046f",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":false,\"code\":\"not_token\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "rPBE/TIfF8j8LwRvU0psGyOSIbSB2yDoOBET76Qw69mM6KI3uuYk87Gzt8tc8k/IWr/UcC6P9tmNq3w2rMa/GTWUBOBmAeMU/U4l38mEQY03OebvbGbTID8N1LFpHanp5RV8aYh1QAP1UVj77k0RqLY90QJR8FbLSO1M6Tu5Gu4IN9EHayhanjy9HORsbFtffH6b1Jmb3QdIijyqMht26JzHjP42CrSQ3iirCZ7oB84IN4zOMY0HQp3TWjAjOTlh9YIwtQqALIrNDOvMzcQpTS1X+wMGpdEvlS44DyLA+veAoAyQ6jpVeg6eT/0r9WwheeaQOIpcTaOZmRepqy/OguKeeRXTucYQG1ATzn53szalncXJJ0XzfdqDWMQ="
+    },
+    {
+      "name": "device refused not_environment",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "ecb77b0069d8c777f4dee98e",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":false,\"code\":\"not_environment\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "7Ld7AGnYx3f03umOn+zv8RlH6yYcJBzJ+siQmFoMS73JnOYjNN+Cxgfmcqfh7jPFu7am24VlGBdyRd/hLgDgRfdI6v4xiNg7OmD0x57Ob+nyK6HVprbTLSK9Stz8VA1bzo5AnXO0wIlzZLM6gdl+Qmygjlc2vJK2DCzyeWhpceMq2gsJuHJ+IqwpUXsni6ympiuYP1S0jU6Y3M9AEX907mz5GJIuPn1jIwOB2fZ8Xz8FJQ4gOSqYud78auynxjeE4XpKDAosNC2yB1OJyyJknpw0QBBVx3YG/8T64Fmw4Voy7tMX3r1DqH1Rp8tYwmvBbuubfi1H+VBuD4oGVZgyskTxiDZtpCaeRxgUJ3yNtK8W25Bt40Tgy9piKkk="
+    },
+    {
+      "name": "device refused not_key",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "cf6c85fce11faf31b7fb03f2",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":false,\"code\":\"not_key\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "z2yF/OEfrzG3+wPyoCFYBN3TAeEvMF2Cr+xKHIc8uCPu3rxM9xhSiLSMtak1AkTl6pC0mjdzSojzh8cvXfBRBuMU6tBo0BrUG1hbdcZobMB+uHCtxJt3GUXso8tIy5pwGz9pBUxO8J3LfaWHhXOqimzcvk9Ehxz310D4XkiFyHZx15xyiEI0SzRLUnQcvl0rCk3qz1pFZja1eiv9nhiNH+pfeWWOuvfjZc04WyCTb5lfiqICHUKTZksfzR91wTvVUpvcxVGdipbHPwJWbq0LTK9rd7RwYdNS/jhDVveO8Mm4nZO10NV0MC1RfeIksfU9knr4zJszAuWCjLpZHN8VbZHHIt9t2EiU4cqXcO/QJfZH1kmIbKZMJYNwD8k="
+    },
+    {
+      "name": "device refused taken",
+      "box": "box_down",
+      "key": "k_down",
+      "nonce": "92ff6dcf70179a38b08791bc",
+      "json": "{\"id\":\"88cc41e7-258a-438d-a0ca-e83dead431ab\",\"ok\":false,\"code\":\"taken\"}",
+      "plain_length": 256,
+      "sealed_length": 284,
+      "sealed_base64": "kv9tz3AXmjiwh5G8ncO16m2+522u07siCFShz9fCjgwlk0hmoOAGa1a+pqMY1T4luZsB392MzU6DBew0NOHcQEnVbZRsSYEeVn0d2+VsLShxr/BY7VTZfvnqs3gc61C0OYsz8u/TzwvPRegq9PiKn28tKuqKmYbUmiKvz3iqaVl5bU22k37uX8G1wSGRaR7+PUul8PrzJ2oYa5bdKrggR7uNcuAJ3I8EpUqK6iPw31cDTOjO3aJGRkk4W7LLCAUKvUnScGI5aJmCXtdSSfi4sVc4ZHVsJTgMjgipNqzJUYrsal/3AvBtRhwPc347uAwx/VcsgiWr62ZBzRaosqi04DOrxAoeHOw3Efc2SJJEOEtroheHnubaHUyLEJE="
+    },
+    {
       "name": "unknown op",
       "box": "box_up",
       "key": "k_up",
@@ -452,6 +532,35 @@
       "key": "k_up",
       "nonce": "cd6ec75d83e6d0a077a5431c",
       "sealed_base64": "zW7HXYPm0KB3pUMcqZEHGXdax1sds863YTo4YrvS4CobudkJU6QlB8AgXM8w4zzSkUwfDnuuDnjf+CZuEXublog2ovfJVw9ui3CmuwqgiQb3Qan4oguA4f45nIZQribh65McD2bz/z/cyo4fPn0wAybMbVnfMopyy6lzY3q27/uCSyq2SrPrvVEJYBDlIu0ZKWgy3vxd4NbXKEysmD/6OJq0Os7aaE1es9pdpvGhXyTQ2zWB/D1orOgIlUX8XmgpEnRbO6JAW6vJgrFbXRby7sXsihx9dpVfpc2Cz977nkb099O1Uwd/mslzcXMxr2zDP0jIIMrXWKSml9p1yea5o4eUalI9lt8KhYMMWJ5TQNlTsQ6RLGMYEsdswgg="
+    }
+  },
+  "member": {
+    "about": "A ping to a member's phone (B9). The phone gave seal_key in its 'device' request (seal, b64u). payload_json is all that our side and Apple carry: the same open part for every member ping, with no item, no db, no name and no number, and 'sealed', which seal_key opens (nonce, json padded to plain_length, sealed_length). collapse goes beside the payload as Apple's collapse id: one notification for each chat, made with a key that HKDF makes from seal_key (collapse_key_label), and another link's key gives another one for the same agent.",
+    "seal_key": "fe2bdb8abe4e922015aa8581243b25868a449889ffd94bc0a0aa0eb57c1ddbd7",
+    "agent": "atlas",
+    "n": 3,
+    "nonce": "2dd8f2ac1fc663275248562d",
+    "json": "{\"t\":\"news\",\"agent\":\"atlas\",\"n\":3}",
+    "plain_length": 256,
+    "sealed_length": 284,
+    "payload_json": "{\"aps\":{\"alert\":{\"loc-key\":\"shared-reply\"},\"mutable-content\":1},\"sealed\":\"LdjyrB/GYydSSFYthRXlE77sfr1ijq9xCYlclm7JiXaqJ97GW7yr0FTO20Jw+70UzxSQMr5z8mNmX+4m5ZWjyFUnUvRVNfQGbA/vl6/kMz4c8slk7kGzyYO1ktfUX/LC6Y+tHJIfjl0AvcM46ML5dHbaNdlkCHj1e0FJWm6wlhefygCO41yChNQ9XA+6UnSpuw4D8zP2oR5pLBYnvx6CdhOrnTcll8wiROJPagA0szoZm7JFfYnGXs+FX8DUATZlZjR9ozsqgpx5nEEyzBKGgKBKakqH8C1wNhRm3emG2o2agNvYD0rMXJMMcmhRB2kJd4TEBz/C1t6Ql2aWmRbnr22p80ulhow6vEvEMZ08jrcFWKZ+B10bYKbJ6PE=\"}",
+    "collapse": "7f64187c98eefd9782b87212b4f7b818",
+    "collapse_key_label": "fz-link/1 collapse key",
+    "another_seal_key": "fca93996c0022b7b37e6d0cac4476e0e6b866ecfdd6ce29acd5dcf91e103b6a7",
+    "collapse_of_another_link": "fc3443c703076d4ae88068c1fabc13fd",
+    "forms": "The two forms, by their open part. The member form is {\"aps\":{\"alert\":{\"loc-key\":\"shared-reply\"},\"mutable-content\":1},\"sealed\":...}, with no other key (our side may add aps.sound and aps.badge). The owner's form has need and db beside aps, and its aps.alert is {\"title\":\"Needs you\"}. A phone tries its link keys on the member form only, and reads what one opens in the member form only: no button, no press, no need, whatever the part holds. It tries the owner's key on the owner's form only, and never a link key.",
+    "with_need": {
+      "about": "Two payloads that a company's hub could send to a member's phone, each sealed with seal_key and holding a need, options and a title. member_form: the phone opens it with seal_key, shows no button and sends nothing. owner_form: the owner's form (need and db in the open part, the owner's sealed layout with no pad); the phone tries no link key on it, so nothing of it opens on a member's phone.",
+      "member_form": {
+        "nonce": "6b5782b1be0bfcfdf1d19619",
+        "json": "{\"t\":\"news\",\"agent\":\"atlas\",\"n\":4,\"need\":12,\"db\":\"0a1b2c3d4e5f\",\"title\":\"Approve the payment?\",\"options\":[\"Approve\",\"Refuse\"]}",
+        "payload_json": "{\"aps\":{\"alert\":{\"loc-key\":\"shared-reply\"},\"mutable-content\":1},\"sealed\":\"a1eCsb4L/P3x0ZYZlgimzMrxMdy37fcmsibEdO0CYAto8ys+4osUJKVQrivADYCsBscPtKyCWGIjokOOkNQoI0sVVsaYP3ujwjKdqWSq8J3r/wK67GXmbul6vxozAeo3YH7vUDpeksa0GIFVeN9y556zqVWACezv0FRFaCcATvq2fGQzGtiGRQDwyC4GzPc4P840zgw55esxFPXTJ25DdkyHff9Gw6IbzB2UkOtAtXQzpHI1FmOa8dL4Qgorl4vs1pc33ozgWMmzBPK2Uacah/u6OJu6Tls12y4ts7LubQ6BUAbExFT6vcB4f0GViKnnM/pA2qpYbWY5n4mkwyl1k2ogXMWhYJZKfbyny+M6b6KHSSVENsY61gfljA4=\"}"
+      },
+      "owner_form": {
+        "nonce": "4a0777972103f7c0213b207b",
+        "json": "{\"need\":12,\"db\":\"0a1b2c3d4e5f\",\"title\":\"Atlas\",\"body\":\"Approve the payment?\",\"options\":[\"Approve\",\"Refuse\"]}",
+        "payload_json": "{\"need\":12,\"db\":\"0a1b2c3d4e5f\",\"aps\":{\"alert\":{\"title\":\"Needs you\"},\"sound\":\"default\",\"thread-id\":\"needs\",\"mutable-content\":1},\"sealed\":\"Sgd3lyED98AhOyB7J2mcMPJuS6o31xPPa6kiQCRON0z22m5QWSK0BPTiG99SbXTKFOkUob4Lrb6IfIGi6pfwHDmBQ/GK7OV1zDBVIZAJWop9oNp2/OEnQykePTPkim4ZBUUWSzkWaakn5JOQ3Evo9XRvkHu9vVwhgalWc8Zfdt4iVDVK0fKS5A==\"}"
+      }
     }
   }
 }

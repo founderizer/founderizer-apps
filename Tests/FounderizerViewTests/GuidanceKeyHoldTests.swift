@@ -11,7 +11,7 @@ import Testing
 /// card with its guidance box and reads, in the card, the question for a key that comes into the box's words, and that
 /// its Send holds such words also while another box's question stands, when the box itself asked nothing. The elements
 /// are read and pressed as an assistive app does (`JobCardPressTests`).
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct GuidanceKeyHoldTests {
     /// A made-up key with the shape of a real one (`KeyInText` knows it by its prefix), in two parts so that no scan of
     /// the repository takes it for a key.

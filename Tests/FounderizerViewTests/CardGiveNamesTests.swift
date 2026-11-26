@@ -7,7 +7,7 @@ import Testing
 /// **Each card takes the short names of its own Give, and of no other card's** (the owner, 23 November 2026: "Yes: a
 /// name that the card's Give names is a badge"), from the books that the app keeps (`FleetStore.cardNames(for:)`),
 /// which every place of a card's words asks.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct CardGiveNamesTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct CardGiveNamesTests {
     /// A request of the manager's whose Give names `repos`; none: a request with no Give.
     private static func need(_ id: Int, why: String = "It pushes the new page.",
                              gives repos: [String]) -> [String: Any] {

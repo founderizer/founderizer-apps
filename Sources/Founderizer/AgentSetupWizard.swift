@@ -366,7 +366,8 @@ struct AgentSetupWizard: View {
 
     /// Continue of "Name your manager": the manager's new name on the hub, when it is another than the one it has, and
     /// then the page of the fleet's servers. The page that shows the manager goes with its new name by itself
-    /// (`FleetStore.noteRenamed`). A team.json that changed between the read and the press is read again, once.
+    /// (`FleetStore.noteRename`). What the press does is `ManagerRename.press`: the team that the hub gives at the press
+    /// says whether the rename of an earlier press, whose answer was lost, was made.
     private func takeName() async {
         guard !busy, let wanted = ManagerName.agentName(typedName), let database = store.state?.db else { return }
         busy = true; refusal = nil
@@ -374,41 +375,47 @@ struct AgentSetupWizard: View {
         // The hub of the press: a store that goes to another hub meanwhile gets no command of this page.
         let hub = store.hub
         guard await store.writable(), store.hub == hub else { return }
-        guard wanted != agent else {
-            // He goes on with the name that it has: no rename, and no note of an earlier one that got no answer.
-            store.noteRenamed(from: agent, to: nil)
+        // He goes on with the name that it has, and no rename of an earlier press waits: nothing to ask the hub.
+        guard wanted != agent || store.renameNoted(of: agent) else {
             store.noteManagerNamed(true)
             return
         }
+        let here = { store.hub == hub && store.state?.db == database }
         renaming = true
-        for attempt in 0..<2 {
-            do {
-                let team = try await HubClient().team(hub: hub, database: database)
-                guard store.hub == hub, store.state?.db == database else { renaming = false; return }
-                store.noteRenamed(from: agent, to: wanted)
-                _ = try await HubClient().nameManager(hub: hub, database: database, client: store.installation,
-                                                      agent: agent, sha256: team.sha256, name: wanted)
-                // The next reading has the new name: the page goes to it, and its view opens on the slider. A store
-                // that went to another hub meanwhile gets no mark: the name was this hub's.
-                guard store.hub == hub, store.state?.db == database else { renaming = false; return }
-                store.noteManagerNamed(true)
-                await store.refresh()
-                renaming = false
-                return
-            } catch let HubError.refusal(refused) {
-                if refused.status == 409, attempt == 0, refused.means(.teamChanged) { continue }
-                store.noteRenamed(from: agent, to: nil)
-                refusal = refused.words; renaming = false; return
-            } catch {
-                // No answer: the hub can have the new name. The next reading says which name it is, and the page
-                // goes with it.
-                refusal = String(l10n: "The hub has not answered. Try again.")
-                await store.refresh()
-                renaming = false
-                return
-            }
+        defer { renaming = false }
+        switch await ManagerRename.press(was: agent, wanted: wanted, team: {
+            let team = try await HubClient().team(hub: hub, database: database)
+            guard here() else { throw CancellationError() }
+            return ManagerRename.Team(team)
+        }, rename: { sha256 in
+            store.noteRename(of: agent)
+            _ = try await HubClient().nameManager(hub: hub, database: database, client: store.installation, agent: agent,
+                                                  sha256: sha256, name: wanted)
+        }) {
+        case .moved:
+            break
+        case .keep:
+            store.noteManagerNamed(true)
+        case .named:
+            // The next reading has the new name: the page goes to it, and its view opens on the slider. A store
+            // that went to another hub meanwhile gets no mark: the name was this hub's.
+            guard here() else { return }
+            store.noteManagerNamed(true)
+            await store.refresh()
+        case .renamed(let now):
+            store.noteRename(of: agent)
+            if now == wanted { store.noteManagerNamed(true) }
+            await store.refresh()
+        case .refused(let refused):
+            guard here() else { return }
+            refusal = refused.words
+            await store.refresh()
+        case .unanswered:
+            guard here() else { return }
+            // The hub can have the new name. The next reading says which name it is, and the page goes with it.
+            refusal = String(l10n: "The hub has not answered. Try again.")
+            await store.refresh()
         }
-        renaming = false
     }
 
     /// Continue of "Your fleet's servers": the hub keeps the step. With "1 server" the same command lets the hub's own

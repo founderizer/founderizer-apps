@@ -7,7 +7,7 @@ import Testing
 /// request that took another's place carries his question about it (the area Needs-you and the manager, 21 November
 /// 2026), and a chat's card drew the talk only inside the answer box, which a key card does not have. Needs you draws it
 /// over every request's answers already.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct KeyCardTalkTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct KeyCardTalkTests {
     @Test func anOpenKeyCardInAChatShowsHisTalkOverItsForm() async throws {
         let (shown, screen) = try await ViewHost.onMainLoop { () -> Bool in
             let now = Int(Date().timeIntervalSince1970)

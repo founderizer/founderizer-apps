@@ -79,7 +79,7 @@ import Testing
 /// drawer joins the lines before the names are read, so "We asked\nMarketing spend rose." keeps "Marketing" on the
 /// open card and shows "We asked Wren · Marketing spend rose." on the folded one; or it draws a line break, and the
 /// three folded lines show less of the reason.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct FoldedReasonTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct FoldedReasonTests {
     @Test func aFoldedReasonDrawsItsNamesAsTheOpenCardDoes() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop { () -> (named: [NSPoint?], plain: [NSPoint?]) in
             let team: [(name: String, role: String?)] = [("wren", "Marketing")]
@@ -120,7 +120,7 @@ import Testing
 /// role was grey). The bug that this catches: the role takes no grey, and draws in the words' white, or in the link's
 /// violet. (A run with a link and its own colour draws its own colour: the role kept its grey with its link too, in
 /// this test's run of 24 November 2026.)
-@Suite(.serialized, .timeLimit(.minutes(1))) struct CardBadgeRoleLookTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct CardBadgeRoleLookTests {
     @Test func theRoleBesideANameInACardsBadgeDrawsGrey() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop { () -> (name: Pixels?, role: Pixels?) in
             let team: [(name: String, role: String?)] = [("wren", "Marketing")]

@@ -7,7 +7,7 @@ import Testing
 /// first-use fix of 22 November 2026, `InstallTarget.hostKeyOptions`): a port that he gave keeps a new host key once, a
 /// port of the hub's record never does, and the steps that run by themselves as root run only at an address that this
 /// Mac's own Tailscale names. FleetCore's tests hold the rule; these hold the places of the app that give it its input.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct ServerPortWordTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct ServerPortWordTests {
     /// A hub address of this test alone (the app keeps its records by the hub's address), at the address of the hub's
     /// machine in `status`.
     private static func hub() -> URL { URL(string: "http://100.80.1.2:8765/\(UUID().uuidString)")! }

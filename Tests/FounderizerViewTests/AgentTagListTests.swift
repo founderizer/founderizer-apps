@@ -9,7 +9,7 @@ import Vision
 /// each other agent, ↑ ↓ and Return or Tab, Esc, one Backspace removes it; his answer of 22 November 2026: a row
 /// shows the name and the role, and a pick writes "@" and the name). The real composer, in the window of a test, on a stand-in hub that keeps what
 /// the app sends. Example names only.
-@Suite(.serialized, .timeLimit(.minutes(3))) struct AgentTagListTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct AgentTagListTests {
     struct Seen: Sendable {
         var firstRow: String?, keptDraft: String?, opened = false, closedByEsc = false, afterEsc: String?, closedWhileTyping = false
         var reopened = false, picked: String?, sentWhilePicking = false, typedAfterPick: String?

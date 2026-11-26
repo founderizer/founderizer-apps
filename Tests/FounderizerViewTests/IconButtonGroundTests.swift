@@ -7,7 +7,7 @@ import Testing
 /// owner, 23 November 2026: "dont add the grey backgroundto the icon buttons unless on hover"). The bug that this catches:
 /// the shared style draws the circle at rest again, or loses it under the pointer or on the press; or a disabled icon
 /// button looks as an enabled one, now that no circle tells them apart.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct IconButtonGroundTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct IconButtonGroundTests {
     /// How light the button's circle is, beside its symbol, over a black page.
     private struct Seen: Sendable { let rest, hover, pressed, away: Double }
 

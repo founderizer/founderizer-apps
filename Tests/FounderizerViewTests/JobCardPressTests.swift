@@ -11,7 +11,7 @@ import Testing
 /// `AXPress`: `accessibilityPerformPress` on SwiftUI's element of the row, found by its identifier. SwiftUI makes its
 /// elements only in a process that an assistive app reads, so the test sets `AXEnhancedUserInterface` on its own app,
 /// as such an app sets it, and takes it away at its end.
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct JobCardPressTests {
     /// A job of two tasks of an example agent: task 2 follows task 1, so the board names the job "task 1".
     @MainActor private static func store() throws -> FleetStore {

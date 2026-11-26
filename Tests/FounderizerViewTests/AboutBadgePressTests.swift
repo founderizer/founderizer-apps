@@ -13,7 +13,7 @@ import Testing
 /// (`accessibilityPerformPress` on SwiftUI's element, found by its identifier). SwiftUI makes its elements only in a
 /// process that an assistive app reads, so the test sets `AXEnhancedUserInterface` on its own app, as such an app sets
 /// it, and takes it away at its end.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct AboutBadgePressTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct AboutBadgePressTests {
     struct Seen: Sendable {
         let clicked: DetailPlace?
         let clickedUnder: DetailPlace?

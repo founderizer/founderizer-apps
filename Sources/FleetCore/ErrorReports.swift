@@ -64,7 +64,9 @@ public enum FirstRunReports {
     /// A press on a card of the page: the check mark, and the answer that the next hub gets. **A "no" is also the
     /// switch's last answer** (`ErrorReportsDay`): the wait of the answer ends at a hub's receipt, at Back to the welcome
     /// page and at a new start of the app, and the day of a hub that does not answer must not go on an older "on" then.
+    /// The first press of all is the funnel's first page (`FunnelPage`): its day stays on this Mac, also for a "no".
     public static func choose(_ send: Bool, at now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) {
+        FunnelPage.reached(at: now, in: defaults)
         defaults.set(word(send), forKey: choiceKey)
         defaults.set(word(send), forKey: waitingKey)
         defaults.set(now.timeIntervalSince1970, forKey: pressedKey)
@@ -101,6 +103,66 @@ public enum FirstRunReports {
         case "none": false
         default: nil
         }
+    }
+}
+
+/// **The funnel's first page** (the SMB audit's Q8, the owner's "Go ahead" of 25 November 2026: "Five funnel counts
+/// under the existing usage switch: first page, servers built, first message, first finished job, second person"):
+/// the UTC day of the owner's first press on a card of the setup's first page, "Help improve Founderizer"
+/// (`FirstRunReports.choose`), kept once on this Mac, also for "Don't send": no hub exists then, and the hub's report
+/// has the other four steps. It goes only in a report that goes anyway, under the switch: in the report with no hub
+/// while the owner's "Send" waits for one, else with the Mac's day after the switch is on, so a page from before the
+/// switch's "on" goes after it. It goes once: a report that our site took ends it (`taken`); a 400 to a report with
+/// it holds it a day (`hold`). **It waits until our site takes it** (`ourSiteTakesIt`). Design:
+/// ~/dev/founderizer-plans/smb-x100-audit-2026-11-25/q8-funnel-design.md.
+public enum FunnelPage {
+    /// **Our site takes the block.** False until it does: our site refuses a report with a key that it does not know.
+    /// The website area's change goes live first, with the privacy page's sentences that the owner saw; then this is
+    /// true, in a commit of its own. The default of `ErrorReportsSending`'s `funnel`.
+    public static let ourSiteTakesIt = false
+    /// The contract's form of a day.
+    static let dayPattern = #"\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z"#
+    static let dayKey = "funnelPageDay"
+    static let takenKey = "funnelPageSent"
+    /// The end of the wait after our site refused a report with it, in seconds since 1970.
+    static let holdKey = "funnelPageHold"
+
+    /// The owner's first press on a card of the page: its day is kept, once.
+    static func reached(at now: Date, in defaults: UserDefaults) {
+        guard defaults.string(forKey: dayKey) == nil, let day = day(of: now) else { return }
+        defaults.set(day, forKey: dayKey)
+    }
+
+    /// **The block that a report carries now**, or nil: no day kept, a report that our site took carried it, or our
+    /// site refused one with it less than a day ago.
+    public static func waiting(now: Date = Date(), in defaults: UserDefaults = AppDefaults.store) -> ErrorReport.Funnel? {
+        guard !defaults.bool(forKey: takenKey), let day = defaults.string(forKey: dayKey) else { return nil }
+        let hold = defaults.object(forKey: holdKey) as? Double
+        if let hold = ErrorReportsDay.valid(hold, now: now), now.timeIntervalSince1970 < hold { return nil }
+        return ErrorReport.Funnel(page: day)
+    }
+
+    /// Our site took a report with it: it goes no more.
+    static func taken(in defaults: UserDefaults) {
+        defaults.set(true, forKey: takenKey)
+        defaults.removeObject(forKey: holdKey)
+    }
+
+    /// Our site refused a report with it (a 400) at `at`: it waits a day.
+    static func hold(at: Double, in defaults: UserDefaults) {
+        defaults.set(at + ErrorReportsDay.day, forKey: holdKey)
+    }
+
+    /// **The UTC day of a time** that a report may carry ("2026-11-26"), or nil: a day, never a second.
+    static func day(of date: Date) -> String? {
+        let seconds = date.timeIntervalSince1970
+        guard seconds.isFinite, Double(ErrorReport.times.lowerBound) <= seconds,
+              seconds <= Double(ErrorReport.times.upperBound) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
+        return String(format: "%04d-%02d-%02d", year, month, day)
     }
 }
 
@@ -159,10 +221,14 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
     public let crashes: [Crash]
     /// **The Mac's day** (W17, `AppHealth`): in the day's report only, and nil in a report of crashes alone.
     public let app: AppHealth?
+    /// **The funnel's first page** (the SMB audit's Q8, `FunnelPage`): with the day (`app`), or in the report with no
+    /// hub, until our site took one report with it; nil in every other report.
+    public let funnel: Funnel?
 
     /// The report, or nil when it cannot be sent: no fleet id or version of the contract's shape, or no crash that is
     /// one and no day (`app`). Identical crashes are one entry, and at most `maxCrashes` go: the ones seen last.
-    public init?(fleet: String?, version: String?, system: String?, crashes: [Crash], app: AppHealth? = nil) {
+    public init?(fleet: String?, version: String?, system: String?, crashes: [Crash], app: AppHealth? = nil,
+                 funnel: Funnel? = nil) {
         guard let fleet, Self.matches(fleet, Self.fleetPattern), let version, Self.matches(version, Self.versionPattern)
         else { return nil }
         let crashes = Self.merged(crashes.compactMap(\.checked))
@@ -173,36 +239,48 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
         self.system = system.flatMap { Self.matches($0, Self.systemPattern) ? $0 : nil }
         self.crashes = crashes
         self.app = app
+        self.funnel = funnel
     }
 
     /// **The report of an install that stopped before this Mac has a hub** (the F5 analysis of 22 November 2026, piece
     /// 4): no fleet's id, because no fleet exists yet, no crash, and the day whose hub's reach is `no_hub` with at least
     /// one install. Our site takes a report with no fleet only so (`from` "mac", `app`, no `crashes`), and keeps it in
     /// no row that is by fleet. nil for a version outside the contract, a day of another reach, or a day with no install.
-    public static func noHub(version: String?, system: String?, app: AppHealth) -> ErrorReport? {
-        guard let version, matches(version, versionPattern), app.hub.reach == AppHealth.noHubReach, !app.installs.isEmpty
-        else { return nil }
-        return ErrorReport(noFleet: version, system: system, app: app)
+    /// **Or the funnel's first page** (Q8, `FunnelPage`): with `funnel`, a day with no install goes as no day at all,
+    /// and the report holds the first page alone, which our site takes from the website area's change on.
+    public static func noHub(version: String?, system: String?, app: AppHealth?, funnel: Funnel? = nil) -> ErrorReport? {
+        guard let version, matches(version, versionPattern) else { return nil }
+        let day = app.flatMap { $0.hub.reach == AppHealth.noHubReach && !$0.installs.isEmpty ? $0 : nil }
+        guard day != nil || funnel != nil else { return nil }
+        return ErrorReport(noFleet: version, system: system, app: day, funnel: funnel)
     }
 
-    private init(noFleet version: String, system: String?, app: AppHealth) {
+    private init(noFleet version: String, system: String?, app: AppHealth?, funnel: Funnel?) {
         fleet = nil
         from = "mac"
         self.version = version
         self.system = system.flatMap { Self.matches($0, Self.systemPattern) ? $0 : nil }
         crashes = []
         self.app = app
+        self.funnel = funnel
     }
 
-    private init(copy report: ErrorReport, app: AppHealth?) {
+    private init(copy report: ErrorReport, app: AppHealth?, funnel: Funnel?) {
         fleet = report.fleet; from = report.from; version = report.version; system = report.system
         crashes = report.crashes
         self.app = app
+        self.funnel = funnel
     }
 
     /// **The same report without the day**: what goes again at once when our site refuses a report with it (the
     /// contract's "The health of a fleet"), also when no crash is in it.
-    public var withoutApp: ErrorReport { ErrorReport(copy: self, app: nil) }
+    public var withoutApp: ErrorReport { ErrorReport(copy: self, app: nil, funnel: funnel) }
+
+    /// **The same report without the funnel**, or nil when nothing would be left in it (no crash and no day): what goes
+    /// again at once when our site refuses a report with the funnel, the newest block, which goes out first.
+    public var withoutFunnel: ErrorReport? {
+        crashes.isEmpty && app == nil ? nil : ErrorReport(copy: self, app: app, funnel: nil)
+    }
 
     /// The version of the build that runs, as the report names it.
     public static func version(of running: AppVersion?) -> String? {
@@ -218,11 +296,11 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
         return data
     }
 
-    private enum CodingKeys: String, CodingKey { case fleet, from, version, system, crashes, app }
+    private enum CodingKeys: String, CodingKey { case fleet, from, version, system, crashes, app, funnel }
 
     /// **An optional key of the report is left out, never `null`**: the site refuses a null key at the top, so a report
     /// with no system has no `system`, a day with no crash has no `crashes`, a report of crashes has no `app`, and the
-    /// report of an install with no hub (`noHub`) has no `fleet`.
+    /// report of an install with no hub (`noHub`) has no `fleet`; a report with no first page that waits has no `funnel`.
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         if let fleet { try values.encode(fleet, forKey: .fleet) }
@@ -231,6 +309,19 @@ public struct ErrorReport: Encodable, Equatable, Sendable {
         if let system { try values.encode(system, forKey: .system) }
         if !crashes.isEmpty { try values.encode(crashes, forKey: .crashes) }
         if let app { try values.encode(app, forKey: .app) }
+        if let funnel { try values.encode(funnel, forKey: .funnel) }
+    }
+
+    /// **The funnel's block of a Mac's report** (Q8): its one step, the first page of the setup, as its UTC day
+    /// ("2026-11-26"), never a time and never a word. The hub's report has the fleet's other four steps.
+    public struct Funnel: Encodable, Equatable, Sendable {
+        public let page: String
+
+        /// The block, or nil for a day out of the contract's form (`FunnelPage.day`).
+        public init?(page: String) {
+            guard ErrorReport.matches(page, FunnelPage.dayPattern) else { return nil }
+            self.page = page
+        }
     }
 
     static func matches(_ value: String, _ pattern: String) -> Bool {
@@ -1387,6 +1478,10 @@ public enum ErrorReportsDay {
     /// early report (`early`) that went counts in the day's `earlyMost`. What came
     /// of a block with installs is kept for the page of an install that stopped (`installReport`). It gives the error of
     /// the last send, or nil for a 200, for the crashes that the report carried (`ErrorReport.settle`).
+    ///
+    /// **The funnel's first page** (Q8, `FunnelPage`) is the newest block, so a 400 to a report with it takes it out
+    /// first: the first page waits a day, and the report goes again at once without it while the switch is still on,
+    /// when something is left in it (`withoutFunnel`). A report with it that our site took ends it.
     @discardableResult
     public static func deliver(_ report: ErrorReport, day isDay: Bool, early: Bool = false, at stamp: Date = Date(),
                                in defaults: UserDefaults = AppDefaults.store,
@@ -1398,6 +1493,14 @@ public enum ErrorReportsDay {
         let carried = report.app.flatMap { $0.installs.isEmpty ? nil : $0.installs }
         while true {
             do { try await send(report); failure = nil } catch { failure = error }
+            if report.funnel != nil, case .refused(400)? = failure as? ErrorReportError {
+                FunnelPage.hold(at: at, in: defaults)
+                guard stillOn() else { return failure }
+                guard let rest = report.withoutFunnel else { break }
+                report = rest
+                continue
+            }
+            if failure == nil, report.funnel != nil { FunnelPage.taken(in: defaults) }
             guard report.app != nil, case .refused(400)? = failure as? ErrorReportError else { break }
             var state = state(in: defaults)
             state.hold = at + day
@@ -1603,12 +1706,16 @@ public enum InstallReportState: Equatable, Sendable {
     /// **Since when this sender saw the owner's "Send" of a first run** that no hub took yet, in memory only: no install
     /// that stopped before it goes in a report with no hub, and a new start of the app sees it anew. nil while none waits.
     private var yesSince: Date?
+    /// The reports carry the funnel's first page (`FunnelPage`): our site takes it.
+    private let funnel: Bool
 
     /// - Parameters: `file`, the kept file of the crashes; `version` and `system`, this build's (`ErrorReport.version`,
     ///   `ErrorReport.runningSystem`); `remember`, the note of the build that runs (`CrashSubscriber.remember`), called
-    ///   when the hub said that the switch is on. `now`, `uptime` (time awake, which stops while the Mac sleeps) and
-    ///   `defaults` are a test's own.
+    ///   when the hub said that the switch is on. `funnel`: the reports carry the funnel's first page
+    ///   (`FunnelPage.ourSiteTakesIt`). `now`, `uptime` (time awake, which stops while the Mac sleeps) and `defaults`
+    ///   are a test's own.
     public init(file: URL, version: String?, system: String?, defaults: UserDefaults = AppDefaults.store,
+                funnel: Bool = FunnelPage.ourSiteTakesIt,
                 now: @escaping @MainActor () -> Date = { Date() },
                 uptime: @escaping @MainActor () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
                 remember: @escaping @MainActor () -> Void = {}) {
@@ -1616,9 +1723,15 @@ public enum InstallReportState: Equatable, Sendable {
         self.version = version
         self.system = system
         self.defaults = defaults
+        self.funnel = funnel
         self.now = now
         self.uptime = uptime
         self.remember = remember
+    }
+
+    /// The funnel's first page that a report carries now, or nil (`FunnelPage.waiting`; none until our site takes it).
+    private func page(at now: Date) -> ErrorReport.Funnel? {
+        funnel ? FunnelPage.waiting(now: now, in: defaults) : nil
     }
 
     /// Crashes of this run (MetricKit gives them at a start).
@@ -1664,12 +1777,16 @@ public enum InstallReportState: Equatable, Sendable {
         guard !working, notBefore.map({ now >= $0 }) ?? true else { return nil }
         guard tick.database != nil else {
             // No hub answered this Mac yet, and the owner's "Send" of this first run waits for one: only the report of
-            // an install that stopped after that "Send" goes, with no fleet's id (piece 4).
+            // an install that stopped after that "Send" goes, with no fleet's id (piece 4), and the funnel's first page
+            // (Q8), as one of that path's reports.
             if let seen = yesSince, ErrorReportsDay.noHubYet(in: defaults) {
                 let yes = Self.latestSend(seen, now: now, in: defaults)
                 let stops = calls.sources().stops
-                guard ErrorReportsDay.asks(stops, after: yes, now: now, in: defaults),
+                let pageWaits = self.page(at: now) != nil
+                guard ErrorReportsDay.asks(stops, after: yes, now: now, in: defaults) || pageWaits,
                       let due = ErrorReportsDay.next(stops: { stops }, after: yes, now: now, in: defaults)
+                          ?? (pageWaits && ErrorReportsDay.mayGoEarly(now: now, in: defaults)
+                              ? ErrorReportsDay.Due.early : nil)
                 else { return nil }
                 return run { await self.withNoHub(since: yes, early: due == .early, calls: calls) }
             }
@@ -1830,7 +1947,8 @@ public enum InstallReportState: Equatable, Sendable {
     /// **The report of an install that stopped before a hub exists** (piece 4): to our own site (no channel: no hub
     /// named one), with no fleet's id and no crash, the reach `no_hub`, and only the installs that stopped after the
     /// owner's latest "Send" (`since`, `latestSend`). The "Send" that waits, and that no hub answered this Mac, are read
-    /// again just before the send, and so is the time of his latest press.
+    /// again just before the send, and so is the time of his latest press. With the funnel's first page that waits
+    /// (Q8, `made`), and with it alone when no install stopped.
     private func withNoHub(since seen: Date, early: Bool, calls: Calls) async {
         let stamp = now(), offsAtStart = offs
         let stillYes = {
@@ -1854,14 +1972,16 @@ public enum InstallReportState: Equatable, Sendable {
     }
 
     /// A report of this build, or nil; a version that has no form of the contract is said once in a start. `noHub`:
-    /// the report of an install with no hub (`ErrorReport.noHub`), with no fleet's id.
+    /// the report of an install with no hub (`ErrorReport.noHub`), with no fleet's id. **The funnel's first page**
+    /// (Q8, `page`) goes with the day (`app`) and in the report with no hub, and in no report of crashes alone.
     private func made(fleet: String?, crashes: [ErrorReport.Crash], app: AppHealth?, noHub: Bool = false) -> ErrorReport? {
         if version.map({ !ErrorReport.matches($0, ErrorReport.versionPattern) }) ?? true, !saidVersion {
             saidVersion = true
             Self.log.error("No error report goes: the version of this build has no form that our site takes.")
         }
-        if noHub { return app.flatMap { ErrorReport.noHub(version: version, system: system, app: $0) } }
-        return ErrorReport(fleet: fleet, version: version, system: system, crashes: crashes, app: app)
+        let first = app != nil || noHub ? page(at: now()) : nil
+        if noHub { return ErrorReport.noHub(version: version, system: system, app: app, funnel: first) }
+        return ErrorReport(fleet: fleet, version: version, system: system, crashes: crashes, app: app, funnel: first)
     }
 
     /// **The Mac's day, from what the app knows now** (`AppHealth`): its update's reads and tries, the hub's reach and

@@ -21,6 +21,8 @@ public enum RefusalMeaning: CaseIterable, Sendable {
     case agentOpenSignIn
     /// The owner request has its answer already (409): the press that answered it is no error.
     case requestAnswered
+    /// No agent of the team has the name of the call (404): an earlier press may have renamed it.
+    case noSuchAgent
     /// The hub's database was restored since the app read it (409): the app reads it again. The phone's line.
     case hubChanged
     /// The address that the call came from is no owner device (403). The phone's line.
@@ -33,6 +35,7 @@ public enum RefusalMeaning: CaseIterable, Sendable {
         case .agentMidTurn: ["agent_mid_turn"]
         case .agentOpenSignIn: ["agent_open_signin"]
         case .requestAnswered: ["request_answered"]
+        case .noSuchAgent: ["no_such_agent"]
         case .hubChanged: ["hub_changed", "hub_changed_sending"]
         case .notOwnerDevice: ["not_owner_device", "not_owner_device_no_code"]
         }
@@ -45,6 +48,7 @@ public enum RefusalMeaning: CaseIterable, Sendable {
         case .agentMidTurn: "middle of a turn"
         case .agentOpenSignIn: "open sign-in"
         case .requestAnswered: "already answered"
+        case .noSuchAgent: "no such agent"
         case .hubChanged: "generation"
         case .notOwnerDevice: "owner device"
         }

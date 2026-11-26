@@ -7,7 +7,7 @@ import Testing
 /// the owner's feedback of 22 November 2026, F13a): the hub closes the old item with its own words ("Replaced by Fleet
 /// Manager with a new item: …") and raises the new one. Needs you kept the old item at hand as one that ended in
 /// another way, so he read the hub's words in the place of the new card, which no page shows (`NeedReplaced`).
-@Suite(.serialized, .timeLimit(.minutes(1))) struct NeedReplacedAtHandTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct NeedReplacedAtHandTests {
     private static let now = Int(Date().timeIntervalSince1970)
 
     /// A reading of the manager and these items, of the database `db`: the second reading is of the same hub and

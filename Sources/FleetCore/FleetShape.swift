@@ -322,6 +322,88 @@ public enum ManagerName {
     public static func shown(_ typed: String) -> String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
+/// **A press of Continue on "Name your manager"** (`HubClient.nameManager`). The hub can rename the manager and its
+/// answer can be lost, while the window still shows the old name. So each press reads the team first, and the team
+/// decides, never that old reading: no press renames a name that is gone.
+public enum ManagerRename {
+    /// What the press needs of `GET /ui/team`.
+    public struct Team: Sendable {
+        /// Each agent of the team.
+        public let names: [String]
+        /// The agent whose role is the manager's.
+        public let manager: String?
+        public let sha256: String
+        public init(names: [String], manager: String?, sha256: String) {
+            self.names = names; self.manager = manager; self.sha256 = sha256
+        }
+        public init(_ team: TeamSnapshot) {
+            self.init(names: team.members.map(\.agent), manager: team.members.first { $0.role == "manager" }?.agent,
+                      sha256: team.sha256)
+        }
+    }
+
+    public enum Outcome: Equatable, Sendable {
+        /// The manager has the page's name, and he goes on with it: no rename.
+        case keep
+        /// The hub took the new name.
+        case named
+        /// The page's name is gone, and the manager is `now`: an earlier press renamed it, and this press sent nothing.
+        /// When `now` is the wanted name, this is that rename's receipt; when it is another, its name page shows again.
+        case renamed(now: String)
+        /// The hub refused this press's command. The rename of an earlier press can have been made all the same.
+        case refused(HubRefusal)
+        /// No answer: the hub can have the new name.
+        case unanswered
+        /// The window went to another hub, or to another generation of this one: nothing of this press counts.
+        case moved
+    }
+
+    /// The team is read at the press. A team that changed between the read and the command, also by the rename of an
+    /// earlier press, is read again, once.
+    /// `team` throws `CancellationError` when the window went to another hub. It runs on its caller's actor, so the
+    /// closures stay there.
+    public static func press(was: String, wanted: String, isolation: isolated (any Actor)? = #isolation,
+                             team: () async throws -> Team,
+                             rename: (_ sha256: String) async throws -> Void) async -> Outcome {
+        for attempt in 0..<2 {
+            do {
+                let team = try await team()
+                if !team.names.contains(was), let now = team.manager { return .renamed(now: now) }
+                guard wanted != was else { return .keep }
+                try await rename(team.sha256)
+                return .named
+            } catch let HubError.refusal(refused) {
+                let moved = refused.means(.noSuchAgent) || (refused.status == 409 && refused.means(.teamChanged))
+                if attempt == 0, moved { continue }
+                return .refused(refused)
+            } catch is CancellationError {
+                return .moved
+            } catch {
+                return .unanswered
+            }
+        }
+        return .unanswered
+    }
+}
+
+/// **The note that this window asked the hub to rename the manager.** The window shows the manager under the name that
+/// it had, and its answer can be lost: the first reading that has no agent of that name shows the manager's name now, and
+/// the page goes to it. The note is for one hub and one generation. Nothing takes it away before: a refusal says only
+/// that its own command renamed nothing, and a note whose manager keeps its name does nothing.
+public struct ManagerRenameNote: Equatable, Sendable {
+    public let hub: URL
+    public let database: String
+    public let was: String
+    public init(hub: URL, database: String, was: String) { self.hub = hub; self.database = database; self.was = was }
+
+    /// The manager's name in this reading, when it is that of the note's hub and generation and no agent has the noted
+    /// name any more.
+    public func follow(hub: URL, reading: HubState) -> String? {
+        guard hub == self.hub, reading.db == database, !reading.agents.contains(where: { $0.name == was }) else { return nil }
+        return reading.agents.first { $0.role == "manager" }?.name
+    }
+}
+
 // MARK: the hub's part: the kept step, one server later, the manager's name
 
 /// **The hub's three feature words for the fleet's shape** (owner API 1.175; the owner, 15 November 2026, to "Start the

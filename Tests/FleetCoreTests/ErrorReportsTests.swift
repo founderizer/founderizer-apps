@@ -670,27 +670,40 @@ struct ErrorReportsDayTests {
             init(_ now: Date) { self.now = now }
         }
 
-        init(_ label: String, at now: Date = ErrorReportsDayTests.t0, version: String = "0.1.499 (499)") {
+        /// The reports carry the funnel's first page: off for the tests of the other rules, also once our site takes it
+        /// (`FunnelPage.ourSiteTakesIt`); the funnel's own tests turn it on; nil is the app's own default.
+        let funnel: Bool?
+
+        init(_ label: String, at now: Date = ErrorReportsDayTests.t0, version: String = "0.1.499 (499)",
+             funnel: Bool? = false) {
             defaults = TestDefaults(label)
             folder = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
                 .appendingPathComponent("\(label)-\(UUID().uuidString)", isDirectory: true)
             clock = Clock(now)
             self.version = version
+            self.funnel = funnel
             sources = .init(update: AppUpdateFacts(at: now, in: defaults), running: AppVersion(name: "0.1.499", build: 499),
                             stops: [])
-            sending = Self.sending(folder: folder, defaults: defaults, clock: clock, version: version)
+            sending = Self.sending(folder: folder, defaults: defaults, clock: clock, version: version, funnel: funnel)
         }
 
         deinit { try? FileManager.default.removeItem(at: folder) }
 
-        private static func sending(folder: URL, defaults: UserDefaults, clock: Clock, version: String)
+        private static func sending(folder: URL, defaults: UserDefaults, clock: Clock, version: String, funnel: Bool?)
             -> ErrorReportsSending {
-            ErrorReportsSending(file: folder.appendingPathComponent("error-reports.json"), version: version,
-                                system: "macOS 26.6.2", defaults: defaults, now: { clock.now }, uptime: { clock.awake })
+            let file = folder.appendingPathComponent("error-reports.json")
+            guard let funnel else {     // the app's own default
+                return ErrorReportsSending(file: file, version: version, system: "macOS 26.6.2", defaults: defaults,
+                                           now: { clock.now }, uptime: { clock.awake })
+            }
+            return ErrorReportsSending(file: file, version: version, system: "macOS 26.6.2", defaults: defaults,
+                                       funnel: funnel, now: { clock.now }, uptime: { clock.awake })
         }
 
         /// The app starts again: a new sender on the same defaults and kept file.
-        func restart() { sending = Self.sending(folder: folder, defaults: defaults, clock: clock, version: version) }
+        func restart() {
+            sending = Self.sending(folder: folder, defaults: defaults, clock: clock, version: version, funnel: funnel)
+        }
 
         /// The wall clock; a move forward is time awake too (`sleep` is not).
         var now: Date {
@@ -1812,6 +1825,114 @@ struct ErrorReportsDayTests {
         answered.now += 600
         await answered.tick(answers: false, hub: none)
         #expect(answered.sent.isEmpty, "a report with no hub went from a Mac that a hub answered")
+    }
+
+    // ------------------------------------------------------------ the funnel's first page (Q8)
+
+    /// **The funnel waits until our site takes it** (the SMB audit's Q8): our site refuses a report with a key that it
+    /// does not know, so a build that sent the first page before the website area's change is live would have the
+    /// report of every first run refused. The app's own sender sends nothing for it then, and the day stays on the Mac
+    /// for after the flip. The flip to true, in a commit of its own, replaces this test.
+    @MainActor @Test func theFunnelWaitsUntilOurSiteTakesIt() async throws {
+        #expect(!FunnelPage.ourSiteTakesIt)
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("FunnelDormant", funnel: nil)
+        FirstRunReports.choose(true, at: h.now, in: h.defaults)
+        for wait in [0.0, 60.0, ErrorReportsDay.day] {
+            h.now += wait
+            await h.tick(answers: false, reach: .hostNotFound, hub: none)
+        }
+        #expect(h.sent.isEmpty)
+        #expect(FunnelPage.waiting(now: h.now, in: h.defaults) == ErrorReport.Funnel(page: "2025-11-16"))
+    }
+
+    /// **The first page goes once, with no hub, and only as a day** (Q8, the owner's rule: only that a step happened
+    /// and its day): the owner's "Send" on the setup's first page sends at once a report with no fleet's id whose only
+    /// new key is `funnel`, the UTC day of his first press (no `app`: no install stopped). Later passes, a day later,
+    /// and the hub's day after it send it no more: a Mac that sent it at each report would count each Mac each day.
+    @MainActor @Test func theFirstPageGoesOnceWithNoHubAndOnlyAsADay() async throws {
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("FunnelPageNoHub", funnel: true)
+        FirstRunReports.choose(true, at: h.now, in: h.defaults)
+        h.now += ErrorReportsDay.day + 60
+        FirstRunReports.choose(true, at: h.now, in: h.defaults)        // a later press keeps the day of the first
+        await h.tick(answers: false, reach: .hostNotFound, hub: none)
+        #expect(h.sent.count == 1 && h.sent.first?.channel == nil)
+        let body = try #require(h.sent.first?.body)
+        #expect(Set(body.keys) == ["from", "version", "system", "funnel"])
+        #expect(body["funnel"] as? [String: String] == ["page": "2025-11-16"])
+        for wait in [60.0, Self.hour, ErrorReportsDay.day] {
+            h.now += wait
+            await h.tick(answers: false, reach: .hostNotFound, hub: none)
+        }
+        #expect(h.sent.count == 1, "the first page went again")
+        h.now += ErrorReportsDay.day
+        await h.tick()
+        #expect(h.sent.count == 2 && h.sent.last?.body["fleet"] as? String == Self.fleet)
+        #expect(h.sent.last?.body["funnel"] == nil, "the first page went again with the day")
+    }
+
+    /// **Nothing goes while the switch is off, and a first page from before the switch's "on" goes once after it**
+    /// (Q8): the owner's "Don't send" keeps the day on this Mac and sends nothing, with no hub and with a hub whose
+    /// switch is off, for days. When he turns the switch on in Settings › Help, the next day carries the first page
+    /// of days before, once. A Mac that sent it on the "no" would break the switch; one that kept nothing until the
+    /// "on" would never count the people who said yes later.
+    @MainActor @Test func aFirstPageFromBeforeTheSwitchsOnGoesOnceAfterIt() async throws {
+        let none = "http://fleet.invalid:8765/"
+        let h = Harness("FunnelPageAfterOn", funnel: true)
+        FirstRunReports.choose(false, at: h.now, in: h.defaults)
+        for _ in 0..<3 {
+            await h.tick(answers: false, hub: none)
+            h.now += ErrorReportsDay.day
+        }
+        h.switchOn = false
+        await h.tick()
+        h.now += ErrorReportsDay.day
+        await h.tick()
+        #expect(h.sent.isEmpty, "a report went while the switch was off")
+        FirstRunReports.forget(in: h.defaults)     // his press on the switch of Settings › Help ends the first run's wait
+        h.switchOn = true
+        h.now += ErrorReportsDay.look
+        await h.tick()
+        #expect(h.sent.count == 1 && h.sent.first?.body["fleet"] as? String == Self.fleet)
+        #expect(h.sent.first?.body["funnel"] as? [String: String] == ["page": "2025-11-16"])
+        h.now += ErrorReportsDay.day
+        await h.tick()
+        #expect(h.sent.count == 2 && h.sent.last?.body["funnel"] == nil)
+    }
+
+    /// **A refused first page waits a day, and the rest goes at once** (Q8): our site answers 400 to a report with the
+    /// funnel (it does not take it yet, or a deploy of it went back). The same report goes again at once without it,
+    /// the first page waits a day and then goes again, and a report with it that our site took ends it. A Mac that took
+    /// the day out first would lose the day's facts for the funnel's fault; one that marked the page as sent would never
+    /// send it. A report with no hub that held the first page alone has nothing left to send again.
+    @Test func aRefusedFirstPageWaitsADayAndTheRestGoesAtOnce() async throws {
+        let defaults = TestDefaults("FunnelPageRefused")
+        FirstRunReports.choose(false, at: Self.t0, in: defaults)
+        let page = try #require(FunnelPage.waiting(now: Self.t0, in: defaults))
+        let report = try #require(ErrorReport(fleet: Self.fleet, version: "0.1.499 (499)", system: nil, crashes: [],
+                                              app: Self.day(), funnel: page))
+        var bodies: [[String: Any]] = []
+        let failure = await ErrorReportsDay.deliver(report, day: true, at: Self.t0, in: defaults) { sent in
+            bodies.append(try Self.json(sent.body()))
+            if sent.funnel != nil { throw ErrorReportError.refused(400) }
+        }
+        #expect(failure == nil)
+        #expect(bodies.count == 2 && bodies[0]["funnel"] != nil && bodies[1]["funnel"] == nil && bodies[1]["app"] != nil)
+        #expect(FunnelPage.waiting(now: Self.t0 + ErrorReportsDay.day - 1, in: defaults) == nil)
+        #expect(FunnelPage.waiting(now: Self.t0 + ErrorReportsDay.day, in: defaults) == page)
+
+        let alone = try #require(ErrorReport.noHub(version: "0.1.499 (499)", system: nil, app: nil, funnel: page))
+        bodies = []
+        let refused = await ErrorReportsDay.deliver(alone, day: true, at: Self.t0 + ErrorReportsDay.day,
+                                                    in: defaults) { sent in
+            bodies.append(try Self.json(sent.body()))
+            throw ErrorReportError.refused(400)
+        }
+        #expect(refused as? ErrorReportError == .refused(400) && bodies.count == 1 && bodies[0]["fleet"] == nil)
+
+        await ErrorReportsDay.deliver(report, day: true, at: Self.t0 + 2 * ErrorReportsDay.day, in: defaults) { _ in }
+        #expect(FunnelPage.waiting(now: Self.t0 + 3 * ErrorReportsDay.day, in: defaults) == nil)
     }
 
     /// **What came of the report of an install that stopped** (`ErrorReportsDay.installReport`, for the page of that

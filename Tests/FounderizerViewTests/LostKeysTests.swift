@@ -8,7 +8,7 @@ import Testing
 /// `cancelOperation:`, so a view test would no longer see what the app does. With a catch taken out, AppKit plays the
 /// sound and keeps nothing. The sound itself is out of a test's reach: its proof is a `log stream` of `NSBeep` while the
 /// suites run.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct LostKeysTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct LostKeysTests {
     /// A responder at the end of a window's chain that takes one command, the start of a line, and typed text, and says
     /// what it took.
     private final class Taker: NSResponder {

@@ -7,7 +7,7 @@ import Testing
 /// (the owner, 21 November 2026: "ideally a modal of that key should open so it can be edited right there after
 /// clicking it", and "Yes, both" to its drawing). The bug that this catches: the badge opens Settings › Secrets, or its
 /// card's close writes the page, and he lands in Settings with his chat gone from under him.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct SecretCardTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct SecretCardTests {
     @Test func aBadgesSecretCardShowsOverTheChatAndEscLeavesThePageAsItWas() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop { () -> (opened: Bool, twice: Bool, shown: Bool, closed: Bool, chat: Bool) in
             let store = ViewHost.store(try ViewHost.reading(needs: [], features: [SecretEntryView.feature, "secret_grants"]))

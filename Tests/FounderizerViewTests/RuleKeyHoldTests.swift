@@ -13,7 +13,7 @@ import Testing
 /// rule's text, and reads that nothing goes and that the editor's question stands; then that the same save goes after
 /// "Keep it", so it was the key that held it. A second test draws the editor over a rule that holds a key and reads
 /// that it asks at once, in the words of a rule: a rule is no message.
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct RuleKeyHoldTests {
     /// A made-up key with the shape of a real one (`KeyInText` knows it by its prefix), in two parts so that no scan of
     /// the repository takes it for a key.

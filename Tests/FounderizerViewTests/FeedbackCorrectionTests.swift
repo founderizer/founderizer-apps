@@ -9,7 +9,7 @@ import Testing
 /// the card's feedback box takes the correction as its own request (`FleetStore.stageKey(of:)`), so its files and its
 /// draft are the box's. The store reads a stand-in hub (`LoopbackHub`), because a correction goes only within a moment
 /// of the hub's answer; the hub refuses the send, and the request stays in the outbox, where the test reads it.
-@Suite(.serialized, .timeLimit(.minutes(2))) struct FeedbackCorrectionTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct FeedbackCorrectionTests {
     struct Seen: Sendable {
         let about: MessagePlace?
         let replaces: String?

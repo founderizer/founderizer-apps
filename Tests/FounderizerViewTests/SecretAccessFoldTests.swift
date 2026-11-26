@@ -11,7 +11,7 @@ import Testing
 /// on a stand-in hub whose central vault has the key that this test's app pinned. Its elements are read and pressed as an
 /// assistive app does (`JobCardPressTests`). A row is set in the form's own draft (`SecretFormDraft`), as its control sets
 /// it: the control's list is a window on the owner's screen.
-@Suite(.serialized, .timeLimit(.minutes(5))) struct SecretAccessFoldTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct SecretAccessFoldTests {
     private static let fold = "secret-access-fold", bothRead = ["ada": "read", "bea": "read"]
     private static let agents = [("manager", "manager"), ("ada", "worker"), ("bea", "lead"), ("cal", "worker")]
     private static let holders: Set<String> = ["ada", "bea", "cal"]

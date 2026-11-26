@@ -9,7 +9,7 @@ import Testing
 /// kern, so the words that he selects, and that VoiceOver reads, are the words as the agent wrote them. A room made of
 /// a no-break space went into every copy of a chat's words once (a review of 21 November 2026). VoiceOver copies each
 /// value from the words, in their order, and a list item's mark has no such action; each value has its press.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct CardValueChipTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct CardValueChipTests {
     private final class Window: NSWindow {
         override var canBecomeKey: Bool { true }
         override var isKeyWindow: Bool { isVisible }

@@ -13,7 +13,7 @@ import Testing
 /// nothing; and a guard that holds a file for a key-like string that it held already, so a file of his cannot be saved
 /// without "Keep it". A file with no key is saved on the same paths, so a check that nothing was saved cannot pass for
 /// another reason. The elements are read and pressed as an assistive app does (`JobCardPressTests`).
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct KnowledgeKeyHoldTests {
     /// A made-up key with the shape of a real one (`KeyInText` knows it by its prefix), in two parts so that no scan of
     /// the repository takes it for a key.

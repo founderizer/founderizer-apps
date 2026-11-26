@@ -124,41 +124,74 @@ import Vision
     /// `.serialized` orders only the tests of one suite. A body that waits (`turn`) runs the main run loop, which would
     /// run the next suite's body inside it: two windows of the app at once, and the keys of one test in the other's
     /// window (the first ship run of the marks' hover tag, 21 November 2026).
+    ///
+    /// **So a view suite's time limit is 10 minutes, and `limit` is the check of a slow body**: Swift Testing applies
+    /// a suite's limit to each test, and its clock runs while the test waits here for its turn behind the bodies of
+    /// the other suites. A limit of 1 minute failed tests that never ran late on a busy Mac (Release's measurement of
+    /// 26 November 2026: SecretCardTests in 4 of 4 first tries, CardGiveNamesTests, OwnFileMenuTests and others; each
+    /// passed alone). `limit` starts only when the body has its turn; the 10 minutes bound each test's wait for it
+    /// (a whole run takes about 4 minutes). **A body that runs past `limit` fails the tests behind it at once**
+    /// (`Turnstile.overran`): it keeps the main loop, so they could not run, and each would wait for its own 10
+    /// minutes, one after the other in a serialized suite, while the Mac's test line waits behind the run.
     nonisolated static func onMainLoop<Seen: Sendable>(limit: Double = 50,
                                                        _ body: @escaping @MainActor () throws -> Seen) async throws
         -> (seen: Seen, screen: Screen) {
-        await Turnstile.shared.enter()
+        let turn = try await Turnstile.shared.enter()
         // the turn ends when the body itself has ended on the main loop, not when the test stops waiting for it: a
         // body that outlived its limit still runs, and the next one must not run inside it (review of 21 November
-        // 2026); a body whose block the main loop never runs keeps the turn, and the tests after it wait here until
-        // their suite's time limit ends them
-        return try await alone(limit: limit, body) { Task { await Turnstile.shared.leave() } }
+        // 2026); while it runs past its limit, the tests that wait and those that come fail at once (`overran`)
+        return try await alone(limit: limit, body,
+                               overran: { words in Task { await Turnstile.shared.overran(turn, words) } },
+                               ended: { Task { await Turnstile.shared.leave() } })
     }
 
-    /// The wait of the test bodies for their turn, in the order in which they came.
-    private actor Turnstile {
+    /// The wait of the test bodies for their turn, in the order in which they came. Each turn has its number, so a
+    /// late word of an earlier turn (`overran`) never touches the turn after it.
+    actor Turnstile {
         static let shared = Turnstile()
         private var busy = false
-        private var waiting: [CheckedContinuation<Void, Never>] = []
+        private var turn = 0
+        /// The words of the body that holds the turn and ran past its limit, while it still holds it.
+        private var stuck: String?
+        private var waiting: [CheckedContinuation<Int, Error>] = []
+        /// The tests that wait for their turn now (`TurnstileTests`).
+        var waitingCount: Int { waiting.count }
 
-        func enter() async {
-            guard busy else { busy = true; return }
-            await withCheckedContinuation { waiting.append($0) }
+        /// The number of the turn that this test gets, once the turns before it have ended; it throws while the body
+        /// that holds the turn runs past its limit.
+        func enter() async throws -> Int {
+            if let stuck { throw Missing(description: stuck) }
+            guard busy else { busy = true; turn += 1; return turn }
+            return try await withCheckedThrowingContinuation { waiting.append($0) }
+        }
+
+        /// The body of turn `number` ran past its limit and still holds the main loop: each test that waits, and each
+        /// that comes until that body ends (`leave`), fails at once with these words.
+        func overran(_ number: Int, _ words: String) {
+            guard busy, number == turn else { return }
+            let said = "an earlier test's body still holds the main loop: \(words)"
+            stuck = said
+            let all = waiting
+            waiting = []
+            for wait in all { wait.resume(throwing: Missing(description: said)) }
         }
 
         func leave() {
-            if waiting.isEmpty { busy = false } else { waiting.removeFirst().resume() }
+            stuck = nil
+            if waiting.isEmpty { busy = false } else { turn += 1; waiting.removeFirst().resume(returning: turn) }
         }
     }
 
     private nonisolated static func alone<Seen: Sendable>(limit: Double,
                                                           _ body: @escaping @MainActor () throws -> Seen,
+                                                          overran: @escaping @Sendable (String) -> Void,
                                                           ended: @escaping @Sendable () -> Void) async throws
         -> (seen: Seen, screen: Screen) {
         try await withCheckedThrowingContinuation { (waiting: CheckedContinuation<(seen: Seen, screen: Screen), Error>) in
             let once = Once(waiting)
             DispatchQueue.global().asyncAfter(deadline: .now() + limit) {
-                once.resume(throwing: Missing(description: "the test's body did not end in \(Int(limit)) s"))
+                let words = "the test's body did not end in \(Int(limit)) s"
+                if once.resume(throwing: Missing(description: words)) { overran(words) }
             }
             let done = once
             CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue) {
@@ -186,7 +219,12 @@ import Vision
         init(_ waiting: CheckedContinuation<Value, Error>) { self.waiting = OSAllocatedUnfairLock(initialState: waiting) }
 
         func resume(returning value: Value) { take()?.resume(returning: value) }
-        func resume(throwing error: Error) { take()?.resume(throwing: error) }
+        /// Whether this was the first resume: false when the body had ended first.
+        @discardableResult func resume(throwing error: Error) -> Bool {
+            guard let waiting = take() else { return false }
+            waiting.resume(throwing: error)
+            return true
+        }
 
         private func take() -> CheckedContinuation<Value, Error>? {
             waiting.withLock { waiting in

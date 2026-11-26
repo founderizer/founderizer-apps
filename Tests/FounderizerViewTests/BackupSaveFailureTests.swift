@@ -10,7 +10,7 @@ import Testing
 /// where the automatic copy's failure shows already, in the model's or the hub's own words. The stand-in hub refuses the
 /// copy with its 404 of a route that it does not serve ("not here"). The bug that it catches: a press of Save copy that
 /// fails with no word on the page where he pressed it.
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct BackupSaveFailureTests {
     struct Seen: Sendable {
         let asked: Bool

@@ -9,7 +9,7 @@ import Testing
 /// it shows, so it takes no key, no click and no focus, and it goes when it is hidden. **A click takes it away until the
 /// pointer leaves**: a redraw of the card does not bring it back over what he does (review round 1). **Its words are
 /// whole**: two lines of words are two lines high (the first build cut them to one).
-@Suite(.serialized, .timeLimit(.minutes(1))) struct AnsweredMarkTagTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct AnsweredMarkTagTests {
     struct Seen: Sendable {
         let canBecomeKey: Bool
         let ignoresMouse: Bool

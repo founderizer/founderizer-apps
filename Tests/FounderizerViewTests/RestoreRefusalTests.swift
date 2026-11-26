@@ -16,7 +16,7 @@ import Testing
 /// wait gave up, Send it again sends nothing: a second send would be a new command to the restored fleet, and with
 /// `replace` a second restore, which loses the records that the first one kept aside (R6-1). A resend carries the
 /// first send's generation. The stand-in hub answers each restore as the test gives it.
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct RestoreRefusalTests {
     struct Seen: Sendable {
         let phases: [String]

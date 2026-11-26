@@ -1062,8 +1062,8 @@ struct OwnerShowRulesTests {
         #expect(handled.contains("if shown.handled(act, showing: chat) { markRepliesSeen() }"))
         // No other word of the owner's act: a mouse-down alone, or a dropped click, frees nothing and marks nothing.
         #expect(!store.contains("func ownerActed") && store.components(separatedBy: "shown.handled(").count == 2)
-        let renamed = try #require(store.range(of: "shown.renamed(from: renamed.was, to: renamed.now)"))
-        let moves = try #require(store.range(of: "if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) {\n"
+        let renamed = try #require(store.range(of: "shown.renamed(from: renamed.was, to: now)"))
+        let moves = try #require(store.range(of: "if let page = Self.renamed(destination, was: renamed.was, now: now) {\n"
                                                 + "                keepsDetail = true; destination = page; keepsDetail = false"))
         #expect(renamed.upperBound < moves.lowerBound)
         // The new name keeps the detail card over the page: only a page that the owner opens closes it.

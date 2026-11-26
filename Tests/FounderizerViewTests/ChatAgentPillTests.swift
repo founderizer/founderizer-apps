@@ -7,7 +7,7 @@ import Testing
 /// **The chat's header names its agent by its name, with its role beside it** (the owner's answer of 22 November 2026:
 /// the name with the role in grey in the chat header; `ChatAgentPill` draws `AgentNameLine`). The pill alone, in
 /// the window of a test, read as a person reads it. Example names only.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct ChatAgentPillTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct ChatAgentPillTests {
     /// The bug that this catches: the header shows the role alone, as before, or the name alone, so with ten agents he
     /// cannot tell what "Nova" does; or the role stands before the name.
     @Test func theHeaderReadsTheNameAndThenTheRoleOnOneLine() async throws {

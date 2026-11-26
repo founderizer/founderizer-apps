@@ -8,7 +8,7 @@ import Testing
 /// for specific Credentials, like we have for agents! ideally a modal of that key should open so it can be edited right
 /// there after clicking it", and "Yes, both"). The bugs that these catch: the name stays words, or its press opens
 /// nothing or Settings › Secrets.
-@Suite(.serialized, .timeLimit(.minutes(2))) struct KeyBadgeTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct KeyBadgeTests {
     /// The reference of the one key of `keepTheKey`, and of a second key.
     private static let keyA = "bws://11111111-2222-4333-8444-555555555551"
     private static let keyB = "bws://11111111-2222-4333-8444-555555555552"

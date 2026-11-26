@@ -7,7 +7,7 @@ import Vision
 /// **His answer waits 5 seconds on its card, with Undo, and Pause stands on the card while its task works** (the
 /// owner's "Yes, 5 seconds (Recommended)" and "Both (Recommended)", 21 November 2026; `AnswerHolds`). The tests read
 /// what the app sends to a stand-in hub (`LoopbackHub`): the app writes only after a hub's answer.
-@Suite(.serialized, .timeLimit(.minutes(2))) struct AnswerHoldTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct AnswerHoldTests {
     private static let now = Int(Date().timeIntervalSince1970)
 
     /// A reading with the manager and DevOps (and `team`: more agents by name and role), these requests and tasks,

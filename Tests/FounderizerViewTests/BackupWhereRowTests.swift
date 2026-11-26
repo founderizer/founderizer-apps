@@ -11,7 +11,7 @@ import Vision
 /// words the row has; the page is drawn whole in a window of 960 points, the least that the app's window takes
 /// (`FounderizerApp`), in English and in the catalog's Spanish. Its words must all show, and both buttons must stand
 /// inside the row. The bugs that it catches: a detail cut to one line, and a button pushed out of its row.
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct BackupWhereRowTests {
     struct Seen: Sendable {
         let language: String

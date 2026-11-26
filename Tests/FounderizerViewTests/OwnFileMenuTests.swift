@@ -12,7 +12,7 @@ import Testing
 /// read them there; the "…" itself is counted by the view that places its menu (`FleetMenuAnchor`). The menu itself is
 /// not opened: its window would stand on the owner's screen.
 /// **VoiceOver reads each file's words, "Open <name> (<size>)", on its press** (its help), and once only.
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct OwnFileMenuTests {
     private final class Window: NSWindow {
         override var canBecomeKey: Bool { true }

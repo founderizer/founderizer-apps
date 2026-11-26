@@ -7,7 +7,7 @@ import Testing
 /// "Yes, as drawn" of 21 November 2026): on Needs you, each option of an item with pictures is its picture over its
 /// words. A press on the picture opens it in the preview window, and a press on the words sends that option. No hub
 /// answers here, so a press waits for one (`AnswerWaits`) with the option that it sends; nothing reaches a hub.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct NeedPictureOptionsTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct NeedPictureOptionsTests {
     struct Seen: Sendable {
         let afterPicture: Int?
         let afterWords: Int?

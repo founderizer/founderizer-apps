@@ -64,7 +64,7 @@ struct RefusalMeaningTests {
             (.teamChanged, "team.json changed meanwhile; reload it"), (.teamChanged, "team.json changed meanwhile; reload the reporting lines"),
             (.agentMidTurn, "juno is in the middle of a turn. Move it when the turn ends."),
             (.agentOpenSignIn, "juno has an open sign-in. Finish it or let it run out, then try again."),
-            (.requestAnswered, "owner request is already answered"),
+            (.requestAnswered, "owner request is already answered"), (.noSuchAgent, "no such agent"),
             (.hubChanged, "hub generation changed; refresh state"), (.hubChanged, "hub generation changed; refresh state before sending"),
             (.notOwnerDevice, "100.64.0.9 is not an owner device. See \"owner_devices\" in team.json."),
         ]
@@ -76,7 +76,7 @@ struct RefusalMeaningTests {
                 #expect(!refusal.means(other), "\(other) read \(words)")
             }
         }
-        for words in ["no such agent", "hub is starting", HubError.unexplained, ""] {
+        for words in ["no such server", "hub is starting", HubError.unexplained, ""] {
             for meaning in RefusalMeaning.allCases { #expect(!refusal(words).means(meaning), "\(meaning) read \(words)") }
         }
     }

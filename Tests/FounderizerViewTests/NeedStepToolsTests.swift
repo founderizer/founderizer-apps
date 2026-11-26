@@ -8,7 +8,7 @@ import Testing
 /// while the request is open. He follows the steps of a request in another app from either place, so a change of
 /// the step's top that drops them takes his way to the card's own window from this page. A request with no steps
 /// for him outside the app has the window's icon and no Copy prompt (`NeedPrompt.offers`).
-@Suite(.serialized, .timeLimit(.minutes(1))) struct NeedStepToolsTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct NeedStepToolsTests {
     @Test func theRequestAtHandHasCopyPromptAndItsWindowsIcon() async throws {
         struct Seen: Sendable {
             let withSteps: Set<String>

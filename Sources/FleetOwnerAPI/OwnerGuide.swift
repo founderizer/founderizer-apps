@@ -188,9 +188,10 @@ public enum OwnerGuide {
         The pages carry their own short steps and their own links. Use those. Do not invent other steps.
 
         Say once, at the start, what the owner needs: an account at a server provider (Hetzner, DigitalOcean, Vultr or
-        Akamai), or a Linux server that they have already; a Tailscale account, which is free and makes a private network
-        between this Mac and the servers; and a Claude or a ChatGPT subscription, which the agents use. The server is the
-        one thing that costs money each month, at the provider.
+        Akamai), or a Linux server that they have already; a Tailscale account, which makes a private network between
+        this Mac and the servers (its free plan is for non-commercial use only: a company needs one of Tailscale's paid
+        plans); and a Claude or a ChatGPT subscription, which the agents use. The server costs money each month, at the
+        provider, and so does Tailscale's plan for a company.
 
         Ask also, at the start, what the manager and the agents should call the owner: a first name, or another name
         that the owner wants. Keep the answer. You save it as soon as the hub answers, before the manager signs in.

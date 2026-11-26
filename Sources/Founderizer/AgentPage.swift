@@ -177,7 +177,9 @@ struct AgentPage: View {
         // An agent in setup or signed out has its setup here too: its rows would only say what the setup does.
         case .settings, .chat:
             if store.setupShows(agent) {
-                AgentSetupWizard(store: store, agent: agent)
+                // One view for each agent and hub, as in the window: the words of a press under the old name never
+                // stand on the page of the new one.
+                AgentSetupWizard(store: store, agent: agent).id("\(store.hub)/\(agent)/setup")
             } else {
                 AgentSetupView(store: store, agent: agent)
             }

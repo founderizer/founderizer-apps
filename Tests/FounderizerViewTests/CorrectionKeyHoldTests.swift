@@ -11,7 +11,7 @@ import Testing
 /// a kept key out of it or pressed Cancel; a "Keep it" of an earlier correction of the same message lets a key of a
 /// later one go with no question. The real views and store, on a stand-in hub (`LoopbackHub`), which keeps what the app
 /// sends and refuses it, so each request stays in the outbox. Example names only.
-@Suite(.serialized, .timeLimit(.minutes(3))) struct CorrectionKeyHoldTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct CorrectionKeyHoldTests {
     /// A made-up key with the shape of a real one (`KeyInText` knows it by its prefix), in two parts so that no scan of
     /// the repository takes it for a key.
     private static let keyText = "sk_test_" + "EXAMPLEexample0123456789"

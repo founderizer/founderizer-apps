@@ -8,7 +8,7 @@ import Testing
 /// 2026; the validators' round 2 of 25 November 2026). Both savers kept the bare copy when the key's step failed and
 /// confirmed it as a whole one, so the hub cleared its warning and no screen said that no copy could give a new Mac its
 /// servers back. The stand-in hub serves the fixture copy of FleetCoreTests and answers each confirm with its copy.
-@Suite(.serialized, .timeLimit(.minutes(2)))
+@Suite(.serialized, .timeLimit(.minutes(10)))
 struct CopyKeyTests {
     struct NoKeychain: Error {}
 

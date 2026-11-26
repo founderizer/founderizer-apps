@@ -10,7 +10,7 @@ import Testing
 /// send the press and the keys at once, as such a Mac does, and read where his words went. No hub answers here, so the
 /// app sends nothing (it writes only after its hub's answer): the words must stand in the card's field, ready for his
 /// Send, and none in the chat's box.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct NeedClarifyKeysTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct NeedClarifyKeysTests {
     /// Where his words went: the field that has the keys, and the chat's box.
     struct Seen: Sendable {
         let field: String?

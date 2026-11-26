@@ -8,7 +8,7 @@ import Vision
 /// 22 November 2026: the Mac's chat box takes a skill's folder, and its ZIP with the plus; the chip shows a bolt and
 /// the skill's name; and of 21 November to the badge with the bolt in his message). The real store and chat, on a
 /// stand-in hub that keeps what the app sends (`LoopbackHub`). Example names only.
-@Suite(.serialized, .timeLimit(.minutes(3))) struct GivenSkillTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct GivenSkillTests {
     private static let now = Int(Date().timeIntervalSince1970)
     /// The box of the chat with Marketing.
     @MainActor private static var box: String { FleetStore.stageKey(agent: "atlas") }

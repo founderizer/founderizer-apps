@@ -10,7 +10,7 @@ import Testing
 /// window's look. AppKit gives a window the Mac's look unless it sets its own, and the main window's
 /// `.preferredColorScheme(.dark)` sets that window's alone: on a customer's Mac in Light mode the words of the
 /// dropdowns of a Drive account's card were black on the dark card, because the card's window (`fleetModal`) set none.
-@Suite(.serialized, .timeLimit(.minutes(1))) struct DarkLookTests {
+@Suite(.serialized, .timeLimit(.minutes(10))) struct DarkLookTests {
     struct Seen: Sendable {
         /// The look of the main window and of each window over it: "dark" or "light".
         let looks: [String]

@@ -1555,13 +1555,16 @@ final class FleetStore {
     }
     /// **A manager that gets its name in its own setup** (`HubClient.nameManager`): the page that shows it goes to its
     /// new name in the same step as the reading that has that name (`notePlacing`), so that no chat of an agent that is
-    /// not there shows between the two. The note is for this hub and this generation, and a reading of another one
-    /// does nothing with it. nil takes the note away: after a rename that the hub refused, and when he goes on with
-    /// the name that the manager has.
-    @ObservationIgnored private var renamedManager: (hub: URL, database: String, was: String, now: String)?
-    func noteRenamed(from was: String, to now: String?) {
-        guard let now, let database = state?.db else { renamedManager = nil; return }
-        renamedManager = (hub, database, was, now)
+    /// not there shows between the two.
+    @ObservationIgnored private var renamedManager: ManagerRenameNote?
+    func noteRename(of was: String) {
+        guard let database = state?.db else { return }
+        renamedManager = ManagerRenameNote(hub: hub, database: database, was: was)
+    }
+    /// This window asked to rename this manager, and no reading has shown it under another name since.
+    func renameNoted(of was: String) -> Bool {
+        guard let database = state?.db else { return false }
+        return renamedManager == ManagerRenameNote(hub: hub, database: database, was: was)
     }
     /// The same page of the agent under its new name: its chat, a part of its details, its sign-in, a rule's editor.
     private static func renamed(_ page: Destination, was: String, now: String) -> Destination? {
@@ -1632,12 +1635,10 @@ final class FleetStore {
     /// An agent with no server goes on the list, and one that runs leaves it. One that has its server needs no joined
     /// server, no chosen provider and no made server any more.
     private func notePlacing(_ fresh: HubState) {
-        // The reading that has a manager under its new name, and no more under its old one (`noteRenamed`).
-        if let renamed = renamedManager, renamed.hub == hub, renamed.database == fresh.db,
-           fresh.agents.contains(where: { $0.name == renamed.now }),
-           !fresh.agents.contains(where: { $0.name == renamed.was }) {
-            shown.renamed(from: renamed.was, to: renamed.now)       // a chat that `setup_show` opened stays not read
-            if let page = Self.renamed(destination, was: renamed.was, now: renamed.now) {
+        // The reading that has the manager under its new name, and no more under its old one (`noteRename`).
+        if let renamed = renamedManager, let now = renamed.follow(hub: hub, reading: fresh) {
+            shown.renamed(from: renamed.was, to: now)       // a chat that `setup_show` opened stays not read
+            if let page = Self.renamed(destination, was: renamed.was, now: now) {
                 keepsDetail = true; destination = page; keepsDetail = false
             }
             renamedManager = nil
