@@ -15,6 +15,11 @@ import SwiftUI
 /// he still has a problem; and what they said goes with the report, which is the one thing that makes support
 /// possible for a product where we hold nothing of his.
 ///
+/// **It says nothing that another line says, and nothing that is right** (the owner, 25 November 2026, of this window:
+/// "it is TOO large, it needs to be much more compact, less text"): a fleet with nothing wrong has no "What Founderizer
+/// can see" at all, because the Checks fact says what the checks found; the facts are one short line each; and no line
+/// explains a control.
+///
 /// The screen is read once, when the window opens, so the name in "Sent with it" stays the screen he pressed it on
 /// and does not follow him around the app while he types.
 struct ReportProblemView: View {
@@ -26,8 +31,11 @@ struct ReportProblemView: View {
     /// The text that the owner's own agent put into the box (`prepare_problem_report`), while the box still holds it
     /// whole (`ProblemReport.AgentDraft`): the report then says, as one more fact, that an agent wrote it.
     @State private var draft = ProblemReport.AgentDraft()
+    /// The window's first check has run for a page's quiet second (`LoadingLine.quiet`): only then does "What
+    /// Founderizer can see" stand with its loading line, so a clear fleet's quick check never shows it at all.
+    @State private var checkIsSlow = false
 
-    /// **Every fact that goes, and so every fact that shows**: the rows under "Sent with it" and the report read this
+    /// **Every fact that goes, and so every fact that shows**: the lines under "Sent with it" and the report read this
     /// one list, so that no fact can go that the owner did not see.
     private var facts: [ProblemReport.Fact] {
         model.facts + (draft.isAgents ? [ProblemReport.writtenByAgent] : [])
@@ -38,7 +46,7 @@ struct ReportProblemView: View {
     var body: some View {
         FleetPage("Report a problem") {
             Group {
-                trouble
+                if troubleShows { trouble }
                 // **A heading over its box, where every heading of the page stands** (the margins of 30 October 2026, row
                 // 10): as a block of a card's rows, the heading and the box stood 14 pt in from the column's edges.
                 VStack(alignment: .leading, spacing: FleetSpace.inside) {
@@ -48,29 +56,13 @@ struct ReportProblemView: View {
                     TextEditor(text: $text).font(FormMetrics.text).fleetTextBox().frame(minHeight: 130)
                         .accessibilityIdentifier("report-text")
                 }
-                FormSection("Sent with it",
-                            footer: String(l10n: "Nothing of your fleet's work leaves this Mac: no task, no message, no file.")) {
-                    FormRow("Answer to", detail: String(l10n: "We write back here and keep nothing else.")) {
+                FormSection("Sent with it") {
+                    FormRow("Answer to") {
                         TextField(text: $email, prompt: Text(verbatim: "")) { Text("you@example.com") }
                             .fieldPlaceholder("you@example.com", shows: email.isEmpty).fleetField().frame(maxWidth: 260)
                             .accessibilityIdentifier("report-email")
                     }
-                    // A short value is the row's own control at the right. A long one — the checks, an error —
-                    // takes the width and wraps: a value cut off with an ellipsis is a value he did not read,
-                    // and nothing may leave this Mac that he has not read.
-                    ForEach(facts.filter { $0.value.count <= 48 }) { fact in
-                        FormRow(fact.name) {
-                            Text(fact.value).foregroundStyle(FleetStyle.muted).textSelection(.enabled)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
-                    ForEach(facts.filter { $0.value.count > 48 }) { fact in
-                        FormBlock(fact.name) {
-                            Text(fact.value).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
-                                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
+                    factLines
                 }
                 status
                 HStack(spacing: 8) {
@@ -99,6 +91,10 @@ struct ReportProblemView: View {
         .ignoresSafeArea(.container, edges: .top)
         .windowButtonsCentred(inBand: FleetSpace.lights)
         .task { await model.read(store: store) }
+        .task {
+            try? await Task.sleep(for: LoadingLine.quiet)
+            checkIsSlow = true
+        }
         .onChange(of: text) { _, now in
             model.copied = false
             draft.changed(to: now)
@@ -123,18 +119,19 @@ struct ReportProblemView: View {
         store.reportAsk?.outcome = .shown
     }
 
-    /// What Founderizer can see, and nothing that is right. While it reads for the first time, one line says so, as
-    /// every page's wait does (`LoadingLine`: nothing for a second, then the words moving, never a spinner), at the
-    /// height of the row it stands for, so nothing under it moves when the answer comes; Check again keeps what the
-    /// last check found until the new one answers. A clear fleet is one line too, with no list of the checks that
-    /// passed.
+    /// "What Founderizer can see" stands while it sees something wrong, and while the window's first check has run
+    /// past a page's quiet second. A clear fleet has none of it: the Checks fact says what the checks found.
+    private var troubleShows: Bool {
+        if let trouble = model.trouble { return !trouble.isClear }
+        return model.reading && checkIsSlow
+    }
+
+    /// What Founderizer can see, and nothing that is right. A first check that is still on its way after a page's
+    /// quiet second has one line that says so, as every page's wait does (`LoadingLine`: the words moving, never a
+    /// spinner); Check again keeps what the last check found until the new one answers.
     @ViewBuilder private var trouble: some View {
-        // **The count line has its place from the first frame** (fix round 3, item 10): the heading moved up 9.5 pt when
-        // "5 things look wrong." came.
-        FormSection("What Founderizer can see", detail: model.trouble?.summary ?? " ") {
-            if model.reading && model.trouble == nil {
-                LoadingLine(String(l10n: "Checking your fleet…")).frame(minHeight: 44)
-            } else if let trouble = model.trouble, !trouble.isClear {
+        FormSection("What Founderizer can see") {
+            if let trouble = model.trouble {
                 ForEach(trouble.findings) { finding in
                     FormBlock(finding.title, detail: finding.says) {
                         VStack(alignment: .leading, spacing: 9) {
@@ -159,12 +156,8 @@ struct ReportProblemView: View {
                         }
                     }
                 }
-            } else if model.trouble != nil {
-                FormRow("Nothing to put right from here", symbol: "checkmark.circle",
-                        detail: String(l10n: "Tell us below and we read it.")) { EmptyView() }
             } else {
-                FormRow("Founderizer could not read your fleet", symbol: "exclamationmark.circle",
-                        detail: String(l10n: "Tell us below anyway.")) { EmptyView() }
+                LoadingLine(String(l10n: "Checking your fleet…"), waits: false).frame(minHeight: FormMetrics.row)
             }
         } accessory: {
             // **Its words, its size and its place from the first frame** (T-01, T-13): it went grey for the window's
@@ -174,6 +167,25 @@ struct ReportProblemView: View {
                 .buttonStyle(FleetOutlineButtonStyle())
                 .accessibilityIdentifier("report-check-again")
         }
+    }
+
+    /// **Every fact that goes, one short line each, in full** (the owner, 25 November 2026: "much more compact, less
+    /// text"): its name and its value, as the report carries them. A long value — the checks, an error — wraps in its
+    /// column: a value cut off with an ellipsis is a value he did not read, and nothing may leave this Mac that he has
+    /// not read. Each fact was a row of 44 points, and a long one a block of its own.
+    private var factLines: some View {
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: FormMetrics.markGap, verticalSpacing: 3) {
+            ForEach(facts) { fact in
+                GridRow {
+                    Text(verbatim: fact.name).font(FormMetrics.detailTitle).foregroundStyle(FleetStyle.text)
+                    Text(verbatim: fact.value).font(FormMetrics.detail).foregroundStyle(FleetStyle.muted)
+                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 12)
+        .accessibilityElement(children: .contain)
     }
 
     /// One line at a time: what the site answered, what refused the send, or what the form still needs.
@@ -197,8 +209,8 @@ struct ReportProblemView: View {
 final class ReportProblemModel {
     private(set) var facts: [ProblemReport.Fact] = []
     private(set) var trouble: FleetTrouble?
-    /// **True from the window's first frame**, which comes before its first check begins: that frame drew "Founderizer
-    /// could not read your fleet" in a 56-pt row for 24 ms, and the card then lost 12 pt (the polish of 30 October 2026).
+    /// **True from the window's first frame**, which comes before its first check begins, so that a first check that
+    /// runs past a page's quiet second shows its line (the polish of 30 October 2026: that frame drew a row for 24 ms).
     private(set) var reading = true
     private(set) var sending = false
     private(set) var reference: String?

@@ -39,6 +39,14 @@ public sealed record ServerList(
     /// <summary>The server of an agent, or null.</summary>
     public ServerEntry? ServerOf(string agent) => Servers.FirstOrDefault(s => s.Agents.Contains(agent));
 
+    /// <summary>**A server that takes <paramref name="agent"/> as its first server**, by the rule of the agent's setup (the
+    /// Mac's <c>ServerList.takesFirst</c>): a server of this list, not the hub's own, with no other agent on it. The setup
+    /// checks it before its move, and again on a new list after a refusal for a team.json that changed: the hub lets a
+    /// shared Linux server take a second agent (hub.py <c>move_refusal</c>), so a retry with no new list put the agent
+    /// beside one that came in the meantime.</summary>
+    public bool TakesFirst(string agent, string name) =>
+        Servers.FirstOrDefault(s => s.Name == name) is { Hub: false } entry && entry.Agents.All(a => a == agent);
+
     /// <summary>The Mac's <c>validate(database:)</c>: this generation, a finite time, at most 1000 servers, each name once,
     /// each name a server's or a machine's from before servers.</summary>
     internal string? Problem(string database)
@@ -194,6 +202,15 @@ public sealed record JoinCode(bool Ok, string RequestId, string Name, string Kin
 /// <summary>The body of POST /ui/servers/join, as the Mac's <c>joinCode</c> sends it for a Linux server of a hub with
 /// <c>server_names</c>: its kind alone.</summary>
 public sealed record JoinAsk(string Kind);
+
+/// <summary>The body of POST /ui/servers/&lt;server&gt;/agents for an agent on a plan (the Mac's <c>addServerAgent</c>):
+/// against the team.json that the app read, the agent, its provider, its role and whom it reports to (null: the
+/// manager). The setup sends it again for the install of an agent that failed: the same command on the same server.</summary>
+public sealed record AgentAsk(string BaseSha256, string Agent, string Runtime, string Role, string? ReportsTo);
+
+/// <summary>The answer of POST /ui/servers/&lt;server&gt;/agents (the Mac's ServerAgentReceipt): the install's job.</summary>
+public sealed record ServerAgentReceipt(bool Ok, string RequestId, string Agent, string Server, string Runtime, long Job,
+                                        string Revision, string Sha256);
 
 /// <summary>The names of servers, as the Mac's Servers.swift has them.</summary>
 public static partial class ServerNames

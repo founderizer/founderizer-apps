@@ -63,6 +63,11 @@ struct CentralVaultPlanTests {
         // is, and says so (`otherOwner`).
         #expect(VaultPlan.of(unset, facts: Self.mine(keyHeld: false, pin: nil)) == VaultPlan(step: .install))
         #expect(VaultPlan.of(unset, facts: Self.mine(hubOnRecord: false)) == .none)
+        // another Mac's owner key on this Mac (Migration Assistant): no automatic install makes a new one in its place,
+        // only the owner's Set up (the Door area's read of 25 November 2026)
+        var moved = Self.mine(keyHeld: false, pin: nil)
+        moved.keyOtherMac = true
+        #expect(VaultPlan.of(unset, facts: moved) == VaultPlan(step: .takeOver, vault: .setUp(nil)))
     }
 
     @Test func aFailedInstallIsTriedAgainAfterTenMinutesAtMostSixTimes() throws {

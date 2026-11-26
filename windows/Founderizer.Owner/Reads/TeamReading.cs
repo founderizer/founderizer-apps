@@ -102,3 +102,54 @@ public sealed record MoveAsk(string BaseSha256, string Server, string Runtime);
 /// which had no machine; <c>Job</c> is the install of the agent on its new server.</summary>
 public sealed record MoveReceipt(bool Ok, string RequestId, string Agent, string Server, string Runtime, long Job,
                                  string Revision, string Sha256, string? Was = null);
+
+/// <summary>The body of POST /ui/team/agents/&lt;agent&gt; for an activation (owner API 1.9; the Mac's
+/// <c>agentActivation</c>): against the team.json that the app read, the one field <c>active</c>.</summary>
+public sealed record ActivationAsk(string BaseSha256, bool Active);
+
+/// <summary>**The answer of an activation** (the Mac's <c>ControlReceipt</c> of <c>agentActivation</c>): the agent, the
+/// new team.json, each change (only <c>active</c>), the updates that it asked for, whether the agent's settings are
+/// still to load, and the check that let the hub activate it. The changes are read with the Mac's rule: one value of
+/// another form never fails the decode, and then the answer is not this command's.</summary>
+public sealed partial record ActivationReceipt(
+    bool Ok,
+    string RequestId,
+    string? Agent = null,
+    string? Sha256 = null,
+    string? Revision = null,
+    JsonElement? Changed = null,
+    IReadOnlyList<string>? UpdatesRequested = null,
+    bool? SettingsPending = null,
+    ActivationCheck? Activation = null)
+{
+    /// <summary>The Mac's <c>matches</c> of <c>agentActivation</c>: this agent, a SHA-256 and a revision of their shapes,
+    /// changes of the field <c>active</c> to <paramref name="active"/> only, updates of this agent only, and the state of
+    /// its settings; the check that let the hub activate it when the activation changed something, and no check else.</summary>
+    internal bool Matches(string agent, bool active)
+    {
+        if (!Ok || Agent != agent || Sha256 is null || !ShaShape().IsMatch(Sha256) || Revision is null || !RevisionShape().IsMatch(Revision) ||
+            SettingsPending is null || UpdatesRequested is not { } updates || !updates.All(u => u == agent))
+            return false;
+        if (Changed is not { ValueKind: JsonValueKind.Array } changes) return false;
+        var count = 0;
+        foreach (var change in changes.EnumerateArray())
+        {
+            if (change.ValueKind != JsonValueKind.Object || !change.TryGetProperty("field", out var field) ||
+                field.ValueKind != JsonValueKind.String || field.GetString() != "active" || !change.TryGetProperty("after", out var after) ||
+                after.ValueKind != (active ? JsonValueKind.True : JsonValueKind.False))
+                return false;
+            count++;
+        }
+        if (active && count > 0) return Activation is { Check: > 0 } check && double.IsFinite(check.CheckedAt) && check.CheckedAt > 0;
+        return Activation is null;
+    }
+
+    [GeneratedRegex(@"\A[a-f0-9]{40}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex RevisionShape();
+
+    [GeneratedRegex(@"\A[a-f0-9]{64}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex ShaShape();
+}
+
+/// <summary>The check that let the hub activate an agent: its id and when it was done.</summary>
+public sealed record ActivationCheck(long Check, double CheckedAt);

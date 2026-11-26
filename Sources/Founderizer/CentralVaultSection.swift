@@ -145,9 +145,9 @@ final class CentralVaultModel {
             guard await read(store) else { return }
             await unpinRemoved(store)
             switch plan.step {
-            case .install: await installOwn(store)
+            case .install: await installOwn(store, pressed: false)
             case .recover: await recover(store)
-            case .update: await updateOwn(store)
+            case .update: await updateOwn(store, pressed: false)
             case .trust(let machines): for machine in machines { await trust(machine, store) }
             case .nothing, .takeOver:
                 await keepTCPWindow(store)
@@ -222,6 +222,10 @@ final class CentralVaultModel {
                 hubOnRecord = machines.flatMap { MachineReach.of(CentralVault.hubMachine(in: $0), in: $0)?.onRecord } != nil
             }
         }
+        // The first look of a run at the owner key reads the item and signs once with the chip: off the main actor, so a
+        // chip or a token daemon that does not answer stops no window, and one look at a time for each fleet, so the
+        // reading of each minute holds no more threads while one waits; `facts` then takes this run's answer.
+        if let fleet = fresh?.fleetID { _ = await OwnerKeychain.look(fleet: fleet) }
         plan = VaultPlan.of(fresh, facts: facts)
         return true
     }
@@ -233,7 +237,8 @@ final class CentralVaultModel {
         removed.subtract(addedHere)
         return VaultFacts(keyHeld: fleet.map(OwnerKeychain.isHeld) ?? false,
                           pin: fleet.flatMap { CentralVaultPins.recipient(hub: hub, fleet: $0) }, hubOnRecord: hubOnRecord,
-                          otherOwner: otherOwner, confirmedRecovery: confirmedRecovery, confirmedPins: confirmedPins, signedAt: signedAt,
+                          otherOwner: otherOwner, keyOtherMac: fleet.map(OwnerKeychain.isOtherMac) ?? false,
+                          confirmedRecovery: confirmedRecovery, confirmedPins: confirmedPins, signedAt: signedAt,
                           install: install, recovery: recovery, servers: servers, update: update, removed: removed,
                           removedKnown: removals.known, updateKnown: keySwap.known, now: Date().timeIntervalSince1970)
     }
@@ -328,9 +333,9 @@ final class CentralVaultModel {
         guard !working, case .retry(let step, _)? = plan.vault else { return }
         run("vault", store) { model in
             switch step {
-            case .install: await model.installOwn(store)
+            case .install: await model.installOwn(store, pressed: true)
             case .recover: await model.recover(store)
-            case .update: await model.updateOwn(store)
+            case .update: await model.updateOwn(store, pressed: true)
             default: break
             }
         }
@@ -363,10 +368,10 @@ final class CentralVaultModel {
         guard !working, case .setUp? = plan.vault else { return }
         takeOverProblem = nil
         run("vault", store) { model in
-            switch await model.installed(store, own: false) {
+            switch await model.installed(store, own: false, pressed: true) {
             case .done: model.install = nil; model.otherOwner = false
             case .stopped(let says): model.takeOverProblem = says
-            case .otherOwner: break         // only the app's own install stops there
+            case .otherOwner, .waitsForSetUp: break         // only the app's own install, and only with no press
             }
         }
     }
@@ -383,7 +388,9 @@ final class CentralVaultModel {
 
     // MARK: the steps
 
-    private enum Outcome { case done, stopped(String), otherOwner }
+    /// `waitsForSetUp`: an automatic round met another Mac's owner key on this Mac, which only a press replaces; the
+    /// next reading's plan shows Set up, with no tries counted.
+    private enum Outcome { case done, stopped(String), otherOwner, waitsForSetUp }
 
     /// A stop of a step, in the owner's words.
     private struct Stop: LocalizedError {
@@ -392,22 +399,24 @@ final class CentralVaultModel {
         var errorDescription: String? { says }
     }
 
-    /// The app's own install, and its try.
-    private func installOwn(_ store: FleetStore) async {
-        switch await installed(store, own: true) {
+    /// The app's own install, and its try. `pressed`: the owner's Try again, else an automatic round.
+    private func installOwn(_ store: FleetStore, pressed: Bool) async {
+        switch await installed(store, own: true, pressed: pressed) {
         case .done: install = nil; otherOwner = false
         case .stopped(let says): install = VaultTries.failed(after: install, at: Date().timeIntervalSince1970, reason: says)
         case .otherOwner: otherOwner = true
+        case .waitsForSetUp: break
         }
     }
 
     /// The vault's update, when it runs another program than the hub's release: the app's own install again
     /// (`--keep-owner`), done only once the hub reads the vault with the release's program. Its tries are for that one
     /// program: the next release's starts them again.
-    private func updateOwn(_ store: FleetStore) async {
+    private func updateOwn(_ store: FleetStore, pressed: Bool) async {
         guard let program = reading?.program else { return }
-        let outcome = await installed(store, own: true, program: program)
+        let outcome = await installed(store, own: true, program: program, pressed: pressed)
         switch outcome {
+        case .waitsForSetUp: return
         case .done: update = nil
         case .stopped(let says):
             update = VaultTries.failed(after: updateFor == program ? update : nil, at: Date().timeIntervalSince1970, reason: says)
@@ -636,20 +645,28 @@ final class CentralVaultModel {
     /// 2026 the hub's record alone chose the machine whose root printed the key that became the pin. `own`: the app's
     /// own install, which leaves a vault that another Mac's key holds as it is (`--keep-owner`). `program`: the update
     /// to that program of the hub's release, which is done only when the hub reads the vault running it.
-    private func installed(_ store: FleetStore, own: Bool, program release: String? = nil) async -> Outcome {
+    private func installed(_ store: FleetStore, own: Bool, program release: String? = nil, pressed: Bool) async -> Outcome {
         do {
             guard store.hub == hub, store.isFresh, let database = store.state?.db else {
                 throw Stop(String(l10n: "Founderizer has no current status of the hub."))
             }
             guard let reading = try await VaultClient().reading(hub: hub, database: database) else { throw Stop(String(l10n: "This hub has no central vault.")) }
             guard let fleet = reading.fleetID else { throw Stop(String(l10n: "The hub did not say which fleet this is.")) }
-            // A new owner key only where the keychain says that none is there: a read that fails now (a locked keychain,
-            // an enclave that refuses its own key for a moment) stops here and keeps the key, so no passing error gives
-            // the hub a new identity (`OwnerKeychain.Lookup`).
+            // A new owner key only where the keychain says that none is there, or that it holds one that no chip of
+            // this Mac opens (a Mac that Migration Assistant or a restore made from another Mac: the path of a new Mac):
+            // a read that fails now (a locked keychain, a chip that does not answer now) stops here and keeps the key,
+            // so no passing error gives the hub a new identity (`OwnerKeychain.Lookup`).
             let key: any OwnerKey
             switch OwnerKeychain.lookup(fleet: fleet) {
             case .key(let held): key = held
             case .none: key = try OwnerKeychain.make(fleet: fleet)
+            // another Mac's owner key gives way only at the owner's Set up (takeOver, the one install with no
+            // --keep-owner): an automatic round (the install where the hub reads no vault, the update after a
+            // release) and Try again of the app's own install leave it, and the plan shows Set up. An own install
+            // keeps the vault's owner key, so a new key here would match no pin and never show Set up again (the
+            // Door area's reads of 25 November 2026)
+            case .otherMac where pressed && !own: key = try OwnerKeychain.make(fleet: fleet)
+            case .otherMac: return .waitsForSetUp
             case .notNow(let failure): throw Stop(String(l10n: "The keychain refused the key (\(Int(failure.status)))."))
             }
             guard let program = CentralVaultRemote.install(ownerKey: key.publicKey, keepOwner: own) else {

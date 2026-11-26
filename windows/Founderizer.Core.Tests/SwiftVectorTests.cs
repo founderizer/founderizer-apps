@@ -223,34 +223,70 @@ public sealed class SwiftVectorTests
     /// short time of en-GB at midnight past ("0:12" against "00:12").</summary>
     private static readonly HashSet<(string Locale, double Ago)> KnownTimeDifferences = [("en_GB", 54000)];
 
+    /// <summary>The narrow no-break space that the Mac's ICU writes before AM and PM.</summary>
+    private const char NarrowSpace = (char)0x202F;
+
+    /// <summary>A locale's culture data as this machine has it, without the user's own regional settings.</summary>
+    private static CultureInfo Culture(string locale) => new(locale.Replace('_', '-'), useUserOverride: false);
+
+    /// <summary>**The space before AM and PM is this machine's** (README, "What the library does as the Swift apps do"):
+    /// Windows' own icu.dll (ICU 72.1, CLDR 42, on build 26100: Windows Server 2025 and Windows 11 24H2) writes en-US's
+    /// short time "h:mm a" with U+0020, and the Mac's ICU with U+202F, which the vectors hold; both read as a space. The
+    /// test asks the machine's data for en-US's short time and takes exactly the separator that it finds before the AM/PM
+    /// marker, only U+0020 or U+202F, and with it its pattern for the message.</summary>
+    private static (char Separator, string Pattern) MachinesAmPmSeparator()
+    {
+        var pattern = Culture("en_US").DateTimeFormat.ShortTimePattern;
+        var at = pattern.IndexOf("tt", StringComparison.Ordinal);
+        Assert.IsTrue(at > 0, $"this machine's en-US short time \"{pattern}\" has no AM/PM marker after a separator");
+        var separator = pattern[at - 1];
+        Assert.IsTrue(separator is ' ' or NarrowSpace,
+                      $"this machine's en-US short time \"{pattern}\" has U+{(int)separator:X4} before its AM/PM marker: only U+0020 or U+202F is a space there");
+        return (separator, pattern);
+    }
+
     [TestMethod]
     public void TheRowTimeAndTheAgeAreFleetCoresInTwoLocales()
     {
         var words = Vectors.Read("swift-words.json");
         var utc = new ScreenContext(TimeZoneInfo.Utc, CultureInfo.InvariantCulture);
         var differences = new List<string>();
+        var (separator, pattern) = MachinesAmPmSeparator();
+        // the Swift's words with this machine's space before AM and PM, and no other change
+        string? Here(string? swift) => swift?.Replace(NarrowSpace + "AM", separator + "AM").Replace(NarrowSpace + "PM", separator + "PM");
+        var data = $"this machine's en-US short time is \"{pattern.Replace(NarrowSpace.ToString(), "<U+202F>")}\", U+{(int)separator:X4} before AM/PM";
         foreach (var t in words.GetProperty("times").EnumerateArray())
         {
             var locale = t.GetProperty("locale").GetString()!;
-            var context = utc with { Culture = new CultureInfo(locale.Replace('_', '-')) };
+            var context = utc with { Culture = Culture(locale) };
             var (time, now) = (t.GetProperty("time").GetDouble(), t.GetProperty("now").GetDouble());
             var mine = TimeWords.RowTime(time, now, context);
-            var swift = t.GetProperty("words").GetString();
+            var swift = Here(t.GetProperty("words").GetString());
             if (KnownTimeDifferences.Contains((locale, now - time)))
             {
                 Assert.AreNotEqual(swift, mine, "a known difference closed: remove it from the list");
                 differences.Add($"{locale} {now - time}: Swift {swift}, C# {mine}");
             }
-            else Assert.AreEqual(swift, mine, $"{locale}, {now - time} s before");
+            else Assert.AreEqual(swift, mine, $"{locale}, {now - time} s before ({data})");
         }
         foreach (var a in words.GetProperty("ages").EnumerateArray())
         {
             var locale = a.GetProperty("locale").GetString()!;
-            var context = utc with { Culture = new CultureInfo(locale.Replace('_', '-')) };
+            var context = utc with { Culture = Culture(locale) };
             Assert.AreEqual(a.GetProperty("words").GetString(),
                             TimeWords.Age(a.GetProperty("time").GetDouble(), a.GetProperty("now").GetDouble(), context),
                             $"{locale}, {a.GetProperty("now").GetDouble() - a.GetProperty("time").GetDouble()} s");
         }
         Assert.AreEqual(KnownTimeDifferences.Count, differences.Count, string.Join("; ", differences));
+        // The row's time takes the separator of its culture, whichever it is: a time with a space of its own would
+        // pass on one kind of machine only, since the vectors' separator above comes from the same data.
+        var at = new DateTimeOffset(2026, 11, 13, 15, 4, 0, TimeSpan.Zero).ToUnixTimeSeconds();
+        foreach (var space in new[] { NarrowSpace, ' ' })
+        {
+            var set = (CultureInfo)Culture("en_US").Clone();
+            set.DateTimeFormat.ShortTimePattern = "h:mm" + space + "tt";
+            Assert.AreEqual("3:04" + space + "PM", TimeWords.RowTime(at, at + 480, utc with { Culture = set }),
+                            $"a culture whose short time has U+{(int)space:X4} before its AM/PM marker");
+        }
     }
 }

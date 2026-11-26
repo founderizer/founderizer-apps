@@ -48,6 +48,7 @@ public sealed class RootVectorTests
         var access = Root.GetProperty("access");
         var line = access.Text("public_line")!;
         Assert.AreEqual(access.GetProperty("program").Text("program"), AccessLine.Program(line));
+        Same(access.Text("fingerprint"), AccessLine.Fingerprint(line));
         Assert.AreEqual(access.GetProperty("program").Text("through_sudo"), Sudo(AccessLine.Program(line)));
         Same(access.Text("root_keys"), AccessLine.RootKeys);
         Same(access.Text("in_place"), AccessLine.InPlaceWord);

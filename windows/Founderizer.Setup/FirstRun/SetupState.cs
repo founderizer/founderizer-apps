@@ -267,7 +267,9 @@ internal static class Lists
 
 /// <summary>**The owner's answers that this PC keeps between starts of the app** (the Mac's settings of the first run:
 /// <c>firstRunManagerName</c>, <c>firstRunAIProvider</c>, <c>firstRunServersStep</c>, <c>firstRunErrorReports</c> and
-/// the answer that waits for a hub). No key, token, password or address of a server is one of them.</summary>
+/// the answer that waits for a hub). No key, token or password is one of them, and no address of a server but the two of
+/// the mark of the manager's first setup (<c>ManagerSetupMark</c>): the hub's own, and, until it joined, the private address
+/// of the manager's own server that the first run made.</summary>
 public interface ISetupChoices
 {
     string? Get(string name);

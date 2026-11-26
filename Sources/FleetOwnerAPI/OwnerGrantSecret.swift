@@ -491,8 +491,8 @@ public enum GrantSecret {
         public var team: (Place) async throws -> Team
         /// One read of the vault's page (`VaultClient.reading`). A read that failed is thrown.
         public var vault: (Place) async throws -> Vault
-        /// Whether this Mac holds an owner key for the fleet of this id, without reading it
-        /// (`OwnerKeychain.isHeld(fleet:)`).
+        /// Whether this Mac holds an owner key for the fleet of this id that it can use (`OwnerKeychain.isHeld(fleet:)`:
+        /// the item's presence answers until the run's first look, off the caller's actor, ends).
         public var holdsKey: (String) -> Bool
         /// The form of a server's name that a signed grant can carry (`CentralVault.isMachine`).
         public var isMachine: (String) -> Bool

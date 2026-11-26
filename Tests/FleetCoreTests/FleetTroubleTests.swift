@@ -69,7 +69,6 @@ struct FleetTroubleTests {
         #expect(found.isClear)
         #expect(found.findings.isEmpty)
         #expect(found.checksRead == 2)
-        #expect(found.summary == "Founderizer sees nothing wrong from here.")
     }
 
     @Test func aWarnIsNotAFailureAndIsNotARow() throws {
@@ -84,7 +83,6 @@ struct FleetTroubleTests {
                          checklists: ["vps": VerifyChecklist(checks: [.init(check: "disk", state: "ok", says: "Fine.")])])
         #expect(found.isClear)
         #expect(found.unchecked == ["studio"])
-        #expect(found.summary.contains("has not read the checks of studio yet"))
     }
 
     // ------------------------------------------------------------ what it does say
@@ -549,7 +547,7 @@ struct FleetTroubleTests {
         #expect(!prompt.contains("Agent: "))
     }
 
-    /// Its checks stay unread until a closer look of this launch reads them, and the screen says so.
+    /// Its checks stay unread until a closer look of this launch reads them, and it counts as not read.
     @Test func aServerWithNoAgentThatWasNotReadIsNeverShownAsWell() throws {
         let alone = try server()
         let found = read(servers: [alone], checklists: FleetTrouble.checklists(of: [], servers: [alone]) { _ in
@@ -557,7 +555,6 @@ struct FleetTroubleTests {
         })
         #expect(found.findings.isEmpty)
         #expect(found.unchecked == ["worker-3"])
-        #expect(found.summary == "Founderizer sees nothing wrong from here, and has not read the checks of worker-3 yet.")
     }
 
     /// A server the machine rows already name is not read twice, and keeps its agents.
@@ -793,7 +790,6 @@ struct FleetTroubleTests {
         })
         #expect(found.findings.isEmpty)
         #expect(found.unchecked == ["hub"])
-        #expect(found.summary == "Founderizer sees nothing wrong from here, and has not read the checks of hub yet.")
     }
 
     /// The same failure, read by a closer look of this launch, is a finding, with its prompt.

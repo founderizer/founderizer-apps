@@ -182,7 +182,7 @@ struct ConversationsPage: View {
             if offered { filters }
             Group {
                 if !offered {
-                    FormSection { FormRow("Your hub has no conversations yet", symbol: "bubble.left.and.bubble.right") }
+                    FormSection { FormRow("Your server has no conversations yet", symbol: "bubble.left.and.bubble.right") }
                 } else if case .loading = reading, store.connectionError == nil {
                     // The first visit: nothing of the list until it is read, then all of it in one frame. While the
                     // hub does not answer nothing is read, and the failed row stands in its place.

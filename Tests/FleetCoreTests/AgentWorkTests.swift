@@ -18,12 +18,12 @@ struct AgentWorkTests {
     }
 
     private func task(_ id: Int, _ state: String, owner: String = "dev", delivered: Double? = nil, accepted: Int? = nil,
-                      waitingOn: String? = nil) -> [String: Any] {
+                      waitingOn: String? = nil, follows: Int? = nil) -> [String: Any] {
         var row: [String: Any] = ["id": id, "title": "Task \(id)", "details": "", "done_when": "Checked", "needs": "none",
                                   "goal": "", "owner": owner, "requester": "manager", "state": state,
                                   "created": Self.now - 30 * 86_400, "attempt": 1, "restarts": 0, "nudge_level": 0, "stop_sent": 0]
         row["started"] = Self.now - 30 * 86_400; row["last_activity"] = Self.now - 60
-        row["delivered"] = delivered; row["accepted"] = accepted; row["waiting_on"] = waitingOn
+        row["delivered"] = delivered; row["accepted"] = accepted; row["waiting_on"] = waitingOn; row["follows"] = follows
         return row
     }
 
@@ -64,7 +64,8 @@ struct AgentWorkTests {
 
     /// **A done task counts on the day of its result**, on this Mac's calendar days, today last: a result that its
     /// requester refused or that failed is no done task but a failed one, and the work of an agent that left the team
-    /// stays in the fleet's chart. The last 7 days stand beside the 7 before them.
+    /// stays in the fleet's chart. The last 7 days stand beside the 7 before them. A refused result that a later task
+    /// takes on (`follows`) is a review round, neither done nor failed; a failed task with a follow-up still fails.
     @Test func eachDayCountsTheResultsOfThatDay() throws {
         let work = try hub([
             task(1, "completed", delivered: Self.at(19, 9)),
@@ -77,6 +78,10 @@ struct AgentWorkTests {
             task(8, "failed", delivered: Self.at(17, 8)),
             task(9, "rejected", delivered: Self.at(10, 8)),
             task(10, "completed", owner: "gone", delivered: Self.at(19, 10)),
+            task(11, "completed", delivered: Self.at(18, 8), accepted: 0),      // a refused round...
+            task(12, "working", follows: 11),                                   // ...that the next one takes on
+            task(13, "working", follows: 8),                                    // a failed task still fails
+            task(14, "canceled", follows: 7),                                   // a canceled follow-up takes nothing on
         ]).work(calendar: Self.utc)
         let dev = try #require(work.agents["dev"])
         #expect(dev.done.count == FleetWork.days)

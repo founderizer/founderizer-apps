@@ -11,9 +11,10 @@ namespace Founderizer.Windows.Fleet;
 /// <see cref="ISetupChoices"/>; the Mac's settings <c>firstRunManagerName</c>, <c>firstRunAIProvider</c>,
 /// <c>firstRunServersStep</c>, <c>firstRunErrorReports</c>, the answer that waits for a hub, and where the Tailscale
 /// policy is kept): one small JSON file of names and words in the first run's folder. The library never gives it a key,
-/// a token, a password or a server's address, except the hub's own address in the mark of the manager's first setup
-/// (<c>ManagerSetupMark</c>: the hub's scheme, host and port, its generation, the manager, its chosen provider and the
-/// name of the server that joined for it). A file that does not read is no answer: the first run asks again.</summary>
+/// a token or a password, and no server's address but the two of the mark of the manager's first setup
+/// (<c>ManagerSetupMark</c>: the hub's scheme, host and port, its generation, the manager, its chosen provider, the name of
+/// the server that joined for it, and the name and the private address of the server that the first run made for it and
+/// that did not join). A file that does not read is no answer: the first run asks again.</summary>
 internal sealed class FileChoices(string path) : ISetupChoices
 {
     private readonly object gate = new();

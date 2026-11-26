@@ -278,19 +278,22 @@ public static class RootCall
 ///
 /// Safe from any thread, and from two objects of one folder in this process (the round's and the access line's): they
 /// share one lock, and each reads the file again when another wrote it since it read it, or the file changed on disk, so
-/// none writes over the others' records. A record that could not be written stays in this object's memory for this start:
-/// a server whose record the disk does not take still has six tries at most.</summary>
+/// none writes over the others' records. One folder is one lock in any spelling: the lock is kept by the path with no
+/// regard to case, which Windows' and macOS's file systems do not tell apart (two locks of one file would let one write
+/// drop the other's records; one lock of two files only reads a file again for nothing). A record that could not be
+/// written stays in this object's memory until the file is read again (another object wrote it, or it changed on disk):
+/// then it is lost, and that server may get one run more than its count.</summary>
 public sealed class RootRecords
 {
     public const string Hardening = "hardening", Browser = "browser";
 
-    /// <summary>One lock and one count of writes for each file in this process (as <c>HostKeys</c> keeps one lock).</summary>
+    /// <summary>One lock and one count of writes for each file in this process, by its path in any case.</summary>
     private sealed class Shared
     {
         public long Writes;
     }
 
-    private static readonly ConcurrentDictionary<string, Shared> Files = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Shared> Files = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly string file;
     private readonly Shared gate;

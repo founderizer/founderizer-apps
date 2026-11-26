@@ -926,7 +926,7 @@ public static partial class Screens
     /// no hold of the owner's and no usage limit holds it. Else null: its state word.</summary>
     public static string? Parked(StoreState s, MobileSnapshot fleet, MobileTaskHead task, DateTimeOffset now, ScreenContext context) =>
         task.ParkedUntil is { } until && !fleet.Holds.Any(h => h.Task == task.Id) &&
-        !fleet.Agents.Any(a => a.Name == task.Owner && a.Limit is not null)
+        TaskLimit.Of(fleet, task) is null
             ? $"Until {ComingTime(until, s.HubNow(now), context)}" : null;
 
     private static TaskCardRow TaskCard(StoreState s, MobileSnapshot fleet, MobileTaskHead task, ActivityColumn column,
@@ -981,6 +981,21 @@ public static partial class Screens
         };
     }
 
+    /// <summary>The line under a task that a usage limit holds (owner API 1.330; the owner, 24 November 2026: the fleet had
+    /// wrong data about an agent). Where the agent's own route is held, or on a hub without `task_limit`, the agent is at
+    /// its limit, and the line says so. Where only the task's own hold keeps it (a hold of the agent's screen route, while
+    /// the agent itself works on), the line says the panel's words, "Usage limit until 16:00", and none when the time of
+    /// the reset is not known: the state word says "Usage limit" already.</summary>
+    private static string? TaskLimitWords(StoreState s, MobileSnapshot? fleet, string owner, RuntimeLimit limit, DateTimeOffset now,
+                                          ScreenContext context)
+    {
+        var agentHeld = fleet?.Offers(TaskLimit.Feature) != true || fleet.Agents.Any(a => a.Name == owner && a.Limit is not null);
+        var until = limit.ResetKnown ? ComingTime(limit.Until, s.HubNow(now), context) : null;
+        if (agentHeld)
+            return until is null ? $"{s.Names.Label(owner)} is at its usage limit." : $"{s.Names.Label(owner)} is at its usage limit until {until}.";
+        return until is null ? null : "Usage limit until " + until;
+    }
+
     /// <summary>A task's page: what it asks, its thread, who did it, its state word and controls, its guidance box, and the
     /// facts of the panel. Null before its first read; on a current reading of a hub that keeps a thread's events, also
     /// until the first read of its record has every page, so that the thread and the panel come in one frame (the Mac's
@@ -992,7 +1007,8 @@ public static partial class Screens
         var task = page.Task;
         var fleet = s.Fleet;
         var hold = page.Holds.FirstOrDefault(h => h.State != "released");
-        var limited = fleet?.Agents.Any(a => a.Name == task.Owner && a.Limit is not null) == true;
+        var limit = TaskLimit.Of(fleet, task);
+        var limited = limit is not null;
         var word = TaskWords.State(task.State, task.Accepted, task.Requester, s.Names, task.WaitingOn,
                                    task.StalledSince is not null || task.NudgeLevel > 0, task.MissingSince is not null,
                                    hold, limited);
@@ -1041,10 +1057,8 @@ public static partial class Screens
             Title = task.Title,
             Asks = task.Details,
             StalledReason = task.StalledReason,
-            LimitWords = !task.IsTerminal && !ownerChecks && hold is null && limited
-                ? (fleet!.Agents.First(a => a.Name == task.Owner).Limit is { ResetKnown: true } l
-                    ? $"{s.Names.Label(task.Owner)} is at its usage limit until {ComingTime(l.Until, s.HubNow(now), context)}."
-                    : $"{s.Names.Label(task.Owner)} is at its usage limit.") : null,
+            LimitWords = !task.IsTerminal && !ownerChecks && hold is null && limit is not null
+                ? TaskLimitWords(s, fleet, task.Owner, limit, now, context) : null,
             Notes = ValueList.Of(thread),
             Thread = ValueList.Of(Thread(page, task, stopped, now, context)),
             ThreadTopRows = page.Activity?.TopRows.Count ?? 0,

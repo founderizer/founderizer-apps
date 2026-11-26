@@ -573,8 +573,7 @@ names stay.
 - **The installer**: `Installer.For(plan, hubClient, box, authKey, sudoPassword, firstRun, policy)`, or `new
   Installer(plan, authKey, sudoPassword, claim, readHub, clock, verifyPause, firstRun, policy)`; `firstRun` and
   `policy` choose the words of a failure once, for each step's detail and its error's line alike; then `RunAsync(IRemote, Action<InstallProgress>, CancellationToken)` gives the
-  server's `VerifyChecklist`, or throws an `InstallError`. `Installer.RunAsync(plan, remote, progress, cancel, authKey)`
-  runs a plan with no claim. A keyed plan's network step sends the installer's `authKey`, so each installer of such a
+  server's `VerifyChecklist`, or throws an `InstallError`. A keyed plan's network step sends the installer's `authKey`, so each installer of such a
   plan takes the key that the plan was made with; one made with none stops at that step and sends nothing. `Reached` is where the install reaches the server (its private address after the network step),
   `ClaimedHub` the hub that the claim step claimed (`http://100.x.y.z:8765/`), which the first run then gives
   `OwnerStore.ConnectOwnerAsync`. Every call logs in with the app's own key under `HostKeyRule.TakeNew` (the Mac's
@@ -701,12 +700,15 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   key is found to work, with the file's name; no record, setting, box or line ever holds them, nor the file's path.
 - **The agent setup**: `AgentSetupFlow` (the Mac's rules: `Page`, `StartOf`, `Stopped`, `InstallBar`, `Blocker`, …),
   `ManagerSetupStart` and `ManagerSetupSteps`, `SignIn` (`Line`, `Page`, the provider's steps), and `AgentSetupModel(calls,
-  agent)` for the manager's first setup: `ReadAsync(fleet)`, `Page`, `PlaceChosenAsync` (its server and its provider in
-  one move, read again once after a changed team), `ChooseAsync`, `SendCodeAsync`, `OpensByItself`. A link that the
-  window opens is only ever `SignInPage.Link`, which is a link of the provider's own hosts.
+  agent, placing)` for one agent's setup (`placing`: the manager of a new fleet): `ReadAsync(fleet)`, `Page`,
+  `PlaceChosenAsync` (its server and its provider in one move, read again once after a changed team), `ChooseAsync` (its
+  own provider's sign-in, or its failed install again), `SendCodeAsync`, `OpensByItself`, and the machine's check and the
+  activation (below). A link that the window opens is only ever `SignInPage.Link`, which is a link of the provider's own
+  hosts.
 - **The manager's first setup in the window** (piece U3, `Agents/ManagerSetup.cs`): `ManagerSetupMark` (what this PC
   keeps of it in the first run's kept answers, `ISetupChoices`: the hub's address, its generation, the manager, the chosen
-  provider and the server that joined; the first run writes it at each change after the claim and last at its hand-over,
+  provider, the server that joined, and the server that the first run made and that did not join, by its name and its
+  address on the private network (`FirstRunServer`, the Mac's `firstRunServerFor`); the first run writes it at each change after the claim and last at its hand-over,
   `ManagerPlacing.NoteAsync(state, now)` writes it at a current reading of a manager with no server, the manager's run
   and Start again take it away, and `ManagerSetupMark.Shown(state, choices)` is the mark that the window shows),
   `ManagerSetup(new ManagerSetupSettings { Calls, Fleet, Choices, Refresh }, mark)` with `View` (a `ManagerSetupView`),
@@ -718,8 +720,63 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   `ManagerSetupScreens.TakesWindow(view)` is that with a page that this build draws: a page that is not drawn leaves the
   window to the manager's page with its pane. One gap stays until wave C: with "1 server", an app that ends in the
   seconds between the claim and the first reading keeps no mark, so the manager's sign-in has no page at the next start.
+- **The setup of an agent that is not the manager of a new fleet** (piece L4b): `ManagerSetup.ForAgent(settings, hub, db,
+  agent)`, with the same loop, presses and pages, for an agent that the hub shows in setup (a team card added it, and the
+  hub's job installs it on its server) or signed out. **No window makes it yet**: the window of piece U5 (or wave C's
+  agent page) will, for an agent whose reading says so (`AgentSetupFlow.Shows(SetupAgent.Of(row, null, null), features)` is
+  true for one that is not active); today `StoreSource` makes the manager's setup alone. `View.TakesChat` says
+  that its pages take the place of its chat; it never fills the window (`Shows` is false), it has no steps on Back's line,
+  it keeps no mark and leaves the manager's mark as it is, and `View.Ended` comes when its chat takes the place of its
+  setup. **Once its machine reports it signed in, the machine's check and then the activation go by themselves**, each once
+  on a visit (the Mac's `follow`), under the moving "Setting up <Agent>"; what stopped them is `View.Activation`: the page
+  "Activate <Agent>" with one orange line (the check's first item that did not pass, the check's own detail, or the hub's
+  words) over Try again (`TryAgainAsync`; only while `ManagerSetupSettings.CanWrite`, the Mac's `store.canWrite`), and
+  nothing goes again before it, but a new visit (`Visit`), as the Mac's view whose states start again. One point differs
+  from the Mac: a check whose
+  request got no answer is asked again at the next read, where the Mac's request line sends it again (the hub keeps one
+  check that waits).
+- **The server's page of a manager with no server** (piece L4b, drawn by U3b): `ManagerSetupSettings.Server`
+  (`AgentServerSettings`: the box, the remote, the records, the tailnet, the providers, the PC's status) makes
+  `ManagerSetup.Server`, an `AgentServerStep`, with `View.NewServer` (an `AgentServerView`). The pages are the Mac's, in
+  its order: "<Manager>'s server" with the way "VPS" (`ChooseVps`; the PC has no Mac way), then "A VPS for your agents"
+  with the providers' cards. Presses: `ChooseProvider`, `SendKeyAsync` (the fleet's Tailscale key, only when the box holds
+  none or Tailscale ended it), `SendTokenAsync`, `ChooseOffer`, `MakeServerAsync` (it asks the hub first, and makes
+  nothing while the hub does not answer, with the Mac's words, `HubWords`, nor on another generation of the hub, with no
+  words: the window makes that generation's setup), `JoinAgain` (Try again), `Back` (nothing while `Runs`); a new visit
+  (`Visit`) opens it on its first page, as the Mac's view. The build is `CloudStep` for this hub, so that Start again finds its server;
+  **its server joins only while the owner's store is on this setup's hub and generation** (`ManagerSetupSettings.Hub` and
+  the calls' `Database`; the Mac's `store.hub == fleet`), with the hub's one-time line, up to three tries as on the Mac,
+  its bar held through a retry (`InstallView.Reported`, F4), and goes to the manager by itself as soon as the hub offers it
+  (a count of reads, 40, three seconds apart). The server that joined is in the manager's mark from the join's end, so a
+  start of the app before the hand-over still gives it, and a hand-over that did not give it keeps it there, unless the
+  hub lists it with another agent: the setup's own rule checks it again at each read and at each start (the Mac's
+  `handOver`). **The server that the first run made and that did not join is
+  installed by itself, once**, with no second server: only the one in the manager's mark (`ManagerSetupMark.Made`), at
+  its address on this PC's network, also when the hub lists it free (the hub takes a server at the join's POST, before
+  the steps after it; `ServerList.TakesFirst`), and never one that the hub lists as its own or with another agent;
+  `ManagerSetup` asks for it once for each opening of the page (`Visit`), as the Mac's `installFirst`, and the page joins
+  it once by itself, with its tries, also when the first run's own join of it stopped. The mark notes that this join
+  started (`FirstRunServer.Tried`), and lets the server go only when a join of it ended well. Once that join started, a
+  stop of it, or a cut by a closed app, does not run again by itself: this PC's install records keep it, and each later
+  opening shows that stop with its words (this run's, else the record's line, else the step where it stopped) and Try
+  again, which joins it again. The mark keeps the server from the first run's claim on (`SetupStore.KeepClaimedMark`), so
+  that an app that ends while the first run's join of it runs does not lose it. Here the PC departs from the Mac in two
+  points, until wave C gives the PC the provider's row "Use this server": the Mac lets the server go as its join starts
+  and keeps that row for it, and its `installFirst` returns when the hub lists the server (its provider's list offers it),
+  where the PC joins it while it is free and no job runs there (`why` has no "busy", as the Mac's reuse reads it). The page
+  joins nothing by itself while a join of that server runs on this PC (its newest join record reads Running): **for U3b,
+  `AgentServerSettings.Records` must be the first run's own `SetupRecords`**, one instance in the app, since `KeptRecords`
+  reads its folder once and a second instance does not see the first run's join. A server that this page made, or a
+  build of an earlier run, is never joined again by itself. `View.Free` are the fleet's servers that the manager can take,
+  and `TakeServerAsync(name)` gives one: **the hub's list is read again first, and a server that another agent took, that
+  is the hub's own or that left the fleet is not given and not kept**. The pages are `AgentServerScreens` (through
+  `ManagerSetupScreens.Of`, `Drawn` false until U3b draws them), with no card for a free server: the Mac has one in its
+  provider's list alone, so it is the owner's to say. `Join(target, name, sudo)` is the join of a server that a check of
+  the PC proved: **Other VPS is not here yet**, because its check, the password once and the key once are in `SetupStore`,
+  for the hub's install alone.
 - **The reads**: `OwnerReads.ServersAsync`, `MachinesAsync`, `TeamAsync` (the Mac's caps and checks), and the writes
-  `JoinCodeAsync`, `MoveAsync`, `SignInAsync`, `SignInCodeAsync`, through `OwnerReads.Of(store)`. The text of a
+  `JoinCodeAsync`, `MoveAsync`, `SignInAsync`, `SignInCodeAsync`, and of L4b `CheckAsync`, `ActivateAsync` and
+  `AddAgentAsync` (a failed install again), through `OwnerReads.Of(store)`. The text of a
   `SignInPage`, a `JobPrompt`, a `MachineLogin` and a `JoinCode` names no link, no code and no command. A field that the Mac reads
   with `try?` is a `JsonElement` with a reader that never fails the list; fields that no page of the setup reads are
   skipped. `MobileAgent.Alive` is the sessions of an agent's helper, for the end of the manager's first setup.
@@ -759,8 +816,10 @@ build's own code (rule 12). Namespace `Founderizer.Setup.RootJobs`. These names 
   the access line (`Marks`, `KeepMarks`), by `RootRecords.NameOf(hub, server)` (the hub's address, the server's name, its
   private address). No secret. A file that does not read is an empty record: each server then has at most six more tries;
   so is a member or a server's record that is null. Two objects of one folder (the round's and the access line's) share
-  one lock, and each reads the file again after another wrote it, so none writes over the others' records; a record that
-  the disk did not take stays in memory for that start.
+  one lock, kept by the path with no regard to case, and each reads the file again after another wrote it, so none writes
+  over the others' records. A record that the disk did not take stays in that object's memory only until the file is read
+  again (another object wrote it, or it changed on disk): then it is lost, and that server may get one run more than its
+  count.
 - **The round** (`RootRound(records).RunAsync(fleet, servers, tailscaleStatus, run, now)`, every `RootRound.Every` =
   300 s): for each server that the hardening is for, the hardening's turn and then the browser parts', each server reached
   only with `servers.RootConnectionAsync` (`ServerRecords`, below). A cancel ends it before a server or between a
@@ -775,10 +834,12 @@ build's own code (rule 12). Namespace `Founderizer.Setup.RootJobs`. These names 
   `fleet`, with a uid that is not 0, not the broker's and no agent's (`Browser.WorkerFits`); the step checks both again on
   the server (`ports-refused`, `worker-refused`); a reading's numbers are 64-bit, as the Mac's `Int`;
   `../vectors/server-browser-ports.json`, by the Mac's `ServerBrowserVectorsTests.swift`, holds them), **the
-  owner's access line** (`AccessLine(records).RoundAsync(hub, servers, publicLine, fingerprint, connections, tailscaleStatus,
-  run, now)`, every `AccessLine.Every` = 900 s; the key's public line and fingerprint come from the caller, as plain text, and
-  a text that is not one line "`ssh-ed25519 <base64> founderizer-owner-access`" (`AccessLine.IsAccessLine`) throws before
-  any program is made or any server is reached: the Mac makes the line from the key), **the connection**
+  owner's access line** (`AccessLine(records).RoundAsync(hub, servers, publicLine, connections, tailscaleStatus, run, now)`,
+  every `AccessLine.Every` = 900 s; the key's public line comes from the caller, as plain text, and a text that is not one
+  line "`ssh-ed25519 <base64> founderizer-owner-access`" with a base64 that reads (`AccessLine.IsAccessLine`) throws before
+  any program is made or any server is reached: the Mac makes the line from the key. Each mark is the fingerprint of the
+  line's own key (`AccessLine.Fingerprint`, the Mac's `OwnerAccessKey.fingerprint`), never one given beside it, which could
+  be another key's), **the connection**
   (`ServerRecords(machines, own, keptOf).RootConnectionAsync(server, tailscaleStatus)`, the one way of a root job to a
   server: the connection that this PC keeps from an install (`keptOf`), else the fleet's own record of the server, **whose
   user other than root is none for a root job**, and **only at an address that this PC's own Tailscale names as that
@@ -798,6 +859,12 @@ build's own code (rule 12). Namespace `Founderizer.Setup.RootJobs`. These names 
   store says that none is there, and stops on a read that failed (the Mac's `OwnerKeychain.lookup`, 09edee16b); and the
   PC's maker of the owner access key (whose public line `AccessLine` takes) keeps the key on a read that failed, and makes
   one only where none is there (the Mac's `FleetKeychainItem.held` and `mayMake`, 5bc07c316).
+- **For U4, which starts the rounds**: (1) a kept connection keeps its `PortGivenFor` (the Mac's kept record,
+  `Machines.swift`, `portGivenFor`), else a hub at the owner's port 2222 is checked against the host's port 22 key and
+  every root job stops as `HostKeyUnknown`, with no word on a page; (2) the root jobs' `SshRemote` takes the first run's
+  `HostKeys` folder (`AppFolders.Setup`, as `Fleet/StoreSource.cs` does), so a key that an install kept is the one that a
+  root job reads; (3) one new `ServerRecords` for each round, as the Mac, so the list of machines is read once a round and
+  never kept from an earlier one.
 - **The owner's computer key** (`OwnerKeyProof.RunAsync(hub, box, post, read)` and `OwnerKeyPlan`): the registration of a key
   with the one-time proof that the PC reads over SSH. `OwnerPcKey` and the store call it in the repair (next piece of this
   entry).
@@ -1017,6 +1084,16 @@ process at a time.
   s below n, either s.
 - **The release manifests** are read as `AppUpdate.readManifest` and `releases.read_manifest` read them, and their
   Ed25519 signature is checked as `releases.verify_signature` checks it, which also refuses a key of small order.
+- **The space before AM and PM is Windows' own**: the times are written from the PC's culture data, which .NET reads
+  from Windows' own ICU (`C:\Windows\System32\icu.dll`; no `UseNls`, no invariant mode). Windows' icu.dll, ICU 72.1 (CLDR
+  42), on build 26100 (Windows Server 2025 and Windows 11 24H2) writes en-US's short time `h:mm a` with U+0020, as
+  Windows' own clock does; the Mac's ICU writes it with U+202F, which `swift-words.json` holds. Both read as a space.
+  Measured on Azure lane 2, 25 November 2026: .NET 10.0.15 in ICU mode, NLS mode and the user's own regional settings
+  all give U+0020 there; .NET's conversion of an ICU pattern keeps the space that it gets (U+202F stays U+202F), and the
+  same icu.dll gives es-US U+202F, so the difference is in Windows' data. The app takes no ICU of its own and changes no
+  space. `SwiftVectorTests.TheRowTimeAndTheAgeAreFleetCoresInTwoLocales` asks the machine's data for en-US's short time
+  and takes exactly the separator before its AM/PM marker, U+0020 or U+202F only; every other difference fails, and its
+  message names the data that it found.
 - **Stricter than Swift**: a shape is anchored at both ends of the text, so a final newline never passes; a manifest's
   `hold` must be JSON true or false (Swift also takes 0 and 1), and its `build` and `size` JSON whole numbers (Swift
   also reads true as 1).

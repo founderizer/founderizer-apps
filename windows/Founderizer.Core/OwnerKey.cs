@@ -33,13 +33,13 @@ public sealed class SoftwareOwnerKey : IOwnerKey, IDisposable
     {
         if (privateScalar.Length != 32) throw new CryptographicException("a P-256 private key is 32 bytes");
         var parameters = new ECParameters { Curve = ECCurve.NamedCurves.nistP256, D = privateScalar.ToArray() };
-        if (publicKey is not null)
-        {
-            var point = P256.Point(publicKey) ?? throw new CryptographicException("not a P-256 public key");
-            parameters.Q = new ECPoint { X = point[1..33], Y = point[33..] };
-        }
         try
         {
+            if (publicKey is not null)
+            {
+                var point = P256.Point(publicKey) ?? throw new CryptographicException("not a P-256 public key");
+                parameters.Q = new ECPoint { X = point[1..33], Y = point[33..] };
+            }
             return new SoftwareOwnerKey(ECDsa.Create(parameters));
         }
         finally

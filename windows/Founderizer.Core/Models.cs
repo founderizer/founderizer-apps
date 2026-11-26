@@ -84,7 +84,9 @@ public sealed record MobileUsageWindow(string? Label = null, double? UsedPercent
 /// <summary>The newest line of one conversation: who wrote it (`owner` or `agent`), when, and its first characters.</summary>
 public sealed record MobilePreview(double Ts, string Side, string Preview);
 
-/// <summary>A task's head: no details, done-when or result, which come with the task itself (MobileTaskHead).</summary>
+/// <summary>A task's head: no details, done-when or result, which come with the task itself (MobileTaskHead). `limit` is the
+/// usage-limit hold that keeps this task waiting now (owner API 1.330, feature `task_limit`), or null: read it through
+/// <see cref="TaskLimit"/>.</summary>
 public sealed record MobileTaskHead(
     long Id,
     string Title,
@@ -109,7 +111,8 @@ public sealed record MobileTaskHead(
     string? Doing = null,
     double? ParkedUntil = null,
     long? Parent = null,
-    long? TriggerId = null)
+    long? TriggerId = null,
+    RuntimeLimit? Limit = null)
 {
     public bool IsTerminal => State is "completed" or "failed" or "rejected" or "canceled";
 }
@@ -158,7 +161,8 @@ public sealed record MobileTaskPage(
     IReadOnlyList<MobileTaskHead>? Subtasks = null,
     MobileTaskHead? ParentTask = null);
 
-/// <summary>A task in full (FleetCore's FleetTask). `goal` must be there and may be null, which reads as none.</summary>
+/// <summary>A task in full (FleetCore's FleetTask). `goal` must be there and may be null, which reads as none. `limit`: as the
+/// head's (<see cref="MobileTaskHead"/>).</summary>
 public sealed record FleetTask(
     long Id,
     string Title,
@@ -198,7 +202,8 @@ public sealed record FleetTask(
     string? LivePath = null,
     double? ParkedUntil = null,
     double? StalledSince = null,
-    string? StalledReason = null)
+    string? StalledReason = null,
+    RuntimeLimit? Limit = null)
 {
     public bool IsTerminal => State is "completed" or "failed" or "rejected" or "canceled";
     /// <summary>The goal in words, "" for none.</summary>

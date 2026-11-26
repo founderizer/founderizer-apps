@@ -200,6 +200,7 @@ public sealed class TpmOwnerKeyTests
         {
             (DeviceNotReady, 0, Tpm20),
             (DeviceNotReady, ServiceStartPending, 0u),
+            (DeviceNotReady, ServiceNotRunning, 0u),
             (Lockout, 0, Tpm20),
             (NotSupported, 0, Tpm20),
             (NotSupported, TpmNotFound, 0u),

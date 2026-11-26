@@ -59,7 +59,7 @@ public enum People {
     /// `provider`: the AI that the owner picked for an agent on a key or a model server, which the line names in the
     /// place of its program (his answer 12; review M8).
     public static func cannotChat(role: String, runtime: String, active: Bool?, provider: ModelProvider? = nil) -> String? {
-        if role == "manager" { return String(l10n: "The fleet's manager never talks with other people.") }
+        if role == "manager" { return String(l10n: "The manager agent never talks with other people.") }
         if active == false { return String(l10n: "This agent is still in setup.") }
         if runtime != "claude" {
             // The provider's own name, "Codex" (fix round 3, item 37: it said "codex").
@@ -74,7 +74,7 @@ public enum People {
             let text = refused.words
             return String(l10n: "The hub said: \(text.hasSuffix(".") ? text : text + ".")")
         }
-        if error is URLError { return String(l10n: "No answer from the hub. It can still have done it: look again before you try again.") }
+        if error is URLError { return String(l10n: "Founderizer did not answer. It can still have done it: look again before you try again.") }
         return error.localizedDescription
     }
 
@@ -563,7 +563,7 @@ public struct PersonInput: Equatable, Sendable {
             let made = handles.map { "\($0.app)/\($0.handle)" }
             if Set(made).count != made.count { return String(l10n: "The same handle is in the list two times.") }
         }
-        if adding, existing >= People.peopleMax { return String(l10n: "This fleet already has \(People.peopleMax) people.") }
+        if adding, existing >= People.peopleMax { return String(l10n: "You already have \(People.peopleMax) people.") }
         return nil
     }
 

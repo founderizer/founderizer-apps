@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -77,23 +78,45 @@ public sealed partial class AccessLine(RootRecords records)
     public static bool IsInPlace(string output) => RootJob.Lines(output).Any(l => l == InPlaceWord);
 
     /// <summary>Whether this text is one line of the fleet's access key, as the Mac's <c>publicLine</c> makes it: its kind,
-    /// its base64, its comment, one space between them, and nothing else.</summary>
-    public static bool IsAccessLine(string? text) => text is not null && AccessLineShape().IsMatch(text);
+    /// its base64, its comment, one space between them, and nothing else; the base64 one that reads.</summary>
+    public static bool IsAccessLine(string? text) => text is not null && AccessLineShape().IsMatch(text) && Blob(text) is not null;
+
+    /// <summary>**The fingerprint of the key of this line**, as <c>ssh-keygen -l</c> prints it and the Mac's
+    /// <c>OwnerAccessKey.fingerprint</c> makes it: "SHA256:" and the base64 of the SHA-256 of the key's public half, with no
+    /// padding. A round makes the mark of a line from the line itself, so a mark never names another key than the one whose
+    /// line went: a fingerprint given beside the line could be another key's, and that key's line would then never go.
+    /// A text that is not a line of the fleet's access key throws.</summary>
+    public static string Fingerprint(string publicLine)
+    {
+        if (!IsAccessLine(publicLine)) throw new ArgumentException("This is not a line of the fleet's access key.", nameof(publicLine));
+        return "SHA256:" + Convert.ToBase64String(SHA256.HashData(Blob(publicLine)!)).Replace("=", "", StringComparison.Ordinal);
+    }
+
+    /// <summary>The key's public half: the bytes of the line's base64, or null where they do not read.</summary>
+    private static byte[]? Blob(string line)
+    {
+        var parts = line.Split(' ');
+        if (parts.Length != 3) return null;
+        try { return Convert.FromBase64String(parts[1]); }
+        catch (FormatException) { return null; }
+    }
 
     [GeneratedRegex(@"\Assh-ed25519 [A-Za-z0-9+/]+=* founderizer-owner-access\z", RegexOptions.CultureInvariant)]
     private static partial Regex AccessLineShape();
 
     /// <summary>**One round** over the hub's servers: the hub's own server and each Linux server that has not got its line
-    /// yet. <paramref name="publicLine"/> and <paramref name="fingerprint"/> are of the fleet's access key: a line that is not
-    /// one throws before any server is reached (<see cref="Program"/>). Each server is reached only with
+    /// yet. <paramref name="publicLine"/> is the line of the fleet's access key: a line that is not one throws before any
+    /// server is reached (<see cref="Program"/>), and each mark is of its own key (<see cref="Fingerprint"/>). Each server is
+    /// reached only with
     /// <see cref="ServerRecords.RootConnectionAsync"/>, at an address that this PC's own Tailscale names as that server
     /// (<paramref name="tailscaleStatus"/>); <paramref name="run"/> runs one program there as root. A cancel ends it
     /// between two servers.</summary>
-    public async Task RoundAsync(Uri hub, IReadOnlyList<ServerEntry> servers, string publicLine, string fingerprint,
-                                 ServerRecords connections, string? tailscaleStatus,
-                                 Func<InstallTarget, string, TimeSpan, Task<string>> run, double now, CancellationToken cancel = default)
+    public async Task RoundAsync(Uri hub, IReadOnlyList<ServerEntry> servers, string publicLine, ServerRecords connections,
+                                 string? tailscaleStatus, Func<InstallTarget, string, TimeSpan, Task<string>> run, double now,
+                                 CancellationToken cancel = default)
     {
         var program = Program(publicLine);
+        var fingerprint = Fingerprint(publicLine);
         foreach (var server in servers.Where(s => s.Hub || s.Kind == "linux"))
         {
             if (cancel.IsCancellationRequested) return;

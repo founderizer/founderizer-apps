@@ -246,11 +246,11 @@ struct PeoplePage: View {
             Group {
                 if offered, reading.value?.hasPeople == false {
                     FormSection {
-                        FormRow("The hub does not serve people yet", symbol: "exclamationmark.circle",
-                                warning: String(l10n: "Update the hub to UI-API 1.17."))
+                        FormRow("Your server needs an update for People", symbol: "exclamationmark.circle",
+                                warning: String(l10n: "Update Founderizer on your server."))
                     }
                 } else if !offered {
-                    FormSection { FormRow("Your hub has no People yet", symbol: "person.2.slash") }
+                    FormSection { FormRow("Your server has no People yet", symbol: "person.2.slash") }
                 } else if waits, store.connectionError == nil {
                     // The first visit: nothing of the list until it is read, then all of its cards in one frame. While
                     // the hub does not answer nothing is read, and the failed row stands in its place.

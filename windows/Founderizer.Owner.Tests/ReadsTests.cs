@@ -128,8 +128,30 @@ public sealed class ReadsTests
                                                       "an open count of an agent with no line");
     }
 
+    /// <summary>**The rule of an agent's first server** (<see cref="ServerList.TakesFirst"/>, the Mac's
+    /// <c>takesFirst</c>), which the setup checks before its move and again, with a new list, after a refusal for a team.json
+    /// that changed: a server of the list, not the hub's own, with no agent but this one. The bug: a retry that puts the
+    /// agent beside another agent that came onto a shared Linux server in the meantime, which the hub's own rule lets that
+    /// server take.</summary>
+    [TestMethod]
+    public async Task A_server_takes_an_agent_first_only_when_no_other_agent_is_on_it()
+    {
+        static string Entry(string name, string agents, bool hub = false) =>
+            $"{{\"name\": \"{name}\", \"hub\": {(hub ? "true" : "false")}, \"joined\": true, \"agents\": [{agents}], \"available\": {(agents.Length == 0 ? "true" : "false")}, \"why\": []}}";
+        var json = "{\"db\": \"db-1\", \"time\": 1, \"servers\": [" + string.Join(", ", Entry("free", ""), Entry("own", "\"leo\""),
+                   Entry("taken", "\"scout\""), Entry("both", "\"leo\", \"scout\""), Entry("hub", "", hub: true)) + "]}";
+        var list = (await OwnerReads.ServersAsync(new Calls(_ => json))).Value!;
+        Assert.IsTrue(list.TakesFirst("leo", "free"));
+        Assert.IsTrue(list.TakesFirst("leo", "own"));
+        Assert.IsFalse(list.TakesFirst("leo", "taken"));
+        Assert.IsFalse(list.TakesFirst("leo", "both"));
+        Assert.IsFalse(list.TakesFirst("leo", "hub"));
+        Assert.IsFalse(list.TakesFirst("leo", "gone"));
+    }
+
     /// <summary>**The writes of the agent setup send what the Mac sends, and their receipts are checked.** Bug: a move
-    /// whose answer names another server taken as done, or a code sent that is no code.</summary>
+    /// whose answer names another server taken as done, a code sent that is no code, or an activation whose answer is of
+    /// another agent, or of an agent that went to setup, taken as done.</summary>
     [TestMethod]
     public async Task The_writes_of_the_agent_setup_send_the_Macs_fields_and_check_their_receipts()
     {
@@ -137,6 +159,13 @@ public sealed class ReadsTests
         {
             "ui/servers/join" => """{"ok": true, "request_id": "REQUEST", "name": "", "kind": "linux", "expires_at": 1763703600, "code": "7KMQ2PRJ4TVW", "line": "curl …"}""",
             "ui/team/agents/juno/move" => """{"ok": true, "request_id": "REQUEST", "agent": "juno", "server": "worker-2", "runtime": "claude", "job": 9, "revision": "r", "sha256": "s"}""",
+            "ui/machines/iris/check" => """{"ok": true, "request_id": "REQUEST", "replayed": false, "agent": "iris", "changed": true, "check": {"id": 4, "state": "requested", "requested_at": 1763700100, "completed_at": null, "detail": null, "waits_for": null}}""",
+            "ui/machines/nora/check" => """{"ok": true, "request_id": "REQUEST", "agent": "nora", "check": {"id": 4, "state": "completed", "requested_at": 1763700100, "completed_at": 1763700110}}""",
+            "ui/team/agents/iris" or "ui/team/agents/nora" => """{"ok": true, "request_id": "REQUEST", "agent": "iris", "revision": "REVISION", "sha256": "SHA", "changed": [{"field": "active", "before": false, "after": true}], "updates_requested": [], "settings_pending": false, "activation": {"check": 4, "checked_at": 1763700110}}"""
+                .Replace("REVISION", new string('a', 40)).Replace("SHA", new string('c', 64)),
+            "ui/team/agents/otto" => """{"ok": true, "request_id": "REQUEST", "agent": "otto", "revision": "REVISION", "sha256": "SHA", "changed": [{"field": "active", "before": true, "after": false}], "updates_requested": [], "settings_pending": false, "activation": null}"""
+                .Replace("REVISION", new string('a', 40)).Replace("SHA", new string('c', 64)),
+            "ui/servers/worker-2/agents" => """{"ok": true, "request_id": "REQUEST", "agent": "iris", "server": "worker-2", "runtime": "codex", "job": 10, "revision": "r", "sha256": "s"}""",
             _ => """{"ok": true, "request_id": "REQUEST"}""",
         });
         var join = (await OwnerReads.JoinCodeAsync(calls)).Value!;
@@ -149,5 +178,19 @@ public sealed class ReadsTests
         Assert.AreEqual(("ui/machines/juno/signin", "{\"runtime\":\"claude\",\"replace\":false}"), calls.Posts[3]);
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => OwnerReads.SignInAsync(calls, "juno", "grok"));
         await Assert.ThrowsExactlyAsync<ArgumentException>(() => OwnerReads.SignInCodeAsync(calls, "juno", "two words"));
+
+        calls.Posts.Clear();
+        Assert.AreEqual(4, (await OwnerReads.CheckAsync(calls, "iris")).Value!.Check!.Id);
+        Assert.AreEqual(("ui/machines/iris/check", "{\"agent\":\"iris\",\"note\":\"\"}"), calls.Posts[0]);
+        await Assert.ThrowsExactlyAsync<HubException>(() => OwnerReads.CheckAsync(calls, "nora"), "a check that ended is not the check of this request");
+        await OwnerReads.ActivateAsync(calls, "iris", new string('a', 64));
+        Assert.AreEqual(("ui/team/agents/iris", "{\"base_sha256\":\"" + new string('a', 64) + "\",\"active\":true}"), calls.Posts[2]);
+        await Assert.ThrowsExactlyAsync<HubException>(() => OwnerReads.ActivateAsync(calls, "nora", new string('a', 64)), "the activation of another agent");
+        await Assert.ThrowsExactlyAsync<HubException>(() => OwnerReads.ActivateAsync(calls, "otto", new string('a', 64)), "the agent went to setup");
+        calls.Posts.Clear();
+        await OwnerReads.AddAgentAsync(calls, "worker-2", new string('a', 64), "iris", "codex", "worker");
+        Assert.AreEqual(("ui/servers/worker-2/agents", "{\"base_sha256\":\"" + new string('a', 64) +
+                         "\",\"agent\":\"iris\",\"runtime\":\"codex\",\"role\":\"worker\",\"reports_to\":null}"), calls.Posts[0]);
+        await Assert.ThrowsExactlyAsync<ArgumentException>(() => OwnerReads.AddAgentAsync(calls, "worker-2", new string('a', 64), "iris", "codex", "manager"));
     }
 }

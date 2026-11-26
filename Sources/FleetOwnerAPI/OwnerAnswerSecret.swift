@@ -640,7 +640,8 @@ public enum AnswerSecret {
         public var team: (Place) async throws -> GrantSecret.Team
         /// One read of the vault's page (`VaultClient.reading`). Asked only for a call with a give.
         public var vault: (Place) async throws -> GrantSecret.Vault
-        /// Whether this Mac holds an owner key for the fleet of this id, without reading it. Asked only for a call
+        /// Whether this Mac holds an owner key for the fleet of this id that it can use (`OwnerKeychain.isHeld`: the
+        /// item's presence answers until the run's first look, off the caller's actor, ends). Asked only for a call
         /// with a give.
         public var holdsKey: (String) -> Bool
         /// The form of a server's name that a signed grant can carry (`CentralVault.isMachine`).

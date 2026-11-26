@@ -67,6 +67,9 @@ public struct VaultPlan: Equatable, Sendable {
             // own clone on the hub's machine, and it leaves a vault that another Mac's key holds as it is
             // (`CentralVaultRemote.install(ownerKey:keepOwner: true)`).
             if facts.otherOwner { return VaultPlan(step: .takeOver, vault: .setUp(otherOwner)) }
+            // another Mac's owner key on this Mac: no automatic install puts a new one in its place, only Set up (the
+            // Door area's read of 25 November 2026)
+            if facts.keyOtherMac { return VaultPlan(step: .takeOver, vault: .setUp(nil)) }
             if let tries = facts.install, tries.givenUp { return VaultPlan(step: .nothing, vault: .retry(.install, tries.reason)) }
             guard facts.hubOnRecord, facts.install?.isDue(at: facts.now) ?? true else { return .none }
             return VaultPlan(step: .install)
@@ -198,6 +201,9 @@ public struct VaultFacts: Equatable, Sendable {
     public var hubOnRecord: Bool
     /// The app's own install found the vault on the hub's machine held by another Mac's owner key.
     public var otherOwner: Bool
+    /// This Mac holds for the fleet an owner key that no chip of this Mac opens (`OwnerKeychain.Lookup.otherMac`): a
+    /// Mac that Migration Assistant or a restore made. Only the owner's Set up replaces it.
+    public var keyOtherMac: Bool
     /// What the vault confirmed in this session, which the hub's reading can show up to a minute later.
     public var confirmedRecovery: String?
     public var confirmedPins: [String: String]
@@ -219,11 +225,13 @@ public struct VaultFacts: Equatable, Sendable {
     public var updateKnown: Bool
     public var now: Double
 
-    public init(keyHeld: Bool, pin: String?, hubOnRecord: Bool, otherOwner: Bool = false, confirmedRecovery: String? = nil,
+    public init(keyHeld: Bool, pin: String?, hubOnRecord: Bool, otherOwner: Bool = false, keyOtherMac: Bool = false,
+                confirmedRecovery: String? = nil,
                 confirmedPins: [String: String] = [:], signedAt: [String: Double] = [:], install: VaultTries? = nil,
                 recovery: VaultTries? = nil, servers: [String: VaultTries] = [:], update: VaultTries? = nil,
                 removed: Set<String> = [], removedKnown: Bool = true, updateKnown: Bool = true, now: Double) {
         self.keyHeld = keyHeld; self.pin = pin; self.hubOnRecord = hubOnRecord; self.otherOwner = otherOwner
+        self.keyOtherMac = keyOtherMac
         self.confirmedRecovery = confirmedRecovery; self.confirmedPins = confirmedPins; self.signedAt = signedAt
         self.install = install; self.recovery = recovery; self.servers = servers; self.update = update
         self.removed = removed; self.removedKnown = removedKnown; self.updateKnown = updateKnown; self.now = now

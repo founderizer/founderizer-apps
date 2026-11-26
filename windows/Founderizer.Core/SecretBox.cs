@@ -19,9 +19,9 @@ public interface ISecretBox
     /// <summary>Takes the value of a name away. A name that holds nothing is no error.</summary>
     void Remove(string name);
 
-    /// <summary>**Writes the value only where the name holds none**, in one step for every process that writes the box:
-    /// true when it wrote, false (and nothing written) when the name holds a value, also one that does not open. A box
-    /// that cannot do it in one step reads first and then writes.</summary>
+    /// <summary>**Writes the value only where the name holds none**: true when it wrote, false (and nothing written) when
+    /// the name holds a value, also one that does not open. <see cref="FileSecretBox"/> does it in one step on Windows (one
+    /// rename with no overwrite); a box that cannot reads first and then writes.</summary>
     bool WriteNew(string name, byte[] value)
     {
         try
@@ -104,6 +104,10 @@ public sealed class FileSecretBox(string folder, IKeyProtection protection) : IS
 
     public string Folder { get; } = Path.GetFullPath(folder);
 
+    /// <summary>The listing of a folder's files for <see cref="Remove"/>: <see cref="Directory.EnumerateFiles(string)"/>,
+    /// or a test's stand-in of a folder that does not list.</summary>
+    internal Func<string, IEnumerable<string>> FilesOf { get; init; } = Directory.EnumerateFiles;
+
     private string PathOf(string name) =>
         Path.Combine([Folder, .. SecretNames.Checked(name).Split('/')]);
 
@@ -131,14 +135,14 @@ public sealed class FileSecretBox(string folder, IKeyProtection protection) : IS
         Place(path, Seal(name, value), Temporary(path), overwrite: true);
     }
 
-    /// <summary>A new file moved into the name's place with no overwrite, so that of two processes that write a new value
-    /// at once one wins and the other gets false; each writes its own temporary file.</summary>
+    /// <summary>A new file moved into the name's place with no overwrite: on Windows one rename, so that of two processes
+    /// that write a new value at once one wins and the other gets false. Each writes its own temporary file
+    /// (<see cref="NewTemporaryName(string)"/>), which <see cref="Remove"/> takes when a crash left it.</summary>
     public bool WriteNew(string name, byte[] value)
     {
         var path = PathOf(name);
         if (File.Exists(path)) return false;
-        var temporary = Path.Combine(Path.GetDirectoryName(path)!,
-            "." + Path.GetFileName(path) + "." + Convert.ToHexString(RandomNumberGenerator.GetBytes(4)).ToLowerInvariant() + ".new");
+        var temporary = Path.Combine(Path.GetDirectoryName(path)!, NewTemporaryName(Path.GetFileName(path)));
         try
         {
             Place(path, Seal(name, value), temporary, overwrite: false);
@@ -187,11 +191,62 @@ public sealed class FileSecretBox(string folder, IKeyProtection protection) : IS
         File.Move(temporary, path, overwrite);
     }
 
+    /// <summary>Takes the value away first, then each temporary file of the name that a crash left before its move (a
+    /// sealed copy of the value), each on its own. **Nothing after the value's delete throws**, so a caller's next step
+    /// runs (<c>OwnerKeys.Remove</c> deletes the TPM key that the value named): a folder that does not list, or a left file
+    /// that another program holds open, stays with no error, and only a later Remove of the same name tries it again. A
+    /// name whose folder does not exist holds nothing, and its Remove is no error (<see cref="ISecretBox.Remove"/>).</summary>
     public void Remove(string name)
     {
         var path = PathOf(name);
-        File.Delete(Temporary(path));
-        File.Delete(path);
+        try
+        {
+            File.Delete(path);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return; // no folder of the name (File.Delete throws there): no value, and no file that a write left
+        }
+        var left = new List<string> { Temporary(path) };
+        try
+        {
+            if (Path.GetDirectoryName(path) is { } folder && Directory.Exists(folder))
+                foreach (var file in FilesOf(folder))
+                    if (IsNewTemporary(Path.GetFileName(path), Path.GetFileName(file))) left.Add(file);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // a folder that does not list: its left files stay, and the fixed temporary file below needs no listing
+        }
+        foreach (var file in left)
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // held open by another program: it stays, and the value is gone already
+            }
+        }
+    }
+
+    /// <summary>**The name of WriteNew's own temporary file** for a value's file name: ".", the name, ".T", 8 hex digits in
+    /// capitals, ".new". The "T" is a capital letter, which no name of the box has, so no name's file and no name's fixed
+    /// temporary file is one of these. WriteNew, Remove and the tests make and read the name only here.</summary>
+    internal static string NewTemporaryName(string fileName) => NewTemporaryName(fileName, RandomNumberGenerator.GetBytes(4));
+
+    internal static string NewTemporaryName(string fileName, ReadOnlySpan<byte> random) =>
+        "." + fileName + ".T" + Convert.ToHexString(random) + ".new";
+
+    /// <summary>Whether <paramref name="candidate"/> is a name that <see cref="NewTemporaryName(string)"/> makes for
+    /// <paramref name="fileName"/>.</summary>
+    internal static bool IsNewTemporary(string fileName, string candidate)
+    {
+        var head = "." + fileName + ".T";
+        return candidate.Length == head.Length + 8 + 4 && candidate.StartsWith(head, StringComparison.Ordinal) &&
+               candidate.EndsWith(".new", StringComparison.Ordinal) &&
+               candidate.AsSpan(head.Length, 8).IndexOfAnyExcept("0123456789ABCDEF") < 0;
     }
 
     /// <summary>Where a value is written before it is moved to its place: a name that starts with ".", which no name of

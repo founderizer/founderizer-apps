@@ -384,7 +384,9 @@ public sealed class ManagerSetupTests
 /// team; each write is kept with its body, and a refusal by its route.</summary>
 internal sealed class SetupHub : OwnerReads.ICalls
 {
-    public string? Database => "db-1";
+    public string? Database { get; set; } = "db-1";
+    /// <summary>The team's lines (GET /ui/team), the manager alone unless a test gives others.</summary>
+    public string TeamLines { get; set; } = "[{\"agent\": \"juno\", \"role\": \"manager\"}]";
     public string Servers { get; set; } = ServerList(managerOn: null);
     public string Machines { get; set; } = "{\"db\": \"db-1\", \"machines\": []}";
     public bool ServersFail { get; set; }
@@ -401,6 +403,9 @@ internal sealed class SetupHub : OwnerReads.ICalls
         lock (posts) return posts.Where(p => p.Route.EndsWith(end, StringComparison.Ordinal)).Select(p => p.Body).ToList();
     }
 
+    /// <summary>The route of each write that reached the hub, in order.</summary>
+    public List<string> Routes { get { lock (posts) return posts.Select(p => p.Route).ToList(); } }
+
     /// <summary>The reads that reached the hub.</summary>
     public int Reads => reads;
     private int reads;
@@ -416,7 +421,7 @@ internal sealed class SetupHub : OwnerReads.ICalls
             "ui/servers" => Servers,
             "ui/machines" => Machines,
             "ui/team" => "{\"db\": \"db-1\", \"revision\": \"" + new string('a', 40) + "\", \"sha256\": \"" + new string('b', 64) +
-                         "\", \"lines\": [{\"agent\": \"juno\", \"role\": \"manager\"}], \"open_tasks\": {}}",
+                         "\", \"lines\": " + TeamLines + ", \"open_tasks\": {}}",
             _ => throw new InvalidOperationException("no read " + route),
         };
         return Task.FromResult(new OwnerAnswer<T>(JsonSerializer.Deserialize(json, type)));
@@ -431,10 +436,22 @@ internal sealed class SetupHub : OwnerReads.ICalls
         cancel.ThrowIfCancellationRequested();
         if (Refuses?.Invoke(route) is { } refused) throw refused;
         var id = requestId!.Value.ToString("D");
-        var json = body is MoveAsk move
-            ? $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"juno\", \"server\": \"{move.Server}\", \"runtime\": \"{move.Runtime}\", \"job\": 7, " +
-              $"\"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('c', 64)}\"}}"
-            : $"{{\"ok\": true, \"request_id\": \"{id}\"}}";
+        var part = route.Split('/');
+        var json = body switch
+        {
+            MoveAsk move => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"juno\", \"server\": \"{move.Server}\", \"runtime\": \"{move.Runtime}\", \"job\": 7, " +
+                            $"\"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('c', 64)}\"}}",
+            CheckAsk check => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{check.Agent}\", \"changed\": true, " +
+                              "\"check\": {\"id\": 4, \"state\": \"requested\", \"requested_at\": 1763700095, \"completed_at\": null, \"detail\": null}}",
+            ActivationAsk => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{part[^1]}\", \"revision\": \"{new string('a', 40)}\", " +
+                             $"\"sha256\": \"{new string('c', 64)}\", \"changed\": [{{\"field\": \"active\", \"before\": false, \"after\": true}}], " +
+                             "\"updates_requested\": [], \"settings_pending\": false, \"activation\": {\"check\": 4, \"checked_at\": 1763700098}}",
+            AgentAsk add => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{add.Agent}\", \"server\": \"{part[2]}\", \"runtime\": \"{add.Runtime}\", " +
+                            $"\"job\": 8, \"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('c', 64)}\"}}",
+            JoinAsk => $"{{\"ok\": true, \"request_id\": \"{id}\", \"name\": \"\", \"kind\": \"linux\", \"expires_at\": 1763703600, \"code\": \"7KMQ2PRJ4TVW\", " +
+                       "\"line\": \"curl -fsS http://100.64.0.9:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh\"}",
+            _ => $"{{\"ok\": true, \"request_id\": \"{id}\"}}",
+        };
         return Task.FromResult(new OwnerAnswer<TAnswer>(JsonSerializer.Deserialize(json, answerType)));
     }
 

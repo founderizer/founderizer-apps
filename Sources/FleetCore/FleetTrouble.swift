@@ -79,8 +79,8 @@ public struct Trouble: Equatable, Identifiable, Sendable {
 public struct FleetTrouble: Equatable, Sendable {
     public static let maxFindings = 12
     public let findings: [Trouble]
-    /// The servers whose checks this Mac has never read, by their own names, so the screen can say that rather than
-    /// imply a pass.
+    /// The servers whose checks this Mac has never read, by their own names: none of them counts as a pass, and no
+    /// screen says that they are well.
     public let unchecked: [String]
     /// How many `verify` checks this Mac has read in all, across the machines it has read.
     public let checksRead: Int
@@ -92,21 +92,6 @@ public struct FleetTrouble: Equatable, Sendable {
     }
 
     public var isClear: Bool { findings.isEmpty }
-
-    /// The one line above the list. It never says that a machine is well when this Mac has not read it.
-    public var summary: String {
-        if findings.isEmpty {
-            if checksRead == 0 {
-                return unchecked.isEmpty
-                    ? String(l10n: "Founderizer sees nothing wrong from here.")
-                    : String(l10n: "Founderizer sees nothing wrong from here, and has not read the checks of \(Self.names(unchecked)) yet.")
-            }
-            return unchecked.isEmpty
-                ? String(l10n: "Founderizer sees nothing wrong from here.")
-                : String(l10n: "Founderizer sees nothing wrong from here. It has not read the checks of \(Self.names(unchecked)) yet.")
-        }
-        return findings.count == 1 ? String(l10n: "One thing looks wrong.") : String(l10n: "\(findings.count) things look wrong.")
-    }
 
     /// What goes in the report, and what the screen shows him in full before it does. It is bounded so that one
     /// broken fleet cannot make a report our own site refuses.
@@ -122,14 +107,6 @@ public struct FleetTrouble: Equatable, Sendable {
         }
         let more = findings.count - shown
         return parts.joined(separator: "; ") + (more > 0 ? "; +\(more) more" : "")
-    }
-
-    private static func names(_ list: [String]) -> String {
-        switch list.count {
-        case 1: return list[0]
-        case 2: return String(l10n: "\(list[0]) and \(list[1])")
-        default: return String(l10n: "\(list.count) servers")
-        }
     }
 }
 

@@ -106,7 +106,7 @@ struct PersonAgentsCard: View {
             FormSection(heading) {
                 ForEach(agents) { agent in row(agent, shared: shared?.reason) }
                 if agents.isEmpty {
-                    FormEmpty("No agent of this fleet can hold a conversation.", symbol: "person.slash")
+                    FormEmpty("No agent can hold a conversation.", symbol: "person.slash")
                 }
             } accessory: {
                 if let saving { SaveMark(state: saving, retry: retry) }

@@ -356,7 +356,8 @@ enum LinkTools {
             },
             // The vault's reading. A read that failed is thrown as it is.
             vault: { place in vaultFacts(try await vault.reading(hub: place.hub, database: place.database)) },
-            // Whether the key is there, with no read of it.
+            // Whether this Mac holds a key that it can use (`OwnerKeychain.isHeld`): it reads no data and signs nothing
+            // here on the main actor; the item's presence answers until the run's first look, off this actor, ends.
             holdsKey: { fleet in OwnerKeychain.isHeld(fleet: fleet) },
             isMachine: { CentralVault.isMachine($0) },
             // The rule of the app's own controls that sign, which fails closed (`clockApart(_:at:)`).

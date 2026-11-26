@@ -515,6 +515,66 @@ public sealed class FourthSetTests
         Assert.IsNull(held, "a hold of the owner's says its own word");
         var limited = fleet with { Agents = [.. fleet.Agents.Select(a => a.Name == "wren" ? a with { Limit = new RuntimeLimit(Now - 60, Now + 600, true) } : a)] };
         Assert.IsNull(Screens.Parked(s, limited, head, Clock, Utc), "a usage limit says its own word");
+
+        // A hub with task_limit (owner API 1.330; the owner, 24 November 2026: an agent's usage was wrong): a task's own
+        // `limit` alone holds it, and its agent's `limit` (the hold of the agent's own route) holds none of the tasks
+        // whose own `limit` is null. Without the feature the agent's `limit` decides, as before. Fails when the rule
+        // reads the agent's `limit` on every hub: a desktop task that a hold of the screen route keeps waiting said
+        // "Working" for days.
+        var hold = new RuntimeLimit(Now - 60, Now + 600, true);
+        var served = limited with { UiFeatures = [.. fleet.UiFeatures ?? [], TaskLimit.Feature] };
+        Assert.IsNotNull(Screens.Parked(s, served, head, Clock, Utc), "its agent's own route alone holds no task of it");
+        Assert.AreEqual("Working", TaskWords.State(head, served, s.Names));
+        var own = head with { Limit = hold };
+        var screen = served with { Agents = fleet.Agents, Tasks = [.. fleet.Tasks.Select(t => t.Id == 31 ? own with { ParkedUntil = null } : t)] };
+        Assert.IsNull(Screens.Parked(s, served with { Agents = fleet.Agents }, own, Clock, Utc), "its own hold says its own word");
+        Assert.AreEqual("Usage limit", TaskWords.State(own, screen, s.Names));
+        Assert.AreEqual(TaskSymbol.Limit, TaskMark.Of(own, [], s.Names, TaskLimit.Of(screen, own) is not null).Symbol);
+        CollectionAssert.Contains(Activity.Lanes(screen, null, ActivityPeriod.All, Utc)[ActivityColumn.Waiting].Select(t => t.Id).ToList(), 31L);
+        var free = served with { Tasks = [.. fleet.Tasks.Select(t => t.Id == 31 ? head with { ParkedUntil = null } : t)] };
+        CollectionAssert.Contains(Activity.Lanes(free, null, ActivityPeriod.All, Utc)[ActivityColumn.InProgress].Select(t => t.Id).ToList(), 31L);
+        // An older hub sends no task `limit`: there a head's own hold alone says nothing.
+        Assert.AreEqual("Working", TaskWords.State(own, fleet, s.Names));
+        Assert.IsNotNull(Screens.Parked(s, fleet, own, Clock, Utc));
+
+        // The hub's own JSON gives the hold, on a head and on the task of its page ({since, until, reset_known}), and the
+        // page's limit line is the task's: it says the task's own hold while its agent has none, and nothing for an
+        // agent's hold that the task does not have.
+        static JsonObject Limit() => new() { ["since"] = Now - 60, ["until"] = Now + 600, ["reset_known"] = true };
+        parked["limit"] = Limit();
+        Assert.AreEqual(hold, Decode(snapshot).Tasks.Single(t => t.Id == 31).Limit);
+        var json = TaskPageJson(31, "working", accepted: null);
+        json["task"]!["limit"] = Limit();
+        var task = HubDecode.TaskPage(Encoding.UTF8.GetBytes(json.ToJsonString()), "gen1", 31).Task;
+        Assert.AreEqual(hold, task.Limit);
+        StoreState WithPage(MobileSnapshot reading, FleetTask of)
+        {
+            var state = State(reading, Clock);
+            return state with { TaskPages = state.TaskPages.SetItem(31, new TaskPageState { Task = of }) };
+        }
+        // The line says what holds the task (his complaint of 24 November 2026: "Wren is at its usage limit" while Wren
+        // chatted and worked): its own hold, which a hold of the agent's screen route gives, in the agent panel's words,
+        // and no line when the reset's time is not known; the agent's sentence only where the agent's own route is held.
+        var until = "Usage limit until " + Screens.ComingTime(Now + 600, State(screen, Clock).HubNow(Clock), Utc);
+        var line = Screens.Task(WithPage(screen, task), 31, Clock, Utc)!.LimitWords;
+        Assert.AreEqual(until, line, "its own hold");
+        StringAssert.DoesNotMatch(line!, new System.Text.RegularExpressions.Regex("Wren|is at its usage limit"));
+        Assert.IsNull(Screens.Task(WithPage(screen, task with { Limit = hold with { ResetKnown = false } }), 31, Clock, Utc)!.LimitWords,
+                      "its own hold, with no known reset: the state word alone");
+        Assert.IsNull(Screens.Task(WithPage(served, task with { Limit = null }), 31, Clock, Utc)!.LimitWords, "its agent's hold alone");
+        StringAssert.StartsWith(Screens.Task(WithPage(served, task), 31, Clock, Utc)!.LimitWords, "Wren is at its usage limit until ",
+                                "its agent's own route holds it");
+        StringAssert.StartsWith(Screens.Task(WithPage(limited, task with { Limit = null }), 31, Clock, Utc)!.LimitWords,
+                                "Wren is at its usage limit until ", "an older hub: its agent's");
+        // The other marks of the task read the same rule: its Search row and the mark of an answered card on it.
+        var marks = screen with { UiFeatures = [.. screen.UiFeatures ?? [], AnswerMark.Feature] };
+        Assert.AreEqual(TaskSymbol.Limit, Screens.Search(State(marks, Clock), "", 0, Clock).Tasks.Single(t => t.Id == 31).Mark.Symbol);
+        var asked = new OwnerNeed(5, "Which tickets first?", "", "", Now - 300, "wren", Answer: "The oldest", Answered: Now - 200, Task: 31);
+        Assert.AreEqual(TaskSymbol.Limit, AnswerMark.Of(asked, marks, marks.Tasks, s.Names).Row);
+        var free31 = marks with { Tasks = [.. marks.Tasks.Select(t => t.Id == 31 ? t with { Limit = null } : t)], Agents = limited.Agents };
+        Assert.AreNotEqual(TaskSymbol.Limit, Screens.Search(State(free31, Clock), "", 0, Clock).Tasks.Single(t => t.Id == 31).Mark.Symbol,
+                           "its agent's own route alone holds no task of it");
+        Assert.AreNotEqual(TaskSymbol.Limit, AnswerMark.Of(asked, free31, free31.Tasks, s.Names).Row);
     }
 
     // ---------------------------------------------------------------- the store

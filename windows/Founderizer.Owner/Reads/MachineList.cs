@@ -256,3 +256,11 @@ public sealed record SignInCode(string Code)
 
 /// <summary>The answer of a machine's command (a sign-in, its code, a check): the request, and the hub's job.</summary>
 public sealed record MachineReceipt(bool Ok, string RequestId, string? Agent = null);
+
+/// <summary>The body of POST /ui/machines/&lt;agent&gt;/check, as the Mac's <c>machineCheck</c> sends it: its command's
+/// fields, the agent and an empty note.</summary>
+public sealed record CheckAsk(string Agent, string Note);
+
+/// <summary>The answer of a machine's check (the Mac's <c>ControlReceipt</c> of <c>machineCheck</c>): the check that the
+/// hub started, or the one that waits already.</summary>
+public sealed record CheckReceipt(bool Ok, string RequestId, string? Agent = null, MachineCheck? Check = null);

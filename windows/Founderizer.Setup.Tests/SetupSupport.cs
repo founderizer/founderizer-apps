@@ -273,7 +273,7 @@ internal sealed class SetupRig : IAsyncDisposable
 
     /// <summary>A server that answers each program by what it is, as L3's tests' server: the check, the network step, the
     /// claim's log at the server's own address, the installer's end and the checks; "ok" for the rest.</summary>
-    private static StandInRemote Answering(Func<RemoteCall, RemoteResult?>? first) =>
+    internal static StandInRemote Answering(Func<RemoteCall, RemoteResult?>? first) =>
         new((call, _) =>
         {
             if (first?.Invoke(call) is { } given) return given;

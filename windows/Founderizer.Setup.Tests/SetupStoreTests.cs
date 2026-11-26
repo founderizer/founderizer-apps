@@ -218,8 +218,9 @@ public sealed class SetupStoreTests
     /// sends the key that the fleet's key gave for that server.** The bugs: a first run that goes to the manager's setup
     /// while its server joins, so that the setup asks for a server again; one that never leaves the build page; and a
     /// join whose installer was made without its plan's key (24 November 2026): the key step wrote an empty key, and the
-    /// joined server never reached the private network. The key step names itself in the join's progress and record,
-    /// and no line or record holds the key, also where the server prints it back.</summary>
+    /// joined server never reached the private network; and a second key made for the installer, which is not the one
+    /// that the plan was made with. The key step shows in the join's progress, and done in its record, and no line of
+    /// the join holds the key, also where the server prints it back.</summary>
     [TestMethod]
     public async Task The_hand_over_comes_at_the_joins_end_with_the_server_that_joined()
     {
@@ -243,14 +244,16 @@ public sealed class SetupStoreTests
 
         var sent = keys.Where(k => k.Host == s.ManagersServer.Address).Select(k => k.Key).ToArray();
         CollectionAssert.AreEqual(new[] { StandInNet.AuthKey }, sent, "the join's key step sends the key of the fleet's key, once");
+        // The stand-in's fleet gives the same key for each server, so the count proves that the key that went is the one
+        // that the plan was made with: a second key made for the installer would be a second one here.
+        Assert.AreEqual(1, rig.Net.Keys.Count(h => h == s.ManagersServer.Address), "one key for the server that joins");
         var network = s.ManagerInstall.Steps.Last(p => p.Step == "network");
         Assert.AreEqual((ProgressState.Done, "Tailscale, with your key on standard input, and the address it gets."), (network.State, network.Says));
         CollectionAssert.Contains(network.Lines.ToList(), "got (not shown)", "the server's line, without the key");
         var record = rig.Records.Installs.All().Single(r => r.Kind == InstallKind.Join);
-        Assert.IsTrue(record.Steps.Any(st => st.Id == InstallStepId.Network && st.State == RecordStepState.Done), "the join's record names its key step");
-        var texts = s.ManagerInstall.Steps.SelectMany(p => p.Lines.Append(p.Detail ?? "").Append(p.ToString()))
-            .Concat(Directory.EnumerateFiles(Path.Combine(rig.Folder, "records"), "*", SearchOption.AllDirectories).Select(File.ReadAllText));
-        Assert.IsFalse(texts.Any(t => t.Contains(StandInNet.AuthKey, StringComparison.Ordinal)), "no line or record holds the key");
+        Assert.IsTrue(record.Steps.Any(st => st.Id == InstallStepId.Network && st.State == RecordStepState.Done), "the join's record has its network step, done");
+        var lines = s.ManagerInstall.Steps.SelectMany(p => p.Lines.Append(p.Detail ?? "").Append(p.ToString()));
+        Assert.IsFalse(lines.Any(t => t.Contains(StandInNet.AuthKey, StringComparison.Ordinal)), "no line of the join holds the key");
     }
 
     /// <summary>**When the join's wait ends by its count and the new hub answers late, the hand-over comes at that
@@ -271,6 +274,9 @@ public sealed class SetupStoreTests
         var handed = rig.Store.HandedOver!;
         Assert.IsNull(handed.Joined);
         Assert.AreEqual(rig.Store.State.ManagersServer, handed.Made, "the manager's setup gets the server that the run made");
+        var made = rig.Store.State.ManagersServer!;
+        Assert.AreEqual(new Agents.FirstRunServer(made.Name, made.Address!), Agents.ManagerSetupMark.Read(rig.Choices)?.Made,
+                        "and its mark keeps it for a start of the app before its install");
     }
 
     /// <summary>**A manager's server that its provider refused with no way on does not hold the run**: the hand-over comes
@@ -382,6 +388,111 @@ public sealed class SetupStoreTests
         Assert.AreEqual(1, moves.Count, "the setup gives the manager the server that joined, by itself");
         StringAssert.Contains(moves[0], $"\"server\":\"{joined}\"");
         StringAssert.Contains(moves[0], "\"runtime\":\"claude\"");
+    }
+
+    /// <summary>**An app that ends while the manager's own server joins opens at its next start on a setup that joins that
+    /// server once by itself** (the Mac's <c>noteMadeServer</c>): the mark keeps the server, by its name and its address on
+    /// the private network, from the moment that it is there, and no later start runs the first run again. The bug: only
+    /// the hand-over kept it, so that the next start's page shows nothing of the server and its only way on is a second paid
+    /// server.</summary>
+    [TestMethod]
+    public async Task An_app_that_ends_while_the_managers_server_joins_joins_it_at_the_next_start()
+    {
+        using var ended = new ManualResetEventSlim();
+        await using var rig = new SetupRig(call =>
+        {
+            if (call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)) ended.Wait(TimeSpan.FromSeconds(20));
+            return null;
+        })
+        { Fleet = SetupRig.NewFleet() };
+        try
+        {
+            await Built(rig);
+            var s = await rig.Until(x => x.ManagerInstall.Running && x.ManagersServer?.Address is not null, "the manager's join");
+            for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)?.Made is null; i++) await Task.Delay(10);
+            var server = new Agents.FirstRunServer(s.ManagersServer!.Name, s.ManagersServer.Address!);
+            var kept = Agents.ManagerSetupMark.Read(rig.Choices);
+            Assert.AreEqual(("juno", "db-1", "claude", null as string, server), (kept?.Agent, kept?.Db, kept?.Provider, kept?.Joined, kept?.Made),
+                            "the server is in the mark while its join runs");
+            Assert.IsFalse(s.HandedOver, "the app ends here, before the hand-over");
+
+            // The next start: the PC is the owner's computer of the claimed hub, with no first run.
+            var now = DateTimeOffset.UtcNow;
+            var state = new Founderizer.Core.StoreState { Hub = new Uri(s.Install.ClaimedHub!), Role = Founderizer.Core.HubRole.Owner, Fleet = rig.Fleet, LastRead = now, Clock = now };
+            var mark = Agents.ManagerSetupMark.Shown(state, rig.Choices);
+            Assert.IsNotNull(mark, "the window shows the manager's setup");
+            var hub = new SetupHub { Servers = "{\"db\": \"db-1\", \"time\": 1763700100, \"servers\": [{\"name\": \"worker-1\", \"hub\": true, \"joined\": true, \"agents\": [], \"available\": false, \"why\": []}]}" };
+            var records = new SetupRecords(rig.Folder, "launch-2");
+            var setup = new Agents.ManagerSetup(new Agents.ManagerSetupSettings
+            {
+                Calls = hub, Fleet = () => rig.Fleet, Choices = rig.Choices,
+                Server = new Agents.AgentServerSettings
+                {
+                    Box = rig.Box, Remote = SetupRig.Answering(null), Records = records, Tailscale = rig.Net, Cloud = p => rig.Clouds[p],
+                    Status = _ => Task.FromResult<string?>(rig.Status.Json()), Pause = (_, cancel) => Task.Delay(1, cancel),
+                    JoinClock = new StandInClock(), HandOverReads = 1, HandOverEvery = TimeSpan.FromMilliseconds(1),
+                },
+            }, mark);
+            await setup.StepAsync();
+            Assert.AreEqual(true, Agents.ManagerSetupMark.Read(rig.Choices)!.Made?.Tried, "its join by itself started");
+            for (var i = 0; i < 500 && records.Installs.All().All(r => r.Launch != "launch-2" || r.Runs); i++) await Task.Delay(10);
+            for (var read = 0; read < 2; read++) await setup.StepAsync();
+            var own = records.Installs.All().Where(r => r.Launch == "launch-2").ToList();
+            Assert.AreEqual((1, InstallOutcome.Done), (own.Count, own[0].Outcome), "one join of that server, which ended well");
+            for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)!.Made is not null; i++) await Task.Delay(10);
+            Assert.IsNull(Agents.ManagerSetupMark.Read(rig.Choices)!.Made, "the mark lets it go at the end of a join that ended well");
+        }
+        finally
+        {
+            ended.Set();
+            await rig.Until(x => !x.ManagerInstall.Running, "the first run's own join to end");
+        }
+    }
+
+    /// <summary>**The manager's setup joins nothing by itself while the first run's own join of its server runs** (the
+    /// mark holds that server from the claim on, so a setup that the window made before the hand-over could ask for it): the
+    /// first run's own records, which the setup reads, say that the join runs. The bug: two joins of one server at once,
+    /// each of which can make a server key; the hub keeps the first and refuses the second, and a server whose key file
+    /// ends with the second one is refused for good.</summary>
+    [TestMethod]
+    public async Task The_managers_setup_joins_nothing_while_the_first_runs_join_of_its_server_runs()
+    {
+        using var ended = new ManualResetEventSlim();
+        await using var rig = new SetupRig(call =>
+        {
+            if (call.Program.Contains("FLEET_JOIN=", StringComparison.Ordinal)) ended.Wait(TimeSpan.FromSeconds(20));
+            return null;
+        })
+        { Fleet = SetupRig.NewFleet() };
+        try
+        {
+            await Built(rig);
+            await rig.Until(x => x.ManagerInstall.Running && x.ManagersServer?.Address is not null, "the manager's join");
+            for (var i = 0; i < 500 && Agents.ManagerSetupMark.Read(rig.Choices)?.Made is null; i++) await Task.Delay(10);
+            var mark = Agents.ManagerSetupMark.Read(rig.Choices)!;
+            Assert.IsNotNull(mark.Made, "the server is in the mark while its join runs");
+
+            // The page opens in this start of the app, with the first run's own records.
+            var hub = new SetupHub { Servers = "{\"db\": \"db-1\", \"time\": 1763700100, \"servers\": [{\"name\": \"worker-1\", \"hub\": true, \"joined\": true, \"agents\": [], \"available\": false, \"why\": []}]}" };
+            var setup = new Agents.ManagerSetup(new Agents.ManagerSetupSettings
+            {
+                Calls = hub, Fleet = () => rig.Fleet, Choices = rig.Choices,
+                Server = new Agents.AgentServerSettings
+                {
+                    Box = rig.Box, Remote = rig.Remote, Records = rig.Records, Tailscale = rig.Net, Cloud = p => rig.Clouds[p],
+                    Status = _ => Task.FromResult<string?>(rig.Status.Json()), Pause = (_, cancel) => Task.Delay(1, cancel),
+                    JoinClock = new StandInClock(), HandOverReads = 1, HandOverEvery = TimeSpan.FromMilliseconds(1),
+                },
+            }, mark);
+            for (var read = 0; read < 2; read++) await setup.StepAsync();
+            Assert.AreEqual((InstallView.None, false), (setup.View.NewServer!.Install, Agents.ManagerSetupMark.Read(rig.Choices)!.Made?.Tried),
+                            "no second join of that server");
+        }
+        finally
+        {
+            ended.Set();
+            await rig.Until(x => !x.ManagerInstall.Running, "the first run's own join to end");
+        }
     }
 
     /// <summary>**A join that waits for the owner's yes at Tailscale shows its link on the install's page, with its one

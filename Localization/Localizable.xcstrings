@@ -2834,16 +2834,6 @@
         }
       }
     },
-    "%lld things look wrong." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld cosas parecen estar mal."
-          }
-        }
-      }
-    },
     "%lld things that needed you" : {
       "localizations" : {
         "es" : {
@@ -8990,16 +8980,6 @@
         }
       }
     },
-    "Founderizer could not read your fleet" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer no pudo leer tu equipo"
-          }
-        }
-      }
-    },
     "Founderizer could not remove it. %@" : {
       "localizations" : {
         "es" : {
@@ -9046,6 +9026,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Founderizer no pudo configurar %@ en %@."
+          }
+        }
+      }
+    },
+    "Founderizer did not answer. It can still have done it: look again before you try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Founderizer no respondió. Puede que lo haya hecho igualmente: vuelve a mirar antes de intentarlo de nuevo."
           }
         }
       }
@@ -9466,36 +9456,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Founderizer no ejecuta imágenes de Docker: usa el paquete npm o PyPI del servidor."
-          }
-        }
-      }
-    },
-    "Founderizer sees nothing wrong from here, and has not read the checks of %@ yet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer no ve ningún problema desde aquí y aún no ha leído las comprobaciones de %@."
-          }
-        }
-      }
-    },
-    "Founderizer sees nothing wrong from here." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer no ve ningún problema desde aquí."
-          }
-        }
-      }
-    },
-    "Founderizer sees nothing wrong from here. It has not read the checks of %@ yet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Founderizer no ve ningún problema desde aquí. Aún no ha leído las comprobaciones de %@."
           }
         }
       }
@@ -13040,12 +13000,12 @@
         }
       }
     },
-    "No agent of this fleet can hold a conversation." : {
+    "No agent can hold a conversation." : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ningún agente de este equipo puede mantener una conversación."
+            "value" : "Ningún agente puede mantener una conversación."
           }
         }
       }
@@ -13106,16 +13066,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El hub no respondió. Aún puede hacerlo: vuelve a mirar antes de intentarlo de nuevo."
-          }
-        }
-      }
-    },
-    "No answer from the hub. It can still have done it: look again before you try again." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El hub no respondió. Puede que lo haya hecho igualmente: vuelve a mirar antes de intentarlo de nuevo."
           }
         }
       }
@@ -14250,16 +14200,6 @@
         }
       }
     },
-    "Nothing of your fleet's work leaves this Mac: no task, no message, no file." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nada del trabajo de tu equipo sale de este Mac: ni tareas, ni mensajes, ni archivos."
-          }
-        }
-      }
-    },
     "Nothing to check" : {
       "localizations" : {
         "es" : {
@@ -14286,16 +14226,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nada que importar"
-          }
-        }
-      }
-    },
-    "Nothing to put right from here" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No hay nada que corregir desde aquí"
           }
         }
       }
@@ -14526,16 +14456,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Una página rechazada"
-          }
-        }
-      }
-    },
-    "One thing looks wrong." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Una cosa parece estar mal."
           }
         }
       }
@@ -20430,26 +20350,6 @@
         }
       }
     },
-    "Tell us below and we read it." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cuéntanoslo abajo y lo leemos."
-          }
-        }
-      }
-    },
-    "Tell us below anyway." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cuéntanoslo abajo de todos modos."
-          }
-        }
-      }
-    },
     "Terminal" : {
       "localizations" : {
         "es" : {
@@ -21740,16 +21640,6 @@
         }
       }
     },
-    "The fleet's manager never talks with other people." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El gestor del equipo nunca habla con otras personas."
-          }
-        }
-      }
-    },
     "The fleet's record of %@ is not a connection." : {
       "localizations" : {
         "es" : {
@@ -21986,16 +21876,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El hub no aceptó este cambio. Vuelve a intentarlo."
-          }
-        }
-      }
-    },
-    "The hub does not serve people yet" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El hub aún no ofrece personas"
           }
         }
       }
@@ -23006,6 +22886,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Las máquinas %1$@ y %2$@"
+          }
+        }
+      }
+    },
+    "The manager agent never talks with other people." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El agente gestor nunca habla con otras personas."
           }
         }
       }
@@ -25010,16 +24900,6 @@
         }
       }
     },
-    "This fleet already has %lld people." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este equipo ya tiene %lld personas."
-          }
-        }
-      }
-    },
     "This fleet is updating to %@…" : {
       "localizations" : {
         "es" : {
@@ -26260,6 +26140,16 @@
         }
       }
     },
+    "Update Founderizer on your server." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualiza Founderizer en tu servidor."
+          }
+        }
+      }
+    },
     "Update and Restart" : {
       "localizations" : {
         "es" : {
@@ -26356,16 +26246,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Actualiza la app."
-          }
-        }
-      }
-    },
-    "Update the hub to UI-API 1.17." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Actualiza el hub a UI-API 1.17."
           }
         }
       }
@@ -27190,16 +27070,6 @@
         }
       }
     },
-    "We write back here and keep nothing else." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Te respondemos aquí y no guardamos nada más."
-          }
-        }
-      }
-    },
     "Web" : {
       "localizations" : {
         "es" : {
@@ -28000,6 +27870,16 @@
         }
       }
     },
+    "You already have %lld people." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya tienes %lld personas."
+          }
+        }
+      }
+    },
     "You already have this server. Nothing new was made." : {
       "localizations" : {
         "es" : {
@@ -28750,26 +28630,6 @@
         }
       }
     },
-    "Your hub has no People yet" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tu hub aún no tiene Personas"
-          }
-        }
-      }
-    },
-    "Your hub has no conversations yet" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tu hub aún no tiene conversaciones"
-          }
-        }
-      }
-    },
     "Your hub has not come back" : {
       "localizations" : {
         "es" : {
@@ -29100,12 +28960,42 @@
         }
       }
     },
+    "Your server has no People yet" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu servidor aún no tiene Personas"
+          }
+        }
+      }
+    },
+    "Your server has no conversations yet" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu servidor aún no tiene conversaciones"
+          }
+        }
+      }
+    },
     "Your server is not on your private network" : {
       "localizations" : {
         "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tu servidor no está en tu red privada"
+          }
+        }
+      }
+    },
+    "Your server needs an update for People" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu servidor necesita una actualización para Personas"
           }
         }
       }

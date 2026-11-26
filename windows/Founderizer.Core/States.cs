@@ -75,6 +75,33 @@ public sealed record AgentStatus(AgentState State, string? AttentionWords = null
     }
 }
 
+/// <summary>Whether a usage limit holds a task: one rule for every screen (FleetCore's TaskLimit; owner API 1.330). A hold of
+/// an agent's screen route keeps only its screen tasks, and the agent's `limit` is the hold of its own route only. So on a
+/// hub that sends each task its own `limit` (<see cref="Feature"/>) that alone says the task's wait: null there is no
+/// wait, also while its agent's `limit` is set. A hub before it sends no task `limit`, and the agent's `limit` decides,
+/// as before. The agent's own row and chat read the agent's `limit` alone, on every hub.</summary>
+public static class TaskLimit
+{
+    /// <summary>`ui_features` of a hub that gives each task its own `limit`.</summary>
+    public const string Feature = "task_limit";
+
+    /// <summary>The hold that keeps a task waiting now: <paramref name="task"/>, its own `limit`, on a hub that serves it;
+    /// else <paramref name="agent"/>, the `limit` of the task's agent.</summary>
+    public static RuntimeLimit? Holding(RuntimeLimit? task, RuntimeLimit? agent, bool served) => served ? task : agent;
+
+    /// <summary>The hold that keeps the task of <paramref name="owner"/> with its own <paramref name="limit"/> waiting now,
+    /// by this reading.</summary>
+    public static RuntimeLimit? Of(MobileSnapshot? fleet, string owner, RuntimeLimit? limit)
+    {
+        RuntimeLimit? agent = null;
+        if (fleet is not null) foreach (var a in fleet.Agents) if (a.Name == owner) { agent = a.Limit; break; }
+        return Holding(limit, agent, fleet?.Offers(Feature) == true);
+    }
+
+    public static RuntimeLimit? Of(MobileSnapshot? fleet, MobileTaskHead task) => Of(fleet, task.Owner, task.Limit);
+    public static RuntimeLimit? Of(MobileSnapshot? fleet, FleetTask task) => Of(fleet, task.Owner, task.Limit);
+}
+
 /// <summary>The mark of a task, from its head (the iPhone's MobileTaskHead.mark, FleetCore's FleetTask.mark): its symbol,
 /// its one state word, whether it needs someone, and whether it is work now. The symbol is a name of the meaning, which
 /// each app draws with its own icon.</summary>
@@ -176,7 +203,7 @@ public sealed record AnswerMark(AnswerSymbol Symbol, string? Words = null, strin
         }
         if (need.Gives && need.Chosen == 0) return new(AnswerSymbol.Check, "Given");
         if (need.Task is not { } id || tasks.FirstOrDefault(t => t.Id == id) is not { } task) return received;
-        var mark = TaskMark.Of(task, fleet.Holds, names, fleet.Agents.Any(a => a.Name == task.Owner && a.Limit is not null),
+        var mark = TaskMark.Of(task, fleet.Holds, names, TaskLimit.Of(fleet, task) is not null,
                                outcomeUnknown: Activity.OutcomeUnknown(fleet, task));
         // The task's tint (FleetTask.tint): a filled red or green result only for a task that is over with no hold, as
         // TaskMark draws them; then orange where its row is orange, with the row's symbol and words.

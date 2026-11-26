@@ -1143,15 +1143,18 @@ public sealed class SetupStore
     /// restart of the PC) would start again as the owner's computer of a hub with no welcome page and no mark, on a chat
     /// that cannot answer. So each change of this run after the claim keeps the mark of the claimed hub as its reading
     /// gives it: its generation, the manager, the provider that the owner chose and, once the manager's own server joined
-    /// that hub, that server (the Mac's <c>noteJoined</c>). The setup uses the provider and the server only while its own
-    /// read says that the manager has no server. The hand-over writes the mark last, and no change of this run writes it
+    /// that hub, that server (the Mac's <c>noteJoined</c>), or, while it did not, that server with its address on the private
+    /// network (<see cref="MadeHere"/>, the Mac's <c>noteMadeServer</c>): an app that ends while that server joins, or waits
+    /// to, would lose the paid server, and no later start runs this run again. The setup uses the provider and the servers
+    /// only while its own read says that the manager has no server. The hand-over writes the mark last, and no change of this run writes it
     /// after that: the setup then changes it, and takes it away when the manager runs.</summary>
     private void KeepClaimedMark()
     {
         var s = State;
         if (s.HandedOver || s.Install.ClaimedHub is not { } claimed || !Uri.TryCreate(claimed, UriKind.Absolute, out var hub)) return;
         if (FleetNow() is not { } fleet || fleet.Agents.FirstOrDefault(a => a.Role == "manager") is not { } manager) return;
-        var mark = new ManagerSetupMark(hub, fleet.Db, manager.Name, s.ChosenAi, JoinedHere(s));
+        var joined = JoinedHere(s);
+        var mark = new ManagerSetupMark(hub, fleet.Db, manager.Name, s.ChosenAi, joined, MadeHere(s, joined));
         // A reading of another hub than the claimed one, which the owner's store held a moment before the claim, is none.
         if (settings.Owner.State.Hub is { } reads && !mark.IsOf(reads)) return;
         lock (markGate)
@@ -1161,6 +1164,11 @@ public sealed class SetupStore
     /// <summary>The manager's own server that joined the claimed hub in this run, or null.</summary>
     private static string? JoinedHere(SetupState s) =>
         s.ManagerInstall.Checklist is not null && s.ManagerInstall.JoinHub == s.Install.ClaimedHub ? s.ManagerInstall.Server ?? s.ManagersServer?.Name : null;
+
+    /// <summary>The manager's own server that this run made, that is on the private network and that did not join, for the
+    /// mark (<paramref name="joined"/>: the server that joined, or null); else null.</summary>
+    private static FirstRunServer? MadeHere(SetupState s, string? joined) =>
+        joined is null && s.ManagersServer is { Address: { } at } own ? new FirstRunServer(own.Name, at) : null;
 
     /// <summary>**Into the app, at the manager's setup** (the Mac's <c>finish</c>): the manager's AI provider that the owner
     /// chose in this first run is not asked again. A manager with no server gets it with its server; a manager that the
@@ -1203,11 +1211,14 @@ public sealed class SetupStore
         // read says that the manager has no server, and without them it would ask for the provider again and never give
         // the manager the server that joined for it.
         var markJoined = placed != true ? JoinedHere(s) : null;
+        // The manager's own server that this run made and that did not join, which the setup installs by itself once, also
+        // after a start of the app (the Mac's `noteMadeServer`).
+        var markMade = placed != true ? MadeHere(s, markJoined) : null;
         lock (markGate)
         {
             marksEnded = true;
             if (fleet is not null && s.Install.ClaimedHub is { } claimed && Uri.TryCreate(claimed, UriKind.Absolute, out var hubAddress))
-                new ManagerSetupMark(hubAddress, fleet.Db, name, placed != true ? provider : null, markJoined).Keep(settings.Choices);
+                new ManagerSetupMark(hubAddress, fleet.Db, name, placed != true ? provider : null, markJoined, markMade).Keep(settings.Choices);
         }
         lock (gate) handover = new Handover(name, provider, joined, asked, made);
         Set(x => x with { HandedOver = true, HandedTo = name });

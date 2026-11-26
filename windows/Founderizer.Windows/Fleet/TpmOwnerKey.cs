@@ -274,10 +274,14 @@ internal sealed partial class OwnerKeys
                 try
                 {
                     var publicKey = Point(parameters);
-                    if (Base64.EncodeToUtf8(parameters.D!, scalar, out _, out int length) != OperationStatus.Done)
-                        throw new CryptographicException("the software key was not written");
-                    value = Record(InSoftware, scalar.AsSpan(0, length).ToArray(), publicKey);
+                    // The key first: a refusal of its import leaves no value of its bytes to clear.
                     made = SoftwareOwnerKey.Import(parameters.D!, publicKey);
+                    if (Base64.EncodeToUtf8(parameters.D!, scalar, out _, out int length) != OperationStatus.Done)
+                    {
+                        ((IDisposable)made).Dispose();
+                        throw new CryptographicException("the software key was not written");
+                    }
+                    value = Record(InSoftware, scalar.AsSpan(0, length).ToArray(), publicKey);
                 }
                 finally
                 {
@@ -335,9 +339,15 @@ internal sealed partial class OwnerKeys
             {
                 // a value that does not open names no key that can be found
             }
-            box.Remove(name);
-            if (record is { Kind: InTpm } old) Delete(Encoding.UTF8.GetString(old.Held));
-            if (record is { } any) CryptographicOperations.ZeroMemory(any.Held);
+            try
+            {
+                box.Remove(name);
+                if (record is { Kind: InTpm } old) Delete(Encoding.UTF8.GetString(old.Held));
+            }
+            finally
+            {
+                if (record is { } any) CryptographicOperations.ZeroMemory(any.Held);
+            }
         }
     }
 

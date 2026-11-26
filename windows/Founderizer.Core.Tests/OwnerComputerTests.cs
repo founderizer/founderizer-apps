@@ -428,6 +428,97 @@ public sealed class OwnerComputerTests
         Assert.AreEqual(1, Directory.GetFiles(Path.GetDirectoryName(raced)!).Length, "no temporary file stays");
     }
 
+    /// <summary>**Remove also takes a temporary file that a crash left** between WriteNew's write and its move (a sealed
+    /// copy of the value, for an owner key its software key), and no file of another name; the value goes first, and
+    /// nothing after it throws, so a caller's next step (OwnerKeys.Remove's delete of the TPM key) runs. The bugs: the copy
+    /// stays in the box's folder after its name was taken away (also when WriteNew's form of the name changed and
+    /// Remove's reading did not); a temporary name that a name of the box can have; a held left file, or a folder that
+    /// does not list, that makes Remove throw after the value went.</summary>
+    [TestMethod]
+    public void Remove_takes_a_temporary_file_that_a_crash_left()
+    {
+        // The maker's exact form, with letters among its hex digits (a maker that writes small letters fails here on each
+        // run, not only when its random digits have a letter), and one with no letter: the fixed capital "T" keeps that
+        // one too from being a name of the box.
+        var letters = FileSecretBox.NewTemporaryName("0123456789abcdef", [0xAB, 0xCD, 0xEF, 0x01]);
+        Assert.AreEqual(".0123456789abcdef.TABCDEF01.new", letters);
+        Assert.IsTrue(FileSecretBox.IsNewTemporary("0123456789abcdef", letters));
+        var digits = FileSecretBox.NewTemporaryName("0123456789abcdef", [0x12, 0x34, 0x56, 0x78]);
+        Assert.IsTrue(FileSecretBox.IsNewTemporary("0123456789abcdef", digits));
+        Assert.IsFalse(SecretNames.IsName("owner-key/" + digits[1..]), "no name of the box is one of them");
+        Assert.IsFalse(FileSecretBox.IsNewTemporary("0123456789abcdef", ".0123456789abcdef.12345678.new"));
+
+        var folder = Folder();
+        var box = new FileSecretBox(Path.Combine(folder, "keys"), new TestProtection());
+        box.Write("owner-key/0123456789abcdef", [1]);
+        box.Write("owner-key/0123456789abcdef.next", [2]);
+        var keys = Path.Combine(folder, "keys", "owner-key");
+        // Each left file's name made by WriteNew's own maker, so that the test and Remove read the same form.
+        var left = FileSecretBox.NewTemporaryName("0123456789abcdef");
+        var others = FileSecretBox.NewTemporaryName("0123456789abcdef.next");
+        File.WriteAllBytes(Path.Combine(keys, left), [3]);
+        File.WriteAllBytes(Path.Combine(keys, others), [4]);
+        box.Remove("owner-key/0123456789abcdef");
+        CollectionAssert.AreEquivalent(new[] { "0123456789abcdef.next", others },
+                                       Directory.GetFiles(keys).Select(f => Path.GetFileName(f)).ToArray());
+
+        // A left file that another program holds open: the value goes all the same, and Remove does not throw. Only
+        // Windows refuses to delete an open file, so only there this part reaches the catch (on the Mac and on Linux the
+        // file goes at once); there the file stays, and a later Remove of the same name takes it.
+        box.Write("owner-key/fedcba9876543210", [5]);
+        var held = Path.Combine(keys, FileSecretBox.NewTemporaryName("fedcba9876543210"));
+        File.WriteAllBytes(held, [6]);
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+            box.Remove("owner-key/fedcba9876543210");
+        Assert.IsNull(box.Read("owner-key/fedcba9876543210"), "the value is gone although a left file was held");
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.IsTrue(File.Exists(held), "Windows kept the held file, so the catch was reached");
+            box.Remove("owner-key/fedcba9876543210");
+        }
+        Assert.IsFalse(File.Exists(held), "a later Remove of the same name takes the left file");
+
+        // A folder whose listing stops part way: the value goes, the fixed temporary file (which needs no listing) and
+        // the left file that the listing gave before it stopped go with it, and Remove does not throw. The listing is a
+        // stand-in that gives one name and then refuses: a rule that denies the listing does not stop every user (on the
+        // test machine of 25 November the Windows user listed the folder all the same).
+        var found = FileSecretBox.NewTemporaryName("0011223344556677");
+        var unlisted = new FileSecretBox(Path.Combine(folder, "keys"), new TestProtection())
+        {
+            FilesOf = each => FoundThenRefused(Path.Combine(each, found)),
+        };
+        unlisted.Write("owner-key/0011223344556677", [7]);
+        var fixedLeft = Path.Combine(keys, ".0011223344556677.new");
+        File.WriteAllBytes(fixedLeft, [8]);
+        File.WriteAllBytes(Path.Combine(keys, found), [9]);
+        unlisted.Remove("owner-key/0011223344556677");
+        Assert.IsNull(unlisted.Read("owner-key/0011223344556677"), "the value is gone although the folder did not list");
+        Assert.IsFalse(File.Exists(fixedLeft), "the fixed temporary file goes");
+        Assert.IsFalse(File.Exists(Path.Combine(keys, found)), "the left file that the listing gave before it stopped goes");
+
+        static IEnumerable<string> FoundThenRefused(string file)
+        {
+            yield return file;
+            throw new UnauthorizedAccessException("the folder does not list");
+        }
+    }
+
+    /// <summary>**A Remove of a name whose folder does not exist is no error** (a name that holds nothing, as ISecretBox
+    /// says), and it makes no folder. The bug: .NET's File.Delete throws DirectoryNotFoundException there, so
+    /// OwnerKeys.Remove throws on a PC that never made an owner key.</summary>
+    [TestMethod]
+    public void Remove_of_a_name_with_no_folder_is_no_error()
+    {
+        var folder = Folder();
+        var box = new FileSecretBox(Path.Combine(folder, "keys"), new TestProtection());
+        box.Remove("owner-key/0123456789abcdef");
+        Assert.IsFalse(Directory.Exists(Path.Combine(folder, "keys")), "no box folder yet");
+        box.Write("device-key", [1]);
+        box.Remove("owner-key/0123456789abcdef");
+        Assert.IsFalse(Directory.Exists(Path.Combine(folder, "keys", "owner-key")), "a Remove makes no folder");
+        CollectionAssert.AreEqual(new byte[] { 1 }, box.Read("device-key"));
+    }
+
     /// <summary>The test protection, which also writes another value into a box's place while it seals: the stand-in of
     /// another process that writes the same name at the same time.</summary>
     private sealed class RacingProtection(string place) : IKeyProtection

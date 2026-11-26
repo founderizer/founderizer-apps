@@ -3523,12 +3523,16 @@
    },
    "description": "Team: Put a new agent on an available server. Not for a new server: use Add server in the Founderizer app, or a tool that adds a machine, where this list has one. The hub writes the agent and its profile in one commit and makes the install job; read servers to follow its steps. Give runtime, or, for an agent on an API key or on the owner's own model server, account and no runtime: the agent then runs the program of that account, on a Linux server whose model_providers in servers names the account's provider.",
    "feature": "servers",
+   "field_features": {
+    "spelling": "agent_spelling"
+   },
    "fields": [
     "agent",
     "runtime",
     "account",
     "role",
-    "reports_to"
+    "reports_to",
+    "spelling"
    ],
    "inputSchema": {
     "additionalProperties": false,
@@ -3565,6 +3569,10 @@
       "type": "string"
      },
      "server": {
+      "type": "string"
+     },
+     "spelling": {
+      "description": "The exact letters of the agent's name as the owner writes it, with capitals (\"Nova\" for nova): equal to the name when lowercased. The apps and the hub's words show the name so.",
       "type": "string"
      }
     },
@@ -3622,10 +3630,14 @@
    "annotations": {
     "readOnlyHint": false
    },
-   "description": "Team: Give an agent a new name. Not for its role title: use agent_settings. The hub moves everything it has to that name in one step (its tasks, chat, messages, memory, notes, duties, grants and profile), and its server moves its checkout and service; it keeps its OS user, so nobody signs in again. Not while the agent has an open task. The manager takes a new name only while it has no server yet (placed false in state, on a hub with the feature manager_rename): its new name then has the rule of a new manager's name, 2 to 26 characters a-z 0-9 -, a letter first, and none of the names that the fleet uses itself (owner, hub, agents, channels, chats, checks, git, pilot, server, vault, watch, work, and each name that starts with login- or vault-); no server has anything of it, and no job runs. Once it has its server, the manager keeps its name. Read servers to see the job end.",
+   "description": "Team: Give an agent a new name. Not for its role title: use agent_settings. The hub moves everything it has to that name in one step (its tasks, chat, messages, memory, notes, duties, grants and profile), and its server moves its checkout and service; it keeps its OS user, so nobody signs in again. Not while the agent has an open task. The manager takes a new name only while it has no server yet (placed false in state, on a hub with the feature manager_rename): its new name then has the rule of a new manager's name, 2 to 26 characters a-z 0-9 -, a letter first, and none of the names that the fleet uses itself (owner, hub, agents, channels, chats, checks, git, pilot, server, vault, watch, work, and each name that starts with login- or vault-); no server has anything of it, and no job runs. Once it has its server, the manager keeps its name. Read servers to see the job end. The same name with a new spelling changes only the spelling: nothing moves and no job runs, for every agent, the manager too.",
    "feature": "agent_rename",
+   "field_features": {
+    "spelling": "agent_spelling"
+   },
    "fields": [
-    "name"
+    "name",
+    "spelling"
    ],
    "inputSchema": {
     "additionalProperties": false,
@@ -3638,6 +3650,10 @@
      },
      "request_id": {
       "description": "A UUID. Give the same one again only to send a command once more after an answer was lost; otherwise leave it out.",
+      "type": "string"
+     },
+     "spelling": {
+      "description": "The exact letters of the agent's name as the owner writes it, with capitals (\"Nova\" for nova): equal to the name when lowercased. The apps and the hub's words show the name so.",
       "type": "string"
      }
     },
@@ -6198,5 +6214,5 @@
    "whole": []
   }
  ],
- "version": "b4e236a7b44661403a95d93f68fb70ad93308fe11434e0845d286b6d033c48d3"
+ "version": "40dd19801d97b90993c0297dd49b0c0ef3936aa220d20cbe93272421cc56ce38"
 }

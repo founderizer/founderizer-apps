@@ -18,11 +18,15 @@
 #   cloud.sh <lane> sync [<worktree>]
 #                                 send the sources of a worktree (default: the worktree of the current folder) to
 #                                 C:\fz\src (the folder app/ of the worktree: C:\fz\src\windows\...), as its files are
-#                                 now, with or without a commit; each file that git does not track is named first; bin
-#                                 and obj on the machine stay, for the next build
+#                                 now, with or without a commit; each file that git does not track is named first; a
+#                                 changed file gets the machine's time, so that its project compiles again (README.md);
+#                                 bin and obj stay for the next build when the last sync came from the same worktree
+#                                 (C:\fz\src\.synced-from), and go when it came from another one
 #   cloud.sh <lane> build [--proofs] [--no-sync]
 #                                 sync of the current folder's worktree, then the x64 build: ../setup/build-window.ps1
-#                                 -Arch x64 publishes and signs it into C:\fz\out\x64 (C:\fz\out\x64-proofs with --proofs)
+#                                 -Arch x64 publishes and signs it into C:\fz\out\x64 (C:\fz\out\x64-proofs with
+#                                 --proofs), and C:\fz\out\SOURCE.txt names the source of each of the two. build and test
+#                                 stop when the last sync did not end, and a sync stops while a build or test runs
 #   cloud.sh <lane> test [--filter <expression>] [--no-sync]
 #                                 sync of the current folder's worktree, then dotnet test of Founderizer.Windows.Tests
 #                                 (a test that hangs for 30 minutes ends the run), with FOUNDERIZER_TPM_TESTS from
@@ -106,11 +110,20 @@ note() { printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" >> "$m
 # Whether the machine has a TPM, from Azure's own fact of it (its vTPM), read at each make and start: test gives it to
 # the owner key's tests as FOUNDERIZER_TPM_TESTS (1 or 0), so that the code under test never says it of itself.
 note_tpm() {
+    # The fact of an earlier run goes first: a stop here leaves no fact for a later test to read.
+    rm -f "$machine_dir/tpm"
     local vtpm
     vtpm="$(az_sub vm show -g "$group" -n "$name" --query securityProfile.uefiSettings.vTpmEnabled -o tsv)" ||
         die "Azure did not say whether the machine has a vTPM"
-    case "$vtpm" in true) printf '1\n' ;; *) printf '0\n' ;; esac > "$machine_dir/tpm"
-    note tpm "vTpmEnabled ${vtpm:-none}"
+    # Every lane is Trusted launch, so Azure says true or false: any other answer (none, too) is a fault.
+    local fact
+    case "$vtpm" in
+        true) fact=1 ;;
+        false) fact=0 ;;
+        *) die "Azure's vTpmEnabled for the machine is neither true nor false: '$vtpm'" ;;
+    esac
+    printf '%s\n' "$fact" > "$machine_dir/tpm"
+    note tpm "vTpmEnabled $vtpm"
 }
 
 # The machine's own SSH, with its key from known_hosts only: a key that is not there is refused.
@@ -356,17 +369,110 @@ for path in sys.stdin.buffer.read().split(b"\0"):
     vm_ps "\$root = '$root'; \$commit = '$commit'; \$changed = '$changed'
 $(cat <<'PS'
 $ErrorActionPreference = 'Stop'
+# The mark goes first, then the check of the runs; a build or test writes its run file first, then reads the mark: so
+# one of the two always sees the other. A run whose process lives stops the sync, and the mark comes back.
+$marker = 'C:\fz\src\.synced-from'
+$mark = "times by content, $root"
+$last = ''
+if (Test-Path -LiteralPath $marker) { $last = Get-Content -LiteralPath $marker -Raw; Remove-Item -LiteralPath $marker -Force }
+# A run file whose process is gone, or is another process (another start, or a start that this session cannot read: a
+# run of cloud.sh is a process of builder, whose start it reads), is left by a killed run, and goes.
+foreach ($run in @(Get-ChildItem -Path C:\fz\src -Filter '.building-*' -Force -File -ErrorAction SilentlyContinue)) {
+    $fact = (Get-Content -LiteralPath $run.FullName -Raw) -split ' ', 3
+    $live = $false
+    if ($fact.Count -ge 3 -and $fact[0] -match '^[0-9]+$') {
+        $process = Get-Process -Id ([int]$fact[0]) -ErrorAction SilentlyContinue
+        if ($process) { try { $live = $process.StartTime.ToUniversalTime().ToString('o') -ceq $fact[1] } catch { $live = $false } }
+    }
+    if ($live) {
+        if ($last) { Set-Content -LiteralPath $marker -Value $last -NoNewline }
+        throw "a $($fact[2]) of cloud.sh still runs on C:\fz\src (process $($fact[0]), since $($fact[1])): sync again after its end"
+    }
+    Remove-Item -LiteralPath $run.FullName -Force
+    "a run file of a run that ended without its cleanup removed: $($run.Name)"
+}
+# dotnet or testhost with C:\fz\src in its command line: a compile or a test that outlived its PowerShell (an SSH
+# connection that broke), or a command of run that names a path there, also with a slash. The nodes of MSBuild and
+# VBCSCompiler name none. A command line that this session cannot read (a process of another user) does not stop it.
+$users = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'dotnet.exe' OR Name = 'testhost.exe'" |
+    Where-Object { $_.CommandLine -and $_.CommandLine.Replace([IO.Path]::AltDirectorySeparatorChar, [IO.Path]::DirectorySeparatorChar).IndexOf('C:\fz\src', [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+if ($users.Count) {
+    if ($last) { Set-Content -LiteralPath $marker -Value $last -NoNewline }
+    $ids = ($users | ForEach-Object { $_.ProcessId }) -join ', '
+    throw "dotnet or testhost runs on C:\fz\src (process $ids): sync again after its end; one that a killed run left ends with: run 'Stop-Process -Id <id>'"
+}
+# A path over 260 characters: .NET in PowerShell 5.1 takes it only with the prefix \\?\, where it takes that prefix.
+$x = '\\?' + [IO.Path]::DirectorySeparatorChar
+try { [void][IO.Directory]::GetFileSystemEntries('\\?\C:\fz') } catch { $x = '' }
+# A folder goes through the prefix: Directory.Delete removes a junction or a link in it, not what it points to. When a
+# read-only file (tar can make one) stops it, the read-only marks go first, again with no step through a link.
+function Clear-ReadOnly([string]$folder) {
+    foreach ($file in [IO.Directory]::GetFiles($folder)) {
+        $attributes = [IO.File]::GetAttributes($file)
+        if ($attributes -band [IO.FileAttributes]::ReadOnly) { [IO.File]::SetAttributes($file, $attributes -bxor [IO.FileAttributes]::ReadOnly) }
+    }
+    foreach ($sub in [IO.Directory]::GetDirectories($folder)) {
+        if (-not ([IO.File]::GetAttributes($sub) -band [IO.FileAttributes]::ReparsePoint)) { Clear-ReadOnly $sub }
+    }
+}
+function Remove-Tree([string]$folder) {
+    try { [IO.Directory]::Delete($folder, $true) } catch { Clear-ReadOnly $folder; [IO.Directory]::Delete($folder, $true) }
+}
+function Remove-Outputs([string]$folder) {
+    foreach ($sub in [IO.Directory]::GetDirectories($folder)) {
+        if ([IO.File]::GetAttributes($sub) -band [IO.FileAttributes]::ReparsePoint) { continue }
+        $name = [IO.Path]::GetFileName($sub)
+        if ($name -eq 'bin' -or $name -eq 'obj') { Remove-Tree $sub; $sub.Substring($x.Length) }
+        else { Remove-Outputs $sub }
+    }
+}
+function Remove-AllOutputs([string]$why) {
+    try { $removed = @(Remove-Outputs ($x + 'C:\fz\src\windows')) }
+    catch { throw "the bin and obj of the last sync were not removed ($($_.Exception.Message)): end what holds their files (dotnet build-server shutdown for MSBuild's nodes and VBCSCompiler; a testhost that a killed test run left), then sync again" }
+    "bin and obj: $($removed.Count) folders removed ($why)"
+}
 $new = 'C:\fz\incoming\src'
-if (Test-Path $new) { Remove-Item -Recurse -Force $new }
+if (Test-Path -LiteralPath $new) { Remove-Tree ($x + $new) }
 New-Item -ItemType Directory -Force -Path $new, 'C:\fz\src', 'C:\fz\setup' | Out-Null
 & tar.exe -x -z -f C:\fz\incoming\src.tgz -C $new
 if ($LASTEXITCODE -ne 0) { throw "tar could not unpack the sources: exit $LASTEXITCODE" }
+# bin and obj stay only when the last sync ended, set the times as below and came from this worktree: the mark says it.
+$cleared = $false
+if ($last -cne $mark -and (Test-Path C:\fz\src\windows)) {
+    Remove-AllOutputs "the last sync: $(if ($last) { $last } else { 'no mark' })"
+    $cleared = $true
+}
+# A file with the bytes of the file in C:\fz\src keeps that file's time; each other file gets the machine's time now, newer than each build before this sync.
+# A kept time after the time of this sync (from a clock that went back, or a time of the Mac from an older cloud.sh)
+# becomes the time of this sync: else a later change, which gets the time of its sync, is older than the copy in bin,
+# and PreserveNewest does not copy it.
+$now = [DateTime]::UtcNow
+$sha = [Security.Cryptography.SHA256]::Create()
+$changes = 0
+$future = 0
+$files = [IO.Directory]::GetFiles($x + $new, '*', 'AllDirectories')
+foreach ($file in $files) {
+    $there = $x + 'C:\fz\src' + $file.Substring(($x + $new).Length)
+    $time = $now
+    if ([IO.File]::Exists($there) -and (New-Object IO.FileInfo $there).Length -eq (New-Object IO.FileInfo $file).Length -and
+        [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($there))) -ceq [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($file)))) {
+        $time = [IO.File]::GetLastWriteTimeUtc($there)
+        if ($time -gt $now) { $time = $now; $future++ }
+    } else { $changes++ }
+    [IO.File]::SetLastWriteTimeUtc($file, $time)
+}
+"files: $changes of $($files.Count) changed or new on the machine" + $(if ($future) { "; $future kept times after the time of this sync, set to it" }) +
+    $(if (-not $x) { '; this PowerShell takes no \\?\ path, so a path over 260 characters stops the sync' })
+# Such a kept time can also be on an output, for example a copy in bin after a clock that went back: bin and obj go.
+if ($future -and -not $cleared -and (Test-Path C:\fz\src\windows)) { Remove-AllOutputs "$future kept times after the time of this sync" }
 # The same tree in C:\fz\src, with each removed file gone; bin and obj stay for the next build.
 & robocopy.exe $new C:\fz\src /MIR /XD bin obj /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed: exit $LASTEXITCODE" }
 $global:LASTEXITCODE = 0
-Remove-Item -Recurse -Force $new, C:\fz\incoming\src.tgz
+Remove-Tree ($x + $new)
+Remove-Item -LiteralPath C:\fz\incoming\src.tgz -Force
 Set-Content -Path C:\fz\src\SOURCE.txt -Value "$root at commit $commit, $changed changed files, sent $((Get-Date).ToUniversalTime().ToString('u'))"
+Set-Content -LiteralPath $marker -Value $mark -NoNewline
 # The pictures' scripts where the Mac's VM has them (C:\fz\setup), for the commands of vm/README.md.
 Copy-Item -Path C:\fz\src\windows\vm\pictures\*.ps1 -Destination C:\fz\setup -Force
 'C:\fz\src: ' + (Get-Content C:\fz\src\SOURCE.txt)
@@ -421,10 +527,33 @@ command_of_lane() {
                 esac
             done
             [ -n "$sync" ] && sync_sources
+            # A run on sources that one sync left whole (its mark), and a file that tells a sync that this run still
+            # uses C:\fz\src: .building-<process>, with the process's start, which goes at the run's end.
+            local guard
+            guard="\$verb = '$verb'
+$(cat <<'PS'
+$building = "C:\fz\src\.building-$PID"
+Set-Content -LiteralPath $building -Value ("$PID " + (Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o') + " $verb") -NoNewline -ErrorAction Stop
+if (-not (Test-Path -LiteralPath C:\fz\src\.synced-from)) {
+    Remove-Item -LiteralPath $building -Force
+    throw 'the last sync did not end, or a sync runs now: sync again'
+}
+PS
+)"
             if [ "$verb" = build ]; then
-                text="'source: ' + (Get-Content C:\\fz\\src\\SOURCE.txt)
-Push-Location C:\\fz\\src\\windows\\Founderizer.Windows; 'dotnet ' + (& \"\$env:ProgramFiles\\dotnet\\dotnet.exe\" --version); Pop-Location
-& C:\\fz\\src\\windows\\vm\\setup\\build-window.ps1 -Source C:\\fz\\src\\windows\\Founderizer.Windows -Arch x64$proofs"
+                text="\$folder = 'x64${proofs:+-proofs}'
+$(cat <<'PS'
+$source = Get-Content C:\fz\src\SOURCE.txt
+"source: $source"
+Push-Location C:\fz\src\windows\Founderizer.Windows; 'dotnet ' + (& "$env:ProgramFiles\dotnet\dotnet.exe" --version); Pop-Location
+# C:\fz\out\SOURCE.txt: one line for x64 and one for x64-proofs; a build that fails leaves the words "did not end".
+New-Item -ItemType Directory -Force -Path C:\fz\out | Out-Null
+$others = @(Get-Content C:\fz\out\SOURCE.txt -ErrorAction SilentlyContinue | Where-Object { -not $_.StartsWith("${folder}: ") })
+Set-Content -Path C:\fz\out\SOURCE.txt -Value ($others + "${folder}: a build that did not end, of $source")
+PS
+)
+& C:\\fz\\src\\windows\\vm\\setup\\build-window.ps1 -Source C:\\fz\\src\\windows\\Founderizer.Windows -Arch x64$proofs
+Set-Content -Path C:\\fz\\out\\SOURCE.txt -Value (\$others + \"\${folder}: \$source\")"
             else
                 case "$filter" in *$'\n'*|*$'\r'*) die "a filter of one line" ;; esac
                 local tpm
@@ -441,7 +570,10 @@ if ($filter) { $arguments += @('--filter', $filter) }
 PS
 )"
             fi
-            vm_ps "$text" ;;
+            vm_ps "$guard
+try {
+$text
+} finally { Remove-Item -LiteralPath \$building -Force -ErrorAction SilentlyContinue }" ;;
         run) [ $# -gt 0 ] || die "run needs a command"; vm run "$@" ;;
         copy) [ $# -ge 2 ] || die "copy needs a source and a destination"; vm copy "$@" ;;
         desktop) [ $# -gt 0 ] || die "desktop needs a command"; vm desktop "$@" ;;

@@ -86,7 +86,7 @@ FLEET_SIGN_IDENTITY="Developer ID Application: Your Name (YOURTEAMID)" \
 FLEET_VAULT_PROFILE=/path/to/your.provisionprofile python3 Vault/build.py
 ```
 
-The relay at founderizer.com sends a notification only to the builds that Amura Ventures SL publishes, so a build
+The relay at platform.founderizer.com sends a notification only to the builds that Founderizer publishes, so a build
 that you sign yourself gets no notification from it.
 
 </details>
@@ -95,7 +95,7 @@ that you sign yourself gets no notification from it.
 
 Founderizer is licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 
-The name Founderizer and its logo belong to Amura Ventures SL, and the licence gives no right to use them (section 6).
+The name Founderizer and its logo belong to Azimut Ventures SL, and the licence gives no right to use them (section 6).
 You can say that your work is based on Founderizer. A changed copy that you share uses a different name and a
 different logo.
 
@@ -113,4 +113,4 @@ test it before you send it.
 
 Created by Miguel Pieras, <https://x.com/mpieras>.
 
-Copyright 2026 Amura Ventures SL.
+Copyright 2026 Azimut Ventures SL.

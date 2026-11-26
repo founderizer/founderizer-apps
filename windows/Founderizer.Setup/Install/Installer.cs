@@ -118,8 +118,12 @@ public sealed class InstallError : Exception
         if (StopReason(says) is { } reason) return reason[..1].ToUpperInvariant() + reason[1..];
         if (Failure is { } failure) return ServerCheck.Failed(server, Port, User ?? "", failure, new RemoteLogin.AppKey(), FirstRun, Policy);
         if (OwnWords.Contains(says)) return says;
-        return $"It stopped at “{Title}”.";
+        return StoppedAt(Title);
     }
+
+    /// <summary>The line of a stop that has no words of its own: the step where it stopped. Also the line of a kept record of
+    /// a join, which keeps no line that the server printed.</summary>
+    public static string StoppedAt(string? title) => $"It stopped at “{title}”.";
 }
 
 /// <summary>The time of an install: what the tests give in place of the clock and the waits.</summary>
@@ -223,12 +227,6 @@ public sealed class Installer
                                 bool firstRun = true, ServerCheck.PolicyPlace? policy = null) =>
         new(plan, authKey, sudoPassword, (code, uri, cancel) => Claim.SendAsync(http, box, uri, code, cancel),
             (hub, cancel) => Claim.ReadHubAsync(http, box, hub, cancel), firstRun: firstRun, policy: policy);
-
-    /// <summary>A plan with no claim (a join, a check, a restart, an update), run over <paramref name="remote"/>.
-    /// <paramref name="authKey"/>: the key of a keyed plan's network step, the one that the plan was made with.</summary>
-    public static Task<VerifyChecklist> RunAsync(InstallPlan plan, IRemote remote, Action<InstallProgress> progress,
-                                                 CancellationToken cancel, string? authKey = null) =>
-        new Installer(plan, authKey).RunAsync(remote, progress, cancel);
 
     /// <summary>**Runs the whole install** and answers with the server's own checklist. <paramref name="report"/> is
     /// called for each step as it starts and as it ends.</summary>

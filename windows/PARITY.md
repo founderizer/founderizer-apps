@@ -22,6 +22,7 @@ Mac, and a device route is all that the PC reaches.
 | `thread_events` | built | `GET /ui/tasks/<id>/events` every 3 seconds for the open task (`HubClient.TaskEventsAsync`), the Mac's whole thread (`TaskThread.cs`, `Screens.Task` `Thread`); the iPhone does not read it |
 | `task_controls` | built | `OwnerCommand.Control`, `POST /ui/tasks/<id>/control`, with its receipt; also the Pause at the end of an answered card's line while the mark is its task's work (`RequestCard.Pause`) |
 | `limit_holds` | built | the agents' `limit`: "Usage limit" in a chat's waiting line, a task's page and the panel |
+| `task_limit` | built | each task's own `limit` (owner API 1.330): with the feature, a task's "Usage limit", its mark, its lane and its page's limit line come from `task.limit` alone (`TaskLimit`), else from its agent's `limit`; the agent's row and chat keep the agent's `limit`. The page's line names the agent only when its own route is held, else "Usage limit until <time>". Later, with the Mac and the iPhone: an agent's dot reads its tasks' marks with no limit (`States.cs` `limited: false`), so it says "Working" for a desktop task that a hold of its screen route keeps waiting |
 | `outcome_checks` | built | TaskOutcome.Checker; WaitsOnOwner(…, routed) in Activity.OwnerChecks and the task page's limit line (ScreensTests) |
 | `liveness` | built | `MobileAgent.HelperIsRecent` |
 | `live_desktop` | waits (step 2) | a task's screen; not at the iPhone's level |
@@ -35,13 +36,13 @@ Mac, and a device route is all that the PC reaches.
 | `reporting_lines` | waits (2.2) | |
 | `leads` | waits (2.2) | |
 | `browser_desktop` | waits (step 2) | |
-| `machine_check` | waits (2.1) | |
+| `machine_check` | waits (2.1) | the check of an agent's machine, by itself once it is signed in, is in the library (piece L4b: `OwnerReads.CheckAsync`, `AgentSetupModel`); its page waits (U3b, U5) |
 | `file_changes` | built | the latest completed report of each path from the task's record (`ActivityTimeline.ChangedFiles`, `ChangedFilesModel`); the panel's "Changed files" (`Pages/TasksPages.cs` `ChangedFiles`, fourth set, 2a) |
 | `subagents` | built | the child agents of the record (`ActivityTimeline.ChildAgents`, `ChildAgentsModel`, `Screens.ChildThread`); a step's child rows and "Open agent thread" (`Pages/TaskRows.cs`), the panel's "Child agents" (`Pages/TasksPages.cs` `ChildAgentsView`) and the child agent's thread with "Back" (`ChildHeadRowView`) |
 | `vault_isolation` | not planned | the Mac app's row "Vault token" stood only in the old details of a server, which no hub since October 2026 showed; it went with them on 19 November 2026 |
 | `triggers` | waits (2.4) | wake-up rules. For that phase: a rule's check can have the form `read` (UI-API.md 1.191), and a last run in the state `joined` is no trouble (`TriggerRun.goodStates`) |
 | `trigger_checks` | waits (2.4) | |
-| `agent_setup` | waits (2.2) | `active` of an agent is read (built); the setup of the manager of a new fleet, from its install to its first session, is built (piece U3: `ManagerSetup`, `Pages/Agents/Setup/`); the server's page of a manager whose server did not join, and the check and the activation of another agent, wait (L4b, U5) |
+| `agent_setup` | waits (2.2) | `active` of an agent is read (built); the setup of the manager of a new fleet, from its install to its first session, is built (piece U3: `ManagerSetup`, `Pages/Agents/Setup/`); the setup of any other agent, with its machine's check and its activation by themselves, is in the library (piece L4b: `ManagerSetup.ForAgent`, `OwnerReads.ActivateAsync`, `AddAgentAsync`); its window waits (U5) |
 | `wakeups` | waits (2.4) | |
 | `screen_model` | waits (2.2) | |
 | `agent_auth` | waits (2.2) | |
@@ -110,7 +111,7 @@ Mac, and a device route is all that the PC reaches.
 | `door_mode_set` | waits (step 2) | |
 | `recovery_copy` | waits (D5) | needs the QR's `bind` value. **Built**: an item's `add_device` is read: the first option of a card with `add_device` 1, which opens the Add device picture on the Mac, stands grey and not enabled, and no route of the store sends it, as the row `door_setup` says |
 | `server_ai_choice` | waits (2.1) | |
-| `manager_server` | waits (2.1) | the first run's server that joined goes to the manager with the chosen provider by itself, and the setup fills the window until the manager runs (piece U3); Add server's pages for a manager with no server wait (L4b, U5) |
+| `manager_server` | waits (2.1) | the first run's server that joined goes to the manager with the chosen provider by itself, and the setup fills the window until the manager runs (piece U3); the server's page of a manager with no server is in the library for a new server at a provider, its join and its hand-over, the first run's server that did not join, and a free server of the fleet (piece L4b: `AgentServerStep`, `ManagerSetup.TakeServerAsync`); Other VPS there waits (its check is in `SetupStore`), and the drawing waits (U3b). Two departures from the Mac until wave C gives the PC the provider's row "Use this server" (the Mac's `MadeServers`, `firstToReuse`). First, the first run's server leaves the manager's mark only when a join of it ended well, where the Mac lets it go as the join starts. Second, the page also joins it by itself when the hub lists it free (`ServerList.TakesFirst`, and no "busy" in its `why`, as the Mac's reuse reads it), where the Mac's `installFirst` returns when the hub lists it (its provider's list offers it). The page joins it by itself once, as the Mac, also when the first run's own join of it stopped, and the mark keeps it from the claim on; after that join of the page stopped or a closed app cut it off, each opening of the page shows that stop with Try again (this PC's install records) and nothing joins by itself, and after Back from that stop the same opening offers only "Make the server" (the stop comes back at the next opening). With no row that offers the server by name, a device that is online at another address (it registered again in Tailscale) leaves the page on its first page with nothing of the server, and the only way on is a second paid server |
 | `knowledge_edit` | waits (step 2) | a write of the owner's knowledge stays on the Mac |
 | `door_setup` | waits (2.4) | the App itself (GitHub's manifest flow) waits. **Built**: an item's `github_app` is read (`OwnerNeed.FirstOptionOnTheMac`, FleetCore's `OwnerNeed.firstOptionStartsOnTheMac`, which the iPhone's `MobileStore.startsOnTheMac` holds to: two options or more, no team yes, no full access and no give): the first option of a card whose `github_app` names an account stands with its own words, grey and not enabled (UI Automation too; `OptionsModel.OnlyOnTheMac`, `Pages/Requests.cs` `Row`), its click does nothing, and no route of the store sends choice 0 for it (a press, a press that waits, the 5-second hold, ticks and their hold, and the last check of a write, `OwnerNeed.OnlyOnTheMac`); the card stays open, and its other options, its other ticks and his words still go (`OptionOnTheMacTests`). A press on Windows had answered the card with choice 0: the hub closed it, and nothing started |
 | `agent_remove` | waits (2.2) | |
@@ -141,6 +142,12 @@ Mac, and a device route is all that the PC reaches.
 ## What no feature name carries
 
 - **The background repair of servers that exist** (the Mac's sweep in `OwnerAccessSweep.swift` and `FleetStore.swift`: `ServerHardening`, `ServerMemory`, `ServerRestart`, `ServerUplink`, and the start guard for cloud-init's units that the area Setup, servers and owner tools builds now): **waits.** On a server that exists, the hub's own included, these root steps come only from the owner's Mac, so a fleet whose owner has only a PC gets each guard on new servers (the installers) and never on the servers that exist. The owner, 22 November 2026: "we need something reliable for ALL servers". It adds no element to a screen. Its order is rule 7 of section 0.1 of `~/dev/founderizer-plans/reliability-test-fleet-2026-11-21.md` (tested with the fault made on purpose, one server first, his fleet before the customers' track, one step takes it back), and its root part is read by the area Door and security, as the Mac's is. It needs the owner's computer on a PC (Windows step 2) before it can run. Piece L6 (the library, `Founderizer.Setup/RootJobs`) has the engine, the hardening, the browser parts and the access line, with the Mac's programs byte for byte; no round runs before the window's U4 starts it, and `ServerMemory`, `ServerRestart`, `ServerUplink` and `ServerLibraries` are the plan's L15.
+- **No first host key of a Mac, or of a server that the hub has not reported as Linux, at any port** (the Mac's
+  `macServer` rule, `93d95edfb` and `b64e9670f`: such a key is the owner's own step, and `ssh` keeps none by itself):
+  no PC counterpart yet. No `HostKeyRule.TakeNew` call of the PC reaches such a server today: the PC's are the first
+  run's check, its password step and the install of a server that the owner typed, and every root job runs under
+  `Known`. The piece that first connects the PC to such a server (a Mac server's screen or vault, a server that the hub
+  reports as another kind) takes the rule.
 - **The line, the minutes and the bar of an install on the first run's build page** (F4 of the owner's feedback of 22
   November 2026, pieces 2 to 5; the Mac's `InstallPhases`, `InstallHold`, `MachineInstallModel.record` and
   `FleetBuildLine`): built, through the shared vectors (`install-reads.json`, `InstallVectorTests`). The line is the one
@@ -207,8 +214,9 @@ Mac, and a device route is all that the PC reaches.
   before the page does (measured in the VM on the welcome page): on a page that opens on these checks, Enter presses
   "Open Founderizer" through its focus. A page that does not keep the first focus on that button closes the gap; it
   touches the focus of every page of the first run, so it waits for its own piece.
-- **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): not planned: it is the
-  Mac's alone, an AppKit panel over every app, also over a full-screen one.
+- **A request card in a window of its own** (the Mac's `NeedWindows`, 21 November 2026): gone on the Mac too. This row
+  is older than F12: the Mac made that window the one badge at the foot of the sidebar, which holds Undo for 5 seconds
+  (Founderizer 0.1.482, `bbceecaa5`). The PC takes F12 in U5.
 - **An answer waits 5 seconds with Undo, Pause stands on its card while its task works, and the mark opens the task**
   (the Mac's `AnswerHolds`, `NeedRequestCard.lineEnd`, `NeedAnswered.waits` of Founderizer 0.1.435, which F12 (Founderizer
   0.1.482, `bbceecaa5`: one held answer for the app, the card completes at once, ONE badge holds Undo for 5 seconds) replaced

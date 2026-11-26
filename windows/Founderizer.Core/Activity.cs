@@ -80,7 +80,7 @@ public static class Activity
     };
 
     /// <summary>A task's lane (FleetTask.activityColumn). <paramref name="held"/>: a hold that is not released, or a usage
-    /// limit of its agent. <paramref name="needsOwner"/>: an outcome that he must record, or a stop that was not
+    /// limit that holds it (<see cref="TaskLimit"/>). <paramref name="needsOwner"/>: an outcome that he must record, or a stop that was not
     /// confirmed, also for a task that ended. A task that its agent parked until a time waits, whatever its state says.
     /// <paramref name="waitsForSubtasks"/>: its session does no work now and subtasks of it are open
     /// (<see cref="SubtaskWaits"/>); such a task in state working waits for them.</summary>
@@ -229,7 +229,9 @@ public static class Activity
     {
         var start = period.Start(snapshot.Time, context) ?? double.NegativeInfinity;
         var held = snapshot.Holds.Where(h => h.State != "released").Select(h => h.Task).ToHashSet();
-        var limited = snapshot.Agents.Where(a => a.Limit is not null).Select(a => a.Name).ToHashSet();
+        var served = snapshot.Offers(TaskLimit.Feature);
+        var limits = new Dictionary<string, RuntimeLimit>();
+        foreach (var a in snapshot.Agents) if (a.Limit is { } l) limits.TryAdd(a.Name, l);
         var owner = OwnerOnly(snapshot, ended);
         var waits = OwnerWaits(snapshot, ended);
         var subtasks = SubtaskWaits(snapshot);
@@ -241,7 +243,8 @@ public static class Activity
         {
             if (agent is not null && task.Owner != agent) continue;
             if (task.ActivityTime() < start && !waits.ContainsKey(task.Id)) continue;
-            lanes[task.Column(held.Contains(task.Id) || limited.Contains(task.Owner), owner.Contains(task.Id), subtasks.ContainsKey(task.Id))].Add(task);
+            var limited = TaskLimit.Holding(task.Limit, limits.GetValueOrDefault(task.Owner), served) is not null;
+            lanes[task.Column(held.Contains(task.Id) || limited, owner.Contains(task.Id), subtasks.ContainsKey(task.Id))].Add(task);
         }
         var sorted = lanes.ToDictionary(p => p.Key, p => p.Value
             .OrderByDescending(t => t.ActivityTime()).ThenByDescending(t => t.Id).ToList());
@@ -446,11 +449,12 @@ public static class TaskWords
         };
     }
 
-    /// <summary>The state word of a task head, with the snapshot's holds and its agent's limit.</summary>
+    /// <summary>The state word of a task head, with the snapshot's holds and the usage limit that holds it
+    /// (<see cref="TaskLimit"/>).</summary>
     public static string State(MobileTaskHead task, MobileSnapshot snapshot, AgentBook names)
     {
         var hold = snapshot.Holds.FirstOrDefault(h => h.Task == task.Id && h.State != "released");
-        var limited = snapshot.Agents.Any(a => a.Name == task.Owner && a.Limit is not null);
+        var limited = TaskLimit.Of(snapshot, task) is not null;
         return State(task.State, task.Accepted, task.Requester, names, task.WaitingOn,
                      task.StalledSince is not null || (task.NudgeLevel ?? 0) > 0, task.MissingSince is not null, hold,
                      limited);

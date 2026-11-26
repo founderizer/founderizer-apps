@@ -38,7 +38,8 @@ public struct FleetWork: Sendable, Equatable {
     public let doneWeek: Int
     public let doneWeekBefore: Int
     /// The results of the last 7 days that did not succeed (`FleetTask.endedBadly`): failed, rejected, not accepted.
-    /// Tasks, as the done ones: a task that failed counts here also when a later task did the work again.
+    /// Tasks, as the done ones: a task that failed counts here also when a later task did the work again; a result
+    /// that its requester did not accept counts only while no later task takes its work on (a review round).
     public let failedWeek: Int
 
     /// The share of the last 7 days' results that did not succeed, in whole percent; nil with no result.
@@ -103,12 +104,26 @@ extension HubState {
         for task in ownerTasks { if let name = row(task.owner) { work[name]?.needsYou += 1 } }
         let week = starts[FleetWork.days - 7]
         var doneWeek = 0, doneWeekBefore = 0, failedWeek = 0
+        // A result that its requester refused while a later task takes the work on (that task `follows` it) is a review
+        // round, neither done nor failed (the owner, 25 November 2026: "Yes, change it"); a failed or rejected task
+        // still counts, also with a follow-up. The task's own red mark stays (`endedBadly`). As the jobs' rule
+        // (`Jobs.swift`): a canceled follow-up takes nothing on, and the task that follows it takes on what it followed.
+        let byID = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var followed: Set<Int> = []
+        for task in tasks where task.state != "canceled" {
+            var earlier = task.follows.flatMap { byID[$0] }, steps = 0
+            while let before = earlier, steps < tasks.count {
+                followed.insert(before.id)
+                earlier = before.state == "canceled" ? before.follows.flatMap { byID[$0] } : nil
+                steps += 1
+            }
+        }
         for task in tasks {
             if team.contains(task.owner), columns[task.id] == .inProgress { work[task.owner]?.inWork += 1 }
             guard task.isDone || task.endedBadly, let index = day(task.resultTime) else { continue }
             let inWeek = task.resultTime >= week
             if task.endedBadly {
-                if inWeek { failedWeek += 1 }
+                if inWeek, !(task.state == "completed" && followed.contains(task.id)) { failedWeek += 1 }
                 continue
             }
             if inWeek { doneWeek += 1 } else { doneWeekBefore += 1 }

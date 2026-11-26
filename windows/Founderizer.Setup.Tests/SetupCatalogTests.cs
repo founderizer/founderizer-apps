@@ -49,6 +49,12 @@ public sealed partial class SetupCatalogTests
             yield return (field.Name, (string)field.GetValue(null)!);
         foreach (var field in typeof(ManagerSetupScreens).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral))
             yield return (field.Name, (string)field.GetValue(null)!);
+        foreach (var field in typeof(AgentServerScreens).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static).Where(f => f.IsLiteral))
+            yield return (field.Name, (string)field.GetValue(null)!);
+        foreach (var field in typeof(HubWords).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral))
+            yield return (field.Name, (string)field.GetValue(null)!);
+        yield return ("HubWords.NotServed", HubWords.NotServed("%@"));
+        yield return ("HubWords.NotAHub", HubWords.NotAHub("%@"));
         yield return ("SignInPage.CodePlaceholder", SignInPage.CodePlaceholder);
         yield return ("ManagerSetupScreens.SettingUp", ManagerSetupScreens.SettingUp("%@"));
         yield return ("SetupScreens.ApproveServer", SetupScreens.ApproveServer("%@"));
@@ -74,6 +80,10 @@ public sealed partial class SetupCatalogTests
                      ("WaitingFor", SetupScreens.WaitingFor("%@")), ("PasswordFor", SetupScreens.PasswordFor("%@", "%@")),
                      ("ManagersServer", SetupScreens.ManagersServer("%@")), ("MakeManagersServer", SetupScreens.MakeManagersServer("%@")),
                      ("CannotReadServer", AgentSetupModel.CannotReadServer("%@")),
+                     ("SigningIn", ManagerSetupScreens.SigningIn("%@")), ("Activate", ManagerSetupScreens.Activate("%@")),
+                     ("NeedsAServer", AgentServerScreens.NeedsAServer("%@")), ("ServerAt", AgentServerScreens.ServerAt("%@", "%@")),
+                     ("Installing", AgentServerScreens.Installing("%@")), ("DidNotInstall", AgentServerScreens.DidNotInstall("%@")),
+                     ("IsInstalled", AgentServerScreens.IsInstalled("%@")),
                  })
             yield return (name, text);
     }

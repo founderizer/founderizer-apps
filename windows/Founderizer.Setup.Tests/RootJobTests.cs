@@ -488,7 +488,8 @@ public sealed class RootJobTests
     // ------------------------------------------------------------ the owner's access line
 
     /// <summary>The bug: the line of the owner's access key goes to each server at each round, or a new server that has the
-    /// name of a removed one (with another address) never gets it.</summary>
+    /// name of a removed one (with another address) never gets it; or a mark names another key than the one whose line
+    /// went, so that the fleet's next key never goes to a server that has the earlier one.</summary>
     [TestMethod]
     public async Task The_access_line_goes_once_to_each_server_and_again_to_a_new_server_of_that_name()
     {
@@ -505,25 +506,28 @@ public sealed class RootJobTests
         const string One = "ssh-ed25519 AAAA founderizer-owner-access", Two = "ssh-ed25519 BBBB founderizer-owner-access";
         var line = new AccessLine(new RootRecords(folder));
         good = false;
-        await line.RoundAsync(Hub, Servers("100.80.1.7"), One, "SHA256:one", Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time);
+        await line.RoundAsync(Hub, Servers("100.80.1.7"), One, Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time);
         Assert.AreEqual(2, calls.Count, "the hub's server and the Linux server");
         Assert.IsTrue(calls.All(c => c.Contains(One)));
         // A failure is tried again only after ten minutes, and each server has its own tries.
-        await line.RoundAsync(Hub, Servers("100.80.1.7"), One, "SHA256:one", Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time + 300);
+        await line.RoundAsync(Hub, Servers("100.80.1.7"), One, Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time + 300);
         Assert.AreEqual(2, calls.Count);
         good = true;
-        await line.RoundAsync(Hub, Servers("100.80.1.7"), One, "SHA256:one", Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time + 600);
+        await line.RoundAsync(Hub, Servers("100.80.1.7"), One, Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time + 600);
         Assert.AreEqual(4, calls.Count);
+        Assert.IsTrue(new RootRecords(folder).Marks().InPlace("app-1", "100.80.1.7", Hub, AccessLine.Fingerprint(One)),
+                      "the mark is of the key whose line went");
         // The line is in place: a new start of the app and any number of rounds send it no more.
         var later = new AccessLine(new RootRecords(folder));
         for (var n = 0; n < 5; n++)
-            await later.RoundAsync(Hub, Servers("100.80.1.7"), One, "SHA256:one", Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time + 2000 + n * 900);
+            await later.RoundAsync(Hub, Servers("100.80.1.7"), One, Records("100.80.1.7"), Tailnet("100.80.1.7"), Run, Time + 2000 + n * 900);
         Assert.AreEqual(4, calls.Count);
         // A new server of that name at another address, and another key of the fleet, each get the line again.
-        await later.RoundAsync(Hub, Servers("100.80.1.8"), One, "SHA256:one", Records("100.80.1.8"), Tailnet("100.80.1.8"), Run, Time + 9000);
+        await later.RoundAsync(Hub, Servers("100.80.1.8"), One, Records("100.80.1.8"), Tailnet("100.80.1.8"), Run, Time + 9000);
         Assert.AreEqual(5, calls.Count);
-        await later.RoundAsync(Hub, Servers("100.80.1.8"), Two, "SHA256:two", Records("100.80.1.8"), Tailnet("100.80.1.8"), Run, Time + 18000);
+        await later.RoundAsync(Hub, Servers("100.80.1.8"), Two, Records("100.80.1.8"), Tailnet("100.80.1.8"), Run, Time + 18000);
         Assert.AreEqual(7, calls.Count);
+        Assert.IsTrue(calls.Skip(5).All(c => c.Contains(Two)), "the line of the other key goes to both servers");
     }
 
     /// <summary>The bug: the PC gets the line of the fleet's access key as text, where the Mac makes it from the key: a text
@@ -532,15 +536,16 @@ public sealed class RootJobTests
     [TestMethod]
     public async Task Only_a_line_of_the_fleets_access_key_makes_a_program_or_reaches_a_server()
     {
-        StringAssert.Contains(AccessLine.Program("ssh-ed25519 AAAAC3Nza+/0= founderizer-owner-access"), AccessLine.InPlaceWord);
+        StringAssert.Contains(AccessLine.Program("ssh-ed25519 AAAAC3Nz+/0= founderizer-owner-access"), AccessLine.InPlaceWord);
         var reached = 0;
         foreach (var bad in new[] { "ssh-ed25519 AAAA founderizer-owner-access\nssh-ed25519 BBBB other", "-e ssh-ed25519 AAAA founderizer-owner-access",
                                     "ssh-ed25519 AAAA founderizer-owner-access\n", "command=\"sh\" ssh-ed25519 AAAA founderizer-owner-access",
-                                    "ssh-ed25519 AAAA founderizer-owner-access ", "ssh-rsa AAAA founderizer-owner-access", "" })
+                                    "ssh-ed25519 AAAA founderizer-owner-access ", "ssh-rsa AAAA founderizer-owner-access", "",
+                                    "ssh-ed25519 AAAAA founderizer-owner-access" })
         {
             Assert.ThrowsExactly<ArgumentException>(() => AccessLine.Program(bad), bad);
             await Assert.ThrowsExactlyAsync<ArgumentException>(() => new AccessLine(new RootRecords(folder)).RoundAsync(
-                Hub, [Read(Row())], bad, "SHA256:one", Listed(("app-1", "100.80.1.7")), Peers(("app-1", "100.80.1.7")),
+                Hub, [Read(Row())], bad, Listed(("app-1", "100.80.1.7")), Peers(("app-1", "100.80.1.7")),
                 (_, _, _) => { reached++; return Task.FromResult(AccessLine.InPlaceWord); }, Time));
         }
         Assert.AreEqual(0, reached, "no server is reached with a text that is not the key's line");

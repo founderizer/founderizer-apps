@@ -66,10 +66,57 @@ app/windows/vm/cloud/cloud.sh list                 # each lane's machine and its
   folder (or of the worktree that `sync <worktree>` names) as they are now, committed or not: the tracked and the new
   files that git does not ignore (each new one is named before it goes), under `app/windows`, `app/vectors`,
   `app/Localization`, `app/Sources` and `app/ios/Sources`. They go to `C:\fz\src` as `app/` has them
-  (`C:\fz\src\windows\Founderizer.Windows`, the paths of the Mac's VM); a removed file goes, and `bin` and `obj` stay,
-  so the next build is incremental. `C:\fz\src\SOURCE.txt` names the worktree, the commit and the count of changed
-  files, and `build` and `test` print it first; `build` also prints `dotnet --version`, and `test` ends a test that hangs
-  for 30 minutes (`--blame-hang-timeout`). The pictures' scripts (`../pictures/*.ps1`) also go to `C:\fz\setup`.
+  (`C:\fz\src\windows\Founderizer.Windows`, the paths of the Mac's VM); a removed file goes.
+  `C:\fz\src\SOURCE.txt` names the worktree, the commit and the count of changed files, and `build` and `test` print it
+  first; `build` also prints `dotnet --version`, and `test` ends a test that hangs for 30 minutes
+  (`--blame-hang-timeout`). The pictures' scripts (`../pictures/*.ps1`) also go to `C:\fz\setup`.
+- **Which files compile again.** MSBuild compiles a project, or copies a file with `PreserveNewest`, only when the file
+  is newer than its output. So `sync` does not take the times of the Mac: a file with the same bytes as the file in
+  `C:\fz\src` keeps the time that it has there, and each other file (changed, put back or new) gets the machine's time
+  at the sync. A changed file is then newer than each build before the sync: also a file with an old time (`cp -p`,
+  `rsync -a`, a tarball, `mv`), a file that was edited while the machine compiled, and a file from another worktree. A
+  project with no changed file does not compile again. `sync` prints the count of the changed and new files. A kept
+  time that is after the time of the sync (from a clock that went back, or a time of the Mac from an older `cloud.sh`)
+  becomes the time of the sync, and `sync` prints their count: else a later change, which gets the time of its sync,
+  is older than the copy in `bin`, and `PreserveNewest` does not copy it. Such a time can be on a copy in `bin` too,
+  so `sync` then also removes each `bin` and `obj`. A path over 260 characters goes through the
+  prefix `\\?\`, which .NET in PowerShell 5.1 needs for it; on a machine whose PowerShell refuses that prefix, `sync`
+  says so, and such a path stops the sync. The rule does not see three things: a build by `run` or `desktop` whose
+  `dotnet` or `testhost` does not name `C:\fz\src` (below), a machine's clock that goes back by less than the time
+  since the last sync, and a file that a command changed in `C:\fz\src` on the machine and then put back with its old
+  time. After one of them, remove the mark (below) and sync again.
+- **A sync and a build do not overlap.** `build` and `test` write `C:\fz\src\.building-<process>`, with the start of
+  their PowerShell process, and remove it at their end, also after an error. A sync stops while that process lives
+  ("a build of cloud.sh still runs on C:\fz\src ...: sync again after its end"), and gives the mark back. A file of a
+  run that was killed names a process that is gone, or another process with the same id (another start, or a start
+  that the sync cannot read: a run of `cloud.sh` is a process of builder, whose start it reads): the sync removes it
+  and goes on. A sync also stops while `dotnet.exe` or `testhost.exe` runs with `C:\fz\src` (or `C:/fz/src`) in its
+  command line: a compile or a test that went on after its PowerShell ended (an SSH connection that broke), or a
+  command of `run` that names a path in `C:\fz\src` (`build` and `test` name their project by its full path). The
+  nodes of MSBuild and `VBCSCompiler`, which stay after a build, name no source and do not stop it. One that a killed
+  run left ends with `run 'Stop-Process -Id <id>'`. A process whose command line the sync cannot read does not stop
+  it: a process of another user, or a task of `desktop` with a higher token while the SSH session has a lower one. In
+  the other direction, `build` and `test` stop when the mark is not there ("the last sync did not end, or a sync runs
+  now: sync again"): a sync removes the mark at its start and writes it at its end, so a sync that stopped can leave
+  a mix of two worktrees in `C:\fz\src`, with no `SOURCE.txt`; and a sync by an older `cloud.sh` deletes the mark too.
+  So `C:\fz\out\SOURCE.txt` never names an empty source. A sync removes the mark before it looks for runs, and a run
+  writes its file before it looks for the mark, so a sync and a run that start at the same time do not both go on.
+- **`bin` and `obj`** stay only when the mark `C:\fz\src\.synced-from` says that the last sync ended, set the times by
+  this rule and came from the same worktree (its path on the Mac). Without it, `sync` first removes each `bin` and `obj`
+  under `C:\fz\src\windows`, of all projects, through the prefix `\\?\`: a junction or a link in them goes, not what
+  it points to, and a read-only file loses that mark first. The times alone do not cover two cases: a sync
+  by an older `cloud.sh`, which takes the Mac's times, so that a DLL in `bin` can be newer than the sources that it was
+  not built from (its robocopy deletes the mark), and a file that another worktree's build left in `bin` and that this
+  worktree does not make (for example a file of `vectors/*.json` that only the other worktree has). To start clean
+  from the same worktree: `run 'Remove-Item C:\fz\src\.synced-from'`, then `sync`. A removal that fails names
+  `dotnet build-server shutdown` (MSBuild's nodes and VBCSCompiler) and a testhost that a killed test run left.
+- **What also stays on a machine, from any worktree:** `C:\fz\out\x64` and `C:\fz\out\x64-proofs`
+  (`C:\fz\out\SOURCE.txt` names the source of the last `build` of each, or says that it did not end),
+  `C:\fz\setup\*.ps1` (a sync removes none), `%LOCALAPPDATA%\Founderizer` (the store of the app), and the TPM keys of a
+  test run that was killed before it deleted them.
+- **Two sessions on one lane** need `hold`, each of them, before the first `sync`: `sync`, `build`, `test` and `run` do
+  not read the hold. Two syncs at once mix the sources of both (a sync does not stop for another sync), and a sync
+  stops the other session's work only while that session's `build` or `test` runs.
 - **Start the app through explorer**, as above: a command of `desktop` is a scheduled task with builder's full token
   (measured: High), so an app that it starts directly runs elevated, which no person's start does. Started through
   explorer, the app has builder's limited token (measured: "limited", Medium), as on a person's PC.

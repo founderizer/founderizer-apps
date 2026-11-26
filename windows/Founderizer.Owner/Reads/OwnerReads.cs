@@ -29,11 +29,18 @@ namespace Founderizer.Owner.Reads;
 [JsonSerializable(typeof(SignInAsk))]
 [JsonSerializable(typeof(SignInCode))]
 [JsonSerializable(typeof(MachineReceipt))]
+[JsonSerializable(typeof(CheckAsk))]
+[JsonSerializable(typeof(CheckReceipt))]
+[JsonSerializable(typeof(ActivationAsk))]
+[JsonSerializable(typeof(ActivationReceipt))]
+[JsonSerializable(typeof(AgentAsk))]
+[JsonSerializable(typeof(ServerAgentReceipt))]
 public sealed partial class ReadsJson : JsonSerializerContext;
 
 /// <summary>**The owner's reads of servers, machines and the team, and the writes of the agent setup**, as the owner's
-/// computer (the Mac's <c>HubClient.servers</c>, <c>machines</c>, <c>team</c>, <c>joinCode</c>, <c>moveAgent</c> and the
-/// commands <c>machineSignin</c> and <c>machineSigninCode</c>), through the store's owner calls. Each read has the
+/// computer (the Mac's <c>HubClient.servers</c>, <c>machines</c>, <c>team</c>, <c>joinCode</c>, <c>moveAgent</c>,
+/// <c>addServerAgent</c> and the commands <c>machineSignin</c>, <c>machineSigninCode</c>, <c>machineCheck</c> and
+/// <c>agentActivation</c>), through the store's owner calls. Each read has the
 /// Mac's size cap and its check of the answer; a changed generation is its own answer, and the store then reads the
 /// fleet again.</summary>
 public static class OwnerReads
@@ -138,6 +145,54 @@ public static class OwnerReads
         var answer = await calls.PostAsync($"ui/machines/{agent}/signin/code", new SignInCode(code), ReadsJson.Default.SignInCode,
                                            ReadsJson.Default.MachineReceipt, id, cancel).ConfigureAwait(false);
         Receipt(answer, id, $"POST /ui/machines/{agent}/signin/code");
+        return answer;
+    }
+
+    /// <summary>**POST /ui/machines/&lt;agent&gt;/check** (the Mac's <c>machineCheck</c>): the agent's helper runs its
+    /// status collection and the check for its activation now, with no AI turn and no change. The answer is the check
+    /// that the hub started, or the one that waits already; its result comes with a later GET /ui/machines.</summary>
+    public static async Task<OwnerAnswer<CheckReceipt>> CheckAsync(ICalls calls, string agent, Guid? requestId = null,
+                                                                   CancellationToken cancel = default)
+    {
+        if (!AgentName(agent)) throw new ArgumentException("the agent is of no valid shape");
+        var id = requestId ?? Guid.NewGuid();
+        var answer = await calls.PostAsync($"ui/machines/{agent}/check", new CheckAsk(agent, ""), ReadsJson.Default.CheckAsk,
+                                           ReadsJson.Default.CheckReceipt, id, cancel).ConfigureAwait(false);
+        if (answer.Value is { } r && !(r.Ok && Same(r.RequestId, id) && r.Agent == agent && r.Check is { IsValid: true, IsPending: true }))
+            throw HubException.InvalidResponse($"POST /ui/machines/{agent}/check", "the answer is not the check of this request");
+        return answer;
+    }
+
+    /// <summary>**POST /ui/team/agents/&lt;agent&gt; with <c>active: true</c>** (owner API 1.9; the Mac's
+    /// <c>agentActivation</c>): against the team.json whose SHA-256 the app read. The hub takes it only after a check of
+    /// the agent's saved settings that passed, and refuses it with its own words else.</summary>
+    public static async Task<OwnerAnswer<ActivationReceipt>> ActivateAsync(ICalls calls, string agent, string sha256, Guid? requestId = null,
+                                                                           CancellationToken cancel = default)
+    {
+        if (!AgentName(agent) || !Sha(sha256)) throw new ArgumentException("the agent or the base is of no valid shape");
+        var id = requestId ?? Guid.NewGuid();
+        var answer = await calls.PostAsync($"ui/team/agents/{agent}", new ActivationAsk(sha256, true), ReadsJson.Default.ActivationAsk,
+                                           ReadsJson.Default.ActivationReceipt, id, cancel).ConfigureAwait(false);
+        if (answer.Value is { } r && !(Same(r.RequestId, id) && r.Matches(agent, active: true)))
+            throw HubException.InvalidResponse($"POST /ui/team/agents/{agent}", "the answer is not the activation of this request");
+        return answer;
+    }
+
+    /// <summary>**POST /ui/servers/&lt;server&gt;/agents** for an agent on a plan (the Mac's <c>addServerAgent</c>): the
+    /// install of that agent on that server with <paramref name="runtime"/>, as a worker or a lead. The setup sends it for
+    /// an install that failed: the same agent, server and provider, and the server repeats only what is missing.</summary>
+    public static async Task<OwnerAnswer<ServerAgentReceipt>> AddAgentAsync(ICalls calls, string server, string sha256, string agent,
+                                                                            string runtime, string role, string? reportsTo = null,
+                                                                            Guid? requestId = null, CancellationToken cancel = default)
+    {
+        if (!ServerNames.IsMachine(server) || !AgentName(agent) || !Sha(sha256) || runtime is not ("claude" or "codex") ||
+            role is not ("worker" or "lead") || reportsTo is not null && !AgentName(reportsTo))
+            throw new ArgumentException("the server, the agent, the base, the provider or the role is of no valid shape");
+        var id = requestId ?? Guid.NewGuid();
+        var answer = await calls.PostAsync($"ui/servers/{server}/agents", new AgentAsk(sha256, agent, runtime, role, reportsTo),
+                                           ReadsJson.Default.AgentAsk, ReadsJson.Default.ServerAgentReceipt, id, cancel).ConfigureAwait(false);
+        if (answer.Value is { } r && !(r.Ok && Same(r.RequestId, id) && r.Agent == agent && r.Server == server && r.Job > 0))
+            throw HubException.InvalidResponse($"POST /ui/servers/{server}/agents", "the answer is not the install of this request");
         return answer;
     }
 

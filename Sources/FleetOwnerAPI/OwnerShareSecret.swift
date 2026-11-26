@@ -444,8 +444,8 @@ public enum ShareSecret {
         public var resources: (Place) async throws -> Resources
         /// One read of the vault's page (`VaultClient.reading`). A read that failed is thrown.
         public var vault: (Place) async throws -> Vault
-        /// Whether this Mac holds an owner key for the fleet of this id, without reading it
-        /// (`OwnerKeychain.isHeld(fleet:)`).
+        /// Whether this Mac holds an owner key for the fleet of this id that it can use (`OwnerKeychain.isHeld(fleet:)`:
+        /// the item's presence answers until the run's first look, off the caller's actor, ends).
         public var holdsKey: (String) -> Bool
         /// As `GrantSecret.Desk.clockApart`: whether this Mac's clock and the hub's differ by more than an hour, and
         /// nil ("not ready") with no answer of the hub in this launch for this place. Asked only for a standing.

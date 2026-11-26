@@ -87,7 +87,7 @@ public static partial class Screens
                                    t.Id.ToString(CultureInfo.InvariantCulture) == number).Take(50);
         }
         var tasks = found.Select(t => new SearchTaskRow(t.Id, t.Title,
-                TaskMark.Of(t, fleet!.Holds, s.Names, fleet!.Agents.Any(a => a.Name == t.Owner && a.Limit is not null),
+                TaskMark.Of(t, fleet!.Holds, s.Names, TaskLimit.Of(fleet, t) is not null,
                             outcomeUnknown: Activity.OutcomeUnknown(fleet!, t))))
             .ToList();
         var count = agents.Count + tasks.Count;
