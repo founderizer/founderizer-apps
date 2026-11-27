@@ -41,9 +41,7 @@ struct PersonPage: View {
     private var agents: [FleetAgent] { (store.state?.agents ?? []).filter { $0.role != "manager" } }
     /// The fleet's chat accounts, which say whose agents have a Telegram bot: the store's reading, which the agent
     /// pages keep too (`AgentPage.prefetch`).
-    private var channels: ChatAppsSnapshot? {
-        get { store.reading("channels.snapshot") } nonmutating set { store.keep(newValue, as: "channels.snapshot") }
-    }
+    private var channels: ChatAppsSnapshot? { store.reading(AgentPage.channelsName) }
 
     var body: some View {
         FleetPage(person?.name ?? String(l10n: "Person"), back: FleetBack("People", action: back)) {
@@ -264,10 +262,9 @@ struct PersonPage: View {
     private func readChannels() async {
         guard store.state?.ui_features?.contains(ChatApps.telegramFeature) == true, store.isFresh,
               let db = store.state?.db else { return }
-        let hub = store.hub
-        if let fresh = try? await store.read("channels.snapshot", { try await ChatAppsClient().read(hub: hub, database: db) }),
-           store.hub == hub, store.state?.db == db {
-            channels = fresh
+        let start = store.pageReadStart()
+        if let fresh = try? await AgentPage.readAccounts(store, hub: store.hub, database: db, from: start), !Task.isCancelled {
+            store.keep(fresh, as: AgentPage.channelsName, from: start)
         }
     }
 
@@ -284,11 +281,16 @@ struct PersonPage: View {
         // a link of this person that shows stays: a reading that is current again makes no new one
         guard canWrite, let db = store.state?.db, inviteLink?.person != person.id else { return }
         inviteLink = nil; inviteProblem = nil
-        let chat = ChatAppsClient()
+        let chat = ChatAppsClient(), hub = store.hub
         do {
-            let hub = store.hub
-            let accounts = try await chat.read(hub: hub, database: db)
-            if store.hub == hub, store.state?.db == db { channels = accounts }
+            var accounts: ChatAppsSnapshot
+            // A write can change which bot may issue the invite while the accounts are on their way.
+            repeat {
+                let start = store.pageReadStart()
+                accounts = try await AgentPage.readAccounts(store, hub: hub, database: db, from: start)
+                guard !Task.isCancelled, store.hub == hub, store.state?.db == db, canWrite else { return }
+                if store.keep(accounts, as: AgentPage.channelsName, from: start) { break }
+            } while true
             // the agent of the invite that this Mac keeps, while it is still theirs and on Telegram: the hub keeps one
             // open invite for each person, so another agent's would stop the link that the owner sent
             let onTelegram = telegramAgents(of: person, in: accounts)
@@ -299,8 +301,9 @@ struct PersonPage: View {
                 return
             }
             let made = try await store.telegramInvite(for: person, agent: agent, bot: bot) {
-                try await chat.makeInvite(hub: store.hub, database: db, client: store.installation, person: person.id, agent: agent)
+                try await chat.makeInvite(hub: hub, database: db, client: store.installation, person: person.id, agent: agent)
             }
+            guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
             // the link on the bot that the invite is for, as the setup steps take it (`LinkCode.link(on:)`)
             guard let link = made.link(on: bot.id) else {
                 inviteProblem = String(l10n: "The hub gave no link.")
@@ -309,7 +312,7 @@ struct PersonPage: View {
             inviteLink = (person.id, link)
         } catch {
             // a read that the form stopped (it closed, or the hub's reading turned old) says nothing
-            if !Task.isCancelled { inviteProblem = People.reason(error) }
+            if !Task.isCancelled, store.hub == hub, store.state?.db == db { inviteProblem = People.reason(error) }
         }
     }
 
@@ -505,7 +508,9 @@ extension FleetStore {
            kept.serves(person, agent: agent, bot: bot, serverTime: state?.time ?? 0, readAt: lastSuccess ?? Date(), now: Date()) {
             return kept.invite
         }
+        let address = hub, database = state?.db
         let made = try await make()
+        guard hub == address, state?.db == database else { throw CancellationError() }
         keep(KeptInvite(made, person: person, agent: agent, bot: bot), as: name)
         return made
     }

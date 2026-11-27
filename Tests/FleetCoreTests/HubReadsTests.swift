@@ -137,6 +137,26 @@ struct HubReadsTests {
         #expect(await count.reads == 3)
     }
 
+    @MainActor @Test func closingOnePageKeepsTheSharedReadAndClosingBothStopsIt() async throws {
+        let reads = PageReads(center: NotificationCenter()), count = Count()
+        let read: @Sendable () async throws -> String = {
+            await count.add()
+            do { try await Task.sleep(for: .seconds(3)) } catch { await count.stop(); throw error }
+            return "finished"
+        }
+        let first = Task { try await reads.read("people", read) }
+        let second = Task { try await reads.read("people", read) }
+        try await Task.sleep(for: .milliseconds(80))
+        first.cancel()
+        await #expect(throws: CancellationError.self) { try await first.value }
+        #expect(await count.reads == 1)
+        #expect(await count.stopped == false)
+        second.cancel()
+        await #expect(throws: CancellationError.self) { try await second.value }
+        for _ in 0..<100 where await !count.stopped { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await count.stopped)
+    }
+
     /// **Only reads with the same time limits share** (review A5, fix round 2): `IntegrationsClient`'s read of `/ui/team`
     /// (60 s) joined `HubClient`'s (10 s) and timed out after 9.9 s. Two reads of one address with one set of limits
     /// share whatever their client; with other limits each is a request of its own.

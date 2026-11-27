@@ -99,7 +99,7 @@ final class RepositoryPicking {
     /// what the agent still does not hold, once more.
     func add(store: FleetStore, agent: String) async {
         guard givingFor == nil, let database = store.state?.db,
-              var reading: ResourceList = store.reading(AccessSettings.name(agent)) else { return }
+              var reading: ResourceList = store.reading(AccessSettings.readingName) else { return }
         let hub = store.hub, client = store.installation, choice = level
         var repos = picked.subtracting(Self.held(reading, agent: agent)).sorted()
         guard !repos.isEmpty else { return }
@@ -116,7 +116,7 @@ final class RepositoryPicking {
                 words = nil
                 break
             } catch let HubError.refusal(refused) where refused.status == 409 && attempt == 1 {
-                guard let fresh = try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database)
+                guard let fresh = try? await AccessSettings.readResources(store, hub: hub, database: database)
                 else { words = refused.words; break }
                 reading = fresh
                 repos = repos.filter { !Self.held(fresh, agent: agent).contains($0) }
@@ -142,9 +142,10 @@ final class RepositoryPicking {
             // The list was closed meanwhile: the line under the agent's rows, as for every + of Can use.
             store.keep(words, as: AccessSettings.saidName(agent, kind: "repo"))
         }
-        if let fresh = try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database),
+        let request = store.pageReadStart()
+        if let fresh = try? await AccessSettings.readResources(store, hub: hub, database: database, from: request),
            store.hub == hub, store.state?.db == database {
-            store.keep(fresh, as: AccessSettings.name(agent))
+            store.keep(fresh, as: AccessSettings.readingName, from: request)
         }
     }
 }
@@ -158,7 +159,7 @@ struct RepositoryPickerPlus: View {
     let model: RepositoryPicking
 
     var body: some View {
-        let reading: ResourceList? = store.reading(AccessSettings.name(agent))
+        let reading: ResourceList? = store.reading(AccessSettings.readingName)
         if model.givingFor == agent {
             ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
                 .padding(.trailing, FormMetrics.rowInset)
@@ -209,7 +210,7 @@ struct RepositoryPickerCard: View {
     private var list: RepositoryList? { store.reading(RepositoryPicking.listName) }
 
     var body: some View {
-        let held = RepositoryPicking.held(store.reading(AccessSettings.name(agent)), agent: agent)
+        let held = RepositoryPicking.held(store.reading(AccessSettings.readingName), agent: agent)
         let giving = model.picked.subtracting(held).count
         FormSection {
             RepositorySearch(text: $model.search)

@@ -74,7 +74,7 @@ struct WhatsAppSetupPage: View {
 
     private var name: String { ChatAppWords.agent(agent) }
     /// The accounts as the Channels page last read them: the store's reading, so a wait reads the newest one.
-    private var accounts: ChatAppsSnapshot? { store.reading("channels.accounts.\(agent)") }
+    private var accounts: ChatAppsSnapshot? { store.reading(AgentPage.channelsName) }
     private var number: ChatAppsSnapshot.Account? { accounts?.channel("whatsapp", of: agent) }
     private var code: String? {
         guard asked == nil, let link, link.state == "waiting", let qr = link.qr, !qr.isEmpty else { return nil }
@@ -266,9 +266,9 @@ struct ChannelFollowSteps: View {
     private var whatsApp: Bool { app == "whatsapp" }
     private var telegram: Bool { app == "telegram" }
     private var name: String { ChatAppWords.agent(agent) }
-    private var people: PeopleSnapshot? { store.reading("channels.people.\(agent)") }
+    private var people: PeopleSnapshot? { (store.reading(PeoplePage.peopleName) as PeopleReading<PeopleSnapshot>?)?.value }
     private var account: ChatAppsSnapshot.Account? {
-        (store.reading("channels.accounts.\(agent)") as ChatAppsSnapshot?)?.channel(app, of: agent)
+        (store.reading(AgentPage.channelsName) as ChatAppsSnapshot?)?.channel(app, of: agent)
     }
     /// The owner can write from this app already, and on Telegram to this bot too (CHAT-APPS.md 19.4).
     private var ownerLinked: Bool {
@@ -446,9 +446,10 @@ struct ChannelFollowSteps: View {
 
     private func makeCode() async {
         guard store.writesNow, let db = store.state?.db, let people, let id = account?.id else { return }
+        let hub = store.hub
         do {
-            let new = try await chat.makeCode(hub: store.hub, database: db, client: store.installation, app: app)
-            guard store.state?.db == db else { return }
+            let new = try await chat.makeCode(hub: hub, database: db, client: store.installation, app: app)
+            guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
             // A code is of use only with where it goes: this agent's own number or bot.
             // A refusal is said only on the link page: one that comes after he went back to the tiles is not a line
             // under them, and the link's next visit asks again.
@@ -459,6 +460,7 @@ struct ChannelFollowSteps: View {
             }
             before = Set(people.handles(of: app).map(\.key)); made = Date(); code = new
         } catch {
+            guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
             code = nil
             if page == .me { problem = ChatAppWords.reason(error) }
         }
@@ -707,12 +709,13 @@ struct ChannelFollowSteps: View {
     /// The person's invite, once for each visit of their page: a new one replaces the one before it at the hub.
     private func makeInvite(_ person: PeopleSnapshot.Person) async {
         guard invited != person.id, store.writesNow, let db = store.state?.db else { return }
+        let hub = store.hub
         problem = nil
         do {
             let made = try await store.telegramInvite(for: person, agent: agent, bot: account) {
-                try await chat.makeInvite(hub: store.hub, database: db, client: store.installation, person: person.id, agent: agent)
+                try await chat.makeInvite(hub: hub, database: db, client: store.installation, person: person.id, agent: agent)
             }
-            guard store.state?.db == db else { return }
+            guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
             guard made.link(on: account?.id) != nil else {
                 problem = String(l10n: "The hub gave no link.")
                 return
@@ -720,7 +723,7 @@ struct ChannelFollowSteps: View {
             invite = made; invited = person.id
         } catch {
             // a read that the page stopped (it went on, or the hub's reading turned old) says nothing
-            if !Task.isCancelled { problem = People.reason(error) }
+            if !Task.isCancelled, store.hub == hub, store.state?.db == db { problem = People.reason(error) }
         }
     }
 

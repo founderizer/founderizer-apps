@@ -150,7 +150,7 @@ final class FleetStore {
     /// This app's own update, put in place without a press while he is away from it (`AppUpdateModel.swift`).
     let updates = AppAutoUpdate()
     /// What each page read last, so a page that opens again draws it at once (`PageReadings.swift`).
-    let readings = PageReadings()
+    let readings: PageReadings
     /// **The first read of this launch has answered, or a second has gone by.** Until then the window draws its
     /// background only: the first-run wizard showed for the 75–86 ms of that read at every launch of an app that
     /// has a fleet (`FleetView.firstRun`).
@@ -652,7 +652,9 @@ final class FleetStore {
             if shown.chat != nil { shown.went(to: destination.agentTab == .chat ? destination.agentName : nil) }
             markRepliesSeen()
             // The launch's first read reads the pages; a page chosen before it needs no read of its own.
-            if launched { prefetch(fleet: PagePrefetch.fleet, agent: PagePrefetch.agent) }
+            if launched {
+                prefetch(fleet: PagePrefetch.fleet, agent: PagePrefetch.agent, changedAgent: destination.agentName != oldValue.agentName)
+            }
         }
     }
     /// The app has its first page: the one asked for, the one `home` chose from a reading, or one he went to first.
@@ -2130,7 +2132,8 @@ final class FleetStore {
     /// The complete disk cache for this launch, ready before the first live window can need a later block.
     @ObservationIgnored private var launchHistory: Task<(OlderTasks, OlderRows), Never>?
 
-    init() {
+    init(pageWrites: NotificationCenter = .default) {
+        readings = PageReadings(center: pageWrites)
         // **A launch's `-hubAddress` that is no hub address stops the app** (review B9, fix round 2): it fell back to his
         // own hub without a word, so a test copy with a typo in it read his real fleet, and could write to it.
         if let asked = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["hubAddress"] as? String,

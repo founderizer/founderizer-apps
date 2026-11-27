@@ -83,32 +83,15 @@ final class HubReads: @unchecked Sendable {
         let response: HTTPURLResponse?
     }
 
-    /// One read on its way and the callers that wait for it.
-    private final class Flight: @unchecked Sendable {
-        var waiters: [UUID: CheckedContinuation<Answer, Error>] = [:]
-        var task: Task<Void, Never>?
-        /// The writes answered before it began (`writes`).
-        let after: Int
-        init(after: Int) { self.after = after }
+    private let reads: SharedReads<Answer>
+
+    init(center: NotificationCenter = .default) { reads = SharedReads(center: center) }
+
+    var inFlight: Int { reads.inFlight }
+
+    func share(_ key: String, _ read: @escaping @Sendable () async throws -> Answer) async throws -> Answer {
+        try await reads.share(key, read)
     }
-
-    private let lock = NSLock()
-    private var flights: [String: Flight] = [:]
-    /// The read each caller waits for, also one that a newer read of its address has replaced in `flights`.
-    private var waiting: [UUID: (key: String, flight: Flight)] = [:]
-    /// The writes of this Mac that the hub answered so far.
-    private var writes = 0
-    private var observer: NSObjectProtocol?
-
-    init(center: NotificationCenter = .default) {
-        observer = center.addObserver(forName: HubWrites.answered, object: nil, queue: nil) { [weak self] _ in
-            guard let self else { return }
-            self.lock.withLock { self.writes += 1 }
-        }
-    }
-
-    /// The reads on their way now, for the tests.
-    var inFlight: Int { lock.withLock { flights.count } }
 
     /// **The read a request is, for sharing**: a GET of the hub, by its address and its time limits, whichever client
     /// makes it and whatever it accepts (every `/ui` route answers JSON). A write is no read and shares nothing.
@@ -125,8 +108,48 @@ final class HubReads: @unchecked Sendable {
         return "GET \(url.absoluteString) " + limits.map { String(format: "%g", $0) }.joined(separator: "/") + present
     }
 
+}
+
+/// The callers of a shared read may leave independently. The last one to leave cancels the work.
+private final class SharedReads<Answer: Sendable>: @unchecked Sendable {
+    /// One read on its way and the callers that wait for it.
+    private final class Flight: @unchecked Sendable {
+        var waiters: [UUID: CheckedContinuation<Answer, Error>] = [:]
+        var task: Task<Void, Never>?
+        /// The writes answered before it began (`writes`).
+        let after: Int
+        init(after: Int) { self.after = after }
+    }
+
+    private let lock = NSLock()
+    private var flights: [String: Flight] = [:]
+    /// The read each caller waits for, also one that a newer read of its address has replaced in `flights`.
+    private var waiting: [UUID: (key: String, flight: Flight)] = [:]
+    /// The writes of this Mac that the hub answered so far.
+    private var writes = 0
+    private let center: NotificationCenter
+    private var observer: NSObjectProtocol?
+
+    init(center: NotificationCenter = .default) {
+        self.center = center
+        observer = center.addObserver(forName: HubWrites.answered, object: nil, queue: nil) { [weak self] _ in
+            guard let self else { return }
+            self.lock.withLock { self.writes += 1 }
+        }
+    }
+
+    deinit {
+        if let observer { center.removeObserver(observer) }
+    }
+
+    var answeredWrites: Int { lock.withLock { writes } }
+
+    /// The reads on their way now, for the tests.
+    var inFlight: Int { lock.withLock { flights.count } }
+
     /// The answer of the read `key`: the one on its way, or a new one that `read` makes.
     func share(_ key: String, _ read: @escaping @Sendable () async throws -> Answer) async throws -> Answer {
+        try Task.checkCancellation()
         let id = UUID()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Answer, Error>) in
@@ -190,37 +213,18 @@ final class HubReads: @unchecked Sendable {
 /// this Mac was answered** (`HubWrites`, review A7), as `HubReads` never does: a list read right after his save took
 /// the read that began during it, and showed what stood before the save until its next read.
 @MainActor public final class PageReads {
-    private var reads: [String: (task: Task<any Sendable, Error>, after: Int)] = [:]
-    private let writes = WriteCount()
-    private var observer: NSObjectProtocol?
+    private let reads: SharedReads<any Sendable>
 
-    public init(center: NotificationCenter = .default) {
-        let writes = writes
-        // Counted where the answer comes, before the writer goes on, so a read the writer starts next sees it.
-        observer = center.addObserver(forName: HubWrites.answered, object: nil, queue: nil) { _ in writes.add() }
-    }
+    public init(center: NotificationCenter = .default) { reads = SharedReads(center: center) }
 
-    /// The answer of the read `key`: the one on its way when it began after the last answered write, else a new one.
+    /// A saved answer can be reused while this count is the same as when the read began.
+    public var answeredWrites: Int { reads.answeredWrites }
+
     public func read<Value: Sendable>(_ key: String, _ read: @escaping @Sendable () async throws -> Value) async throws -> Value {
-        let after = writes.value
-        if let running = reads[key], running.after == after {
-            guard let value = try await running.task.value as? Value else { throw HubError.invalidResponse }
-            return value
-        }
-        let task = Task<any Sendable, Error> { try await read() }
-        reads[key] = (task, after)
-        defer { if reads[key]?.task == task { reads[key] = nil } }
-        guard let value = try await task.value as? Value else { throw HubError.invalidResponse }
+        let answer = try await reads.share(key) { try await read() }
+        guard let value = answer as? Value else { throw HubError.invalidResponse }
         return value
     }
-}
-
-/// The answered writes of this Mac, counted from any thread.
-final class WriteCount: @unchecked Sendable {
-    private let lock = NSLock()
-    private var count = 0
-    func add() { lock.withLock { count += 1 } }
-    var value: Int { lock.withLock { count } }
 }
 
 final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {

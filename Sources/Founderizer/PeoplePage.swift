@@ -27,10 +27,13 @@ struct PeoplePage: View {
     /// The person or the conversation that shows, kept by the part around this group, which shows it in its own place
     /// (`AgentPeoplePart`): nil keeps it here.
     var routeBinding: Binding<[Route]>? = nil
-    /// The readings are the store's (`FleetStore.reading`), the fleet's and each agent's under its own name: the people
-    /// he saw last show in the first frame when he comes back, and the read that starts then changes only what changed.
+    /// Every agent filters the same successful response. Errors belong to this visit.
+    @State private var peopleFailure: (why: String, since: ContinuousClock.Instant)?
     private var kept: PeopleReading<PeopleSnapshot> {
-        get { store.reading(peopleName) ?? .loading } nonmutating set { store.keep(newValue, as: peopleName) }
+        let shared: PeopleReading<PeopleSnapshot> = store.reading(Self.peopleName) ?? .loading
+        guard let peopleFailure else { return shared }
+        if let last = store.readingKept(Self.peopleName), last > peopleFailure.since { return shared }
+        return shared.failed(peopleFailure.why, at: peopleFailure.since)
     }
     /// The people as the page draws them: one break of failed reads says nothing (`PeopleReading.shown`).
     private var reading: PeopleReading<PeopleSnapshot> { kept.shown(store) }
@@ -49,17 +52,14 @@ struct PeoplePage: View {
     /// When this visit began: a line about a kept reading waits a second for the read that is on its way (`Held`).
     @State private var opened = ContinuousClock.now
     private let client = PeopleClient()
-    private var peopleName: String { "people.list.\(agent ?? "fleet")" }
+    nonisolated static let peopleName = "people.list.fleet"
     private static let rolesName = "people.roles.fleet"
-    /// The people and the roles, read before the page first opens (`PagePrefetch`): the fleet's, and each agent's.
-    static let prefetch = PagePrefetch("people.list.fleet", feature: People.feature) {
+    /// The people and the roles, read before the page first opens (`PagePrefetch`): shared by all agents.
+    static let prefetch = PagePrefetch(peopleName, feature: People.feature, sharedAcrossAgents: true) {
         PeopleReading.current(try await PeopleClient().people(hub: $0, database: $1), at: Date().timeIntervalSince1970)
     }
     static let rolesPrefetch = PagePrefetch(rolesName, feature: RoleList.feature) {
         PeopleReading.current(try await PeopleClient().roles(hub: $0, database: $1), at: Date().timeIntervalSince1970)
-    }
-    static let agentPrefetch = PagePrefetch(agent: { "people.list.\($0)" }, feature: People.feature) { hub, database, _ in
-        PeopleReading.current(try await PeopleClient().people(hub: hub, database: database), at: Date().timeIntervalSince1970)
     }
 
     init(store: FleetStore, agent: String? = nil, grouped: Bool = false, route: Binding<[Route]>? = nil) {
@@ -138,7 +138,7 @@ struct PeoplePage: View {
             if routeBinding == nil { ownRoute = [] }
             problem = nil
             // Reads that failed in an earlier visit say nothing to this one before its own break (`PageReading.visited`).
-            if kept.failedSince != nil { kept = kept.visited() }
+            peopleFailure = nil
             if roleReading.failedSince != nil { roleReading = roleReading.visited() }
             let start = ContinuousClock.now
             while !Task.isCancelled {
@@ -403,7 +403,7 @@ struct PeoplePage: View {
     @ViewBuilder private var readingRow: some View {
         // Not while the window's notice says the outage (`FleetStore.hubNoticeShows`; fix round 3, item 33).
         if (reading.failure != nil || store.connectionError != nil) && !store.hubNoticeShows {
-            held(peopleName) {
+            held(Self.peopleName) {
                 FormSection {
                     FormRow("The people are unavailable", symbol: "exclamationmark.circle", warning: reading.failure)
                         .accessibilityIdentifier("people-failed")
@@ -419,7 +419,7 @@ struct PeoplePage: View {
                 .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("people-problem")
         } else if reading.isOld && !store.hubNoticeShows {
             // Not while the window's notice says the outage (fix round 3c; item 33: an outage is said once).
-            held(peopleName) {
+            held(Self.peopleName) {
                 Text("Last reading \(activityAge(reading.at, now: now).lowercased()). Founderizer reads again every 5 seconds.")
                     .font(FormMetrics.detail).foregroundStyle(.orange).accessibilityIdentifier("people-stale")
             }
@@ -434,11 +434,14 @@ struct PeoplePage: View {
         let hub = store.hub
         // From the kept readings: the drawn one is loading while its reads fail inside one break.
         let first: Bool = if case .loading = kept { true } else if offersRoles, case .loading = roleReading { true } else { false }
-        let people: PeopleReading<PeopleSnapshot>
+        let request = store.pageReadStart()
+        let result: Result<PeopleReading<PeopleSnapshot>, Error>
         do {
-            people = .current(try await client.people(hub: hub, database: db), at: now)
+            result = .success(try await store.read(Self.peopleName, from: request) { [client] in
+                PeopleReading.current(try await client.people(hub: hub, database: db), at: Date().timeIntervalSince1970)
+            })
         } catch {
-            people = kept.failed(People.reason(error))
+            result = .failure(error)
         }
         var roles: PeopleReading<RoleList>?
         if offersRoles {
@@ -449,8 +452,17 @@ struct PeoplePage: View {
             }
         }
         if first, let start { await store.settle(since: start) }
-        guard store.hub == hub, store.state?.db == db else { return }
-        kept = people
+        guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
+        switch result {
+        case .success(let people):
+            if let snapshot = people.value, store.keep(PeopleReading.current(snapshot, at: now), as: Self.peopleName, from: request) {
+                peopleFailure = nil
+            }
+        case .failure(let error):
+            if store.acceptsPageRead(request, for: Self.peopleName) {
+                peopleFailure = (People.reason(error), kept.failedSince ?? .now)
+            }
+        }
         if let roles { roleReading = roles }
     }
 }

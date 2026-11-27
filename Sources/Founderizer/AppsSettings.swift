@@ -53,7 +53,7 @@ struct AppsPage: View {
     private var features: [String] { store.state?.ui_features ?? [] }
     private var groups: [AppsGroup] { AppsGroup.available(features: features) }
     private var offered: Bool { features.contains(ResourceList.feature) }
-    private var reading: ResourceList? { store.reading(AccessSettings.name(nil)) }
+    private var reading: ResourceList? { store.reading(AccessSettings.readingName) }
     /// When the first of the lists' reads that failed in a row failed (`AccessSettings.readOnce`): one break of them
     /// says nothing (`FleetStore.pageReadingIsOld`).
     private var failedSince: ContinuousClock.Instant? { store.reading(AccessSettings.name(nil) + ".failedSince") }
@@ -163,7 +163,7 @@ struct AppsSettings: View {
     }
     /// The resources of the three lists (`AccessSettings`), which each list reads for itself once there is a reading.
     private var resources: ResourceList? {
-        get { store.reading(AccessSettings.name(agent)) } nonmutating set { store.keep(newValue, as: AccessSettings.name(agent)) }
+        store.reading(AccessSettings.readingName)
     }
     /// Changes when an account is connected, so the item list reads again.
     @State private var connects = 0
@@ -460,17 +460,19 @@ struct AppsSettings: View {
         guard let database = store.state?.db else { return }
         let hub = store.hub, start = ContinuousClock.now, first = waits
         let app = drawsApp ? try? await IntegrationsClient().read(hub: hub, database: database) : nil
-        let list = listsWait ? try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database) : nil
+        let request = store.pageReadStart()
+        let list = listsWait ? try? await AccessSettings.readResources(store, hub: hub, database: database, from: request) : nil
         if first { await store.settle(since: start) }
         guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
         if let app { integrations = app }
-        if let list { resources = list }
+        if let list { store.keep(list, as: AccessSettings.readingName, from: request) }
         appRead = true; unread = listsWait; unreadSince = unread ? .now : nil
         while unread {
             do { try await store.nap(3) } catch { return }
-            let list = listsWait ? try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database) : nil
+            let request = store.pageReadStart()
+            let list = listsWait ? try? await AccessSettings.readResources(store, hub: hub, database: database, from: request) : nil
             guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { return }
-            if let list { resources = list }
+            if let list { store.keep(list, as: AccessSettings.readingName, from: request) }
             unread = listsWait
         }
     }

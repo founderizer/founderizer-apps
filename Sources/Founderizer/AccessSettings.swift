@@ -44,10 +44,9 @@ struct AccessSettings: View {
     /// over the row as the − does, so its click is its own, in the room that the row keeps for it. nil draws every row
     /// as before.
     var accessory: ((FleetResource) -> AnyView?)? = nil
-    /// The store's (`FleetStore.reading`), the fleet's pages' and each agent's under its own name (`name`): the list he
-    /// saw last shows in the first frame when he comes back, and the read that starts then changes only what changed.
+    /// The fleet's list. Each page shows the resources that match its agent and kind.
     private var reading: ResourceList? {
-        get { store.reading(Self.name(agent)) } nonmutating set { store.keep(newValue, as: Self.name(agent)) }
+        store.reading(Self.readingName)
     }
     /// When the first of the reads that failed in a row failed, or nil while the last read answered: `reading` is then
     /// the last good one, or nil. One break of them says nothing (`FleetStore.pageReadingIsOld`). It is the reading's,
@@ -80,16 +79,15 @@ struct AccessSettings: View {
     private var foldersOffered: Bool { store.state?.ui_features?.contains("drive_folders") == true }
     private var canChange: Bool { offered && store.writesNow && working == nil }
 
-    /// The name of the fleet's resources, or of one agent's: the MCPs and Apps lists and the Secrets page draw it.
+    /// The same resource list supplies MCPs, Apps and Secrets for every agent.
+    nonisolated static let readingName = "resources.fleet"
+    /// Failure times and the results of actions belong to their own page.
     nonisolated static func name(_ agent: String?) -> String { "resources.\(agent ?? "fleet")" }
     /// The words behind the orange mark of a repository that the hub's GitHub App does not reach.
     static let unreachedWords = String(l10n: "The GitHub App cannot reach this repository")
     /// The resources, read before the page first opens (`PagePrefetch`): the fleet's, and each agent's.
-    static let prefetch = PagePrefetch(name(nil), feature: ResourceList.feature) {
+    static let prefetch = PagePrefetch(readingName, feature: ResourceList.feature, sharedAcrossAgents: true) {
         try await ResourcesClient().read(hub: $0, database: $1)
-    }
-    static let agentPrefetch = PagePrefetch(agent: { name($0) }, feature: ResourceList.feature) { hub, database, _ in
-        try await ResourcesClient().read(hub: hub, database: database)
     }
     /// **"Last reading", in the heading row of the page's first group** (review B17, fix round 2; as Secrets): one line
     /// for the one reading that Apps draws in its lists, and only once this visit's read has had its second (`Held`).
@@ -99,7 +97,7 @@ struct AccessSettings: View {
     /// round 3, item 33: an outage is said once).
     @ViewBuilder static func lastReading(_ store: FleetStore, agent: String?, since opened: ContinuousClock.Instant) -> some View {
         let failedSince: ContinuousClock.Instant? = store.reading(name(agent) + ".failedSince")
-        if (store.reading(name(agent)) as ResourceList?) != nil && store.pageReadingIsOld(failedSince: failedSince)
+        if (store.reading(readingName) as ResourceList?) != nil && store.pageReadingIsOld(failedSince: failedSince)
             && !store.hubNoticeShows {
             Held(since: opened) {
                 Label("Last reading", systemImage: "clock.arrow.circlepath")
@@ -118,8 +116,9 @@ struct AccessSettings: View {
     }
 
     /// The resources, read once for every list of a page that is reading them now (`FleetStore.read`).
-    static func readResources(_ store: FleetStore, agent: String?, hub: URL, database: String) async throws -> ResourceList {
-        try await store.read(name(agent)) { try await ResourcesClient().read(hub: hub, database: database) }
+    static func readResources(_ store: FleetStore, hub: URL, database: String, from start: PageReadStart? = nil) async throws -> ResourceList {
+        guard !Task.isCancelled, store.hub == hub, store.state?.db == database else { throw CancellationError() }
+        return try await store.read(readingName, from: start) { try await ResourcesClient().read(hub: hub, database: database) }
     }
 
     var body: some View {
@@ -1074,10 +1073,11 @@ struct AccessSettings: View {
     @discardableResult static func readOnce(_ store: FleetStore, agent: String?, since start: ContinuousClock.Instant? = nil) async -> Bool {
         guard store.state?.ui_features?.contains(ResourceList.feature) == true, store.isFresh,
               let database = store.state?.db else { return false }
-        let hub = store.hub, first = (store.reading(name(agent)) as ResourceList?) == nil
-        guard let list = try? await readResources(store, agent: agent, hub: hub, database: database) else {
+        let request = store.pageReadStart()
+        let hub = store.hub, first = (store.reading(readingName) as ResourceList?) == nil
+        guard let list = try? await readResources(store, hub: hub, database: database, from: request) else {
             if first, let start { await store.settle(since: start) }
-            if !Task.isCancelled, store.hub == hub, store.state?.db == database {
+            if !Task.isCancelled, store.acceptsPageRead(request, for: readingName) {
                 if (store.reading(name(agent) + ".failedSince") as ContinuousClock.Instant?) == nil {
                     store.keep(ContinuousClock.now, as: name(agent) + ".failedSince")
                 }
@@ -1086,8 +1086,7 @@ struct AccessSettings: View {
         }
         guard !Task.isCancelled else { return false }
         if first, let start { await store.settle(since: start) }
-        guard store.hub == hub, store.state?.db == database else { return false }
-        store.keep(list, as: name(agent))
+        guard !Task.isCancelled, store.keep(list, as: readingName, from: request) else { return false }
         store.keep(nil, as: name(agent) + ".failedSince")
         return true
     }
@@ -1106,7 +1105,7 @@ struct AccessGive: View {
     @State private var giving = false
 
     var body: some View {
-        let reading: ResourceList? = store.reading(AccessSettings.name(agent))
+        let reading: ResourceList? = store.reading(AccessSettings.readingName)
         let open = (reading?.resources ?? []).filter { $0.kind == kind && !$0.holders.contains { $0.agent == agent } }
         if giving {
             ProgressView().controlSize(.small).frame(width: IconMetrics.side, height: IconMetrics.side)
@@ -1144,9 +1143,10 @@ struct AccessGive: View {
         let said = await AccessSettings.write(resource, to: agent, level: level, sha256: reading.sha256, store: store, database: database)
         store.keep(said, as: AccessSettings.saidName(agent, kind: kind))
         let hub = store.hub
-        if let fresh = try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database),
+        let request = store.pageReadStart()
+        if let fresh = try? await AccessSettings.readResources(store, hub: hub, database: database, from: request),
            store.hub == hub, store.state?.db == database {
-            store.keep(fresh, as: AccessSettings.name(agent))
+            store.keep(fresh, as: AccessSettings.readingName, from: request)
         }
     }
 }

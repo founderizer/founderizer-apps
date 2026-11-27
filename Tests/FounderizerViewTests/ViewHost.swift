@@ -64,13 +64,13 @@ import Vision
 
     /// A store of the app on the test's defaults and folder, with a reading in place of the hub's first answer. The
     /// defaults hold only the hub's address: no draft or choice of an earlier test.
-    static func store(_ state: HubState) -> FleetStore {
+    static func store(_ state: HubState, pageWrites: NotificationCenter = .default) -> FleetStore {
         _ = ready
         if let kept {
             for key in kept.dictionaryRepresentation().keys { kept.removeObject(forKey: key) }
             kept.set("http://127.0.0.1:9", forKey: "hubAddress")
         }
-        let store = FleetStore()
+        let store = FleetStore(pageWrites: pageWrites)
         store.state = state
         return store
     }

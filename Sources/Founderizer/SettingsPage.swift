@@ -106,9 +106,7 @@ struct SettingsPage: View {
     /// that a block is not there has to live outside the block.
     ///
     /// The store keeps it (`FleetStore.reading`), so both sections are there in the first frame when he comes back.
-    private var channels: ChatAppsSnapshot? {
-        get { store.reading("channels.snapshot") } nonmutating set { store.keep(newValue, as: "channels.snapshot") }
-    }
+    private var channels: ChatAppsSnapshot? { store.reading(AgentPage.channelsName) }
     /// When General first asked for the channels, and whether that read has answered. Until it has, General draws
     /// neither of its sections, for at most a second, so the two come in one frame: Channels came 311 ms after
     /// Notifications on the owner's Mac.
@@ -186,16 +184,17 @@ struct SettingsPage: View {
             asked = .now
             while !Task.isCancelled {
                 if let db = store.state?.db {
-                    let hub = store.hub
+                    let hub = store.hub, start = store.pageReadStart()
+                    let channelsStart = store.pageReadStart()
                     // the reads at once, so that the sections come in one frame
-                    async let chatRead = chat ? try? await ChatAppsClient().read(hub: hub, database: db) : nil
+                    async let chatRead = chat ? try? await AgentPage.readAccounts(store, hub: hub, database: db, from: channelsStart) : nil
                     async let modelsRead = models ? try? await DefaultModelsClient().read(hub: hub, database: db) : nil
                     async let profileRead = own ? try? await OwnerProfileClient().read(hub: hub, database: db) : nil
                     let (freshChannels, freshDefaults, freshProfile) = await (chatRead, modelsRead, profileRead)
-                    if store.state?.db == db {
-                        if let freshChannels { channels = freshChannels }
-                        if let freshDefaults { defaults = freshDefaults }
-                        if let freshProfile { profile = freshProfile }
+                    if !Task.isCancelled {
+                        if let freshChannels { store.keep(freshChannels, as: AgentPage.channelsName, from: channelsStart) }
+                        if let freshDefaults { store.keep(freshDefaults, as: "defaults.page", from: start) }
+                        if let freshProfile { store.keep(freshProfile, as: "profile.page", from: start) }
                     }
                 }
                 if !Task.isCancelled { answered = true }

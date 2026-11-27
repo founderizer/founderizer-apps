@@ -18,25 +18,19 @@ import SwiftUI
 struct ChannelsPage: View {
     @Bindable var store: FleetStore
     let agent: String
-    /// Each reading of the accounts, for the People dot of the agent's sidebar.
-    var onRead: (ChatAppsSnapshot) -> Void = { _ in }
     /// **The first group of the agent's People** (D-5): its heading and its two cards, without a page of its own.
     var grouped = false
     /// A channel's steps, kept by the part around this group, which shows them in its own place (`AgentPeoplePart`):
     /// nil keeps them here.
     var setup: Binding<ChannelSetup?>? = nil
-    /// The readings are the store's (`FleetStore.reading`), under this agent's name: the cards he saw last show in the
+    /// The readings are the store's (`FleetStore.reading`), for the whole fleet: the cards he saw last show in the
     /// first frame when he comes back, and the read that starts then changes only what changed. A channel's steps read
     /// the same two names.
-    private var snapshot: ChatAppsSnapshot? {
-        get { store.reading("channels.accounts.\(agent)") } nonmutating set { store.keep(newValue, as: "channels.accounts.\(agent)") }
-    }
+    private var snapshot: ChatAppsSnapshot? { store.reading(AgentPage.channelsName) }
     private var people: PeopleSnapshot? {
-        get { store.reading("channels.people.\(agent)") } nonmutating set { store.keep(newValue, as: "channels.people.\(agent)") }
+        (store.reading(PeoplePage.peopleName) as PeopleReading<PeopleSnapshot>?)?.value
     }
-    private var readAt: Date? {
-        get { store.reading("channels.read_at.\(agent)") } nonmutating set { store.keep(newValue, as: "channels.read_at.\(agent)") }
-    }
+    private var readAt: Date? { store.readingDate(AgentPage.channelsName) }
     @State private var readError: String?
     /// When the first of the reads that failed in a row failed: one break of them says nothing
     /// (`FleetStore.pageReadingIsOld`).
@@ -53,14 +47,6 @@ struct ChannelsPage: View {
         nonmutating set { if let setup { setup.wrappedValue = newValue } else { ownSetup = newValue } }
     }
     private let client = ChatAppsClient()
-
-    /// The accounts and the people, read when the agent's chat first opens (`PagePrefetch`).
-    static let prefetch = PagePrefetch(agent: { "channels.accounts.\($0)" }, feature: ChatApps.feature) { hub, database, _ in
-        try await ChatAppsClient().read(hub: hub, database: database)
-    }
-    static let peoplePrefetch = PagePrefetch(agent: { "channels.people.\($0)" }, feature: ChatApps.peopleFeature) { hub, database, _ in
-        try await ChatAppsClient().people(hub: hub, database: database)
-    }
 
     private var name: String { ChatAppWords.agent(agent) }
     private var canChange: Bool { store.writesNow && busy == nil && snapshot?.sha256 != nil }
@@ -400,16 +386,30 @@ struct ChannelsPage: View {
     /// The accounts, and the people with them: a first reading draws its cards whole, in one frame.
     private func read(since start: ContinuousClock.Instant? = nil) async {
         guard let db = store.state?.db else { return }
-        let hub = store.hub, first = snapshot == nil
+        let hub = store.hub, first = snapshot == nil, accountsStart = store.pageReadStart()
         var accounts: ChatAppsSnapshot?, reason: String?
-        do { accounts = try await client.read(hub: hub, database: db) } catch { reason = ChatAppWords.reason(error) }
-        let readPeople = peopleOffered && (accounts ?? snapshot) != nil ? try? await client.people(hub: hub, database: db) : nil
+        do { accounts = try await AgentPage.readAccounts(store, hub: hub, database: db, from: accountsStart) }
+        catch { reason = ChatAppWords.reason(error) }
+        guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
+        let peopleStart = store.pageReadStart()
+        var readPeople: PeopleReading<PeopleSnapshot>?
+        if peopleOffered, (accounts ?? snapshot) != nil {
+            // The channel client has a longer deadline than the People page. Share its accepted
+            // result, and let HubReads join only requests with the same time limits.
+            let people = try? await store.read(PeoplePage.peopleName + ".channels", from: peopleStart) { [client] in
+                try await client.people(hub: hub, database: db)
+            }
+            if let people { readPeople = .current(people, at: store.state?.time ?? Date().timeIntervalSince1970) }
+        }
         if first, let start { await store.settle(since: start) }
-        guard store.hub == hub, store.state?.db == db else { return }
+        guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
         if let accounts {
-            snapshot = accounts; readAt = Date(); readError = nil; failedSince = nil
-            onRead(accounts)
-        } else { readError = reason; failedSince = failedSince ?? .now }
-        if peopleOffered, let readPeople { people = readPeople }
+            if store.keep(accounts, as: AgentPage.channelsName, from: accountsStart) {
+                readError = nil; failedSince = nil
+            }
+        } else if store.acceptsPageRead(accountsStart, for: AgentPage.channelsName) {
+            readError = reason; failedSince = failedSince ?? .now
+        }
+        if peopleOffered, let readPeople { store.keep(readPeople, as: PeoplePage.peopleName, from: peopleStart) }
     }
 }

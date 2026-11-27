@@ -110,19 +110,18 @@ struct SecretsPage: View {
     /// opens in a chat, on Needs you or over a job's card. It reads as the page does, and Done, Esc and a click outside
     /// close it with nothing else changed: he stays where he was. nil: the page.
     var card: SecretCard? = nil
-    /// The readings are the store's (`FleetStore.reading`), the fleet's and each agent's under its own name: the list he
-    /// saw last shows in the first frame when he comes back, and the read that starts then changes only what changed.
+    /// Every agent draws its own entries from this fleet's sign-in catalog.
     /// The team it is made from is kept for the other pages that draw it too ("team.snapshot").
     private var reading: LoginReading? {
-        get { store.reading(readingName) } nonmutating set { store.keep(newValue, as: readingName) }
+        store.reading(Self.readingName)
     }
     /// The name of that reading in the store.
-    private var readingName: String { "secrets.logins.\(agent ?? "fleet")" }
+    nonisolated static let readingName = "secrets.logins.fleet"
     /// `GET /ui/resources` (owner feature `resource_grants`): who may give each secret, with the version a change of
     /// it goes against. nil on a hub without it, and then no secret shows the row. It is the reading of the MCPs and
     /// Apps lists (`AccessSettings.name`).
     private var resources: ResourceList? {
-        get { store.reading(AccessSettings.name(agent)) } nonmutating set { store.keep(newValue, as: AccessSettings.name(agent)) }
+        store.reading(AccessSettings.readingName)
     }
     /// When the first of the reads that failed in a row failed, or nil while the last read answered: `reading` is then
     /// the last good one, or nil. One break of them says nothing (`FleetStore.pageReadingIsOld`).
@@ -160,13 +159,10 @@ struct SecretsPage: View {
 
     private var offered: Bool { SecretEntryView.isOffered(by: store) }
 
-    /// The catalog and its use, read before the page first opens (`PagePrefetch`): the fleet's, and each agent's.
-    static let prefetch = PagePrefetch("secrets.logins.fleet", feature: SecretEntryView.feature) { try await loginReading(hub: $0, database: $1) }
-    static let agentPrefetch = PagePrefetch(agent: { "secrets.logins.\($0)" }, feature: SecretEntryView.feature) { hub, database, _ in
-        try await loginReading(hub: hub, database: database)
-    }
+    /// The catalog and its use, read before the page first opens (`PagePrefetch`): shared by all agents.
+    static let prefetch = PagePrefetch(readingName, feature: SecretEntryView.feature, sharedAcrossAgents: true) { try await loginReading(hub: $0, database: $1) }
     /// The reading the page makes itself (`read`): team.json, and the profiles where the hub has them.
-    private nonisolated static func loginReading(hub: URL, database: String) async throws -> LoginReading {
+    nonisolated static func loginReading(hub: URL, database: String) async throws -> LoginReading {
         let client = HubClient()
         let team = try await client.team(hub: hub, database: database)
         let profiles = try? await client.profiles(hub: hub, database: database)
@@ -627,7 +623,7 @@ struct SecretsPage: View {
         // A list that the hub gave in a form this app cannot read is no list (`hasCatalog`), never an empty one: else the
         // card would close as gone, with what the owner typed in Value.
         let shows = SecretsList.card(reference, in: reading.flatMap { $0.hasCatalog ? $0.catalog : nil },
-                                     fresh: !store.readingWaits(readingName, since: opened))
+                                     fresh: !store.readingWaits(Self.readingName, since: opened))
         let entry = shows.entry
         return VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
@@ -1037,26 +1033,29 @@ struct SecretsPage: View {
     @discardableResult private func read(since start: ContinuousClock.Instant? = nil) async -> Bool {
         guard offered, store.isFresh, let database = store.state?.db else { return false }
         let hub = store.hub, client = HubClient(), withProfiles = store.state?.ui_features?.contains("profiles") == true
-        let first = reading == nil
+        let first = reading == nil, request = store.pageReadStart()
         guard let team = try? await client.team(hub: hub, database: database) else {
             if first, let start { await store.settle(since: start) }
-            if !Task.isCancelled, store.hub == hub, store.state?.db == database {
+            if !Task.isCancelled, store.acceptsPageRead(request, for: Self.readingName) {
                 if failedSince == nil { failedSince = .now }
             }
             return false
         }
         let profiles = withProfiles ? try? await client.profiles(hub: hub, database: database) : nil
         // A failed read of who may give them keeps the last one: the catalog is what this page is about.
+        let resourceRequest = store.pageReadStart()
         let standings = store.state?.ui_features?.contains(ResourceList.feature) == true
-            ? try? await AccessSettings.readResources(store, agent: agent, hub: hub, database: database) : nil
+            ? try? await AccessSettings.readResources(store, hub: hub, database: database, from: resourceRequest) : nil
         guard !Task.isCancelled else { return false }
         if first, let start { await store.settle(since: start) }
         guard store.hub == hub, store.state?.db == database else { return false }
-        reading = LoginReading(team: team, profiles: profiles?.profiles); failedSince = nil
+        if let standings { store.keep(standings, as: AccessSettings.readingName, from: resourceRequest) }
+        guard !Task.isCancelled, store.keep(LoginReading(team: team, profiles: profiles?.profiles),
+                                            as: Self.readingName, from: request) else { return false }
+        failedSince = nil
         // A tick of a secret that left the catalog goes, so the bar never counts one that is no longer there.
         if agent == nil { bar.ticked.formIntersection((team.logins ?? [:]).keys) }
         store.keep(team, as: "team.snapshot")
-        if let standings { resources = standings }
         return true
     }
 }

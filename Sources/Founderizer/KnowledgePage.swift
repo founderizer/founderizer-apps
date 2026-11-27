@@ -32,10 +32,9 @@ struct KnowledgePage: View {
     /// The file whose card shows over the page.
     @State private var carded: KnowledgeCardID?
     @State private var filter = ""
-    /// The agents' profiles, for the chips. nil: not read yet. The store's (`FleetStore.reading`), the fleet's page's and
-    /// each agent's under its own name, so the page he saw last shows in its first frame when he comes back.
+    /// The fleet's profiles for the chips. Each agent page filters this same response.
     private var profiles: [AgentProfile]? {
-        get { store.reading("knowledge.profiles.\(scope)") } nonmutating set { store.keep(newValue, as: "knowledge.profiles.\(scope)") }
+        store.reading(Self.profilesName)
     }
     @State private var addingURL = false
     @State private var address = ""
@@ -89,11 +88,9 @@ struct KnowledgePage: View {
     /// The most text that the reader shows: the Markdown view makes every block at once.
     private static let readerLimit = 100_000
     /// The profiles, read before the page first opens (`PagePrefetch`): the fleet's page's, and each agent's.
-    static let prefetch = PagePrefetch("knowledge.profiles.fleet", feature: "profiles") {
+    nonisolated static let profilesName = "knowledge.profiles.fleet"
+    static let prefetch = PagePrefetch(profilesName, feature: "profiles", sharedAcrossAgents: true) {
         try await HubClient().profiles(hub: $0, database: $1).profiles
-    }
-    static let agentPrefetch = PagePrefetch(agent: { "knowledge.profiles.\($0)" }, feature: "profiles") { hub, database, _ in
-        try await HubClient().profiles(hub: hub, database: database).profiles
     }
 
     private var scope: String { agent ?? "fleet" }
@@ -900,12 +897,13 @@ struct KnowledgePage: View {
 
     @discardableResult private func readProfiles(since start: ContinuousClock.Instant? = nil) async -> Bool {
         guard store.isFresh, store.state?.ui_features?.contains("profiles") == true, let db = store.state?.db else { return false }
-        let hub = store.hub, first = profiles == nil
-        let list = try? await HubClient().profiles(hub: hub, database: db)
+        let hub = store.hub, first = profiles == nil, request = store.pageReadStart()
+        let profiles = try? await store.read(Self.profilesName, from: request) {
+            try await HubClient().profiles(hub: hub, database: db).profiles
+        }
         if first, let start { await store.settle(since: start) }
-        guard let list, store.hub == hub, store.state?.db == db else { return false }
-        profiles = list.profiles
-        return true
+        guard !Task.isCancelled, let profiles else { return false }
+        return store.keep(profiles, as: Self.profilesName, from: request)
     }
 }
 

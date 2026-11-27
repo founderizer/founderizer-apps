@@ -69,7 +69,7 @@ struct PersonAccessPage: View {
     private var gone: Bool { !offered || scope == nil }
     /// The agent's own Can use, or the fleet's reading of the same resources until the agent's own comes.
     private var reading: ResourceList? {
-        store.reading(AccessSettings.name(agent)) ?? store.reading(AccessSettings.name(nil))
+        store.reading(AccessSettings.readingName)
     }
     /// When the first of the agent's reads of them that failed in a row failed (`AccessSettings.readOnce`).
     private var failedSince: ContinuousClock.Instant? { store.reading(AccessSettings.name(agent) + ".failedSince") }

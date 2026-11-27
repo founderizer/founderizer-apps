@@ -1,6 +1,25 @@
 import FleetCore
 import SwiftUI
 
+/// The fleet and the last answered local write when a page began its read.
+@MainActor final class PageReadStart {
+    fileprivate let context: String
+    fileprivate let writes: Int
+    fileprivate var at: ContinuousClock.Instant
+
+    fileprivate init(context: String, writes: Int, at: ContinuousClock.Instant) {
+        self.context = context
+        self.writes = writes
+        self.at = at
+    }
+}
+
+/// Every waiter gets the original request time, including when the read fails.
+private struct PageReply: Sendable {
+    let started: ContinuousClock.Instant
+    let result: Result<any Sendable, Error>
+}
+
 /// **What each page read last, kept by the store, so a page that opens again draws it in its first frame** and reads
 /// again at once.
 ///
@@ -18,6 +37,8 @@ import SwiftUI
         var value: Any?
         /// When it was kept.
         var at: ContinuousClock.Instant?
+        var started: ContinuousClock.Instant?
+        var answeredWrites: Int?
         /// The same reading, which a view reads with no watch (`FleetStore.quietReading`).
         @ObservationIgnored var quiet: (context: String, value: Any?) = ("", nil)
     }
@@ -25,7 +46,12 @@ import SwiftUI
     private var slots: [String: Slot] = [:]
     private var models: [String: AnyObject] = [:]
     /// The reads of a page reading that are on their way, by the reading's name and context (`FleetStore.read`).
-    fileprivate let reads = PageReads()
+    fileprivate let reads: PageReads
+
+    init(center: NotificationCenter) {
+        reads = PageReads(center: center)
+    }
+
     /// The hub generation, and the agents of it, whose readings were read before their pages opened.
     private var prefetched: Set<String> = []
     /// When the live readings were last asked for, and whether that round is on its way (`FleetStore.keepLive`).
@@ -39,12 +65,20 @@ import SwiftUI
         return slot.context == context ? slot.value as? Value : nil
     }
 
-    fileprivate func set(_ value: Any?, _ name: String, in context: String) {
+    fileprivate func set(_ value: Any?, _ name: String, in context: String, from start: PageReadStart? = nil) {
         let slot = slot(name)
         if slot.context != context { slot.context = context }
         slot.value = value
         slot.at = .now
+        slot.started = start?.at ?? slot.at
+        slot.answeredWrites = start?.writes
         slot.quiet = (context, value)
+    }
+
+    fileprivate func accepts(_ start: PageReadStart, for name: String, in context: String) -> Bool {
+        guard start.context == context, start.writes == reads.answeredWrites else { return false }
+        guard let slot = slots[name], slot.context == context, let previous = slot.started else { return true }
+        return previous <= start.at
     }
 
     fileprivate func quietValue<Value>(_ name: String, in context: String) -> Value? {
@@ -59,6 +93,13 @@ import SwiftUI
     fileprivate func kept(_ name: String, in context: String) -> ContinuousClock.Instant? {
         let slot = slot(name)
         return slot.context == context && slot.value != nil ? slot.at : nil
+    }
+
+    /// A first visit to a chat may reuse a fleet answer as recent as a normal page refresh.
+    fileprivate func canReuse(_ name: String, in context: String, at now: ContinuousClock.Instant) -> Bool {
+        guard let slot = slots[name], slot.context == context, slot.value != nil, let at = slot.at,
+              slot.answeredWrites == reads.answeredWrites else { return false }
+        return now - at < .seconds(LiveReadings.every)
     }
 
     /// True the first time it is asked for this hub generation (or this agent of it), so its readings are read once.
@@ -106,6 +147,29 @@ extension FleetStore {
         if let releases = value as? ReleaseState { keepForNextLaunch(releases, as: "releases") }
     }
 
+    func pageReadStart() -> PageReadStart {
+        PageReadStart(context: readingContext, writes: readings.reads.answeredWrites, at: .now)
+    }
+
+    func canReuseFleetReading(_ name: String, at now: ContinuousClock.Instant = .now) -> Bool {
+        readings.canReuse(name, in: readingContext, at: now)
+    }
+
+    func acceptsPageRead(_ start: PageReadStart, for name: String) -> Bool {
+        !Task.isCancelled && readings.accepts(start, for: name, in: readingContext)
+    }
+
+    /// A reply to a fleet read cannot replace a newer reply or the result of a save.
+    @discardableResult func keep(_ value: any Sendable, as name: String, from start: PageReadStart) -> Bool {
+        guard acceptsPageRead(start, for: name) else { return false }
+        readings.set(value, name, in: readingContext, from: start)
+        return true
+    }
+
+    func readingDate(_ name: String) -> Date? {
+        readings.age(name, in: readingContext).map { Date().addingTimeInterval(-Self.seconds($0)) }
+    }
+
     /// **The page shows a kept reading that this visit has not read again yet.** A page that opened at `opened`
     /// marks such a reading as its last one once a second has gone by (`Held`): until then its read is on its way and
     /// the reading is not old yet, so no warning shows for the 200 ms that read takes.
@@ -141,9 +205,16 @@ extension FleetStore {
     /// `name` reads it through here, and a read that is asked for while one is on its way gets that one's answer.
     /// Settings › Apps draws one reading of the resources in four lists, and each list read it for itself: eight reads
     /// of `/ui/resources` in 0.6 s as the page opened. Nothing is kept here; the caller keeps what it read.
-    func read<Value: Sendable>(_ name: String, _ read: @escaping @Sendable () async throws -> Value) async throws -> Value {
+    func read<Value: Sendable>(_ name: String, from start: PageReadStart? = nil, _ read: @escaping @Sendable () async throws -> Value) async throws -> Value {
         // Never one that began before a write of this Mac was answered (`PageReads`, review A7).
-        try await readings.reads.read(readingContext + "\n" + name, read)
+        let origin = start?.at ?? .now
+        let reply = try await readings.reads.read(readingContext + "\n" + name) {
+            do { return PageReply(started: origin, result: .success(try await read())) }
+            catch { return PageReply(started: origin, result: .failure(error)) }
+        }
+        if let start { start.at = min(start.at, reply.started) }
+        guard let value = try reply.result.get() as? Value else { throw HubError.invalidResponse }
+        return value
     }
 
     /// The model of a page that reads through a model of its own (`UpdatesModel`), kept as its readings are.
@@ -230,14 +301,16 @@ struct PagePrefetch: Sendable {
     /// **Read on its own, beside the others** (review A12, fix round 2): a reading of more than the hub — our update
     /// channel, with its 20-second limit — that would hold back every page read after it in the one-at-a-time queue.
     let apart: Bool
+    let sharedAcrossAgents: Bool
     let read: @Sendable (_ hub: URL, _ database: String, _ agent: String) async throws -> any Sendable
 
     /// A reading of the whole fleet.
-    init(_ name: String, feature: String? = nil, apart: Bool = false,
+    init(_ name: String, feature: String? = nil, apart: Bool = false, sharedAcrossAgents: Bool = false,
          read: @escaping @Sendable (URL, String) async throws -> any Sendable) {
         self.name = { _ in name }
         self.feature = feature
         self.apart = apart
+        self.sharedAcrossAgents = sharedAcrossAgents
         self.read = { hub, database, _ in try await read(hub, database) }
     }
 
@@ -247,6 +320,7 @@ struct PagePrefetch: Sendable {
         self.name = name
         self.feature = feature
         self.apart = false
+        self.sharedAcrossAgents = false
         self.read = read
     }
 }
@@ -269,9 +343,8 @@ extension PagePrefetch {
     ]
     /// The readings of an agent's sections, read when its chat first opens.
     @MainActor static let agent: [PagePrefetch] = AgentMemorySection.prefetch + [
-        PeoplePage.agentPrefetch, ConversationsPage.prefetch, AgentMessagesReading.prefetch,
-        KnowledgePage.agentPrefetch, AccessSettings.agentPrefetch,
-        ChannelsPage.prefetch, ChannelsPage.peoplePrefetch, SecretsPage.agentPrefetch, KPIsTab.prefetch,
+        PeoplePage.prefetch, ConversationsPage.prefetch, AgentMessagesReading.prefetch,
+        KnowledgePage.prefetch, AccessSettings.prefetch, AgentPage.prefetch, SecretsPage.prefetch, KPIsTab.prefetch,
     ]
 }
 
@@ -288,7 +361,7 @@ extension FleetStore {
     /// hub, where one read takes 0.12 to 0.37 s, and an agent's 9 came after them. A page that he opened in those
     /// seconds drew its heading alone and then its groups one after the other (Servers: the list at 441 ms, the
     /// devices at 617 ms).
-    func prefetch(fleet: [PagePrefetch], agent: [PagePrefetch]) {
+    func prefetch(fleet: [PagePrefetch], agent: [PagePrefetch], changedAgent: Bool = false) {
         // Only on a hub that answered this launch: never on the reading kept from the last launch alone, which is
         // current while the launch's first read is on its way (`isFresh`).
         guard let state, isFresh, lastSuccess != nil else { return }
@@ -297,12 +370,18 @@ extension FleetStore {
         if readings.firstPrefetch(context) {
             due += fleet.map { ($0, "") }
         }
-        if let name = destination.agentName, readings.firstPrefetch(context + "\n" + name) {
-            // The agent whose page he opened comes first: its sections are the ones he opens next.
-            due = agent.map { ($0, name) } + due
+        if let name = destination.agentName {
+            let first = readings.firstPrefetch(context + "\n" + name)
+            if first || changedAgent {
+                let items = first ? agent : agent.filter(\.sharedAcrossAgents)
+                due = items.map { ($0, name) } + due
+            }
         }
         let features = state.ui_features ?? []
-        due = due.filter { item, _ in item.feature.map(features.contains) ?? true }
+        var scheduled: Set<String> = []
+        due = due.filter { item, agent in
+            (item.feature.map(features.contains) ?? true) && scheduled.insert(item.name(agent)).inserted
+        }
         guard !due.isEmpty else { return }
         for (item, agent) in due where item.apart {
             Task { [weak self] in _ = await self?.prefetch(item, agent: agent, hub: hub, database: database) }
@@ -373,13 +452,24 @@ extension FleetStore {
 
     /// Reads one reading of `item` before its page opens, and keeps it unless the page has one by then. False once
     /// the hub or its generation changed.
-    private func prefetch(_ item: PagePrefetch, agent: String, hub: URL, database: String) async -> Bool {
+    func prefetch(_ item: PagePrefetch, agent: String, hub: URL, database: String) async -> Bool {
         guard self.hub == hub, state?.db == database else { return false }
         let name = item.name(agent)
-        if reading(name) as Any? != nil { return true }
+        if item.sharedAcrossAgents {
+            if canReuseFleetReading(name) { return true }
+            let start = pageReadStart()
+            // Two chats opened in quick succession can ask while the first read is still on its way.
+            let value: any Sendable
+            do {
+                value = try await read(name, from: start) { try await item.read(hub, database, agent) }
+            } catch { return true }
+            guard self.hub == hub, state?.db == database else { return false }
+            // An answer that predates a save, or a newer reading from a visible page, is obsolete.
+            keep(value, as: name, from: start)
+            return true
+        }
+        if readingKept(name) != nil { return true }
         guard let value = try? await item.read(hub, database, agent) else {
-            // A read that fails takes the reading kept from the last launch under its name with it: the health and the
-            // releases (`keptReadingFailed`; reviews A and B of 30 October 2026).
             if self.hub == hub, state?.db == database { keptReadingFailed(name) }
             return true
         }

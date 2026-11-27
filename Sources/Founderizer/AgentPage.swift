@@ -114,13 +114,20 @@ struct AgentPage: View {
     let open: (Destination) -> Void
     /// The accounts, for the Channels dot. They are the store's (`FleetStore.reading`), one reading of the whole fleet:
     /// the dot is there in the first frame when he comes back.
-    private var channels: ChatAppsSnapshot? {
-        get { store.reading("channels.snapshot") } nonmutating set { store.keep(newValue, as: "channels.snapshot") }
-    }
+    private var channels: ChatAppsSnapshot? { store.reading(Self.channelsName) }
 
     private var channelsOffered: Bool { store.state?.ui_features?.contains(ChatApps.feature) == true }
     /// The accounts, read before the agent's page first opens (`PagePrefetch`).
-    static let prefetch = PagePrefetch("channels.snapshot", feature: ChatApps.feature) { try await ChatAppsClient().read(hub: $0, database: $1) }
+    nonisolated static let channelsName = "channels.snapshot"
+    private nonisolated static let accountsClient = ChatAppsClient()
+    static let prefetch = PagePrefetch(channelsName, feature: ChatApps.feature, sharedAcrossAgents: true) {
+        try await accountsClient.read(hub: $0, database: $1)
+    }
+
+    static func readAccounts(_ store: FleetStore, hub: URL, database: String, from start: PageReadStart) async throws -> ChatAppsSnapshot {
+        guard store.hub == hub, store.state?.db == database else { throw CancellationError() }
+        return try await store.read(channelsName, from: start) { try await accountsClient.read(hub: hub, database: database) }
+    }
 
     var body: some View {
         // Its sections keep their identity across a generation: an owner write gives the fleet a new one, and a
@@ -163,9 +170,9 @@ struct AgentPage: View {
     private func readChannels() async {
         while !Task.isCancelled {
             if channelsOffered, store.isFresh, let db = store.state?.db {
-                let hub = store.hub
-                if let fresh = try? await ChatAppsClient().read(hub: hub, database: db), store.hub == hub, store.state?.db == db {
-                    channels = fresh
+                let start = store.pageReadStart()
+                if let fresh = try? await Self.readAccounts(store, hub: store.hub, database: db, from: start), !Task.isCancelled {
+                    store.keep(fresh, as: Self.channelsName, from: start)
                 }
             }
             do { try await store.nap(15) } catch { return }
@@ -186,7 +193,7 @@ struct AgentPage: View {
         case .behaviour: BehaviourView(store: store, team: team, agent: agent, open: open)
         case .tasks: ActivityBoard(store: store, scope: agent)
         case .kpis: KPIsTab(store: store, agent: agent)
-        case .people: AgentPeoplePart(store: store, agent: agent) { channels = $0 }
+        case .people: AgentPeoplePart(store: store, agent: agent)
         case .canUse: AgentCanUsePart(store: store, agent: agent)
         case .capabilities: AgentCapabilitiesPart(store: store, agent: agent)
         }
@@ -237,8 +244,6 @@ struct AgentPage: View {
 struct AgentPeoplePart: View {
     @Bindable var store: FleetStore
     let agent: String
-    /// Each reading of the accounts, for the People dot of the agent's sidebar.
-    var onChannels: (ChatAppsSnapshot) -> Void = { _ in }
     @State private var channelSteps: ChannelSetup?
     @State private var route: [PeoplePage.Route] = []
     @State private var conversation: Int?
@@ -250,7 +255,7 @@ struct AgentPeoplePart: View {
 
     var body: some View {
         if channelSteps != nil {
-            ChannelsPage(store: store, agent: agent, onRead: onChannels, grouped: true, setup: $channelSteps)
+            ChannelsPage(store: store, agent: agent, grouped: true, setup: $channelSteps)
         } else if !route.isEmpty {
             PeoplePage(store: store, agent: agent, grouped: true, route: $route)
         } else if let id = conversation {
@@ -260,7 +265,7 @@ struct AgentPeoplePart: View {
         } else {
             FleetPage(AgentTab.people.heading) {
                 if features.contains(ChatApps.feature) {
-                    ChannelsPage(store: store, agent: agent, onRead: onChannels, grouped: true, setup: $channelSteps)
+                    ChannelsPage(store: store, agent: agent, grouped: true, setup: $channelSteps)
                 }
                 if worker && features.contains(People.feature) {
                     PeoplePage(store: store, agent: agent, grouped: true, route: $route)

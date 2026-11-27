@@ -1506,19 +1506,15 @@ struct NeedRequestCard: View {
     private func readKeyList() async {
         guard need.isOpen, let replaced = need.secret?.replaces, SecretEntryView.isOffered(by: store),
               let database = store.state?.db else { return }
-        let name = "secrets.logins.fleet", hub = store.hub
+        let name = SecretsPage.readingName, hub = store.hub
         let kept: LoginReading? = store.reading(name)
         let once = "\(hub.absoluteString)\n\(database)\n\(replaced)"
         guard kept?.catalog[replaced] == nil, Self.keyListReads.insert(once).inserted else { return }
-        let before = store.readingKept(name), reader = SecretsPage.prefetch.read
-        // (`prefetch.read` gives any reading; this one is the list's)
-        let list = try? await store.read(name) { () async throws -> LoginReading? in
-            try await reader(hub, database, "") as? LoginReading
-        }
+        let request = store.pageReadStart()
+        let list = try? await store.read(name, from: request) { try await SecretsPage.loginReading(hub: hub, database: database) }
         // a read that a card's leave cut off, or that failed, may come again at the card's next appearance
         guard let list, !Task.isCancelled else { Self.keyListReads.remove(once); return }
-        guard store.hub == hub, store.state?.db == database, store.readingKept(name) == before else { return }
-        store.keep(list, as: name)
+        if !store.keep(list, as: name, from: request) { Self.keyListReads.remove(once) }
     }
 
     /// The requests whose card read the secrets list for its key, by hub, generation and reference (`readKeyList`).
