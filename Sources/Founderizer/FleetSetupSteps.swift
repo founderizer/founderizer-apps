@@ -448,6 +448,11 @@ final class FleetCloudModel {
             made?(name, server.id)
             kept?.made(id: server.id, type: server.type, monthlyPrice: server.monthlyPrice, currency: server.currency)
             keep()
+            // F17's SP1: the hub's signed record of this server comes from this answer in memory, never from a file
+            // (`ServerMade.Fresh`). A first run's server has no hub yet: the first round of its fleet signs it.
+            if let hub, let record = ServerMade.Fields(machine: name.lowercased(), provider: provider, id: server.id, use: use) {
+                ServerMade.Fresh.add(record, hub: hub)
+            }
             stage = .joining
             reached = .joining
             let joinEnd = try await CloudServers.joined(name, since: Date(), status: outside.network,

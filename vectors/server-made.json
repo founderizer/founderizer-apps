@@ -1,0 +1,109 @@
+{
+  "about": "One record server-made (F17 design A, SP1): the canonical statement that the owner key of the client that made the server signs (ECDSA P-256 over SHA-256 of its UTF-8 bytes, DER, standard base64, which vault.owner_signed checks; the nonce is RFC 6979's), and by, the signer's name in a record: SHA-256 of the key's 65 bytes, lower-case hex. A reader refuses each refused signature and each refused statement (another fleet's too, with fleet as the reader's), and a record by another key.",
+  "made_by": "app/vectors/makers/server_made.py",
+  "fleet": "0123456789abcdef",
+  "private_scalar_hex": "3bfcab566ce12f9f7c6cc7979d926e9c6c7a7b47a893d9065fb4481f8f8f1ce0",
+  "public_key": "BGiKyhvIgQmzeXzTYKF8nGSz8lxQeqknzg+eDOAEA5A7RC0h7h8P48Xr2npl3BEIFMU4Cf+G5tlITggsFZbcvuc=",
+  "by": "adceb4d6afe77c717489fae930600222424b765a451f58a4b11f825b75104624",
+  "other_public_key": "BJOQhbjRAQmr2pw/dlPRMe9h+BIHU89D57SXzEy7texG4i40nE7/FQ6FfyQSlaM2Z4e/r5iJn3XI/nDQOuxSgtA=",
+  "fields": {
+    "v": 1,
+    "kind": "server-made",
+    "fleet": "0123456789abcdef",
+    "machine": "worker-3",
+    "provider": "hetzner",
+    "id": "58213977",
+    "use": "agent",
+    "at": 1790000000
+  },
+  "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}",
+  "signature": "MEUCIHozZVUBdg1DEfXHYUFm3fdEZsOXBWS7fMKV+ejGBbH5AiEAjysqLUo72qoYkc5Wu2cL12eLxI3Wzp5WPrJUkFmdrLM=",
+  "refused_signatures": [
+    {
+      "name": "the signature of another server's statement",
+      "signature": "MEQCIGbH6fw3RKjH6/zAX9zYIwh/k0Sc7nObSgghPrZauD4EAiARjvj1WcnMQRuz88PnEI4pljl8CSDEsI1GwWKuuLNE6Q=="
+    },
+    {
+      "name": "r with a zero byte in front that it does not need",
+      "signature": "MEYCIQB6M2VVAXYNQxH1x2FBZt33RGbDlwVku3zClfnoxgWx+QIhAI8rKi1KO9qqGJHOVrtnC9dni8SN1s6eVj6yVJBZnayz"
+    },
+    {
+      "name": "a byte after the sequence",
+      "signature": "MEUCIHozZVUBdg1DEfXHYUFm3fdEZsOXBWS7fMKV+ejGBbH5AiEAjysqLUo72qoYkc5Wu2cL12eLxI3Wzp5WPrJUkFmdrLMA"
+    },
+    {
+      "name": "base64 without its padding",
+      "signature": "MEUCIHozZVUBdg1DEfXHYUFm3fdEZsOXBWS7fMKV+ejGBbH5AiEAjysqLUo72qoYkc5Wu2cL12eLxI3Wzp5WPrJUkFmdrLM"
+    },
+    {
+      "name": "r and s side by side, not DER",
+      "signature": "ejNlVQF2DUMR9cdhQWbd90Rmw5cFZLt8wpX56MYFsfmPKyotSjvaqhiRzla7ZwvXZ4vEjdbOnlY+slSQWZ2ssw=="
+    }
+  ],
+  "refused_statements": [
+    {
+      "name": "another fleet",
+      "statement": "{\"at\":1790000000,\"fleet\":\"fedcba9876543210\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "another kind",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"owner-device\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "another version",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":2}"
+    },
+    {
+      "name": "a field more",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"project\":\"example\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "no use",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"v\":1}"
+    },
+    {
+      "name": "a provider that the app does not rent at",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"aws\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "a use that is neither hub nor agent",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"door\",\"v\":1}"
+    },
+    {
+      "name": "a name in capitals",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"Worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "an id with a slash",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977/1\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "the time as text",
+      "statement": "{\"at\":\"1790000000\",\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "a time before 1970",
+      "statement": "{\"at\":-1,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "the version as true",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":true}"
+    },
+    {
+      "name": "the keys out of their order",
+      "statement": "{\"v\":1,\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\"}"
+    },
+    {
+      "name": "a space after a colon",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\": \"agent\",\"v\":1}"
+    },
+    {
+      "name": "a key twice",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"worker-3\",\"machine\":\"worker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    },
+    {
+      "name": "an escape for a plain letter",
+      "statement": "{\"at\":1790000000,\"fleet\":\"0123456789abcdef\",\"id\":\"58213977\",\"kind\":\"server-made\",\"machine\":\"\\u0077orker-3\",\"provider\":\"hetzner\",\"use\":\"agent\",\"v\":1}"
+    }
+  ]
+}

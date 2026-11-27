@@ -120,10 +120,10 @@ final class AddServerEngine {
 
     /// **The fleet's servers whose install this Mac saw end**, by name in lower case: the address that the install
     /// reached is the address that the hub has for the server now (`InstallEnds`). A new server that took the name of
-    /// a removed one has another address, and is not one of them.
+    /// a removed one has another address, and is not one of them. With the hub's mark of another client's install
+    /// (F17's SP1), at the address that the hub has now too.
     static func finished(_ list: ServerList?, ended: [String: String]) -> Set<String> {
-        Set((list?.servers ?? []).filter { $0.address != nil && ended[$0.name.lowercased()] == $0.address }
-            .map { $0.name.lowercased() })
+        InstallEnds.finished(list?.servers ?? [], ended: ended)
     }
 
     /// The servers of an account's list that this Mac made for this hub, by name in lower case (`MadeServers.holds`),

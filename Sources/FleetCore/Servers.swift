@@ -129,6 +129,11 @@ public struct ServerEntry: Decodable, Identifiable, Sendable {
     /// it. Add agent offers its Other models card only for a server that has them, so it shows no card that the hub
     /// would refuse (spec 9.4).
     public let model_providers: [String]?
+    /// **The address that a client's install of this server reached at its last step** (F17's SP1, feature
+    /// `server_made`), while the server is at that address; nil from a hub before it, and for a server whose install no
+    /// client saw end. A plain mark that proves nothing: "Use this server" reads it beside this Mac's own
+    /// (`InstallEnds`), and nothing else does.
+    public let install_ended: String?
     public var id: String { name }
     public var isMac: Bool { kind == "mac" }
 

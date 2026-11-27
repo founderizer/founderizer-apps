@@ -712,6 +712,8 @@ struct StartAgainTests {
         defaults.set([mine, theirs], forKey: "hubsAnswered")
         MadeServers.note("worker-2", id: "102", hub: hub, in: defaults)
         MadeServers.note("worker-2", id: "902", hub: other, in: defaults)
+        // The entries of the kept list (F17's SP1) go as the others do.
+        MadeServers.sweep(["worker-2": "102"], hub: hub, in: defaults)
         InstallEnds.note("worker-2", address: "100.64.0.9", hub: hub, in: defaults)
         InstallEnds.note("worker-2", address: "100.64.0.99", hub: other, in: defaults)
         for key in ["unplacedAgents", "addingAgents"] { defaults.set(["\(mine)|db1|manager", "\(theirs)|db9|manager"], forKey: key) }

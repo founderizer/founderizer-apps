@@ -40,6 +40,10 @@ enum KeptRecordsPlace {
 ///
 /// **A sign of change**: `changes` goes up at each write that changed a record, and each such write posts the record's
 /// `changed`, so a reader in this app knows when to read again without a look at the folder.
+///
+/// **A record can have a mark beside it, an empty file `<id>.swept`** (`sweep`, F17's SP1): the record, its file and
+/// every read of it stay as they are, so an older build of the app, which reads only `<id>.json`, has every record too;
+/// only `unswept` leaves a marked record out.
 public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
     /// The largest file that is read as a record: a record is about 2 KiB.
     public static var largestFile: Int { 64 * 1024 }
@@ -54,6 +58,8 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
     private var counted = 0
     /// The records whose last write did not reach the disk: each write tries them again.
     private var unsaved: Set<UUID> = []
+    /// The records with a mark beside them (`sweep`).
+    private var marked: Set<UUID> = []
 
     /// `keeps`: the newest records that stay; an older one goes with its file at the next write.
     public init(folder: URL, launch: String = AppLaunch.id, keeps: Int = 40) {
@@ -81,6 +87,26 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
         return Self.sorted(loaded().values).map { $0.runs && $0.launch != launch ? $0.cutOff() : $0 }
     }
 
+    /// The records of `all` with no mark beside them (`sweep`).
+    public func unswept() -> [Record] {
+        lock.lock(); defer { lock.unlock() }
+        return Self.sorted(loaded().values.filter { !marked.contains($0.id) })
+            .map { $0.runs && $0.launch != launch ? $0.cutOff() : $0 }
+    }
+
+    /// **These records get a mark beside them**: an empty file `<id>.swept`, and nothing else of a record changes, so
+    /// it counts and says no change. A record whose mark does not reach the disk stays in `unswept`.
+    public func sweep(_ ids: Set<UUID>) {
+        lock.lock(); defer { lock.unlock() }
+        let all = loaded()
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        for id in ids where all[id] != nil && !marked.contains(id) {
+            guard (try? Data().write(to: mark(id), options: .atomic)) != nil else { continue }
+            marked.insert(id)
+        }
+    }
+
     /// Keeps the record as it is now. A record that did not change writes nothing and counts nothing. Every record
     /// whose last write did not reach the disk is written again at each call, also at one that changes nothing; a
     /// write counts only when it changed a record.
@@ -94,7 +120,7 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
         let extra = Self.sorted(all.values).dropFirst(keeps).filter { !($0.runs && $0.launch == launch) }
         for old in extra where old.id != record.id {
             all[old.id] = nil
-            try? FileManager.default.removeItem(at: file(old.id))
+            removeFiles(old.id)
         }
         records = all
         if changed { counted += 1; unsaved.insert(record.id) }
@@ -116,7 +142,7 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
         for record in gone {
             all[record.id] = nil
             unsaved.remove(record.id)
-            try? FileManager.default.removeItem(at: file(record.id))
+            removeFiles(record.id)
         }
         records = all
         if !gone.isEmpty { counted += 1 }
@@ -129,6 +155,15 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
     }
 
     private func file(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString.lowercased()).json") }
+
+    /// The mark beside a record (`sweep`).
+    private func mark(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString.lowercased()).swept") }
+
+    /// With the lock held: the record's file goes, and its mark.
+    private func removeFiles(_ id: UUID) {
+        for place in [file(id), mark(id)] { try? FileManager.default.removeItem(at: place) }
+        marked.remove(id)
+    }
 
     /// With the lock held: the records of the folder, read at the first call. A file that is no record of this
     /// version, that is larger than a record can be, or that is no regular file (`bytes`), is passed over and stays.
@@ -143,6 +178,12 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
                   name == "\(record.id.uuidString.lowercased()).json" else { continue }
             found[record.id] = record
         }
+        // The marks: by their names alone, of a record that the folder holds. A mark is an empty file.
+        let ids = Set(found.keys.map { $0.uuidString.lowercased() })
+        marked = Set(names.compactMap { name -> UUID? in
+            guard name.hasSuffix(".swept"), ids.contains(String(name.dropLast(6))) else { return nil }
+            return UUID(uuidString: String(name.dropLast(6)))
+        })
         records = found
         return found
     }

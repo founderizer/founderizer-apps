@@ -12,9 +12,12 @@ import Foundation
 /// So each record that did not end in a join and that did not leave nothing (`isUnjoined`) is a server that can stand
 /// at its provider.
 ///
-/// The server's name and the provider's id stay on this Mac, for the owner's own eyes. A reader for another program
-/// gives the fixed names, the counts and the times, and never `name`, `serverID`, `hub` or `id`. The record stands
-/// beside `MadeServers`, which `CloudExisting.reuse` reads and which stays as it is.
+/// The record itself stays on this Mac. Since F17's SP1 the hub keeps a signed copy of what it says of the server (its
+/// name, its provider, the provider's id and its use; `ServerMade`), for the fleet's other devices and later its
+/// keeper; nothing else of it leaves this Mac. A reader for another program (`OwnerSetupDiagnosis`) still gives the
+/// fixed names, the counts and the times, and never `name`, `serverID`, `hub` or `id`. The record stands beside
+/// `MadeServers`, which `CloudExisting.reuse` reads; each can have a mark beside it (`KeptRecords.sweep`,
+/// `MadeServers.sweep`), which changes no read but the sweep's.
 public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
     /// The stage that the try reached (`FleetCloudModel.Stage`, the two of a build).
     public enum Stage: String, Codable, CaseIterable, Sendable {

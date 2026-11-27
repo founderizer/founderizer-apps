@@ -340,7 +340,9 @@ public struct FleetKeychainItem: Sendable {
 
 /// **Where the owner key is kept** (service `com.founderizer.owner-key`, account the fleet's id). For an enclave key
 /// the item holds the chip's own wrapped form (`dataRepresentation`), which opens on no other Mac; for a software key,
-/// the key itself. Nothing but the central vault's install, its recovery key and its pins reads it.
+/// the key itself. Only the central vault's install, its recovery key and its pins read it, and the sweep of the
+/// server records (F17's SP1, `ServerMade.sweep`), which signs with it in the background: at most one round a minute,
+/// until a round did all that it had in this start of the app. The sweep writes nothing to the Keychain.
 public enum OwnerKeychain {
     public static let item = FleetKeychainItem(service: "com.founderizer.owner-key", label: "owner key")
 

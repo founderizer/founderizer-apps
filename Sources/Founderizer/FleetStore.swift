@@ -316,6 +316,16 @@ final class FleetStore {
         return model
     }
 
+    /// The servers that this Mac made, to the hub as records that its owner key signed (F17's SP1): one for each hub
+    /// address.
+    @ObservationIgnored private var madeModels: [URL: ServerMadeModel] = [:]
+    func madeModel() -> ServerMadeModel {
+        if let model = madeModels[hub] { return model }
+        let model = ServerMadeModel(hub: hub)
+        madeModels[hub] = model
+        return model
+    }
+
     /// The door's access file of this hub (owner feature `server_access`), kept by itself: one for each hub address.
     @ObservationIgnored private var doorModels: [URL: DoorSyncModel] = [:]
     func doorModel() -> DoorSyncModel {
@@ -2325,6 +2335,8 @@ final class FleetStore {
                     self.accessModel().tick(store: self)
                     // The join's hardening of each Linux server, put right again as root, with nothing on a page.
                     self.hardeningModel().tick(store: self)
+                    // The servers that this Mac made, to the hub as signed records, with nothing on a page.
+                    self.madeModel().tick(store: self)
                     // This app's crashes, to our own site while his Error reports switch is on, with nothing on a page.
                     ErrorReportsSender.shared.tick(store: self)
                     // The answer of the first run's page "Help improve Founderizer", to the hub, with nothing on a page.
@@ -2471,6 +2483,10 @@ final class FleetStore {
         // The models that this store keeps for this hub: none of them writes for it again.
         vaultModels[old] = nil; connectSwitches[old] = nil; accessModels[old] = nil; keyModels[old] = nil
         hardeningModels[old] = nil; doorModels[old] = nil
+        // What this Mac signed, and would sign, of the servers that it made for this fleet (F17's SP1).
+        madeModels[old]?.stop()
+        madeModels[old] = nil
+        ServerMade.forget(hub: old)
         checksModels = checksModels.filter { !$0.key.hasPrefix(bar) }
         if let waiting = pending, waiting.hub == old, !sending {
             try? outbox.clear(matching: waiting.requestID)

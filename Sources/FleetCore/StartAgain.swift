@@ -113,13 +113,9 @@ public enum StartAgain {
                 type: there.type.isEmpty ? build.type : there.type, monthlyPrice: build.monthlyPrice,
                 currency: build.currency, build: build))
         }
-        for (name, id) in made.sorted(by: { $0.key < $1.key }) where CloudServers.isID(id) && !built.contains(id) {
-            let found = listed.flatMap { provider, list in
-                list.filter { $0.id == id && $0.name.lowercased() == name }.map { (provider: provider, server: $0) }
-            }
-            guard found.count == 1, let one = found.first,
-                  taken.insert("\(one.provider.rawValue)|\(id)").inserted else { continue }
-            proven.servers.append(Server(provider: one.provider, serverID: id, name: one.server.name, use: .agent,
+        for one in listedMade(made, except: built, listed: listed) {
+            guard taken.insert("\(one.provider.rawValue)|\(one.server.id)").inserted else { continue }
+            proven.servers.append(Server(provider: one.provider, serverID: one.server.id, name: one.server.name, use: .agent,
                                          type: one.server.type.isEmpty ? nil : one.server.type))
         }
         proven.servers.sort { first, second in
@@ -129,6 +125,21 @@ public enum StartAgain {
             return (first.name, first.id) < (second.name, second.id)
         }
         return proven
+    }
+
+    /// **The entries of `MadeServers` that a provider's list proves**: an entry with an id that no build of `built`
+    /// names, when exactly one list of `listed` has a server with that id and that name. The entry names no provider,
+    /// so two lists that both have such a server prove nothing. In the entries' order by name. Also the rule by which
+    /// such an entry becomes a signed record of the hub (`ServerMade.kept`).
+    static func listedMade(_ made: [String: String], except built: Set<String>,
+                           listed: [CloudProvider: [CloudExisting]]) -> [(provider: CloudProvider, server: CloudExisting)] {
+        made.sorted(by: { $0.key < $1.key }).compactMap { name, id in
+            guard CloudServers.isID(id), !built.contains(id) else { return nil }
+            let found = listed.flatMap { provider, list in
+                list.filter { $0.id == id && $0.name.lowercased() == name }.map { (provider: provider, server: $0) }
+            }
+            return found.count == 1 ? found[0] : nil
+        }
     }
 
     /// A record of a build is this hub's own for the proof: it names this hub, and it has an id of the provider.

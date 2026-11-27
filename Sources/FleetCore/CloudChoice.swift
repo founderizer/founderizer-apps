@@ -66,9 +66,10 @@ extension CloudExisting {
     ///
     ///   - **It is in the fleet, free, and the hub offers it.** The hub offers a server from its first reading, which
     ///     comes right after the join and before the install's updates, firewall, hardening and checks. So a server
-    ///     whose install this Mac did not see end (`finished`) gets the same install again, which repeats only what is
-    ///     missing. One whose install it saw end goes to the agent that waits for its first server (`placing`), with
-    ///     no install; with no such agent it is a server of the fleet and nothing more.
+    ///     whose install no client saw end (`finished`: this Mac, or the hub's mark of another client,
+    ///     `InstallEnds.finished`) gets the same install again, which repeats only what is missing. One whose install
+    ///     was seen to end goes to the agent that waits for its first server (`placing`), with no install; with no such
+    ///     agent it is a server of the fleet and nothing more.
     ///   - **It joined the fleet and its server service never reported**: the same install again.
     ///   - **This Mac made it for this hub (`made`), the hub lists no server of its name or at its address, and it is
     ///     online on this Mac's network**: its install stopped before the join. The same install, at that address. The
@@ -205,26 +206,52 @@ public struct FleetKnown: Equatable, Sendable {
 /// kept by its name and, once its provider answered, by the provider's own id: names come back (a deleted `worker-3`
 /// gives its name to the next server, which can be another fleet's), and ids do not. Names and ids only, in the app's
 /// settings: no secret.
+///
+/// **An entry can have a mark beside it** (`sweep`, F17's SP1): a copy of it in a list of its own, as a build's record
+/// gets an empty file beside it (`KeptRecords`). The entry stays where it is, so an older build of the app has it too;
+/// only `unswept` leaves a marked entry out.
 public enum MadeServers {
     static let key = "serversMadeFor"
+    static let sweptKey = "serversMadeFor.swept"
 
     private static func prefix(_ hub: URL) -> String { "\(hub.absoluteString)|" }
 
     /// Keeps a server made for this hub: by its name right before its provider is asked for it (a call that fails can
-    /// leave the server there), and with the provider's id once the provider gave one.
+    /// leave the server there), and with the provider's id once the provider gave one. A mark of an earlier server of
+    /// that name goes, and one of this very entry stays.
     public static func note(_ name: String, id: String? = nil, hub: URL, in defaults: UserDefaults = AppDefaults.store) {
-        let name = name.lowercased(), start = "\(prefix(hub))\(name)"
-        var all = (defaults.stringArray(forKey: key) ?? []).filter { $0 != start && !$0.hasPrefix(start + "|") }
-        all.append(id.map { "\(start)|\($0)" } ?? start)
-        defaults.set(all, forKey: key)
+        let name = name.lowercased(), start = "\(prefix(hub))\(name)", entry = id.map { "\(start)|\($0)" } ?? start
+        func others(_ all: [String]) -> [String] { all.filter { $0 != start && !$0.hasPrefix(start + "|") } }
+        if let marks = defaults.stringArray(forKey: sweptKey) {
+            defaults.set(others(marks) + (marks.contains(entry) ? [entry] : []), forKey: sweptKey)
+        }
+        defaults.set(others(defaults.stringArray(forKey: key) ?? []) + [entry], forKey: key)
     }
 
     /// The servers made for this hub: each name in lower case with the provider's id, or an empty id where the provider
     /// gave none.
     public static func kept(hub: URL, in defaults: UserDefaults = AppDefaults.store) -> [String: String] {
+        entries(hub: hub, defaults) { _ in true }
+    }
+
+    /// The servers of `kept` with no mark beside them (`sweep`).
+    public static func unswept(hub: URL, in defaults: UserDefaults = AppDefaults.store) -> [String: String] {
+        let marks = Set(defaults.stringArray(forKey: sweptKey) ?? [])
+        return entries(hub: hub, defaults) { !marks.contains($0) }
+    }
+
+    /// These entries of this hub, name and id, get a mark beside them: nothing else of them changes.
+    public static func sweep(_ made: [String: String], hub: URL, in defaults: UserDefaults = AppDefaults.store) {
+        let wanted = Set(made.map { "\(prefix(hub))\($0.key)|\($0.value)" })
+        let marks = defaults.stringArray(forKey: sweptKey) ?? []
+        let new = (defaults.stringArray(forKey: key) ?? []).filter { wanted.contains($0) && !marks.contains($0) }
+        if !new.isEmpty { defaults.set(marks + new, forKey: sweptKey) }
+    }
+
+    private static func entries(hub: URL, _ defaults: UserDefaults, _ taken: (String) -> Bool) -> [String: String] {
         let prefix = prefix(hub)
         var kept: [String: String] = [:]
-        for entry in defaults.stringArray(forKey: key) ?? [] where entry.hasPrefix(prefix) {
+        for entry in defaults.stringArray(forKey: key) ?? [] where entry.hasPrefix(prefix) && taken(entry) {
             let parts = entry.dropFirst(prefix.count).split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
             guard let name = parts.first, !name.isEmpty else { continue }
             kept[String(name)] = parts.count > 1 ? String(parts[1]) : ""
@@ -232,10 +259,13 @@ public enum MadeServers {
         return kept
     }
 
-    /// Forgets the servers made for this hub: the app forgets that fleet ("Start again").
+    /// Forgets the servers made for this hub, and their marks: the app forgets that fleet ("Start again").
     public static func forget(hub: URL, in defaults: UserDefaults = AppDefaults.store) {
         let prefix = prefix(hub)
-        defaults.set((defaults.stringArray(forKey: key) ?? []).filter { !$0.hasPrefix(prefix) }, forKey: key)
+        for list in [key, sweptKey] {
+            guard let all = defaults.stringArray(forKey: list) else { continue }
+            defaults.set(all.filter { !$0.hasPrefix(prefix) }, forKey: list)
+        }
     }
 
     /// **The provider's ids of the hub's own servers among the builds of this Mac**, for Add server's list: since a
@@ -271,6 +301,15 @@ public enum InstallEnds {
         let prefix = "\(hub.absoluteString)|"
         let all = (defaults.dictionary(forKey: key) as? [String: String] ?? [:]).filter { !$0.key.hasPrefix(prefix) }
         defaults.set(all, forKey: key)
+    }
+
+    /// **The servers of the hub's list whose install was seen to end**, by name in lower case: by this Mac (`ended`), or
+    /// by another client of the fleet (the hub's mark, `ServerEntry.install_ended`, F17's SP1), and each only at the
+    /// address that the hub has for the server now. A new server under the name of a removed one has another address.
+    public static func finished(_ servers: [ServerEntry], ended: [String: String]) -> Set<String> {
+        Set(servers.filter {
+            $0.address != nil && (ended[$0.name.lowercased()] == $0.address || $0.install_ended == $0.address)
+        }.map { $0.name.lowercased() })
     }
 
     /// The address that each ended install of this hub reached, by the server's name in lower case.

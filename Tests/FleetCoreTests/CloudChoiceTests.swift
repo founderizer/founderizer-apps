@@ -243,6 +243,75 @@ struct CloudChoiceTests {
         #expect(MadeServers.holds(server("worker-2"), in: ["worker-2": ""]))
     }
 
+    /// **An entry with a mark beside it stays an entry of every read** (`sweep`, F17's SP1): it stays in the list that
+    /// an older build of the app reads, and a new server of that name is a new entry, with no mark. A bug here: after a
+    /// move back to an older build, "Start again" and "Use this server" lose a server that is still paid for; or the
+    /// record of a new server never reaches the hub because an older one had its name.
+    @Test func aServerWithAMarkStaysAServerOfEveryRead() throws {
+        let defaults = TestDefaults("cloud-choice")
+        let one = try #require(URL(string: "http://100.64.0.1:8765")), other = try #require(URL(string: "http://100.64.0.2:8765"))
+        MadeServers.note("worker-2", id: "1", hub: one, in: defaults)
+        MadeServers.note("worker-3", id: "2", hub: one, in: defaults)
+        MadeServers.note("worker-2", id: "1", hub: other, in: defaults)
+        MadeServers.sweep(["worker-2": "1", "worker-3": "9"], hub: one, in: defaults)
+        #expect(MadeServers.unswept(hub: one, in: defaults) == ["worker-3": "2"])
+        #expect(MadeServers.kept(hub: one, in: defaults) == ["worker-2": "1", "worker-3": "2"])
+        // The list that an older build reads holds each entry as before.
+        #expect(Set(defaults.stringArray(forKey: "serversMadeFor") ?? []) == ["\(one.absoluteString)|worker-2|1",
+                                                                              "\(one.absoluteString)|worker-3|2",
+                                                                              "\(other.absoluteString)|worker-2|1"])
+        #expect(MadeServers.unswept(hub: other, in: defaults) == ["worker-2": "1"])
+        MadeServers.note("worker-2", id: "7", hub: one, in: defaults)
+        #expect(MadeServers.kept(hub: one, in: defaults) == ["worker-2": "7", "worker-3": "2"])
+        #expect(MadeServers.unswept(hub: one, in: defaults) == ["worker-2": "7", "worker-3": "2"])
+        MadeServers.sweep(["worker-2": "7"], hub: one, in: defaults)
+        MadeServers.forget(hub: one, in: defaults)
+        #expect(MadeServers.kept(hub: one, in: defaults).isEmpty && MadeServers.kept(hub: other, in: defaults) == ["worker-2": "1"])
+    }
+
+    /// **An install was seen to end by this Mac, or by another client of the fleet (the hub's mark), each only at the
+    /// server's address now** (F17's SP1). A bug here: a new server of a removed one's name gets an agent with no
+    /// install, or a server that another Mac installed is installed again.
+    @Test func anInstallWasSeenToEndOnlyAtTheServersAddressNow() throws {
+        func entry(_ name: String, _ address: String?, _ mark: String?) throws -> ServerEntry {
+            let row: [String: Any] = ["name": name, "address": address as Any? ?? NSNull(), "hub": false, "joined": true,
+                                      "agents": [], "available": true, "why": [], "install_ended": mark as Any? ?? NSNull()]
+            return try JSONDecoder().decode(ServerEntry.self, from: JSONSerialization.data(withJSONObject: row))
+        }
+        let servers = try [entry("worker-1", "100.64.0.11", nil), entry("worker-2", "100.64.0.12", "100.64.0.12"),
+                           entry("worker-3", "100.64.0.13", "100.64.0.99"), entry("worker-4", nil, nil)]
+        #expect(InstallEnds.finished(servers, ended: ["worker-1": "100.64.0.11", "worker-3": "100.64.0.9"])
+                == ["worker-1", "worker-2"])
+    }
+
+    /// **Each place of the app that decides on this Mac's ended installs takes the hub's mark too**, wherever the rule
+    /// stands (F17's SP1): a place that compares them with a server's address has the mark in the same condition, and
+    /// the app's pages decide at such a place or by `InstallEnds.finished`. A bug here: the rule moves to another file,
+    /// or two changes of it are merged, the hub's mark is gone, and a server that another Mac installed is installed
+    /// again with no test that says so.
+    @Test func eachPlaceThatDecidesOnEndedInstallsTakesTheHubsMarkToo() throws {
+        let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var places = 0, without: [String] = [], pagesDecide = false
+        for folder in ["Sources/Founderizer", "Sources/FleetCore"] {
+            let files = try #require(FileManager.default.enumerator(at: app.appendingPathComponent(folder), includingPropertiesForKeys: nil))
+            for case let file as URL in files where file.pathExtension == "swift" {
+                let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
+                let code = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
+                var decides = folder == "Sources/Founderizer" && code.contains("InstallEnds.finished(")
+                for match in code.matches(of: #/ended\[[^\]]*\]\s*==\s*\$0\.address/#) {
+                    let open = code[..<match.range.lowerBound].lastIndex(of: "{") ?? code.startIndex
+                    let close = code[match.range.upperBound...].firstIndex(of: "}") ?? code.endIndex
+                    places += 1
+                    if !code[open..<close].contains("install_ended == $0.address") { without.append(file.lastPathComponent) }
+                    if folder == "Sources/Founderizer" { decides = true }
+                }
+                pagesDecide = pagesDecide || decides
+            }
+        }
+        #expect(places > 0 && pagesDecide)
+        #expect(without.isEmpty, "add the hub's mark to the condition, or call InstallEnds.finished, in: \(without)")
+    }
+
     @Test func theFleetsOwnVPSIsNeverTakenAsAServerForAgents() throws {
         let hub = try entry("hub", hub: true, why: ["hub_machine"])
         #expect(again(server("worker-3", madeFor: "hub"), [hub], devices: [device("worker-3")], made: ["worker-3"]) == nil)

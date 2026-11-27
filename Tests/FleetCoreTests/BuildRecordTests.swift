@@ -213,6 +213,38 @@ struct BuildRecordTests {
         #expect(records.changes == before + 1)
     }
 
+    /// **A record gets a mark beside it and stays where it is** (`sweep`, F17's SP1): every read has it, an older build
+    /// of the app (which reads each `<id>.json` file) too, through a later write and the next start; only `unswept`
+    /// leaves it out, and its mark goes with it. A bug here: after a move back to an older build, "Start again" has no
+    /// proof of a server that is still paid for, and the first run makes a second paid hub server.
+    @Test func aRecordWithAMarkBesideItStaysTheRecordOfEveryRead() throws {
+        let scratch = Scratch()
+        defer { scratch.remove() }
+        let records = BuildRecords(folder: scratch.folder, launch: "now")
+        var mine = build("worker-2", at: 10)
+        mine.made(id: "4711", at: time(18))
+        let other = stopped("worker-3", id: "4712")
+        for record in [mine, other] { records.write(record) }
+        let before = records.changes
+        records.sweep([mine.id])
+        #expect(records.changes == before)
+        #expect(records.all().map(\.id) == [mine.id, other.id] && records.unswept().map(\.id) == [other.id])
+        mine.joined(at: time(60))
+        records.write(mine)
+        let name = mine.id.uuidString.lowercased(), mark = scratch.folder.appendingPathComponent("\(name).swept")
+        // An older build reads each `<id>.json` file: both records, the last write too.
+        let files = try FileManager.default.contentsOfDirectory(atPath: scratch.folder.path)
+        #expect(files.filter { $0.hasSuffix(".json") }.count == 2)
+        let file = try Data(contentsOf: scratch.folder.appendingPathComponent("\(name).json")), marked = try Data(contentsOf: mark)
+        #expect(file.count > 0 && marked.isEmpty)
+        let next = BuildRecords(folder: scratch.folder, launch: "next")
+        #expect(next.all().map(\.id) == [mine.id, other.id] && next.all()[0].outcome == .joined)
+        #expect(next.unswept().map(\.id) == [other.id])
+        next.remove { $0.id == mine.id }
+        #expect(!FileManager.default.fileExists(atPath: mark.path))
+        #expect(BuildRecords(folder: scratch.folder, launch: "last").all().map(\.id) == [other.id])
+    }
+
     /// The servers that never joined are found by their hub after another start of the app, and a first run's ones by
     /// "no hub". A build that the app's end cut off reads as interrupted, which is unjoined too, and never as running.
     /// A try that left nothing is in no such list.

@@ -559,6 +559,16 @@ final class MachineInstallModel {
         // A server's install ran to its last step from this Mac (`InstallEnds`).
         if plan.job == .join {
             InstallEnds.note(machine, address: reached.host, hub: fleet)
+            // F17's SP1: the hub keeps the mark too, for the fleet's other clients; only the store's own hub, and only
+            // one that keeps it. A plain mark: a send that fails changes nothing here.
+            if fleet == store.hub, store.state?.ui_features?.contains(ServerMade.feature) == true,
+               let database = store.state?.db {
+                let client = store.installation, address = reached.host
+                Task {
+                    try? await HubClient().keepInstallEnded(hub: fleet, database: database, client: client,
+                                                            server: machine, address: address)
+                }
+            }
             // A server that this Mac made for this hub and never saw join did join after all (`BuildRecord`): by the
             // hub that this install began with.
             let hub = log?.record.hub ?? fleet.absoluteString

@@ -1375,7 +1375,12 @@ struct FirstRunView: View {
     private func keepManagersServer(for hub: URL) {
         guard let made = model.managersServerMade else { return }
         MadeServers.note(made.name, id: made.id, hub: hub)
-        if let id = made.id { BuildRecords.shared.noteJoined(serverID: id, provider: made.provider, hub: hub.absoluteString) }
+        guard let id = made.id else { return }
+        BuildRecords.shared.noteJoined(serverID: id, provider: made.provider, hub: hub.absoluteString)
+        // Its record at the hub (F17's SP1) is this hub's too, and no more an earlier try's.
+        if let record = ServerMade.Fields(machine: made.name.lowercased(), provider: made.provider, id: id, use: .agent) {
+            ServerMade.Fresh.add(record, hub: hub)
+        }
     }
 
     /// **The manager's own server goes to its setup** (`FleetStore.noteMadeServer`) once the hub has a manager with no
