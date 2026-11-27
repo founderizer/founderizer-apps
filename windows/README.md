@@ -723,6 +723,27 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   `ManagerSetupScreens.TakesWindow(view)` is that with a page that this build draws: a page that is not drawn leaves the
   window to the manager's page with its pane. One gap stays until wave C: with "1 server", an app that ends in the
   seconds between the claim and the first reading keeps no mark, so the manager's sign-in has no page at the next start.
+- **"Name your manager" of a hub whose first run did not ask** (piece U3b: a hub with `fleet_shape`,
+  `hub_shared_later` and `manager_rename`, and no kept step): `View.TypedName` and `TypeName(text)` (the field opens
+  on the manager's name with capitals, or on "Juno" for the hub's default), and `TakeNameAsync()`, the Mac's
+  `takeName`: `ManagerRename.PressAsync` (`Founderizer.Core`, FleetCore's `ManagerRename`), a pure function of the
+  team that the hub gives at the press (`OwnerReads.TeamAsync`, read again once on `team_changed` or `no_such_agent`,
+  and only while the store holds the mark's hub and generation), with `OwnerReads.RenameAsync` against its SHA-256; or
+  no call for the name that the manager has, when no earlier rename waits; then the provider's page, by a note of this
+  hub and generation that lasts for the app's run (the Mac's `namedManagers`). The rename is noted before it goes
+  (`ManagerSetupMark.NoteRename`, the Mac's `noteRename`, a `ManagerRenameNote`): it holds who was renamed and never a
+  name that a press asked for, so a worker of that name never takes the page, and nothing takes it away but the
+  reading of the manager under another name, since a refusal says only that its own command renamed nothing. When the
+  page's name is gone from the team, nothing is sent: the manager's name now is the receipt of the earlier press, or,
+  for a third name, its own name page shows again. The setup stays on its name's page, with Continue off
+  (`View.Busy`), for the press only, and a reading with no agent of the old name gives the mark of the manager's name
+  (`ManagerSetupMark.Shown`), and `TakeRename` (`StoreSource.TakeRename`, with `History.Rename`) moves the kept mark
+  there, with its provider and its joined server, and the manager's pages. So an answer that is lost after the hub
+  renamed still finds the manager. A kept mark of an agent that the reading no longer has follows the manager's name
+  now (`ManagerPlacing`, `FollowManager`): a rename that this app has no note of. The window's page is
+  `Pages/Agents/Setup/ManagerNamePage.cs`, in the look of the first run's `NamePage`. Back on the provider's page goes
+  to it (`ManagerSetupScreen.Back`, `BackToName()`, Esc; the Mac's `SetupBack`), for a manager with no server whose
+  name's page came first; the name's page is the first, with no Back.
 - **The setup of an agent that is not the manager of a new fleet** (piece L4b): `ManagerSetup.ForAgent(settings, hub, db,
   agent)`, with the same loop, presses and pages, for an agent that the hub shows in setup (a team card added it, and the
   hub's job installs it on its server) or signed out. **No window makes it yet**: the window of piece U5 (or wave C's
@@ -778,7 +799,7 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   the PC proved: **Other VPS is not here yet**, because its check, the password once and the key once are in `SetupStore`,
   for the hub's install alone.
 - **The reads**: `OwnerReads.ServersAsync`, `MachinesAsync`, `TeamAsync` (the Mac's caps and checks), and the writes
-  `JoinCodeAsync`, `MoveAsync`, `SignInAsync`, `SignInCodeAsync`, and of L4b `CheckAsync`, `ActivateAsync` and
+  `JoinCodeAsync`, `MoveAsync`, `RenameAsync`, `SignInAsync`, `SignInCodeAsync`, and of L4b `CheckAsync`, `ActivateAsync` and
   `AddAgentAsync` (a failed install again), through `OwnerReads.Of(store)`. The text of a
   `SignInPage`, a `JobPrompt`, a `MachineLogin` and a `JoinCode` names no link, no code and no command. A field that the Mac reads
   with `try?` is a `JsonElement` with a reader that never fails the list; fields that no page of the setup reads are

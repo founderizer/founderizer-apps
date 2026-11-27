@@ -171,6 +171,71 @@ struct ProblemReportTests {
         #expect(!ProblemReceipt(reference: "").isValid)
         #expect(!ProblemReceipt(reference: String(repeating: "x", count: 41)).isValid)
     }
+
+    // ------------------------------------------------------------ the window's height
+
+    /// **The window is as high as its form, and keeps a height that he gives it** (the owner, 25 November 2026: "much
+    /// more compact"; the validation's M1 and S4). The bugs that it catches: a frame before the facts, a lost top edge, a
+    /// window past the screen, his tile, Zoom or drag undone by the next status line, and no new height after a change
+    /// of the width alone.
+    @Test func theWindowTakesThePagesHeightAndKeepsAHeightThatHeGaveIt() throws {
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 875)
+        var fit = ProblemReport.WindowFit()
+        // before the facts: no frame, the scene's 600 stays
+        let none = fit.frame(page: nil, window: CGRect(x: 100, y: 200, width: 620, height: 600), over: 0, room: screen)
+        #expect(none == nil)
+        // the page's height, rounded up, under the same top edge (800), the width as it was
+        let fitted = fit.frame(page: 591.5, window: CGRect(x: 100, y: 200, width: 620, height: 600), over: 0, room: screen)
+        let first = try #require(fitted)
+        #expect(first == CGRect(x: 100, y: 208, width: 620, height: 592))
+        fit.took(592)
+        // a page taller than the screen: the screen's visible height, inside it
+        let taller = fit.frame(page: 1200, window: first, over: 0, room: screen)
+        let tall = try #require(taller)
+        #expect(tall == CGRect(x: 100, y: 0, width: 620, height: 875))
+        fit.took(875)
+        // a change of the width alone wraps the page again: the window takes its new height
+        let wider = CGRect(x: 100, y: 0, width: 800, height: 875)
+        let rewrapped = fit.frame(page: 560, window: wider, over: 0, room: screen)
+        let again = try #require(rewrapped)
+        #expect(again == CGRect(x: 100, y: 315, width: 800, height: 560))
+        fit.took(560)
+        // a height that the fitter did not set (Zoom, Fill, Move & Resize, a tile): his from then on
+        let tiled = CGRect(x: 720, y: 0, width: 720, height: 875)
+        let afterTile = fit.frame(page: 597, window: tiled, over: 0, room: screen)
+        #expect(afterTile == nil)
+        #expect(fit.own)
+        let later = fit.frame(page: 640, window: tiled, over: 0, room: screen)
+        #expect(later == nil)
+        // a drag of the edge that changed the height is his too, also before any fit
+        var dragged = ProblemReport.WindowFit()
+        dragged.resized(from: 600, to: 600)
+        #expect(!dragged.own)
+        dragged.resized(from: 600, to: 700)
+        let afterDrag = dragged.frame(page: 592, window: CGRect(x: 0, y: 0, width: 620, height: 700), over: 0, room: screen)
+        #expect(afterDrag == nil)
+    }
+
+    /// **The window grows at once and shrinks only after a check answered or a send ended** (the validation's S1). The
+    /// bug that it catches: the window's bottom edge moving about 37 points each time a status line comes and goes while
+    /// he types.
+    @Test func thePageHeightGrowsAtOnceAndShrinksOnlyAfterAnAnswer() {
+        var height = ProblemReport.PageHeight()
+        height.measure(nil)
+        #expect(height.shown == nil)
+        height.measure(592)
+        #expect(height.shown == 592)
+        height.measure(629)                     // "Write the address we should answer at." came: at once
+        #expect(height.shown == 629)
+        height.measure(592)                     // the line went while he types: the window stays
+        #expect(height.shown == 629)
+        height.settle()                         // a send ended or a check answered: the page's height
+        #expect(height.shown == 592)
+        height.measure(560)                     // the layout after the answer may make it lower too
+        #expect(height.shown == 560)
+        height.measure(540)                     // and after that, no more
+        #expect(height.shown == 560)
+    }
 }
 
 /// A site that redirects every report to another site, which would take it and give a receipt. It remembers each

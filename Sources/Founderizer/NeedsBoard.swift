@@ -69,6 +69,14 @@ struct NeedsBoard: View {
     /// The requests that his answer here sent away: none of them is one that "ended in another way" (`settle`), also
     /// when the reading has its answer before its moment ends.
     @State private var his: Set<Int> = []
+    /// **The height of each request at hand, of the page's words for a day with no request, and of the request at hand's
+    /// whole room**: where the badge of his held answer stands, under the request at hand (`answerBadge`).
+    @State private var stepHeights: [Int: CGFloat] = [:]
+    @State private var emptyHeight: CGFloat?
+    @State private var stageHeight: CGFloat = 0
+    /// The last height that the page measured of what stands at hand: the badge keeps its place with it for the frame
+    /// in which the next request is at hand and not measured yet, and then moves (two reviews: it went out and came in).
+    @State private var lastHeight: CGFloat?
     /// The task's card that has the keyboard's focus: Return is that card's, and opens its task.
     @FocusState private var focusedTask: Int?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -89,7 +97,7 @@ struct NeedsBoard: View {
         let onWay = Dictionary(needs.compactMap { need in onItsWay(need).map { (need.id, $0) } }) { first, _ in first }
         // A request whose answer settles is still in the lane, at hand, until its moment ends (`hold`). **An answer that
         // waits with Undo leaves as an answer on its way does** (`onItsWay`; the owner's F12, 22 November 2026): its
-        // Undo is the badge's at the bottom of the page (`AnswerBadge`).
+        // Undo is the badge's under the request at hand (`answerBadge`).
         let lane = NeedsLane(needs, sent: Set(onWay.keys), held: settling.union(keySaves.filter(\.value.holds).keys),
                              now: now)
         let open = lane.open.map(\.id)
@@ -167,7 +175,7 @@ struct NeedsBoard: View {
         // page kept by a number is theirs.
         .onChange(of: "\(store.hub.absoluteString) \(state?.db ?? "")") { _, _ in
             sent = [:]; confirmed = [:]; memory = [:]; order = []; endedAtHand = nil; writes = false
-            settling = []; took = []; his = []; leaves = false; keySaves = [:]
+            settling = []; took = []; his = []; leaves = false; keySaves = [:]; stepHeights = [:]; lastHeight = nil
         }
         // The choice is the page's while it shows. The next visit starts at the lane's first request, unless
         // something chose one for it; a choice of an earlier visit would count as such a choice.
@@ -466,6 +474,11 @@ struct NeedsBoard: View {
                         writes = typed
                         hold(need.id)
                     }
+                        // the badge of his held answer stays where it came while his answer settles here (`hold`), and
+                        // then goes to the end of the next request (`answerBadge`)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            if !settling.contains(need.id) { stepHeights[need.id] = height; lastHeight = height }
+                        }
                         .padding(.top, Self.stepTop).padding(.bottom, 56).frame(maxWidth: .infinity)
                 }
                 // A request that his answer sent away goes 8 points up as it fades, and the next one comes from 8
@@ -474,11 +487,52 @@ struct NeedsBoard: View {
             } else if empty {
                 // The page's own words for a day with no request, where a request stands; not beside a task's card,
                 // which needs him too. **Its mark draws itself when his answer sent the last request away.**
-                FormEmpty("Nothing needs you", symbol: "checkmark.circle", draws: leaves).padding(.top, Self.stepTop)
+                FormEmpty("Nothing needs you", symbol: "checkmark.circle", draws: leaves)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { emptyHeight = $0; lastHeight = $0 }
+                    .padding(.top, Self.stepTop)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .top) { answerBadge(under: need, empty: empty) }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { stageHeight = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: need?.id)
+    }
+
+    /// From the end of the request at hand to the badge of his held answer, and the least room under the badge.
+    private static let badgeGap: CGFloat = 20, badgeFoot: CGFloat = 24
+    /// The badge's own height: one line of the detail's words in the hover tag's room (`AnswerBadgeCapsule`).
+    private static let badgeHeight: CGFloat = 28
+
+    /// **The badge of his held answer stands under the request at hand** (the owner, 26 November 2026, of the badge at
+    /// the foot of the sidebar: "it is very far from where I clicked, it should be somewhere in the same area where I
+    /// just clicked the card"): 20 points under the end of the request that stands where he answered, in the middle of
+    /// its column, as wide as its words and at most as wide as the request (`AnswerBadgeCapsule`, its look, words, motion
+    /// and VoiceOver as `AnswerBadge`). It comes in the frame of his press, under the place of the options that he
+    /// pressed, stays there while his answer settles, and goes with the next request to that request's end, over 0.2 s;
+    /// under the words of a day with no request when it was the last one, and at the top of the column when nothing
+    /// stands there. **A request higher than the column keeps it at the column's foot**, over the room under its last
+    /// row. Only an answer given on this page: one given in a chat stands at its
+    /// card, and on this page at the foot of the sidebar (`AnswerBadge.inSidebar`). Its Undo brings the request back at
+    /// hand (`AnswerBadge.undo`).
+    @ViewBuilder private func answerBadge(under need: OwnerNeed?, empty: Bool) -> some View {
+        let holds = AnswerHolds.shared
+        // what stands at hand, else the last height measured: the next request has its height only after its first
+        // layout, and the badge stays in the view meanwhile, so that it moves and does not go out and come in again
+        let measured: CGFloat? = if let need { stepHeights[need.id] } else if empty { emptyHeight } else { 0 }
+        if let shown = holds.onAnyPage(in: store), holds.pageOf(shown.need) == Destination.needs.page,
+           let content = measured ?? lastHeight {
+            let end = Self.stepTop + content + Self.badgeGap
+            let top = max(min(end, stageHeight - Self.badgeHeight - Self.badgeFoot), Self.stepTop)
+            AnswerBadgeCapsule(look: shown.held.look, title: shown.need.shownTitle) {
+                AnswerBadge.undo(shown.need, store: store)
+            }
+            .animation(reduceMotion ? nil : FleetMotion.badgeWords, value: shown.held.look)
+            .frame(maxWidth: SetupMetrics.cardsWidth)
+            .padding(.horizontal, 16)
+            .padding(.top, top)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: top)
+            .transition(reduceMotion ? .identity : .answerBadge)
+        }
     }
 }
 
@@ -939,7 +993,8 @@ private struct NeedAnswered: View {
     /// He answered in his own words: no check stands before them, and none draws itself.
     var inWords = false
     /// He answered a moment ago, here: the check draws itself, white, and then goes quiet (`NeedsBoard.hold`). An answer
-    /// that the app holds draws it too: its Undo is the badge's (`AnswerBadge`; the owner's F12, 22 November 2026).
+    /// that the app holds draws it too: its Undo is the badge's under the request at hand (`NeedsBoard.answerBadge`; the
+    /// owner's F12, 22 November 2026).
     var draws = false
     /// The mark before his answer: a check, or a cross for a command that he ran and that ended with another exit
     /// status than 0 (owner feature `need_run`).

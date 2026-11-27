@@ -26,6 +26,8 @@ namespace Founderizer.Owner.Reads;
 [JsonSerializable(typeof(JoinCode))]
 [JsonSerializable(typeof(MoveAsk))]
 [JsonSerializable(typeof(MoveReceipt))]
+[JsonSerializable(typeof(RenameAsk))]
+[JsonSerializable(typeof(RenameReceipt))]
 [JsonSerializable(typeof(SignInAsk))]
 [JsonSerializable(typeof(SignInCode))]
 [JsonSerializable(typeof(MachineReceipt))]
@@ -118,6 +120,23 @@ public static class OwnerReads
                                            ReadsJson.Default.MoveAsk, ReadsJson.Default.MoveReceipt, id, cancel).ConfigureAwait(false);
         if (answer.Value is { } r && !(r.Ok && Same(r.RequestId, id) && r.Agent == agent && r.Server == server && r.Runtime == runtime && r.Job > 0))
             throw HubException.InvalidResponse($"POST /ui/team/agents/{agent}/move", "the answer is not the move of this request");
+        return answer;
+    }
+
+    /// <summary>**POST /ui/team/agents/&lt;agent&gt;/rename** (the Mac's <c>nameManager</c>; owner feature
+    /// <c>manager_rename</c>): the manager of a fleet whose first run did not ask gets the name that the owner typed,
+    /// against the team.json whose SHA-256 the app read. <paramref name="name"/> is already in the installer's form (the
+    /// caller checks it by <c>ManagerName.AgentName</c>), and another than the name it has.</summary>
+    public static async Task<OwnerAnswer<RenameReceipt>> RenameAsync(ICalls calls, string agent, string sha256, string name,
+                                                                     Guid? requestId = null, CancellationToken cancel = default)
+    {
+        if (!AgentName(agent) || !AgentName(name) || name == agent || !Sha(sha256))
+            throw new ArgumentException("the agent, the name or the base is of no valid shape");
+        var id = requestId ?? Guid.NewGuid();
+        var answer = await calls.PostAsync($"ui/team/agents/{agent}/rename", new RenameAsk(sha256, name), ReadsJson.Default.RenameAsk,
+                                           ReadsJson.Default.RenameReceipt, id, cancel).ConfigureAwait(false);
+        if (answer.Value is { } r && !(r.Ok && Same(r.RequestId, id) && r.Agent == name && r.Was == agent))
+            throw HubException.InvalidResponse($"POST /ui/team/agents/{agent}/rename", "the answer is not the rename of this request");
         return answer;
     }
 

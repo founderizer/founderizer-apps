@@ -2,28 +2,31 @@ import AppKit
 import FleetCore
 import SwiftUI
 
-/// **The badge of his held answer, at the foot of the sidebar** (the owner, 22 November 2026: "complete it immediately
-/// and show like a badge at the bottom of the page that shows what has been chosen, slightly animated nicely, and
-/// include a button link to undo"; 23 November 2026: "a small floating badge on the side that says Undo ... which brings
-/// the card back", and his answer F22-1 (a) to its pictures: the foot of the sidebar, as Apple Mail's Undo Send). His
-/// answer completes on its card in the frame of his press, and the app still holds its send for 5 seconds
-/// (`AnswerHolds`): the badge is the face of that hold. It stands at the foot of the main window's sidebar, under the
-/// line that ends the agents' list and over Settings (and over the Update banner while that shows), on every page, while
-/// an answer that he gave on a page of the main window waits; one at most. **Its Undo brings the card back**: Needs you
-/// with the request at hand, or the agent's chat with its card open and in view. The card's own window becomes a badge
-/// of its own (`NeedWindows`), and the job's detail card keeps Undo on the card's line (`NeedRequestCard.lineEnd`).
+/// **The badge of his held answer stands where he gave the answer** (the owner, 22 November 2026: "complete it
+/// immediately and show like a badge at the bottom of the page that shows what has been chosen, slightly animated nicely,
+/// and include a button link to undo"; 23 November 2026: "a small floating badge on the side that says Undo ... which
+/// brings the card back"; 26 November 2026, of the badge at the foot of the sidebar: "it is very far from where I clicked,
+/// it should be somewhere in the same area where I just clicked the card"). His answer completes on its card in the frame
+/// of his press, and the app still holds its send for 5 seconds (`AnswerHolds`): the badge is the face of that hold. **On
+/// the page where he gave it, the badge stands at the card**: on Needs you under the request at hand
+/// (`NeedsBoard.answerBadge`), and in a chat its Undo stands at the end of the folded card's line
+/// (`NeedRequestCard.lineEnd`), as on the job's detail card and on the iPhone. **On every other page of the main window
+/// it stands at the foot of the sidebar** (this view; his answer F22-1 (a), as Apple Mail's Undo Send), under the line that
+/// ends the agents' list and over Settings (and over the Update banner while that shows); one at most. **Its Undo brings
+/// the card back**: Needs you with the request at hand, or the agent's chat with its card open and in view. The card's own
+/// window becomes a badge of its own (`NeedWindows`).
 ///
 /// - One line: a check for an option that he pressed or ticked, none for words that he wrote (his rule of 14 November
 ///   2026); the words of the folded card's answer line, plain, as the card reads them (`Look`: the agent of a role that
-///   an option names by its name, with the role beside it), cut with "…" at the sidebar's width less 12 points each
-///   side, and "Undo" in the colour of a link, with the hand, never cut. No title, no count, no close button.
+///   an option names by its name, with the role beside it), cut with "…" at the room's width, and "Undo" in the colour
+///   of a link, with the hand, never cut. No title, no count, no close button.
 /// - The look of the hover tag (`HoverTag`): a capsule in `FleetStyle.lifted` with its one-point edge.
 /// - It comes up 8 points and fades in over 0.18 s, as his own message does, and fades out over 0.12 s; a new answer
 ///   changes its words in place over 0.15 s (`AnyTransition.answerBadge`, `FleetMotion.badgeWords`), and the sidebar's
 ///   line over it moves with it over the same times (`FleetView.sidebar`). Under Reduce Motion it stands and goes in
 ///   one frame, and so does the line.
-/// - Edit › Undo (⌘Z) takes the answer back while the badge stands and it is the newest act that can be undone: the
-///   window's undo manager holds it from the badge's coming to its going, so words typed after it are undone first.
+/// - Edit › Undo (⌘Z) takes the answer back while it waits, on any page, and it is the newest act that can be undone:
+///   the window's undo manager holds it from the hold's start to its end, so words typed after it are undone first.
 /// - VoiceOver reads one element, "<title>, answered: <words>", with the action Undo.
 struct AnswerBadge: View {
     @Bindable var store: FleetStore
@@ -63,8 +66,18 @@ struct AnswerBadge: View {
         var announced: String { filesAlone ? words : String(l10n: "Answered: \(words)") }
     }
 
+    /// **The held answer that the sidebar shows**: one held on a page of the main window that does not show now. On its
+    /// own page the badge stands at its card (`NeedsBoard.answerBadge`, `NeedRequestCard.lineEnd`), where he clicked.
+    static func inSidebar(_ store: FleetStore) -> (need: OwnerNeed, held: AnswerHolds.Held)? {
+        guard let held = AnswerHolds.shared.onAnyPage(in: store),
+              AnswerHolds.shared.pageOf(held.need) != store.destination.page else { return nil }
+        return held
+    }
+
     var body: some View {
-        let shown = AnswerHolds.shared.onAnyPage(in: store)
+        // Edit › Undo holds the answer that waits on any page, also where its badge stands at its card
+        let waiting = AnswerHolds.shared.onAnyPage(in: store)?.need
+        let shown = Self.inSidebar(store)
         let look = shown?.held.look
         ZStack {
             if let shown, let look {
@@ -79,14 +92,14 @@ struct AnswerBadge: View {
         .frame(maxWidth: max(width - 2 * Self.inset, 0), alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, Self.inset - 10).padding(.bottom, shown == nil ? 0 : 6)
-        .onChange(of: shown?.need.id, initial: true) { _, _ in keepUndo(for: shown?.need) }
+        .onChange(of: waiting?.id, initial: true) { _, _ in keepUndo(for: waiting) }
         .onDisappear { keepUndo(for: nil) }
     }
 
     /// **Undo: his answer goes nowhere, and the card comes back as it was** (`AnswerHolds.undo`), on the page where he
     /// gave it, from any page: Needs you with the request at hand, or the agent's chat with its card in view
     /// (`FleetStore.chatFocus`, as a match of the search card opens a chat at its row).
-    private static func undo(_ need: OwnerNeed, store: FleetStore) {
+    static func undo(_ need: OwnerNeed, store: FleetStore) {
         let page = AnswerHolds.shared.pageOf(need)
         AnswerHolds.shared.undo(need, store: store)
         if page == Destination.needs.page {
@@ -101,8 +114,8 @@ struct AnswerBadge: View {
         if store.destination == .needs { store.selectedNeed = need.id }
     }
 
-    /// **The badge's act in the window's undo manager**, from its coming to its going: Edit › Undo (⌘Z) takes the
-    /// answer back while it is the newest act that can be undone. No new menu item: Edit › Undo is the system's.
+    /// **The held answer's act in the window's undo manager**, from the hold's start to its end, wherever its badge
+    /// stands: Edit › Undo (⌘Z) takes the answer back while it is the newest act that can be undone. No new menu item: Edit › Undo is the system's.
     /// The main window's own undo manager, which its Edit › Undo reaches (`NSWindow.undo:`).
     private func keepUndo(for need: OwnerNeed?) {
         undoKept?.removeAllActions(withTarget: undoTarget)
@@ -120,8 +133,8 @@ struct AnswerBadge: View {
     final class UndoTarget {}
 }
 
-/// **The capsule of a held answer** (`AnswerBadge` at the foot of the sidebar, and the card's own window that becomes it,
-/// `NeedWindows`): a check for an option, the answer's words, cut with "…" where its room ends, and "Undo" in the colour
+/// **The capsule of a held answer** (`AnswerBadge` at the foot of the sidebar, under the request at hand on Needs you,
+/// `NeedsBoard.answerBadge`, and the card's own window that becomes it, `NeedWindows`): a check for an option, the answer's words, cut with "…" where its room ends, and "Undo" in the colour
 /// of a link, never cut; one element for VoiceOver, "<title>, answered: <words>", with the action Undo. As wide as its
 /// words, at most the width that it is given.
 struct AnswerBadgeCapsule: View {

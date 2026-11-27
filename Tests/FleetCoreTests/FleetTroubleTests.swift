@@ -71,6 +71,20 @@ struct FleetTroubleTests {
         #expect(found.checksRead == 2)
     }
 
+    /// **Report a problem's section stands for what is wrong, and for a slow first check only** (the owner, 25 November
+    /// 2026: "much more compact, less text"). The bugs that it catches: a clear fleet's section back on his screen, the
+    /// findings hidden, and a first check that runs long with no line that says so.
+    @Test func theSectionStandsForFindingsAndForASlowFirstCheckOnly() throws {
+        let wrong = FleetTrouble(findings: [Trouble(id: "vps/disk", title: "Disk almost full · vps", says: "2 GB free.",
+                                                    kind: .check)])
+        #expect(FleetTrouble.sectionShows(found: wrong, reading: false, slow: true))
+        #expect(FleetTrouble.sectionShows(found: wrong, reading: true, slow: false))
+        #expect(!FleetTrouble.sectionShows(found: FleetTrouble(findings: [], checksRead: 4), reading: false, slow: true))
+        #expect(!FleetTrouble.sectionShows(found: FleetTrouble(findings: [], checksRead: 4), reading: true, slow: true))
+        #expect(FleetTrouble.sectionShows(found: nil, reading: true, slow: true))
+        #expect(!FleetTrouble.sectionShows(found: nil, reading: true, slow: false))
+    }
+
     @Test func aWarnIsNotAFailureAndIsNotARow() throws {
         let found = read(machines: [try machine("vps")],
                          checklists: ["vps": VerifyChecklist(checks: [

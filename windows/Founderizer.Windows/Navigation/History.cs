@@ -59,6 +59,16 @@ public sealed class History
         Changed?.Invoke();
     }
 
+    /// <summary>**The pages of an agent that took a new name go to that name**, in place, with no move and no change raised
+    /// (the Mac's <c>FleetStore.renamed</c>): the current page and both lists.</summary>
+    public void Rename(string was, string now)
+    {
+        Page Moved(Page p) => p.Agent == was ? p with { Agent = now } : p;
+        Current = Moved(Current);
+        for (int i = 0; i < back.Count; i++) back[i] = Moved(back[i]);
+        for (int i = 0; i < forward.Count; i++) forward[i] = Moved(forward[i]);
+    }
+
     /// <summary>A page that the fleet no longer has (an agent that left) leaves both lists.</summary>
     public void Forget(Func<Page, bool> gone)
     {

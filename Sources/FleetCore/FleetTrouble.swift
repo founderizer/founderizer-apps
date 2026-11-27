@@ -93,6 +93,15 @@ public struct FleetTrouble: Equatable, Sendable {
 
     public var isClear: Bool { findings.isEmpty }
 
+    /// **Report a problem's "What Founderizer can see" stands only while it has something to say** (the owner, 25
+    /// November 2026, of that window: "much more compact, less text"): while a check found something wrong, and while the
+    /// window's first check has run past a page's quiet second (`slow`), with its loading line. A clear fleet has none of
+    /// it: the Checks fact says what the checks found. `found` is the last check's answer, nil before the first one.
+    public static func sectionShows(found: FleetTrouble?, reading: Bool, slow: Bool) -> Bool {
+        if let found { return !found.isClear }
+        return reading && slow
+    }
+
     /// What goes in the report, and what the screen shows him in full before it does. It is bounded so that one
     /// broken fleet cannot make a report our own site refuses.
     public var reportLine: String {

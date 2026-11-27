@@ -389,6 +389,22 @@ public sealed class WindowTests
         Assert.AreEqual(Page.Needs, history.Current);
         history.Start(Page.Tasks); // the launch's first page leaves no way back
         Assert.IsFalse(history.CanGoBack || history.CanGoForward);
+
+        // A manager that its setup renamed (piece U3b): its pages, here and on both lists, go to its new name, so that the
+        // window neither leaves its setup for Tasks nor goes Back to an agent that is gone.
+        history.Go(Page.Chat("juno"));
+        history.Go(Page.Needs);
+        history.Go(Page.Chat("juno"));
+        history.GoBack();
+        history.Rename("juno", "nova");
+        Assert.AreEqual(Page.Needs, history.Current);
+        history.GoBack();
+        Assert.AreEqual(Page.Chat("nova"), history.Current, "the back list");
+        history.GoForward();
+        history.GoForward();
+        Assert.AreEqual(Page.Chat("nova"), history.Current, "the forward list");
+        history.Rename("nova", "vera");
+        Assert.AreEqual(Page.Chat("vera"), history.Current, "the current page");
     }
 
     [TestMethod]

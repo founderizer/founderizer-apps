@@ -332,8 +332,8 @@ import SwiftUI
             badge.contentView = host
             badge.takesKeys = hadKeys
             self.badge = badge
-            // **Edit › Undo (⌘Z) takes it back while the badge has the keys**, as the sidebar's badge does for an
-            // answer on a page; Tab reaches its Undo with the keyboard's full access
+            // **Edit › Undo (⌘Z) takes it back while the badge has the keys**, as the main window does for an answer
+            // on a page; Tab reaches its Undo with the keyboard's full access
             badge.undoManager?.registerUndo(withTarget: self) { _ in
                 MainActor.assumeIsolated { AnswerHolds.shared.undo(need, store: store) }
             }

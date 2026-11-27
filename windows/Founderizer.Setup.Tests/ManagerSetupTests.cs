@@ -21,19 +21,21 @@ public sealed class ManagerSetupTests
     private static readonly Uri Hub = new("http://100.64.0.9:8765/");
 
     /// <summary>The hub's reading as the owner's store holds it: the manager, its runtime, its sessions.</summary>
-    private static MobileSnapshot Fleet(string runtime = "claude", string alive = "", IReadOnlyList<string>? features = null) =>
-        new(1, "db-1", 1763700100, [new MobileAgent("juno", "manager", runtime, 0, [], Title: "Fleet Manager", Active: true, Alive: alive)],
+    private static MobileSnapshot Fleet(string runtime = "claude", string alive = "", IReadOnlyList<string>? features = null, string name = "juno") =>
+        new(1, "db-1", 1763700100, [new MobileAgent(name, "manager", runtime, 0, [], Title: "Fleet Manager", Active: true, Alive: alive)],
             [], [], [], [], [], UiFeatures: features ?? ["servers", "machines", "machine_signin", "agent_setup", "manager_server"]);
 
     private static (ManagerSetup Setup, SetupHub Hub, MemoryChoices Choices) Setup(ManagerSetupMark mark, Func<MobileSnapshot?> fleet,
                                                                                   SetupHub? hub = null, Func<Task>? refresh = null,
-                                                                                  Func<bool>? fresh = null)
+                                                                                  Func<bool>? fresh = null, Func<Uri?>? hubOf = null)
     {
         var choices = new MemoryChoices();
         mark.Keep(choices);
         hub ??= new SetupHub();
-        return (new ManagerSetup(new ManagerSetupSettings { Calls = hub, Fleet = fleet, Choices = choices, Refresh = refresh, Fresh = fresh }, mark),
-                hub, choices);
+        return (new ManagerSetup(new ManagerSetupSettings
+        {
+            Calls = hub, Fleet = fleet, Choices = choices, Refresh = refresh, Fresh = fresh, Hub = hubOf,
+        }, mark), hub, choices);
     }
 
     /// <summary>**The manager gets the server that joined for it and the provider of the first run in one command, by
@@ -110,7 +112,8 @@ public sealed class ManagerSetupTests
         await setup.StepAsync();
         await setup.StepAsync();
         var screen = ManagerSetupScreens.Of(setup.View);
-        Assert.AreEqual(("provider", "Juno's AI provider", "worker-2 takes no agent now."), (screen.Name, screen.Title, screen.Warning));
+        Assert.AreEqual(("provider", "Juno's AI provider", "worker-2 takes no agent now.", false),
+                        (screen.Name, screen.Title, screen.Warning, screen.Back), "no Back: no name's page came first");
         CollectionAssert.AreEqual(new[] { "agent-setup-provider-codex", "agent-setup-provider-claude" }, screen.Controls.Select(c => c.Id).ToArray());
         Assert.IsTrue(screen.Controls.Single(c => c.Id == "agent-setup-provider-claude").Marked);
         Assert.AreEqual(1, hub.PostsTo("/move").Count, "no command again by itself");
@@ -329,6 +332,338 @@ public sealed class ManagerSetupTests
         Assert.IsTrue(ManagerSetupScreens.TakesWindow(provider.View), "a page that the build draws takes the window");
     }
 
+    /// <summary>The features of a hub that keeps the fleet's shape and can rename a manager with no server: its setup
+    /// starts on "Name your manager" when its first run did not ask.</summary>
+    private static readonly string[] Renames =
+        ["servers", "machines", "machine_signin", "agent_setup", "manager_server", "fleet_shape", "hub_shared_later", "manager_rename"];
+
+    /// <summary>**A hub whose first run did not ask opens the manager's setup on "Name your manager", which takes the
+    /// window, and Continue renames the manager on the hub; the setup of the new name goes on to the provider's page**
+    /// (piece U3b; the Mac's <c>NameManagerPage</c> and <c>takeName</c>). Each hub of these tests is its own (an example
+    /// address on a port of its own), because the note that the owner named it lasts for the app's run, as the Mac's. The
+    /// bugs: a frame alone with no way out (the name's page undrawn); a name that the installer refuses sent to the hub; a
+    /// rename with the typed capitals, against no team.json, or against the first one again when the team changed; the
+    /// mark moved at the receipt, so that the setup of the new name reads a reading that does not have it yet and leaves
+    /// the window; a mark that a reading of the new name does not move, so that the window loses the setup; and the name's
+    /// page again after the rename, with no way on.</summary>
+    [TestMethod]
+    public async Task A_hub_whose_first_run_did_not_ask_names_its_manager_and_goes_on_to_its_provider()
+    {
+        var at = new Uri("http://100.64.0.9:8771/");
+        var fleet = Fleet(features: Renames);
+        var (setup, hub, choices) = Setup(new ManagerSetupMark(at, "db-1", "juno"), () => fleet);
+        await setup.StepAsync();
+        var screen = ManagerSetupScreens.Of(setup.View);
+        Assert.AreEqual(("name", "Name your manager", "It leads your team and is your main assistant.", true),
+                        (screen.Name, screen.Title, screen.Detail, screen.Drawn));
+        Assert.IsTrue(ManagerSetupScreens.TakesWindow(setup.View), "the page takes the window");
+        Assert.AreEqual("Juno", setup.View.TypedName, "the field opens on the manager's own name with capitals");
+        CollectionAssert.AreEqual(new[] { "agent-setup-name", "agent-setup-name-continue" }, screen.Controls.Select(c => c.Id).ToArray());
+
+        foreach (var wrong in new[] { "J", "1nova", "hub", "abcdefghijklmnopqrstuvwxyza" })
+        {
+            setup.TypeName(wrong);
+            var refused = ManagerSetupScreens.Of(setup.View);
+            Assert.IsTrue(refused.Controls.Single(c => c.Id == "agent-setup-name").Marked, wrong);
+            Assert.IsFalse(refused.Controls.Any(c => c.Id == "agent-setup-name-continue"), wrong);
+            await setup.TakeNameAsync();
+            Assert.AreEqual(0, hub.PostsTo("/rename").Count, wrong);
+        }
+
+        setup.TypeName(" Nova ");
+        var tries = 0;
+        hub.TeamShas.Enqueue(new string('b', 64));
+        hub.TeamShas.Enqueue(new string('e', 64));
+        hub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal) && tries++ == 0
+            ? HubException.Refusal(409, null, "The team changed.", "team_changed") : null;
+        await setup.TakeNameAsync();
+        var renames = hub.PostsTo("/rename");
+        Assert.AreEqual(2, renames.Count, "a team.json that changed between the read and the press is read again, once");
+        StringAssert.Contains(renames[0], $"\"base_sha256\":\"{new string('b', 64)}\"");
+        StringAssert.Contains(renames[1], $"\"base_sha256\":\"{new string('e', 64)}\"", "the second rename goes against the team.json read again");
+        StringAssert.Contains(renames[1], "\"name\":\"nova\"");
+        Assert.IsFalse(setup.View.Busy, "Continue is held for the press only");
+        hub.TeamLines = "[{\"agent\": \"nova\", \"role\": \"manager\"}]";
+        await setup.TakeNameAsync();
+        Assert.AreEqual(2, hub.PostsTo("/rename").Count, "a press after the rename sends nothing: the team has the new name");
+
+        // Until a reading has the new name, the setup keeps its mark and stays on its name's page (the Mac's renaming): a
+        // real hub's reading has the old name for a moment after the receipt, and a setup of the new name would read nothing
+        // there and leave the window to the chat of an agent that is gone.
+        var before = new StoreState { Hub = at, Role = HubRole.Owner, Fleet = fleet };
+        var shown = ManagerSetupMark.Shown(before, choices);
+        Assert.AreEqual("juno", shown?.Agent, "the mark keeps the old name until a reading has the new one");
+        var (same, _, _) = Setup(shown!, () => fleet);
+        await same.StepAsync();
+        Assert.IsTrue(ManagerSetupScreens.TakesWindow(same.View), "the setup of the shown mark keeps the window over the old reading");
+        Assert.AreEqual(("provider", true), (ManagerSetupScreens.Of(setup.View).Name, ManagerSetupScreens.TakesWindow(setup.View)),
+                        "he named it: the provider's page, also over a reading from before");
+
+        // The reading with the new name: the setup of that name, and the kept mark goes there, once.
+        var after = before with { Fleet = Fleet(features: Renames, name: "nova") };
+        Assert.AreEqual("nova", ManagerSetupMark.Shown(after, choices)?.Agent, "the setup of the new name");
+        Assert.AreEqual(("juno", "nova"), ManagerSetupMark.TakeRename(after, choices));
+        Assert.IsNull(ManagerSetupMark.TakeRename(after, choices), "once");
+        var mark = ManagerSetupMark.Read(choices)!;
+        Assert.AreEqual(("nova", null, null), (mark.Agent, mark.Provider, mark.Joined), "the kept mark takes the new name");
+
+        // The setup of the new name, as the window makes it for the mark: on to the provider's page, not the name's again.
+        var renamed = after.Fleet!;
+        var (next, _, _) = Setup(mark, () => renamed);
+        await next.StepAsync();
+        var providers = ManagerSetupScreens.Of(next.View);
+        Assert.AreEqual("provider", providers.Name, "the owner named it on this run of the app");
+
+        // Back on the provider's page goes to the name's page, which has none (the Mac's SetupBack; the owner's "Match the
+        // Mac"): a name that he wants to change after Continue can be changed.
+        Assert.AreEqual((true, false), (providers.Back, screen.Back), "Back on the provider's page; none on the first page");
+        next.BackToName();
+        Assert.AreEqual(("name", (string?)null, false), (ManagerSetupScreens.Of(next.View).Name, ManagerSetupScreens.Of(next.View).Warning,
+                                                          ManagerSetupScreens.Of(next.View).Back));
+        Assert.AreEqual("Nova", next.View.TypedName, "the field holds the name that it has now");
+    }
+
+    /// <summary>**A rename that the hub refused keeps the name's page with the hub's words, and the name that the manager has
+    /// goes on with no rename** (the Mac's <c>takeName</c>). The bugs: a refusal that the page does not say, or that moves
+    /// the mark to a name that the hub does not have (the window then loses the setup); a rename sent for the name that the
+    /// manager has, which the hub refuses, so that the owner cannot go on.</summary>
+    [TestMethod]
+    public async Task A_refused_rename_says_the_hubs_words_and_the_name_it_has_goes_on_with_no_rename()
+    {
+        var at = new Uri("http://100.64.0.9:8772/");
+        var fleet = Fleet(features: Renames);
+        var (setup, hub, choices) = Setup(new ManagerSetupMark(at, "db-1", "juno"), () => fleet);
+        await setup.StepAsync();
+        hub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal)
+            ? HubException.Refusal(409, null, "That name is taken.", "name_taken") : null;
+        setup.TypeName("Nova");
+        await setup.TakeNameAsync();
+        var screen = ManagerSetupScreens.Of(setup.View);
+        Assert.AreEqual(("name", "That name is taken."), (screen.Name, screen.Warning));
+        Assert.AreEqual("juno", ManagerSetupMark.Read(choices)!.Agent, "the mark keeps the name that the hub has");
+        Assert.IsTrue(ManagerSetupMark.RenameNoted(at, "db-1", "juno"), "a refusal says only that its own command renamed nothing");
+
+        // The line stays on the name's page: a page that is not the name's takes it away (a reading of a hub that cannot
+        // rename, for one), and the name's page that comes back has none.
+        fleet = Fleet();
+        await setup.StepAsync();
+        Assert.AreNotEqual("name", ManagerSetupScreens.Of(setup.View).Name);
+        fleet = Fleet(features: Renames);
+        await setup.StepAsync();
+        Assert.AreEqual(("name", (string?)null), (ManagerSetupScreens.Of(setup.View).Name, ManagerSetupScreens.Of(setup.View).Warning),
+                        "the line of a page before is gone");
+
+        await setup.TakeNameAsync();
+        Assert.AreEqual("That name is taken.", ManagerSetupScreens.Of(setup.View).Warning);
+        setup.Visit();
+        Assert.IsNull(ManagerSetupScreens.Of(setup.View).Warning, "a new visit has no orange line of a rename before it");
+
+        // A store that went to another generation of the hub between the team's read and the second rename gets no second
+        // rename (the Mac's guard of the hub and its db before each call).
+        var before = hub.PostsTo("/rename").Count;
+        hub.Refuses = route =>
+        {
+            if (!route.EndsWith("/rename", StringComparison.Ordinal)) return null;
+            fleet = Fleet(features: Renames) with { Db = "db-2" };
+            return HubException.Refusal(409, null, "The team changed.", "team_changed");
+        };
+        setup.TypeName("Vera");
+        await setup.TakeNameAsync();
+        Assert.AreEqual(before + 1, hub.PostsTo("/rename").Count, "no second rename in another generation");
+        fleet = Fleet(features: Renames);
+
+        hub.Refuses = null;
+        setup.TypeName("Juno");
+        await setup.TakeNameAsync();
+        Assert.AreEqual(before + 1, hub.PostsTo("/rename").Count, "the name that it has goes on with no rename");
+        Assert.AreEqual(("provider", (string?)null), (ManagerSetupScreens.Of(setup.View).Name, ManagerSetupScreens.Of(setup.View).Warning));
+
+        // A press goes only to the hub of its mark: a store that went to another hub gets no rename (the hub half of the
+        // generation's check; the Mac's guard of the hub of the press).
+        Uri? current = new Uri("http://100.64.0.9:9999/");
+        var own = new Uri("http://100.64.0.9:8778/");
+        var (pressed, pressedHub, _) = Setup(new ManagerSetupMark(own, "db-1", "juno"), () => fleet, hubOf: () => current);
+        await pressed.StepAsync();
+        pressed.TypeName("Nova");
+        await pressed.TakeNameAsync();
+        Assert.AreEqual(0, pressedHub.PostsTo("/rename").Count, "no rename goes to a hub that is not the mark's");
+        current = own;
+        await pressed.TakeNameAsync();
+        Assert.AreEqual(1, pressedHub.PostsTo("/rename").Count, "the press of the mark's own hub goes");
+
+        // A refusal, or no answer, of a press whose store went to another generation meanwhile does nothing: no orange
+        // line of the hub before (the Mac's `guard here()`).
+        var moved = Fleet(features: Renames);
+        var away = new Uri("http://100.64.0.9:8779/");
+        var (gone, goneHub, _) = Setup(new ManagerSetupMark(away, "db-1", "juno"), () => moved);
+        await gone.StepAsync();
+        foreach (var answer in new[] { HubException.Refusal(409, null, "That name is taken.", "name_taken"), HubException.NoAnswer() })
+        {
+            goneHub.Refuses = route =>
+            {
+                if (!route.EndsWith("/rename", StringComparison.Ordinal)) return null;
+                moved = Fleet(features: Renames) with { Db = "db-2" };
+                return answer;
+            };
+            gone.TypeName("Nova");
+            await gone.TakeNameAsync();
+            Assert.IsNull(gone.View.Refusal, $"{answer.Message}: nothing of the press counts in another generation");
+            moved = Fleet(features: Renames);
+        }
+    }
+
+    /// <summary>**A rename whose answer is lost after the hub renamed still finds the new name at the next reading** (the
+    /// read of U3b, Must 1; the Mac notes the rename before it goes, and keeps the note when no answer comes): the reading
+    /// with the new name gives the setup of that name, and the kept mark goes there with its provider. The bug: a mark left,
+    /// on disk, on a name that the hub no longer has, so that the window opens Tasks, also after a restart, and the
+    /// manager has no server and no way on.</summary>
+    [TestMethod]
+    public async Task A_rename_whose_answer_is_lost_finds_the_new_name_at_the_next_reading()
+    {
+        var at = new Uri("http://100.64.0.9:8773/");
+        var fleet = Fleet(features: Renames);
+        var (setup, hub, choices) = Setup(new ManagerSetupMark(at, "db-1", "juno", "claude"), () => fleet);
+        await setup.StepAsync();
+        Assert.AreEqual("name", ManagerSetupScreens.Of(setup.View).Name);
+        hub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal) ? HubException.NoAnswer() : null;
+        setup.TypeName("Nova");
+        await setup.TakeNameAsync();
+        Assert.AreEqual(1, hub.PostsTo("/rename").Count, "the rename reached the hub");
+        Assert.AreEqual(("name", AgentSetupModel.NoAnswer), (ManagerSetupScreens.Of(setup.View).Name, ManagerSetupScreens.Of(setup.View).Warning));
+
+        var after = new StoreState { Hub = at, Role = HubRole.Owner, Fleet = Fleet(features: Renames, name: "nova") };
+        Assert.AreEqual(new ManagerSetupMark(at, "db-1", "nova", "claude"), ManagerSetupMark.Shown(after, choices), "the setup of the new name");
+        Assert.AreEqual(("juno", "nova"), ManagerSetupMark.TakeRename(after, choices));
+        Assert.AreEqual(new ManagerSetupMark(at, "db-1", "nova", "claude"), ManagerSetupMark.Read(choices), "the kept mark, with its provider");
+    }
+
+    /// <summary>**A press after a rename whose answer was lost finds the hub's answer in the team, and sends no second
+    /// rename** (the read of U3b, round 2, Should 1; the Mac's <c>ManagerRename</c>, d95e1044c). The hub has the new name
+    /// and the owner's store still holds the reading from before, so the page has the old name and Continue. The bugs: a
+    /// second rename, whose 404 the refusal takes the note away, so that at the reading of the new name the window forgets
+    /// the manager's chat and opens Tasks; the name from before typed again, which clears the note while the hub has
+    /// another name; a third name, which a press leaves on the page; a rename that went through and shows Continue.</summary>
+    [TestMethod]
+    public async Task A_press_after_a_lost_rename_keeps_its_note_and_sends_no_second_rename()
+    {
+        var port = 8780;
+        // The same name again, the name from before again, and another device's name meanwhile.
+        foreach (var (typed, has) in new[] { ("Nova", "nova"), ("Juno", "nova"), ("Nova", "atlas") })
+        {
+            var at = new Uri($"http://100.64.0.9:{port++}/");
+            var fleet = Fleet(features: Renames);
+            var (setup, hub, choices) = Setup(new ManagerSetupMark(at, "db-1", "juno", "claude"), () => fleet);
+            await setup.StepAsync();
+            hub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal) ? HubException.NoAnswer() : null;
+            setup.TypeName("Nova");
+            await setup.TakeNameAsync();
+            Assert.AreEqual(1, hub.PostsTo("/rename").Count, "the rename reached the hub");
+            Assert.AreEqual((AgentSetupModel.NoAnswer, false), (ManagerSetupScreens.Of(setup.View).Warning, setup.View.Busy), "Continue is on again");
+
+            // The hub has another name; its 404 "no such agent" is what a second rename would get.
+            hub.TeamLines = $"[{{\"agent\": \"{has}\", \"role\": \"manager\"}}]";
+            hub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal)
+                ? HubException.Refusal(404, null, "There is no such agent.", "no_such_agent") : null;
+            setup.TypeName(typed);
+            await setup.TakeNameAsync();
+            Assert.AreEqual(1, hub.PostsTo("/rename").Count, $"{typed}: no second rename");
+            var page = ManagerSetupScreens.Of(setup.View);
+            // The mark has its provider, so the page after the name is the fleet's servers.
+            var same = string.Equals(typed, has, StringComparison.OrdinalIgnoreCase);
+            Assert.AreEqual((same ? "servers" : "name", (string?)null, false), (page.Name, page.Warning, setup.View.Busy),
+                            $"{typed}: the press ends with Continue on, and the page of the name that he asked for goes on");
+            await setup.TakeNameAsync();
+            Assert.AreEqual(1, hub.PostsTo("/rename").Count, $"{typed}: the next press sends nothing either");
+
+            // The reading of the name that the hub has: the setup and the kept mark go there, with the provider kept.
+            var after = new StoreState { Hub = at, Role = HubRole.Owner, Fleet = Fleet(features: Renames, name: has) };
+            Assert.AreEqual(new ManagerSetupMark(at, "db-1", has, "claude"), ManagerSetupMark.Shown(after, choices), $"{typed}: the setup of the name that the hub has");
+            Assert.AreEqual(("juno", has), ManagerSetupMark.TakeRename(after, choices), $"{typed}: the window moves there");
+            Assert.AreEqual(new ManagerSetupMark(at, "db-1", has, "claude"), ManagerSetupMark.Read(choices), typed);
+
+            // The page of that setup: the provider's for the name that he asked for, else the name's page again (the Mac's
+            // `renamed(now)`, where a name that is not the wanted one shows its own page).
+            var (next, _, _) = Setup(ManagerSetupMark.Read(choices)!, () => Fleet(features: Renames, name: has));
+            await next.StepAsync();
+            Assert.AreEqual(same ? "servers" : "name", ManagerSetupScreens.Of(next.View).Name, $"{typed}: the page of the name that the hub has ({has})");
+        }
+
+        // "No such agent" without a name that the hub has: the note stays, and a later reading finds the name. And the
+        // name from before, typed again for a rename that never came: no call but the team's read, and on to the provider.
+        var late = new Uri("http://100.64.0.9:8790/");
+        var (gone, goneHub, goneChoices) = Setup(new ManagerSetupMark(late, "db-1", "juno"), () => Fleet(features: Renames));
+        await gone.StepAsync();
+        goneHub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal)
+            ? HubException.Refusal(404, null, "There is no such agent.", "no_such_agent") : null;
+        gone.TypeName("Nova");
+        await gone.TakeNameAsync();
+        Assert.AreEqual(("name", "There is no such agent."), (ManagerSetupScreens.Of(gone.View).Name, ManagerSetupScreens.Of(gone.View).Warning));
+        Assert.IsTrue(ManagerSetupMark.RenameNoted(late, "db-1", "juno"), "the note of a rename that can have been made stays");
+        Assert.AreEqual(("juno", "nova"), ManagerSetupMark.TakeRename(new StoreState { Hub = late, Role = HubRole.Owner, Fleet = Fleet(features: Renames, name: "nova") }, goneChoices));
+
+        // Another device renamed the manager before any press of this window: the press finds it, sends nothing, notes
+        // it, and the reading takes the page there, to that name's own page.
+        var device = new Uri("http://100.64.0.9:8795/");
+        var (first, firstHub, firstChoices) = Setup(new ManagerSetupMark(device, "db-1", "juno"), () => Fleet(features: Renames));
+        await first.StepAsync();
+        firstHub.TeamLines = "[{\"agent\": \"atlas\", \"role\": \"manager\"}]";
+        first.TypeName("Nova");
+        await first.TakeNameAsync();
+        Assert.AreEqual(0, firstHub.PostsTo("/rename").Count, "no rename of a name that is gone");
+        Assert.AreEqual("name", ManagerSetupScreens.Of(first.View).Name, "another name than his: its own name page");
+        Assert.AreEqual(("juno", "atlas"), ManagerSetupMark.TakeRename(new StoreState { Hub = device, Role = HubRole.Owner, Fleet = Fleet(features: Renames, name: "atlas") }, firstChoices),
+                        "the press noted the rename, and the reading moves the window");
+
+        // Nothing is renamed, the name is the one it has, and no press before this one waits: the hub is asked nothing.
+        var quiet = new Uri("http://100.64.0.9:8792/");
+        var (asks, asksHub, _) = Setup(new ManagerSetupMark(quiet, "db-1", "juno"), () => Fleet(features: Renames));
+        await asks.StepAsync();
+        var reads = asksHub.Reads;
+        asks.TypeName("Juno");
+        await asks.TakeNameAsync();
+        Assert.AreEqual((reads, "provider"), (asksHub.Reads, ManagerSetupScreens.Of(asks.View).Name), "no call of the hub, and on to the provider");
+
+        var keep = new Uri("http://100.64.0.9:8791/");
+        var (kept, keptHub, _) = Setup(new ManagerSetupMark(keep, "db-1", "juno"), () => Fleet(features: Renames));
+        await kept.StepAsync();
+        keptHub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal) ? HubException.NoAnswer() : null;
+        kept.TypeName("Nova");
+        await kept.TakeNameAsync();
+        keptHub.Refuses = null;
+        kept.TypeName("Juno");
+        await kept.TakeNameAsync();
+        Assert.AreEqual(1, keptHub.PostsTo("/rename").Count, "the name from before sends nothing more");
+        Assert.AreEqual("provider", ManagerSetupScreens.Of(kept.View).Name, "he goes on with the name that the hub has");
+        Assert.IsTrue(ManagerSetupMark.RenameNoted(keep, "db-1", "juno"), "the note of the rename stays: a rename that still comes takes the page with it");
+
+        // A refused read of the team says nothing of a rename (a hub that restarts): the note stays, and the reading of the
+        // new name takes the page with it.
+        var restarts = new Uri("http://100.64.0.9:8793/");
+        var (waits, waitsHub, waitsChoices) = Setup(new ManagerSetupMark(restarts, "db-1", "juno"), () => Fleet(features: Renames));
+        await waits.StepAsync();
+        waitsHub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal) ? HubException.NoAnswer() : null;
+        waits.TypeName("Nova");
+        await waits.TakeNameAsync();
+        waitsHub.Throws = route => route == "ui/team" ? HubException.Refusal(503, null, "The hub restarts.", "restarting") : null;
+        await waits.TakeNameAsync();
+        Assert.AreEqual(("name", "The hub restarts."), (ManagerSetupScreens.Of(waits.View).Name, ManagerSetupScreens.Of(waits.View).Warning));
+        Assert.AreEqual(("juno", "nova"), ManagerSetupMark.TakeRename(new StoreState { Hub = restarts, Role = HubRole.Owner, Fleet = Fleet(features: Renames, name: "nova") }, waitsChoices),
+                        "the page goes with the reading of the name");
+
+        // The manager got another name than the one that this window asked for, and a worker has that one: the page goes
+        // to the manager, never to the worker.
+        var worker = new Uri("http://100.64.0.9:8794/");
+        var (taken, takenHub, takenChoices) = Setup(new ManagerSetupMark(worker, "db-1", "juno"), () => Fleet(features: Renames));
+        await taken.StepAsync();
+        takenHub.Refuses = route => route.EndsWith("/rename", StringComparison.Ordinal) ? HubException.NoAnswer() : null;
+        taken.TypeName("Nova");
+        await taken.TakeNameAsync();
+        var mixed = Fleet(features: Renames, name: "atlas");
+        var reading = mixed with { Agents = [new MobileAgent("nova", "worker", "claude", 0, []), .. mixed.Agents] };
+        Assert.AreEqual(("juno", "atlas"), ManagerSetupMark.TakeRename(new StoreState { Hub = worker, Role = HubRole.Owner, Fleet = reading }, takenChoices),
+                        "the manager's name, not the worker's");
+    }
+
     /// <summary>**The setup's reads go on after a read that throws** (the read of U3: one error that was not the window's
     /// leave ended them for good, while the Mac's <c>try?</c> reads on): the hub's client that gives up throws a cancel of
     /// its own, and an answer of no form an error of another kind. The bug: a page that stands still at its last read, and
@@ -388,6 +723,13 @@ public sealed class ManagerSetupTests
         await placing.NoteAsync(state, now);
         Assert.AreEqual(("claude", "worker-2"), (ManagerSetupMark.Read(choices)!.Provider, ManagerSetupMark.Read(choices)!.Joined));
 
+        // A rename that this app has no note of (another computer's, or an app that ended before the reading of the new
+        // name): the kept mark follows the manager's name now, with its provider and its joined server (piece U3b's read).
+        await placing.NoteAsync(state with { Fleet = Fleet(name: "nova") }, now);
+        Assert.AreEqual(("nova", "claude", "worker-2"), (ManagerSetupMark.Read(choices)!.Agent, ManagerSetupMark.Read(choices)!.Provider,
+                                                         ManagerSetupMark.Read(choices)!.Joined), "the mark of a renamed manager");
+        Assert.AreEqual("nova", ManagerSetupMark.Shown(state with { Fleet = Fleet(name: "nova") }, choices)?.Agent, "its setup shows");
+
         ManagerSetupMark.Forget(choices);
         hub.Servers = SetupHub.ServerList(managerOn: "worker-2");
         var reads = hub.Reads;
@@ -407,6 +749,8 @@ internal sealed class SetupHub : OwnerReads.ICalls
     public string Servers { get; set; } = ServerList(managerOn: null);
     public string Machines { get; set; } = "{\"db\": \"db-1\", \"machines\": []}";
     public bool ServersFail { get; set; }
+    /// <summary>The SHA-256 of the team.json of each next read, in order; then the same one each time.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> TeamShas { get; } = new();
     /// <summary>An error of a read, by its route, that is not the hub's (the hub's client that gives up, an answer of no form).</summary>
     public Func<string, Exception?>? Throws { get; set; }
     public Func<string, HubException?>? Refuses { get; set; }
@@ -437,7 +781,8 @@ internal sealed class SetupHub : OwnerReads.ICalls
             "ui/servers" when ServersFail => throw HubException.NoAnswer(),
             "ui/servers" => Servers,
             "ui/machines" => Machines,
-            "ui/team" => "{\"db\": \"db-1\", \"revision\": \"" + new string('a', 40) + "\", \"sha256\": \"" + new string('b', 64) +
+            "ui/team" => "{\"db\": \"db-1\", \"revision\": \"" + new string('a', 40) + "\", \"sha256\": \"" +
+                         (TeamShas.TryDequeue(out var sha) ? sha : new string('b', 64)) +
                          "\", \"lines\": " + TeamLines + ", \"open_tasks\": {}}",
             _ => throw new InvalidOperationException("no read " + route),
         };
@@ -467,6 +812,9 @@ internal sealed class SetupHub : OwnerReads.ICalls
                             $"\"job\": 8, \"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('c', 64)}\"}}",
             JoinAsk => $"{{\"ok\": true, \"request_id\": \"{id}\", \"name\": \"\", \"kind\": \"linux\", \"expires_at\": 1763703600, \"code\": \"7KMQ2PRJ4TVW\", " +
                        "\"line\": \"curl -fsS http://100.64.0.9:8765/join | FLEET_JOIN=7KMQ2PRJ4TVW sh\"}",
+            // The rename of a manager with no server: no job and no server (POST /ui/team/agents/<agent>/rename).
+            RenameAsk rename => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{rename.Name}\", \"was\": \"{route.Split('/')[3]}\", " +
+                                $"\"server\": null, \"job\": null, \"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('d', 64)}\"}}",
             _ => $"{{\"ok\": true, \"request_id\": \"{id}\"}}",
         };
         return Task.FromResult(new OwnerAnswer<TAnswer>(JsonSerializer.Deserialize(json, answerType)));

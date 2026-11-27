@@ -216,6 +216,91 @@ extension ProblemReport {
     }
 }
 
+// ---------------------------------------------------------------- the window's height
+
+extension ProblemReport {
+    /// **The height that the page gives its window** (the owner, 25 November 2026, of Report a problem: "much more
+    /// compact"): it grows at once, so nothing is cut and Send stays in view, but it shrinks only when a check answered
+    /// or a send ended (`settle`), so its bottom edge does not move about 37 points each time a status line comes and
+    /// goes while he types (the validation of 25 November 2026, S1). The measure after a settle may shrink it too,
+    /// because the page's new layout comes after the answer that changed it.
+    public struct PageHeight: Equatable, Sendable {
+        /// The height that the window takes; nil until the page has its facts.
+        public private(set) var shown: Double?
+        private var measured: Double?
+        private var settling = false
+
+        public init() {}
+
+        /// The page's height, measured; nil while the page has no facts (the window then keeps the scene's height).
+        public mutating func measure(_ height: Double?) {
+            guard let height, height > 0 else { return }
+            measured = height
+            if let shown, height <= shown, !settling { return }
+            shown = height
+            settling = false
+        }
+
+        /// A check answered or a send ended: the window takes the page's height, also a lower one, and so does the next
+        /// measure.
+        public mutating func settle() {
+            if let measured { shown = measured }
+            settling = true
+        }
+    }
+
+    /// **Where the window stands for that height** (`FormHeightWindow`), in the screen's points with the origin at the
+    /// lower left, as AppKit counts a window's frame: its top edge stays, its width stays, and it stays inside the
+    /// screen's visible frame, where a page taller than the screen scrolls. **A height that the fitter did not set is
+    /// his** (the validation of 25 November 2026, M1): a drag of an edge, Window › Zoom, Fill, Move & Resize, a tile at
+    /// the screen's edge or a window app's move all leave the window at a height that is not the one set last, and from
+    /// then on the window keeps every height that he gives it. A change of the width alone is no such change: the page
+    /// wraps again and the window takes its height again. Known and left: a height that he gives the window before the
+    /// first check answered (before the fitter set any) is the fitter's once, when that check answers, unless he gave it
+    /// with a drag (`resized`).
+    public struct WindowFit: Equatable, Sendable {
+        /// The height that the fitter set last, or found right; nil before its first fit.
+        public private(set) var placed: Double?
+        /// He gave the window a height of his own: the fitter sets none from then on.
+        public private(set) var own = false
+
+        public init() {}
+
+        /// A drag of the window's edge ended: a change of the height is his.
+        public mutating func resized(from before: Double, to after: Double) {
+            if abs(after - before) > 0.5 { own = true }
+        }
+
+        /// The frame that the window takes for a page of `page` points (nil: none yet), or nil to leave it as it is.
+        /// `window` is its frame now, `over` the room that its frame has over its content, `room` the visible frame of
+        /// its screen (nil: on no screen).
+        public mutating func frame(page: Double?, window: CGRect, over: Double, room: CGRect?) -> CGRect? {
+            guard !own else { return nil }
+            let now = Double(window.height)
+            if let placed, abs(now - placed) > 0.5 {
+                own = true
+                return nil
+            }
+            guard let page, page > 0 else { return nil }
+            var target = (page + over).rounded(.up)
+            if let room { target = min(target, Double(room.height)) }
+            guard abs(now - target) > 0.5 else {
+                placed = now
+                return nil
+            }
+            var frame = window
+            frame.size.height = CGFloat(target)
+            frame.origin.y = window.maxY - CGFloat(target)
+            if let room { frame.origin.y = min(max(frame.origin.y, room.minY), room.maxY - CGFloat(target)) }
+            placed = target
+            return frame
+        }
+
+        /// The height that the window took after its frame was set: the one that the next fit compares.
+        public mutating func took(_ height: Double) { placed = height }
+    }
+}
+
 // ---------------------------------------------------------------- sending it
 
 /// What our website answers a report with: the reference the customer can quote back at us.

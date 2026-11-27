@@ -83,12 +83,72 @@ public sealed partial record ManagerSetupMark(Uri Hub, string Db, string Agent, 
     }
 
     /// <summary>**The mark for which the window shows the manager's setup now**: the PC is the owner's computer of the hub
-    /// of the mark, the store holds a reading of that generation, and that reading has the manager. Null otherwise.</summary>
-    public static ManagerSetupMark? Shown(StoreState state, ISetupChoices choices) =>
-        state.Role == HubRole.Owner && state.Fleet is { } fleet && Read(choices) is { } mark && mark.IsOf(state.Hub, fleet.Db) &&
-        fleet.Agents.Any(a => a.Name == mark.Agent)
-            ? mark
-            : null;
+    /// of the mark, the store holds a reading of that generation, and that reading has the manager; or the reading has no
+    /// agent of the mark's name any more and this window asked to rename that manager (<see cref="NoteRename"/>), and then
+    /// the mark is that of the manager's name in it. Null otherwise.</summary>
+    public static ManagerSetupMark? Shown(StoreState state, ISetupChoices choices)
+    {
+        if (state.Role != HubRole.Owner || state.Fleet is not { } fleet || Read(choices) is not { } mark || !mark.IsOf(state.Hub, fleet.Db))
+            return null;
+        if (fleet.Agents.Any(a => a.Name == mark.Agent)) return mark;
+        return Renamed(state) is { } r && r.Was == mark.Agent ? mark with { Agent = r.Now } : null;
+    }
+
+    /// <summary>**The rename of this manager that this window asked for on this run** (the Mac's
+    /// <c>FleetStore.renamedManager</c>): its hub, its generation and the name that it had. It is noted before the rename
+    /// goes, and nothing takes it away but the reading that has no agent of that name: a refusal says only that its own
+    /// command renamed nothing, and a note whose manager keeps its name does nothing. So an answer that is lost after the
+    /// hub renamed still finds the manager, under the name that the reading gives it, and the mark goes there
+    /// (<see cref="TakeRename"/>).</summary>
+    private static ManagerRenameNote? renamed;
+
+    /// <summary>Notes the rename of this manager before it goes.</summary>
+    public static void NoteRename(Uri hub, string db, string was)
+    {
+        lock (Writes) renamed = new ManagerRenameNote(hub, db, was);
+    }
+
+    /// <summary>This window asked to rename this manager of this hub and generation, and no reading has shown it under
+    /// another name since (the Mac's <c>renameNoted</c>).</summary>
+    public static bool RenameNoted(Uri hub, string db, string was)
+    {
+        lock (Writes) return renamed?.Is(hub, db, was) == true;
+    }
+
+    /// <summary>The noted rename that this reading shows: of its hub and generation, with no agent of the noted name any
+    /// more, and the manager's name in it; or null.</summary>
+    private static (string Was, string Now)? Renamed(StoreState state)
+    {
+        lock (Writes)
+            return renamed is { } note && state.Hub is { } hub && state.Fleet is { } fleet && note.Follow(hub, fleet) is { } now ? (note.Was, now) : null;
+    }
+
+    /// <summary>**The rename that this reading shows**, once: the reading of the note's hub and generation has no agent of
+    /// the noted name, and its manager has another. The kept mark of that hub and generation goes to the manager's name
+    /// now, with its provider and its joined server, and the window moves the manager's pages there (the Mac's
+    /// <c>FleetStore.notePlacing</c> with <c>renamedManager</c>); the note goes.</summary>
+    public static (string Was, string Now)? TakeRename(StoreState state, ISetupChoices choices)
+    {
+        lock (Writes)
+        {
+            if (Renamed(state) is not { } r) return null;
+            renamed = null;
+            if (Read(choices) is { } kept && kept.IsOf(state.Hub, state.Fleet!.Db) && kept.Agent == r.Was) (kept with { Agent = r.Now }).Keep(choices);
+            return r;
+        }
+    }
+
+    /// <summary>**A kept mark of an agent that the reading no longer has goes to the manager's name now**, with its provider
+    /// and its joined server: a rename whose note this app does not have (an app that ended before the reading of the new
+    /// name, another computer's rename). Nothing for a mark of another hub or generation, or of an agent that the reading
+    /// has.</summary>
+    public static void FollowManager(ISetupChoices choices, Uri hub, MobileSnapshot fleet, string manager)
+    {
+        lock (Writes)
+            if (Read(choices) is { } kept && kept.IsOf(hub, fleet.Db) && kept.Agent != manager && fleet.Agents.Any(a => a.Name == manager) &&
+                !fleet.Agents.Any(a => a.Name == kept.Agent))
+                (kept with { Agent = manager }).Keep(choices);
+    }
 
     /// <summary>A name that a mark can hold.</summary>
     public static bool Holds(string agent) => AgentShape().IsMatch(agent);
@@ -133,7 +193,12 @@ public sealed class ManagerPlacing(OwnerReads.ICalls calls, ISetupChoices choice
         if (state.Role != HubRole.Owner || state.Hub is not { } hub || state.Fleet is not { } fleet || !state.IsFresh(now)) return;
         if (!fleet.Offers(AgentSetupFlow.ServerFeature) || !AgentSetupFlow.Features.All(fleet.Offers)) return;
         if (fleet.Agents.FirstOrDefault(a => a.Role == "manager") is not { } manager || !ManagerSetupMark.Holds(manager.Name)) return;
-        if (ManagerSetupMark.Read(choices)?.IsOf(hub, fleet.Db) == true) return;
+        if (ManagerSetupMark.Read(choices)?.IsOf(hub, fleet.Db) == true)
+        {
+            // A mark that is there keeps its provider and its joined server, under the manager's name now.
+            ManagerSetupMark.FollowManager(choices, hub, fleet, manager.Name);
+            return;
+        }
         var key = hub.GetLeftPart(UriPartial.Authority) + "|" + fleet.Db;
         lock (gate)
         {
@@ -174,9 +239,9 @@ public sealed class ManagerSetupSettings
     /// nothing, and counts no read, while it does not (a window that is behind, a hub that does not answer). Null: always.</summary>
     public Func<bool>? Fresh { get; init; }
     public Func<TimeSpan, CancellationToken, Task> Pause { get; init; } = Task.Delay;
-    /// <summary>The hub that the owner's store is on now (its <c>State.Hub</c>): the server's page joins a server only while
-    /// it is the hub of this setup, and its generation is this setup's (<see cref="OwnerReads.ICalls.Database"/>). Null:
-    /// the generation alone says it.</summary>
+    /// <summary>The hub that the owner's store is on now (its <c>State.Hub</c>): a press of the setup goes only to its mark's
+    /// hub, and the server's page joins a server only while it is the hub of this setup, and its generation is this setup's
+    /// (<see cref="OwnerReads.ICalls.Database"/>). Null: the generation alone says it.</summary>
     public Func<Uri?>? Hub { get; init; }
     /// <summary>**The owner's store can send a write now** (the Mac's <c>store.canWrite</c>): Try again of a stopped
     /// activation shows only then. Null: always.</summary>
@@ -205,6 +270,10 @@ public sealed record ManagerSetupView
     public string? Marked { get; init; }
     /// <summary>The hub's words when it refused a step, or this app's for one that it did not answer, until the next step.</summary>
     public string? Refusal { get; init; }
+    /// <summary>The words in the field of "Name your manager".</summary>
+    public string TypedName { get; init; } = "";
+    /// <summary>The hub's features at this visit's first read (the Mac's <c>startFeatures</c>), or null before it.</summary>
+    public IReadOnlyList<string>? StartFeatures { get; init; }
     /// <summary>Why the setup stopped the last time, in the hub's own words (<see cref="AgentSetupFlow.Stopped"/>), split
     /// in two lines where it says why (the Mac's <c>lines</c>).</summary>
     public string? Stopped { get; init; }
@@ -216,7 +285,7 @@ public sealed record ManagerSetupView
     public int? BarPart { get; init; }
     /// <summary>The server that the install title names (the Mac's <c>serverName</c>).</summary>
     public string Server { get; init; } = ManagerSetupScreens.ItsServer;
-    /// <summary>A press of this setup is on its way: no second one, and no Try again.</summary>
+    /// <summary>A press of this setup is on its way: no second one, no Try again, and no Continue.</summary>
     public bool Busy { get; init; }
     /// <summary>The reads in a row that had no list of the hub's servers while the hub answered its state.</summary>
     public int UnreadReads { get; init; }
@@ -267,9 +336,12 @@ public sealed record ManagerSetupView
 /// manager a server of the fleet (<see cref="TakeServerAsync"/>) or a new one (<see cref="Server"/>). Nothing here draws or
 /// opens a page.
 ///
-/// Not here (pieces U3b and L6, and wave C): the drawing of the server's page, the slider's page and its root step on the
-/// hub's own server, the name's page of a hub whose first run did not ask, and a change of provider. Their pages draw
-/// their frame alone, and do not take the window (<see cref="ManagerSetupScreens.TakesWindow"/>).</summary>
+/// The name's page of a hub whose first run did not ask is here (piece U3b): its field and Continue, which renames the
+/// manager on the hub (<see cref="TakeNameAsync"/>).
+///
+/// Not here (U3b's Server step and L6, and wave C): the drawing of the server's page, the slider's page and its root
+/// step on the hub's own server, and a change of provider. Their pages draw their frame alone, and do not take the
+/// window (<see cref="ManagerSetupScreens.TakesWindow"/>).</summary>
 public sealed class ManagerSetup
 {
     private readonly ManagerSetupSettings settings;
@@ -288,7 +360,44 @@ public sealed class ManagerSetup
     /// <summary>The server's page asked for the first run's server on this visit (<see cref="AgentServerStep"/>).</summary>
     private bool serverOpened;
     private bool busy, ended, shareStopped;
+    /// <summary>The name's page: the words in its field, and a rename that is on its way (the page stays the name's, with
+    /// Continue off, until the press ends: the Mac's <c>renaming</c>), and the words of a rename that the hub refused or
+    /// did not answer.</summary>
+    private string typedName;
+    private bool renaming;
+    private string? nameRefusal;
+    /// <summary>The hub's features at the first read of this visit (the Mac's <c>startFeatures</c>).</summary>
+    private IReadOnlyList<string>? startFeatures;
     private int unreadReads, shareReads;
+
+    /// <summary>**The hubs and generations where the owner went on from the name's page, on this run of the app** (the
+    /// Mac's <c>FleetStore.namedManagers</c>): the provider's page is next there, until the hub keeps a step. One set for
+    /// the app, because the setup of the new name is another setup.</summary>
+    private static readonly HashSet<string> NamedOn = [];
+    private string NamedKey => Mark.Hub.GetLeftPart(UriPartial.Authority) + "|" + Mark.Db;
+
+    /// <summary>The owner went on from the name's page of this hub and generation, on this run of the app.</summary>
+    private bool Named { get { lock (NamedOn) return NamedOn.Contains(NamedKey); } }
+
+    private void NoteNamed()
+    {
+        lock (NamedOn) NamedOn.Add(NamedKey);
+    }
+
+    /// <summary>**Back on the provider's page** (the Mac's <c>SetupBack</c> there, and Esc): the name's page again, with no
+    /// orange line, by the note that he named the manager taken away (the Mac's <c>noteManagerNamed(false)</c>). Nothing
+    /// while the page shows no Back (<see cref="ManagerSetupScreen.Back"/>).</summary>
+    public void BackToName()
+    {
+        lock (gate)
+        {
+            if (!ManagerSetupScreens.Of(view).Back) return;
+            nameRefusal = null;
+            model.ForgetRefusal();
+        }
+        lock (NamedOn) NamedOn.Remove(NamedKey);
+        Publish();
+    }
     private AgentPage? shownPage;
     private (long Job, int? Furthest) bar = (-1, null);
 
@@ -324,6 +433,9 @@ public sealed class ManagerSetup
         this.firstSetup = firstSetup;
         Mark = mark;
         model = new AgentSetupModel(settings.Calls, mark.Agent, placing: firstSetup) { Provider = mark.Provider, Joined = mark.Joined };
+        // The name's field opens on the manager's own name with capitals, never on its role, which is no name; and on the
+        // suggestion when it has the hub's default (the Mac's typedName).
+        typedName = mark.Agent == Install.ManagerName.Fallback ? Install.ManagerName.Suggested : AgentBook.Capitalized(mark.Agent);
         var fleet = settings.Fleet();
         var role = fleet?.Agents.FirstOrDefault(a => a.Name == mark.Agent)?.Role;
         view = new ManagerSetupView
@@ -356,6 +468,8 @@ public sealed class ManagerSetup
             placeAsked = false;
             serverOpened = false;
             unreadReads = 0;
+            nameRefusal = null;
+            startFeatures = null;
             model.NewVisit();
         }
         Server?.NewVisit();
@@ -436,6 +550,7 @@ public sealed class ManagerSetup
     {
         if (settings.Fresh?.Invoke() == false || settings.Fleet() is not { } fleet || fleet.Db != Mark.Db) return false;
         await model.ReadAsync(fleet, cancel).ConfigureAwait(false);
+        lock (gate) startFeatures ??= model.Reading?.Features;
         Publish(answered: true);
         return true;
     }
@@ -448,7 +563,7 @@ public sealed class ManagerSetup
     private async Task FollowAsync(CancellationToken cancel)
     {
         if (model.Reading is not { } reading || Busy) return;
-        var start = model.Start(reading, named: true);
+        var start = model.Start(reading, named: Named);
         if (start is ManagerSetupStart.Sharing sharing)
         {
             // "1 server" is kept and the page waits for the hub's reading of its own server's service: a count of reads
@@ -475,7 +590,7 @@ public sealed class ManagerSetup
             try
             {
                 placeAsked = true;
-                await model.PlaceChosenAsync(reading, named: true, cancel).ConfigureAwait(false);
+                await model.PlaceChosenAsync(reading, named: Named, cancel).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -542,9 +657,9 @@ public sealed class ManagerSetup
                 {
                     Mark = Mark with { Provider = provider };
                     if (ManagerSetupMark.Read(settings.Choices)?.IsOf(Mark.Hub, Mark.Db) == true) Mark.Keep(settings.Choices);
-                    if (model.PlaceOn(reading, model.Start(reading, named: true)) is not null) placeAsked = true;
+                    if (model.PlaceOn(reading, model.Start(reading, named: Named)) is not null) placeAsked = true;
                 }
-                await model.ChooseAsync(reading, provider, named: true, cancel).ConfigureAwait(false);
+                await model.ChooseAsync(reading, provider, named: Named, cancel).ConfigureAwait(false);
                 await ReadAsync(cancel).ConfigureAwait(false);
             }
             finally { turn.Release(); }
@@ -552,6 +667,111 @@ public sealed class ManagerSetup
         catch (OperationCanceledException) { }
         finally { End(); }
     }
+
+    /// <summary>The words in the name's field, as he types them.</summary>
+    public void TypeName(string typed)
+    {
+        lock (gate) typedName = typed;
+        Publish();
+    }
+
+    /// <summary>**Continue of "Name your manager"** (the Mac's <c>takeName</c>): a press of <see cref="ManagerRename"/>, against
+    /// the team that the hub gives at the press, and only while the store holds the mark's hub and generation. The page
+    /// stays the name's until the press ends, with Continue off, and a reading that has the new name then moves the mark
+    /// (<see cref="ManagerSetupMark.TakeRename"/>) and the window to the setup of that name. The rename is noted before it
+    /// goes (<see cref="ManagerSetupMark.NoteRename"/>), so an answer that is lost, or a press after one, still finds the
+    /// manager in the team: nothing takes the note away but the reading of the manager's other name. A refusal says only
+    /// that its own command renamed nothing. The hub's words of a refusal, or this app's of no answer, are the page's
+    /// orange line. Nothing goes for words that the installer does not take, or with no current reading of this hub's
+    /// generation.</summary>
+    public async Task TakeNameAsync(CancellationToken cancel = default)
+    {
+        string typed;
+        lock (gate) typed = typedName;
+        if (Install.ManagerName.AgentName(typed) is not { } wanted || !Begin()) return;
+        try
+        {
+            await turn.WaitAsync(cancel).ConfigureAwait(false);
+            try
+            {
+                lock (gate) nameRefusal = null;
+                if (settings.Fresh?.Invoke() == false || !OfThisGeneration()) return;
+                if (wanted == Mark.Agent && !ManagerSetupMark.RenameNoted(Mark.Hub, Mark.Db, Mark.Agent))
+                {
+                    // He goes on with the name that it has, and no rename of an earlier press waits: nothing to ask the hub.
+                    NoteNamed();
+                    return;
+                }
+                // Continue is held for the press only (the Mac's `defer { renaming = false }`): its refresh is part of it.
+                lock (gate) renaming = true;
+                Publish();
+                try
+                {
+                    var outcome = await ManagerRename.PressAsync(Mark.Agent, wanted, async () =>
+                    {
+                        // The hub and generation of the press, before each call (the Mac's guard of store.hub and its db): a
+                        // store that went to another one, or a call that it answered with nothing, gets no rename.
+                        var read = await OwnerReads.TeamAsync(settings.Calls, cancel).ConfigureAwait(false);
+                        return read.Value is { } team && OfThisGeneration()
+                            ? new ManagerRename.Team(team.Lines.Select(l => l.Agent).ToArray(), team.Manager?.Agent, team.Sha256)
+                            : null;
+                    }, async sha256 =>
+                    {
+                        // **The note goes before the rename** (the Mac's noteRename before nameManager): an answer that is lost
+                        // after the hub renamed still finds the manager at the next reading (ManagerSetupMark.TakeRename).
+                        ManagerSetupMark.NoteRename(Mark.Hub, Mark.Db, Mark.Agent);
+                        var answer = await OwnerReads.RenameAsync(settings.Calls, Mark.Agent, sha256, wanted, cancel: cancel).ConfigureAwait(false);
+                        return answer.Value is not null && OfThisGeneration();
+                    }, cancel).ConfigureAwait(false);
+                    switch (outcome)
+                    {
+                        case ManagerRename.Outcome.Keep:
+                            NoteNamed();
+                            break;
+                        case ManagerRename.Outcome.Named:
+                            // The next reading has the new name: the mark goes to it then, and the setup of that name takes
+                            // this one's place (the Mac's renaming).
+                            NoteNamed();
+                            await RefreshAsync().ConfigureAwait(false);
+                            break;
+                        case ManagerRename.Outcome.Renamed renamed:
+                            // The hub has another name already, of a press before this one or of another device: it is noted,
+                            // nothing goes, and the reading says the name. A third name's own page shows again then.
+                            ManagerSetupMark.NoteRename(Mark.Hub, Mark.Db, Mark.Agent);
+                            if (renamed.Now == wanted) NoteNamed();
+                            await RefreshAsync().ConfigureAwait(false);
+                            break;
+                        case ManagerRename.Outcome.Refused refused:
+                            // The hub refused this command. The rename of an earlier press can have been made all the same:
+                            // the note stays, and a reading says which name it is.
+                            if (!OfThisGeneration()) break;
+                            lock (gate) nameRefusal = refused.Refusal.HubWords ?? refused.Refusal.Message;
+                            await RefreshAsync().ConfigureAwait(false);
+                            break;
+                        case ManagerRename.Outcome.Unanswered:
+                            // The hub can have the new name. The next reading says which name it is, and the page goes with it.
+                            if (!OfThisGeneration()) break;
+                            lock (gate) nameRefusal = AgentSetupModel.NoAnswer;
+                            await RefreshAsync().ConfigureAwait(false);
+                            break;
+                    }
+                }
+                finally { lock (gate) renaming = false; }
+            }
+            finally { turn.Release(); }
+        }
+        catch (OperationCanceledException) { lock (gate) renaming = false; }
+        finally { End(); }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (settings.Refresh is { } refresh) await refresh().ConfigureAwait(false);
+    }
+
+    /// <summary>The owner's store holds a reading of this setup's hub and generation, and the calls go to them.</summary>
+    private bool OfThisGeneration() =>
+        settings.Fleet()?.Db == Mark.Db && settings.Calls.Database == Mark.Db && (settings.Hub?.Invoke() is not { } hub || Mark.IsOf(hub));
 
     /// <summary>**Claude Code's code, to the machine, and then forgotten here** (the Mac's <c>send</c>): only while the
     /// sign-in waits for it and no code is on its way. False when it did not go.</summary>
@@ -737,7 +957,7 @@ public sealed class ManagerSetup
     /// says so. Without a list, a manager would read as placed (<see cref="SetupAgent.Of"/>), and its setup would show the
     /// provider's page of an agent that runs.</summary>
     private bool Unread(AgentReading reading) =>
-        firstSetup && reading.Features.Contains("servers") && reading.Servers is null || model.Start(reading, named: true) is ManagerSetupStart.Unread;
+        firstSetup && reading.Features.Contains("servers") && reading.Servers is null || model.Start(reading, named: Named) is ManagerSetupStart.Unread;
 
     private ServerJob? Job(AgentReading? reading) =>
         reading is null ? null : AgentSetupFlow.Job(Mark.Agent, reading.Server(Mark.Agent),
@@ -750,7 +970,9 @@ public sealed class ManagerSetup
         {
             var reading = model.Reading;
             var unread = reading is not null && Unread(reading);
-            var page = reading is null ? null : unread ? AgentPage.Of(AgentSetupPage.Servers) : model.Page(reading, named: true);
+            var page = reading is null ? null : unread ? AgentPage.Of(AgentSetupPage.Servers) : model.Page(reading, named: Named, renaming: renaming);
+            // The name's orange line stays on the name's page only (the Mac's refusal, cleared when the page changes).
+            if (page is not null && page.Kind != AgentSetupPage.Name) nameRefusal = null;
             if (page is not null && page != shownPage)
             {
                 if (shownPage is not null) model.PageChanged(page);
@@ -759,7 +981,7 @@ public sealed class ManagerSetup
             var job = Job(reading);
             var machine = reading?.Machine(Mark.Agent);
             var runtime = reading?.Agent?.Runtime ?? "codex";
-            var start = reading is null ? null : unread ? new ManagerSetupStart.Unread() : model.Start(reading, named: true);
+            var start = reading is null ? null : unread ? new ManagerSetupStart.Unread() : model.Start(reading, named: Named);
             string? placeOn = reading is null || start is null ? null : model.PlaceOn(reading, start);
             IReadOnlyList<string>? barSteps = null;
             int? barPart = null;
@@ -786,7 +1008,9 @@ public sealed class ManagerSetup
                 Start = start,
                 Cards = reading is null ? [] : model.Cards(reading),
                 Marked = reading?.Agent?.Placed == false ? model.Provider ?? runtime : runtime,
-                Refusal = model.Refusal,
+                Refusal = nameRefusal ?? model.Refusal,
+                TypedName = typedName,
+                StartFeatures = startFeatures,
                 Stopped = stopped is null ? null : Lines(stopped),
                 InstallFailed = job is { Kind: "install", State: "failed" },
                 SignIn = page?.Kind == AgentSetupPage.SignIn && reading is not null ? model.SignInPage(reading, page.Runtime ?? runtime) : null,
@@ -847,7 +1071,7 @@ public static class ManagerSetupScreens
 
     /// <summary>**The setup takes the window now**: it shows (<see cref="ManagerSetupView.Shows"/>), it has not ended, and
     /// this build draws its page. A page that the build draws as its frame alone (<see cref="ManagerSetupScreen.Drawn"/>
-    /// false: the server's page, the fleet's servers with the root step, the name's page, which piece U3b draws) does not
+    /// false: the server's page and the fleet's servers with the root step, which wave B draws after L4b and L6) does not
     /// take it: the manager's page shows with the pane, so that every other page stays in reach (the read of U3, fault 2).</summary>
     public static bool TakesWindow(ManagerSetupView v) => v is { Shows: true, Ended: false } && Of(v).Drawn;
 
@@ -863,7 +1087,7 @@ public static class ManagerSetupScreens
         switch (page.Kind)
         {
             case AgentSetupPage.Name:
-                return new("name", SetupScreens.NameTitle, false, null, [], null, progress, Drawn: false);
+                return NamePage(v, progress);
             case AgentSetupPage.Servers:
                 return v.Start switch
                 {
@@ -923,6 +1147,20 @@ public static class ManagerSetupScreens
         }
     }
 
+    /// <summary>**"Name your manager"** of a hub whose first run did not ask (the Mac's <c>NameManagerPage</c> in its
+    /// setup): the first run's words, the field with the typed words, which wears its orange edge for words that the
+    /// installer does not take; Continue only for a name that it takes; and in orange the hub's words of a refused rename.</summary>
+    private static ManagerSetupScreen NamePage(ManagerSetupView v, SetupProgress? progress)
+    {
+        var name = Install.ManagerName.AgentName(v.TypedName);
+        var controls = new List<SetupControl>
+        {
+            new(SetupControlKind.Field, SetupScreens.NamePlaceholder, "agent-setup-name", v.TypedName, Marked: v.TypedName.Length > 0 && name is null),
+        };
+        if (name is not null) controls.Add(new(SetupControlKind.Button, SetupScreens.Continue, "agent-setup-name-continue"));
+        return new("name", SetupScreens.NameTitle, false, SetupScreens.NameDetail, controls, v.Refusal, progress);
+    }
+
     private static ManagerSetupScreen SettingUpPage(ManagerSetupView v, SetupProgress? progress) =>
         new("settingUp", SettingUp(v.Label), true, null, [], null, progress, Making: true);
 
@@ -936,6 +1174,14 @@ public static class ManagerSetupScreens
         var why = v.Refusal ?? v.Stopped;
         if (why is not null && v.InstallFailed && !v.Busy) controls.Add(new(SetupControlKind.Button, SetupScreens.TryAgain, "agent-setup-install-again"));
         var detail = v.FirstSetup && v.Reading?.Agent?.Role == "manager" ? SetupScreens.AiDetail(v.Label) : null;
-        return new("provider", SetupScreens.AiTitle(v.Label), false, detail, controls, why, progress);
+        return new("provider", SetupScreens.AiTitle(v.Label), false, detail, controls, why, progress, Back: GoesBackToName(v));
     }
+
+    /// <summary>**Back on the provider's page goes to the name's page** (the Mac's <c>SetupBack</c> of
+    /// <c>AgentSetupWizard</c>): for a manager with no server, of a hub that can rename it, whose setup starts on the fleet's
+    /// servers (its name's page came first), while no press is on its way. "Name your manager" is the first page, with no
+    /// Back.</summary>
+    private static bool GoesBackToName(ManagerSetupView v) =>
+        !v.Busy && v.Start is ManagerSetupStart.Servers && v.Reading is { Agent.Placed: false } &&
+        v.StartFeatures?.Contains(FleetShapeHub.Rename) == true;
 }

@@ -271,6 +271,9 @@ public sealed partial class MainWindow : Window
             homeChosen = true;
             history.Start(Screens.FirstPage(next));
         }
+        // A manager that its own setup renamed on this run: its pages go to its new name before an agent's page that is
+        // gone leaves (the Mac's FleetStore.notePlacing with renamedManager).
+        if ((source as StoreSource)?.TakeRename(next) is { } rename) history.Rename(rename.Was, rename.Now);
         if (next.Fleet is { } fleet)
         {
             var names = fleet.Agents.Select(a => a.Name).ToHashSet();
@@ -284,7 +287,7 @@ public sealed partial class MainWindow : Window
         if (taskbar is not null) _ = taskbar.Show(Screens.TaskbarCount(next), Screens.TaskbarWords(next));
         if (WaitingPage(next) != waitingPage) ShowPage();
         // The manager's first setup comes with the reading that says that this PC owns its hub, and goes when it ends.
-        else if ((SetupOf(history.Current) is not null) != ShowsSetup) ShowPage();
+        else if (SetupMoved()) ShowPage();
         ShowLine();
         page?.Show(next, DateTimeOffset.UtcNow, !settings.AnimationsEnabled);
         var now = pane;
@@ -485,16 +488,21 @@ public sealed partial class MainWindow : Window
     private ManagerSetup? SetupOf(Page page)
     {
         if (page.Kind != PageKind.Chat || (source as StoreSource)?.ManagerSetup() is not { } setup || setup.Mark.Agent != page.Agent) return null;
-        // A page that this build draws as its frame alone does not take the window (the read of U3, fault 2): the
-        // manager's page shows with the pane until piece U3b draws it.
+        // A page that this build draws as its frame alone (the server's page and the fleet's servers of wave B) does not
+        // take the window (the read of U3, fault 2): the manager's page shows with the pane.
         return ManagerSetupScreens.TakesWindow(setup.View) ? setup : null;
     }
 
     /// <summary>The setup's own change: once it ends or no longer shows, the manager's chat takes its page.</summary>
     private void SetupChanged()
     {
-        if ((SetupOf(history.Current) is not null) != ShowsSetup) ShowPage();
+        if (SetupMoved()) ShowPage();
     }
+
+    /// <summary>The setup that the window shows is not the one that it shows now: it comes, it goes, or it is another, the
+    /// setup of a manager that took a new name.</summary>
+    private bool SetupMoved() =>
+        SetupOf(history.Current) is var setup && ((setup is not null) != ShowsSetup || setup is not null && setupPage?.Setup != setup);
 
     /// <summary>The setup's page with the window's line over it (the read of U3, fault 3): made with the page, so that the
     /// page keeps its one place in the window's tree while it comes and goes.</summary>

@@ -90,7 +90,9 @@ struct FounderizerApp: App {
         Window("Report a problem", id: Self.reportWindow) {
             ReportProblemView(store: store).preferredColorScheme(.dark)
         }
-        .defaultSize(width: 620, height: 780)
+        // About the height of its form with a clear fleet, so its first frame is near the height that the form then
+        // gives it (`FormHeightWindow`); it stood at 780, with nearly 200 points empty under Send.
+        .defaultSize(width: 620, height: 600)
         // No bar of any kind at the top, as the main window (margins row 11).
         .windowStyle(.hiddenTitleBar)
         .restorationBehavior(.disabled)

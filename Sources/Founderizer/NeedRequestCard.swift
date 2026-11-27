@@ -1175,13 +1175,21 @@ struct NeedRequestCard: View {
     }
     /// **His answer waits 5 seconds, with Undo** (`AnswerHolds`): the card stands folded as with an answer on its way.
     private var holding: AnswerHolds.Held? { AnswerHolds.shared.held(need, in: store) }
-    /// **The card stands on a page of the main window** (a chat; `cardOnPage`): his held answer completes on it, with its
-    /// check and no Undo on its line, and its Undo is the badge's at the bottom of the page (`AnswerBadge`; the owner's
-    /// F12, 22 November 2026). The card's own window and the job's detail card keep Undo where the mark will stand
-    /// (`undoOnLine`): his yes of 21 November 2026, where the badge would say the same words twice or stand under a dimmed
-    /// page.
+    /// **Undo stands at the end of the folded card's line while his answer waits, where the mark will stand**
+    /// (`undoOnLine`; his yes of 21 November 2026), in a chat too, for an answer given on that chat's page: the owner,
+    /// 26 November 2026, of the badge at the foot of the sidebar: "it is very far from where I clicked, it should be
+    /// somewhere in the same area where I just clicked the card". The sidebar's badge shows that answer only on another
+    /// page (`AnswerBadge.inSidebar`). **An answer has its one Undo where he gave it**, on every surface of the card (a
+    /// review of 26 November 2026): one given elsewhere stands folded here with its check, and its Undo is the
+    /// sidebar's badge, the card's own window or the card where he gave it. The place of this card is the one that its
+    /// answers take (`NeedAnswerBox.holdPlace`): a chat's page, the card's own window, else a card on no page (the
+    /// job's detail card).
     @Environment(\.cardOnPage) private var onPage
-    private var undoOnLine: Bool { holding != nil && !onPage }
+    private var undoOnLine: Bool {
+        guard let holding else { return false }
+        let here: AnswerHolds.Place = onPage ? .page(store.destination.page) : cardWindow != nil ? .window : .card
+        return holding.place == here
+    }
     /// The task that his answer let go on, where the reading has it (owner feature `need_marks`).
     private var answeredTask: FleetTask? { store.answered(need).task }
     /// **The turning mark, the orange mark and the gray mark of his pause open the task** (his "Both (Recommended)",
@@ -1414,9 +1422,9 @@ struct NeedRequestCard: View {
         }
     }
 
-    /// **The end of the folded card's answer line**: Undo while his answer waits, in the card's own window and the job's
-    /// detail card (`undoOnLine`; his "Yes, 5 seconds": "Undo at the end of its answer line", with no words beside it
-    /// and no count), else Pause while the task works. Each is its own press inside the folded card's, which opens
+    /// **The end of the folded card's answer line**: Undo while his answer waits, in a chat, in the card's own window and
+    /// on the job's detail card (`undoOnLine`; his "Yes, 5 seconds": "Undo at the end of its answer line", with no words
+    /// beside it and no count), else Pause while the task works. Each is its own press inside the folded card's, which opens
     /// nothing. VoiceOver's action Undo stays on the folded card wherever it stands.
     @ViewBuilder private var lineEnd: some View {
         if undoOnLine {

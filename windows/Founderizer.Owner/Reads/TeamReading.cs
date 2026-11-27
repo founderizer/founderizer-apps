@@ -153,3 +153,11 @@ public sealed partial record ActivationReceipt(
 
 /// <summary>The check that let the hub activate an agent: its id and when it was done.</summary>
 public sealed record ActivationCheck(long Check, double CheckedAt);
+
+/// <summary>The body of POST /ui/team/agents/&lt;agent&gt;/rename (owner feature <c>manager_rename</c>; the Mac's
+/// <c>nameManager</c>): the manager's new name, against the team.json that the app read.</summary>
+public sealed record RenameAsk(string BaseSha256, string Name);
+
+/// <summary>The answer of the rename (the Mac's ManagerNameReceipt): <c>Agent</c> is the new name, <c>Was</c> the name
+/// that the manager had.</summary>
+public sealed record RenameReceipt(bool Ok, string RequestId, string Agent, string Was, string Revision, string Sha256);

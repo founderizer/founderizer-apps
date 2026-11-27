@@ -66,20 +66,22 @@ import Vision
         let heldAgain: Bool
         /// Where the second click went, in the option's frame: the failure says it.
         let click: String
-        let onlyBadge: Bool
+        let onCard: Bool
         let sentBeforeUndo: Bool
         let openAgain: Bool
         let waited: Double?
         let choice: Bool
         let once: Bool
-        let badgeGone: Bool
+        let undoGone: Bool
     }
 
-    /// **In a chat his answer completes on its card, and the badge at the bottom of the page has Undo** (the owner's F12,
-    /// 22 November 2026): a press of an option folds the card with his answer and no Undo on its line, "Undo" stands in
-    /// the badge only, and nothing reaches the hub; the badge's Undo opens the card with its options; a press that is not
-    /// taken back reaches the hub once, when the wait is over and never before, and the badge goes. Bug: Undo on the
-    /// card's line beside the badge, or a badge whose Undo does not take the answer back.
+    /// **In a chat his answer completes on its card, with Undo at the end of its line** (the owner's F12, 22 November
+    /// 2026, and his words of 26 November 2026 of the badge at the foot of the sidebar: "it is very far from where I
+    /// clicked, it should be somewhere in the same area where I just clicked the card"): a press of an option folds the
+    /// card with his answer and "Undo" at the end of its line, "Undo" stands on that card only, no badge stands in the
+    /// sidebar, and nothing reaches the hub; that Undo opens the card with its options; a press that is not taken back
+    /// reaches the hub once, when the wait is over and never before, and Undo goes. Bugs: Undo in a badge far from the
+    /// card he pressed, or an Undo that does not take the answer back.
     @Test func anAnswerWaitsAndUndoOpensTheCardAgain() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Waits in
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
@@ -101,15 +103,16 @@ import Vision
             }
             ViewHost.atOnce(ViewHost.click(monday, in: window))
             let held = holds.held[51] != nil
-            // the badge has come up to its place (0.18 s): "Undo" stands in it, and nowhere else
-            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            // the card has folded with "Undo" at the end of its line: "Undo" stands on it, and nowhere else
+            ViewHost.turn(5) { (try? Self.lineUndo(51, in: window)) ?? nil != nil }
             ViewHost.turn(0.5)
-            guard let badge = Self.badge(in: window) else {
-                throw ViewHost.Missing(description: "the page has no badge of the held answer")
+            guard let undo = try Self.lineUndo(51, in: window), let card = Self.frame("need-folded-51", in: window) else {
+                throw ViewHost.Missing(description: "the folded card has no Undo on its line")
             }
             let undoes = try Self.everywhere(String(l10n: "Undo"), in: window)
-            let onlyBadge = !undoes.isEmpty && undoes.allSatisfy { badge.frame.insetBy(dx: -2, dy: -2).contains($0) }
-            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
+            let onCard = !undoes.isEmpty && undoes.allSatisfy { card.insetBy(dx: -2, dy: -2).contains($0) }
+                && Self.element("answer-badge", in: window) == nil
+            ViewHost.atOnce(ViewHost.click(undo, in: window))
             let sentBeforeUndo = !posts().isEmpty
             ViewHost.turn(5) { holds.held[51] == nil }
             let friday = try ViewHost.middle(of: "Friday", in: window, seconds: 5)
@@ -138,25 +141,26 @@ import Vision
             Task { await store.refresh() }
             ViewHost.turn(20) { !posts().isEmpty }
             let post = posts().first
-            ViewHost.turn(5) { Self.badge(in: window) == nil }
+            ViewHost.turn(5) { (try? Self.lineUndo(51, in: window)) ?? nil == nil }
             // the store has ended its send (the stand-in hub refuses it): the window's end removes the outbox after
             // the refusal is saved there; a send that does not end fails this test
             guard ViewHost.turn(10, until: { !store.sending }) else {
                 throw ViewHost.Missing(description: "the store's send did not end in 10 s")
             }
-            return Waits(heldAtPress: held, heldAgain: heldAgain, click: click, onlyBadge: onlyBadge,
+            return Waits(heldAtPress: held, heldAgain: heldAgain, click: click, onCard: onCard,
                          sentBeforeUndo: sentBeforeUndo, openAgain: open,
                          waited: post.map { $0.at.timeIntervalSince(pressed) },
                          choice: post?.body.contains(#""choice":1"#) == true, once: posts().count == 1,
-                         badgeGone: Self.badge(in: window) == nil)
+                         undoGone: (try? Self.lineUndo(51, in: window)) ?? nil == nil
+                            && Self.element("answer-badge", in: window) == nil)
         }
         #expect(seen.heldAtPress && !seen.sentBeforeUndo, "the press waits, and nothing reaches the hub")
-        #expect(seen.onlyBadge, "Undo stands in the badge, and not on the card's line")
-        #expect(seen.openAgain, "the badge's Undo opens the card with its options")
+        #expect(seen.onCard, "Undo stands at the end of the card's line, and in no badge of the sidebar")
+        #expect(seen.openAgain, "the card's Undo opens it with its options")
         #expect(seen.heldAgain, "his second press waits too (its click: \(seen.click))")
         #expect((seen.waited ?? 0) >= 0.8, "the answer reaches the hub only once the wait is over")
         #expect(seen.choice && seen.once, "and it is the option that he pressed, once")
-        #expect(seen.badgeGone, "the badge goes with the wait")
+        #expect(seen.undoGone, "Undo goes with the wait")
         #expect(screen.stayedHis)
     }
 
@@ -167,6 +171,9 @@ import Vision
         let label: String?
         let actions: [String]
         let words: Bool
+        /// The badge's frame and the middle of the request at hand's last option: the failure says them.
+        let near: Bool
+        let place: String
         let sent: Bool
         let back: Bool
         let countBack: Bool
@@ -176,9 +183,13 @@ import Vision
     /// 22 November 2026: "complete it immediately and show like a badge at the bottom of the page that shows what has
     /// been chosen"): his key 2 and Return answer the request at hand; inside two seconds the next request is at hand, the
     /// answered one has no card in the lane, the sidebar's count is one less, the badge says his answer with Undo (to
-    /// VoiceOver too: one element and its action), and nothing reached the hub. A click on the badge's Undo gives the
-    /// request back at hand with its options, and the count back. Bug: the request stays at hand for the 5 seconds, or an
-    /// Undo that brings back a request that is in no lane.
+    /// VoiceOver too: one element and its action), and nothing reached the hub. **The badge stands under the request at
+    /// hand, where he answered** (the owner, 26 November 2026: "it should be somewhere in the same area where I just
+    /// clicked the card"): in the page's column, under its last option, at most 160 points under it, and the only badge
+    /// of the window (none at the foot of the sidebar too). A click on the
+    /// badge's Undo gives the request back at hand with its options, and the count back. Bugs: the request stays at hand
+    /// for the 5 seconds; a badge at the foot of the sidebar or at the window's foot, far from the card; an Undo that
+    /// brings back a request that is in no lane.
     @Test func onNeedsYouAnAnsweredRequestLeavesAndTheBadgeBringsItBack() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Leaves in
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
@@ -216,6 +227,12 @@ import Vision
             // the request at hand is the next one: his answer's words stand in the badge
             let words = try ViewHost.middle(of: "Monday", in: window, seconds: 3)
                 .map { badge.frame.insetBy(dx: -2, dy: -2).contains($0) } ?? false
+            // under the request at hand's last option, in the page's column (window points: y grows upwards)
+            let orange = try ViewHost.middle(of: "Orange", in: window, seconds: 3)
+            let badges = Self.count("answer-badge", in: window)
+            let near = orange.map { badge.frame.minX > FleetStyle.sidebarWidth && badge.frame.maxY < $0.y
+                && $0.y - badge.frame.maxY <= 160 } ?? false && badges == 1
+            let place = "badge \(badge.frame), Orange \(orange.map { "\($0)" } ?? "not drawn"), \(badges) badges"
             let sent = !posts().isEmpty
             ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
             ViewHost.turn(5) { holds.held[55] == nil }
@@ -223,12 +240,14 @@ import Vision
             let back = holds.held[55] == nil && store.selectedNeed == 55 && friday != nil && posts().isEmpty
             let two = String(l10n: "\(2) items need you")
             ViewHost.turn(2) { Self.reads("nav-needs", in: window).value == two }
-            return Leaves(next: next, lane: lane, count: count, label: label, actions: actions, words: words, sent: sent,
-                          back: back, countBack: Self.reads("nav-needs", in: window).value == two)
+            return Leaves(next: next, lane: lane, count: count, label: label, actions: actions, words: words, near: near,
+                          place: place, sent: sent, back: back,
+                          countBack: Self.reads("nav-needs", in: window).value == two)
         }
         #expect(seen.next && seen.lane, "the next request is at hand inside two seconds, and the answered one left the lane")
         #expect(seen.count, "the sidebar's count is one less while the answer waits")
         #expect(seen.words && !seen.sent, "the badge says his answer, and nothing reached the hub")
+        #expect(seen.near, "the badge stands under the request at hand, where he answered (\(seen.place))")
         #expect(seen.label == "Choose the day of the move, answered: Monday" && seen.actions == ["Undo"],
                 "VoiceOver reads the badge as one element with its action Undo")
         #expect(seen.back, "the badge's Undo brings the request back at hand with its options, and sends nothing")
@@ -415,7 +434,8 @@ import Vision
         #expect(screen.stayedHis)
     }
 
-    /// His words go into the box, Return holds them, and the badge's Undo puts them back in the box, with nothing sent.
+    /// His words go into the box, Return holds them, and the Undo on the folded card's line puts them back in the box, with
+    /// nothing sent.
     @Test func undoPutsHisWordsBackInTheBox() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> (box: String, sent: Bool) in
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
@@ -438,12 +458,12 @@ import Vision
             ViewHost.turn(1) { ViewHost.fieldWords(in: window) != nil }
             ViewHost.atOnce(ViewHost.keys("hello\r", in: window))
             ViewHost.turn(5) { holds.held[52] != nil }
-            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            ViewHost.turn(5) { (try? Self.lineUndo(52, in: window)) ?? nil != nil }
             ViewHost.turn(0.5)
-            guard let badge = Self.badge(in: window) else {
-                throw ViewHost.Missing(description: "the page has no badge of the held answer")
+            guard let undo = try Self.lineUndo(52, in: window) else {
+                throw ViewHost.Missing(description: "the folded card has no Undo on its line")
             }
-            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
+            ViewHost.atOnce(ViewHost.click(undo, in: window))
             // the card opens (its own replies stand again, which only the open card has), with his words in its box
             let shows = try ViewHost.middle(of: String(l10n: "Tell me more"), in: window, seconds: 5) != nil
             let need = try #require(store.state?.needs.first)
@@ -487,12 +507,12 @@ import Vision
             ViewHost.atOnce(ViewHost.click(done, in: window))
             ViewHost.turn(5) { holds.held[53] != nil }
             seen.boxWhileHeld = store.answers["53"]
-            ViewHost.turn(5) { Self.badge(in: window) != nil }
+            ViewHost.turn(5) { (try? Self.lineUndo(53, in: window)) ?? nil != nil }
             ViewHost.turn(0.5)
-            guard let badge = Self.badge(in: window) else {
-                throw ViewHost.Missing(description: "the held reply has no badge")
+            guard let undo = try Self.lineUndo(53, in: window) else {
+                throw ViewHost.Missing(description: "the held reply's folded card has no Undo on its line")
             }
-            ViewHost.atOnce(ViewHost.click(badge.undo, in: window))
+            ViewHost.atOnce(ViewHost.click(undo, in: window))
             seen.sentBeforeUndo = !posts().isEmpty
             ViewHost.turn(5) { holds.held[53] == nil }
             seen.boxAfterUndo = store.answers["53"]
@@ -670,6 +690,9 @@ import Vision
     struct Sidebar: Sendable {
         let kept: Bool
         let inSidebar: Bool
+        /// In the agent's chat: the number of "Undo" drawn in the window, and whether each is in the badge.
+        let undoesInChat: Int
+        let chatUndoInBadge: Bool
         let windowClosed: Bool
         let back: Bool
         let sentBeforeClose: Bool
@@ -679,10 +702,11 @@ import Vision
     /// **A held answer keeps its 5 seconds on every page, its badge stands at the foot of the sidebar, and its Undo
     /// brings the card back** (the owner's F22-1 (a), 23 November 2026, as Apple Mail's Undo Send): he answers on Needs
     /// you and opens Tasks inside the wait; the answer still waits, nothing reached the hub, and the badge stands in the
-    /// sidebar; the request's own window, opened and closed meanwhile, leaves it as it is; its Undo opens Needs you
+    /// sidebar; **in the asking agent's chat the request's card has no Undo of its own: one Undo for one answer, the
+    /// badge's** (a review of 26 November 2026); the request's own window, opened and closed meanwhile, leaves it as it is; its Undo opens Needs you
     /// with the request at hand and its options. **The close of the main window still sends a held answer at once.**
-    /// Bugs: a page change that sends the answer, the close of the request's own window that sends the answer held on
-    /// the page, or an Undo that changes nothing on the screen.
+    /// Bugs: a page change that sends the answer, two Undos for one answer, the close of the request's own window that
+    /// sends the answer held on the page, or an Undo that changes nothing on the screen.
     @Test func aPageChangeKeepsTheHeldAnswerAndItsUndoBringsTheCardBack() async throws {
         let (seen, screen) = try await ViewHost.onMainLoop(limit: 90) { () -> Sidebar in
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
@@ -715,6 +739,18 @@ import Vision
             }
             // the sidebar is the window's first 320 points (`FleetStyle.sidebarWidth`)
             let inSidebar = badge.frame.minX >= 0 && badge.frame.maxX <= FleetStyle.sidebarWidth
+            // he opens the asking agent's chat: its card stands folded with its check, and "Undo" is the badge's alone
+            store.destination = .agent("manager")
+            guard ViewHost.turn(5, until: { Self.frame("need-folded-57", in: window) != nil }) else {
+                throw ViewHost.Missing(description: "the asking agent's chat has no folded card of the request")
+            }
+            ViewHost.turn(1)
+            let chatUndoes = try Self.everywhere(String(l10n: "Undo"), in: window)
+            let chatUndoInBadge = Self.badge(in: window).map { shown in
+                chatUndoes.allSatisfy { shown.frame.insetBy(dx: -2, dy: -2).contains($0) }
+            } ?? false
+            store.destination = .activity
+            ViewHost.turn(1)
             // he opens the request's own window and closes it: the answer held on the page still waits, with its badge
             NeedWindows.room = NSRect(x: -40000, y: -40000, width: 1440, height: 900)
             defer { NeedWindows.room = nil }
@@ -749,11 +785,14 @@ import Vision
             guard ViewHost.turn(10, until: { !store.sending }) else {
                 throw ViewHost.Missing(description: "the store's send did not end in 10 s")
             }
-            return Sidebar(kept: kept, inSidebar: inSidebar, windowClosed: windowClosed, back: back,
+            return Sidebar(kept: kept, inSidebar: inSidebar, undoesInChat: chatUndoes.count,
+                           chatUndoInBadge: chatUndoInBadge, windowClosed: windowClosed, back: back,
                            sentBeforeClose: sentBeforeClose, closed: closed)
         }
         #expect(seen.kept, "the answer still waits on Tasks, and nothing reached the hub")
         #expect(seen.inSidebar, "its badge stands in the sidebar")
+        #expect(seen.undoesInChat == 1 && seen.chatUndoInBadge,
+                "in the agent's chat one Undo stands, the badge's, and none on the card (\(seen.undoesInChat) drawn)")
         #expect(seen.windowClosed, "the close of the request's own window sends nothing, and the badge stays")
         #expect(seen.back, "the badge's Undo opens Needs you with the request at hand and its options")
         #expect(!seen.sentBeforeClose && seen.closed, "the close of the main window sends the held answer at once")
@@ -1091,6 +1130,42 @@ import Vision
             return object.perform(NSSelectorFromString(name))?.takeUnretainedValue() as? String
         }
         return (read("accessibilityLabel"), read("accessibilityValue"))
+    }
+
+    /// How many elements of the window have this identifier, by the accessibility tree.
+    @MainActor private static func count(_ identifier: String, in window: NSWindow) -> Int {
+        var queue: [NSObject] = window.contentView.map { [$0] } ?? []
+        var found = 0
+        while !queue.isEmpty {
+            let object = queue.removeFirst()
+            if object.responds(to: NSSelectorFromString("accessibilityIdentifier")),
+               object.perform(NSSelectorFromString("accessibilityIdentifier"))?.takeUnretainedValue() as? String == identifier {
+                found += 1
+            }
+            if object.responds(to: NSSelectorFromString("accessibilityChildren")),
+               let kids = object.perform(NSSelectorFromString("accessibilityChildren"))?.takeUnretainedValue() as? [Any] {
+                queue += kids.compactMap { $0 as? NSObject }
+            }
+        }
+        return found
+    }
+
+    /// The frame of the element with this identifier in the window's points, by the accessibility tree; nil for none.
+    @MainActor private static func frame(_ identifier: String, in window: NSWindow) -> NSRect? {
+        guard let object = element(identifier, in: window),
+              object.responds(to: NSSelectorFromString("accessibilityFrame")),
+              let screen = (object.value(forKey: "accessibilityFrame") as? NSValue)?.rectValue else { return nil }
+        let frame = window.convertFromScreen(screen)
+        return frame.width > 0 ? frame : nil
+    }
+
+    /// **The Undo at the end of a folded card's line** (`NeedRequestCard.lineEnd`): the middle of "Undo" where the window
+    /// draws it, inside that card's own frame by the accessibility tree; nil while none stands there.
+    @MainActor private static func lineUndo(_ need: Int, in window: NSWindow) throws -> NSPoint? {
+        guard let card = frame("need-folded-\(need)", in: window),
+              let undo = try ViewHost.middle(of: String(l10n: "Undo"), in: window, seconds: 0),
+              card.insetBy(dx: -2, dy: -2).contains(undo) else { return nil }
+        return undo
     }
 
     /// **The badge of the held answer** (`AnswerBadge`): its frame in the window's points, by the accessibility tree,

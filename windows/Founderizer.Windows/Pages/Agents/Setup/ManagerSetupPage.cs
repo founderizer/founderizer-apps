@@ -23,10 +23,13 @@ namespace Founderizer.Windows.Pages.Agents.Setup;
 /// <summary>**The setup of the manager of a new fleet, filling the window** (windows-app-plan-v2.md, piece U3; set 8,
 /// pictures 18 to 20; the Mac's <c>AgentSetupWizard</c> for the manager's first server, which the Mac draws alone, as the
 /// first run, <c>FleetStore.fillsWindow</c>): the steps of the manager's setup on Back's line (Manager · AI provider ·
-/// Servers · Sign in), no Back, and one centred step under them: its mark, its title (moving while the server works) and
+/// Servers · Sign in), Back only on the provider's page of a manager whose name's page came first (to that page; Esc is
+/// Back), and one centred step under them: its mark, its title (moving while the server works) and
 /// its one way on. Every word and rule is the library's (<see cref="ManagerSetup"/>, <see cref="ManagerSetupScreens"/>).
 ///
 /// <list type="bullet">
+/// <item>**"Name your manager"** of a hub whose first run did not ask (piece U3b): <see cref="ManagerNamePage"/>, in the
+/// first run's look; its Continue renames the manager on the hub.</item>
 /// <item>**The provider's page**: the manager's mark, "&lt;Manager&gt;'s AI provider" with its line, the cards; under them
 /// in orange why the setup stopped, over Try again for a failed install.</item>
 /// <item>**The install** (picture 18): the provider's own logo at 48, the moving "Installing &lt;provider&gt; on
@@ -52,12 +55,14 @@ internal sealed class ManagerSetupPage : Grid
     private readonly Grid room = new();
     private readonly StepColumn column = new(StepLook.Width);
     private readonly TextBlock warning = StepControls.Warning("");
+    private readonly Button back;
     private readonly UISettings settings = new();
     private CancellationTokenSource? run;
     private DispatcherQueueTimer? holdTimer;
     private bool held, open;
     private string? drawn, markOf, namedAs;
     private PasteField? paste;
+    private ManagerNamePage? namePage;
     private Action? onwards;
     private StepsBar? bar;
     private readonly List<Button> cardButtons = [];
@@ -87,6 +92,27 @@ internal sealed class ManagerSetupPage : Grid
         column.HorizontalAlignment = HorizontalAlignment.Center;
         column.VerticalAlignment = VerticalAlignment.Center;
         room.Children.Add(column);
+        // Back on Back's line, as the first run's (FirstRunHost): only on the provider's page of a manager whose name's
+        // page came first (ManagerSetupScreen.Back; the Mac's SetupBack); Esc is Back.
+        back = new Button
+        {
+            Style = StepControls.Plain,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(22, 20, 0, 0),
+            Padding = new Thickness(6, 4, 8, 4),
+            Visibility = Visibility.Collapsed,
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 7,
+                Children = { StepLook.Glyph(StepLook.ChevronLeft, 12, Look.Muted), Look.Words(SetupViewWords.Back, StepLook.Text, 20, Look.Muted, wrap: false) },
+            },
+        };
+        AutomationProperties.SetName(back, SetupViewWords.Back);
+        AutomationProperties.SetAutomationId(back, "agent-setup-back");
+        back.Click += (_, _) => setup.BackToName();
+        Children.Add(back);
         progress.HorizontalAlignment = HorizontalAlignment.Center;
         progress.VerticalAlignment = VerticalAlignment.Top;
         progress.Margin = new Thickness(0, 25, 0, 0);
@@ -94,6 +120,14 @@ internal sealed class ManagerSetupPage : Grid
         AutomationProperties.SetAutomationId(this, "agent-setup");
 
         KeyboardAccelerators.Add(Enter());
+        var escape = new KeyboardAccelerator { Key = global::Windows.System.VirtualKey.Escape };
+        escape.Invoked += (_, e) =>
+        {
+            if (back.Visibility != Visibility.Visible) return;
+            setup.BackToName();
+            e.Handled = true;
+        };
+        KeyboardAccelerators.Add(escape);
         settings.AnimationsEnabledChanged += (_, _) => queue.TryEnqueue(() => { drawn = null; Show(); });
         Loaded += (_, _) => Open();
         Unloaded += (_, _) => Close();
@@ -166,21 +200,27 @@ internal sealed class ManagerSetupPage : Grid
         room.Padding = new Thickness(0, screen.Progress is null ? 0 : 56, 0, 0);
         var shows = screen.Drawn && (view.Answered || held);
         column.Visibility = shows ? Visibility.Visible : Visibility.Collapsed;
+        back.Visibility = shows && screen.Back ? Visibility.Visible : Visibility.Collapsed;
         if (screen.Title != namedAs)
         {
             namedAs = screen.Title;
             named(screen.Title);
         }
         if (!shows) return;
-        var mark = screen.Logo is { } logo ? "logo:" + logo : (screen.Making ? "making:" : "agent:") + view.Agent;
+        // The name's page: the mark of the typed name at 72, as the first run's (ManagerNamePage).
+        var isName = screen.Name == "name";
+        var mark = isName ? "name:" + ManagerNamePage.MarkOf(view)
+            : screen.Logo is { } logo ? "logo:" + logo : (screen.Making ? "making:" : "agent:") + view.Agent;
         if (mark != markOf)
         {
             markOf = mark;
-            column.Mark = screen.Logo is { } provider ? ProviderPage.Logo(provider, StepLook.Mark, 12)
+            column.Mark = isName ? StepLook.AgentMark(ManagerNamePage.MarkOf(view), 72)
+                : screen.Logo is { } provider ? ProviderPage.Logo(provider, StepLook.Mark, 12)
                 : StepLook.AgentMark(view.Agent, screen.Making ? 96 : StepLook.Mark);
         }
         column.Show(screen.Title, screen.Waits, screen.Detail, Reduced);
-        var key = screen.Name + "|" + string.Join(",", screen.Controls.Select(c => c.Kind + c.Id + c.Words + c.Marked + string.Join("/", c.Lines ?? [])));
+        // The name's field holds the typed words itself: its page is drawn once, not at each key.
+        var key = isName ? "name" : screen.Name + "|" + string.Join(",", screen.Controls.Select(c => c.Kind + c.Id + c.Words + c.Marked + string.Join("/", c.Lines ?? [])));
         if (key != drawn)
         {
             drawn = key;
@@ -193,6 +233,7 @@ internal sealed class ManagerSetupPage : Grid
         // The provider cards take no press while one is on its way (the Mac's ProviderCard with busy), in place, so that a
         // field of the page keeps what it holds.
         foreach (var card in cardButtons) card.IsEnabled = !view.Busy;
+        if (isName) namePage?.Show(view, screen);
         warning.Text = screen.Warning ?? "";
         warning.Visibility = screen.Warning is null ? Visibility.Collapsed : Visibility.Visible;
         if (setup.TakeOpening() is { } opening) OpenSignIn(opening.Link, opening.Code);
@@ -209,6 +250,16 @@ internal sealed class ManagerSetupPage : Grid
         onwards = null;
         column.Controls.Children.Clear();
         cardButtons.Clear();
+        if (screen.Name == "name")
+        {
+            // "Name your manager": the field, the orange line of a refused rename, and Continue (the Mac's order).
+            namePage ??= new ManagerNamePage(setup);
+            column.Controls.Children.Add(namePage.Field);
+            column.Controls.Children.Add(warning);
+            column.Controls.Children.Add(namePage.Next);
+            onwards = () => namePage.Enter();
+            return;
+        }
         var cards = screen.Controls.Where(c => c.Kind == SetupControlKind.Card).ToList();
         if (cards.Count > 0) column.Controls.Children.Add(Cards(cards, view.Busy));
         foreach (var control in screen.Controls.Where(c => c.Kind != SetupControlKind.Card))

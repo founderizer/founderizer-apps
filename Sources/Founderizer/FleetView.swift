@@ -440,7 +440,7 @@ struct FleetView: View {
         let agents = ChatList.order(listed.map(\.name), pinned: store.pinned)
             .compactMap { name in listed.first { $0.name == name } }
         let names = Set(agents.map(\.name))
-        let badgeShows = AnswerHolds.shared.onAnyPage(in: store) != nil
+        let badgeShows = AnswerBadge.inSidebar(store) != nil
         return VStack(alignment: .leading, spacing: 2) {
             needsRow
             tasksRow
@@ -465,8 +465,9 @@ struct FleetView: View {
             // it began 4 pt before the one and ended 4 pt after the other.
             VStack(alignment: .leading, spacing: 0) {
                 Rule().padding(.horizontal, 10).padding(.vertical, 8)
-                // **The badge of his held answer**, on every page, under the line and over the Update banner and Settings
-                // (`AnswerBadge`; the owner's F22-1 (a), 23 November 2026, as Apple Mail's Undo Send). One element with the
+                // **The badge of his held answer**, on every page but the one where he gave it, under the line and over
+                // the Update banner and Settings (`AnswerBadge`; the owner's F22-1 (a), 23 November 2026, as Apple Mail's
+                // Undo Send; on its own page it stands at its card, his words of 26 November 2026). One element with the
                 // line, so that the sidebar's rows do not move while no answer waits.
                 AnswerBadge(store: store, width: CGFloat(sidebarWidth))
             }

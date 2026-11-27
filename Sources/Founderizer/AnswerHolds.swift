@@ -22,8 +22,10 @@ import SwiftUI
 ///
 /// **A hold knows its place** (`Place`): the page of the main window where he gave it, the card's own window, which
 /// becomes its badge, or a card that is on neither (the job's detail card). **A hold whose place is a page keeps its 5 seconds on every page of
-/// the main window**, where its badge stands at the foot of the sidebar and its Undo brings the card back (`AnswerBadge`;
-/// the owner's F22-1 (a), 23 November 2026), **and goes at once when the main window closes** (`watchMainWindow`). **A
+/// the main window**, where its badge stands at its card on that page (under the request at hand on Needs you, at the end
+/// of the folded card's line in a chat; the owner, 26 November 2026) and at the foot of the sidebar on the others, and its
+/// Undo brings the card back (`AnswerBadge`; the owner's F22-1 (a), 23 November 2026), **and goes at once when the main
+/// window closes** (`watchMainWindow`). **A
 /// quit, an update's restart and the close of the card's own window send what waits at once** (`releaseAll`,
 /// `release`): his answer is not lost by an act that is not Undo.
 @MainActor @Observable final class AnswerHolds {
@@ -135,7 +137,8 @@ import SwiftUI
         return held
     }
 
-    /// **The held answer of a page of the main window** (`AnswerBadge`, at the foot of the sidebar on every page): the
+    /// **The held answer of a page of the main window** (`AnswerBadge`: at its card on its own page, at the foot of the
+    /// sidebar on the others; Edit › Undo on every page): the
     /// one whose place is a page, with its request, on the hub and generation that the store reads, while that request
     /// is open there; nil where none is.
     func onAnyPage(in store: FleetStore) -> (need: OwnerNeed, held: Held)? {

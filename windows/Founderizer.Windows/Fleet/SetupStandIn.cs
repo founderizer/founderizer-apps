@@ -63,7 +63,19 @@ internal sealed class SetupStandIn : OwnerReads.ICalls
         return new MobileSnapshot(1, "db-1", DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             [new MobileAgent("juno", "manager", Text(row, "runtime") ?? "claude", 0, [], Title: Text(row, "title") ?? "Fleet Manager", Active: true,
                              Alive: Text(row, "alive") ?? "")],
-            [], [], [], [], [], UiFeatures: ["servers", "machines", "machine_signin", "agent_setup", "manager_server"]);
+            [], [], [], [], [], UiFeatures: Features(row) ?? ["servers", "machines", "machine_signin", "agent_setup", "manager_server"]);
+    }
+
+    /// <summary>The hub's features that <c>fleet.json</c> names (<c>features</c>), for a state that needs others (the
+    /// name's page of piece U3b needs the fleet's shape and the manager's rename); null for the setup's own.</summary>
+    private static IReadOnlyList<string>? Features(JsonElement row)
+    {
+        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("features", out var list) || list.ValueKind != JsonValueKind.Array)
+            return null;
+        var names = new List<string>();
+        foreach (var name in list.EnumerateArray())
+            if (name.ValueKind == JsonValueKind.String) names.Add(name.GetString()!);
+        return names;
     }
 
     public Task<OwnerAnswer<T>> GetAsync<T>(string route, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type, int limit,
@@ -87,10 +99,15 @@ internal sealed class SetupStandIn : OwnerReads.ICalls
         try { File.AppendAllText(Path.Combine(folder, "writes.log"), DateTimeOffset.UtcNow.ToString("O") + " " + route + Environment.NewLine); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         var id = (requestId ?? Guid.NewGuid()).ToString("D");
-        var json = body is MoveAsk move
-            ? $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"juno\", \"server\": \"{move.Server}\", \"runtime\": \"{move.Runtime}\", \"job\": 7, " +
-              $"\"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('c', 64)}\"}}"
-            : $"{{\"ok\": true, \"request_id\": \"{id}\"}}";
+        var json = body switch
+        {
+            MoveAsk move => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"juno\", \"server\": \"{move.Server}\", \"runtime\": \"{move.Runtime}\", \"job\": 7, " +
+                            $"\"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('c', 64)}\"}}",
+            // The rename of a manager with no server (piece U3b): the hub's receipt, with no job and no server.
+            RenameAsk rename => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{rename.Name}\", \"was\": \"juno\", \"server\": null, " +
+                                $"\"job\": null, \"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('d', 64)}\"}}",
+            _ => $"{{\"ok\": true, \"request_id\": \"{id}\"}}",
+        };
         return Task.FromResult(new OwnerAnswer<TAnswer>(JsonSerializer.Deserialize(json, answerType)));
     }
 

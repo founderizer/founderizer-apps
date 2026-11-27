@@ -101,6 +101,9 @@ public sealed class AgentSetupModel(OwnerReads.ICalls calls, string agent, bool 
         if (now.Kind is not (AgentSetupPage.Installing or AgentSetupPage.Switching or AgentSetupPage.SignIn)) AskedSignIn = false;
     }
 
+    /// <summary>The page's orange line goes (the Mac's <c>refusal = nil</c> of a Back).</summary>
+    public void ForgetRefusal() => Refusal = null;
+
     /// <summary>**A new visit of the setup's page** (the Mac's view, whose states start again): no refusal, no command
     /// refused, no code on its way, no sign-in asked or opened, and no check or activation asked on this visit.</summary>
     public void NewVisit()

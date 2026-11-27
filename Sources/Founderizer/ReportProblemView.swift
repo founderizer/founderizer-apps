@@ -34,6 +34,11 @@ struct ReportProblemView: View {
     /// The window's first check has run for a page's quiet second (`LoadingLine.quiet`): only then does "What
     /// Founderizer can see" stand with its loading line, so a clear fleet's quick check never shows it at all.
     @State private var checkIsSlow = false
+    /// Where the page's blocks begin under the window's top edge, and the whole page's height down to the room under
+    /// its last block, which the window takes (`FormHeightWindow`): at once when it grows, and when it shrinks only
+    /// after a check answered or a send ended (`ProblemReport.PageHeight`).
+    @State private var blocksTop: CGFloat?
+    @State private var pageHeight = ProblemReport.PageHeight()
 
     /// **Every fact that goes, and so every fact that shows**: the lines under "Sent with it" and the report read this
     /// one list, so that no fact can go that the owner did not see.
@@ -45,7 +50,9 @@ struct ReportProblemView: View {
 
     var body: some View {
         FleetPage("Report a problem") {
-            Group {
+            // **One stack of the page's blocks**, as the page stacks them (`FleetSpace.block`), so that their height is read
+            // in one place: the window is as high as they are (`FormHeightWindow`).
+            VStack(alignment: .leading, spacing: FleetSpace.block) {
                 if troubleShows { trouble }
                 // **A heading over its box, where every heading of the page stands** (the margins of 30 October 2026, row
                 // 10): as a block of a card's rows, the heading and the box stood 14 pt in from the column's edges.
@@ -62,7 +69,8 @@ struct ReportProblemView: View {
                             .fieldPlaceholder("you@example.com", shows: email.isEmpty).fleetField().frame(maxWidth: 260)
                             .accessibilityIdentifier("report-email")
                     }
-                    factLines
+                    // no hairline and no empty strip while the first check has not given the facts yet
+                    if !facts.isEmpty { factLines }
                 }
                 status
                 HStack(spacing: 8) {
@@ -79,6 +87,14 @@ struct ReportProblemView: View {
                     }
                 }
             }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { blocks in
+                // the room over the blocks is read at their first layout, before anything could scroll it
+                if blocksTop == nil { blocksTop = blocks.minY }
+                // no height before the first check gives the facts, measured where the height is read, so that a
+                // height measured without them never reaches the window (the second reader's round 2)
+                pageHeight.measure(model.facts.isEmpty ? nil
+                                   : Double((blocksTop ?? blocks.minY) + blocks.height + FleetSpace.bottom))
+            }
         }
         // **No bar over the page, as on the main window** (the margins of 30 October 2026, row 11): the window's title
         // stood in a bar over the page's own title. The band over the page holds the window's three buttons, and the
@@ -90,6 +106,13 @@ struct ReportProblemView: View {
         .tint(FleetStyle.accent)
         .ignoresSafeArea(.container, edges: .top)
         .windowButtonsCentred(inBand: FleetSpace.lights)
+        // **Only once the facts are there**: before the first check answers the page lacks them, and the window went
+        // from 600 to about 490 and back to about 592 a few tenths of a second later, at each opening (the second read
+        // of 25 November 2026). Until then it keeps the scene's 600, about the form's height with a clear fleet.
+        .background(FormHeightWindow(height: pageHeight.shown))
+        // a check that answered and a send that ended may make the window lower; a status line while he types does not
+        .onChange(of: model.reading) { _, now in if !now { pageHeight.settle() } }
+        .onChange(of: model.sending) { _, now in if !now { pageHeight.settle() } }
         .task { await model.read(store: store) }
         .task {
             try? await Task.sleep(for: LoadingLine.quiet)
@@ -120,10 +143,9 @@ struct ReportProblemView: View {
     }
 
     /// "What Founderizer can see" stands while it sees something wrong, and while the window's first check has run
-    /// past a page's quiet second. A clear fleet has none of it: the Checks fact says what the checks found.
+    /// past a page's quiet second (`FleetTrouble.sectionShows`).
     private var troubleShows: Bool {
-        if let trouble = model.trouble { return !trouble.isClear }
-        return model.reading && checkIsSlow
+        FleetTrouble.sectionShows(found: model.trouble, reading: model.reading, slow: checkIsSlow)
     }
 
     /// What Founderizer can see, and nothing that is right. A first check that is still on its way after a page's
@@ -201,6 +223,79 @@ struct ReportProblemView: View {
             HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Sending…").font(FormMetrics.detail).foregroundStyle(FleetStyle.muted) }
         } else if let refusal = report.refusal {
             Text(refusal).font(FormMetrics.detail).foregroundStyle(.orange)
+        }
+    }
+}
+
+/// **The window of Report a problem is as high as its form** (the owner, 25 November 2026, of this window: "it is TOO
+/// large, it needs to be much more compact, less text"): it stood at 780 points over a form of about 590, with nearly 200
+/// points of empty canvas under Send. It takes the page's height once the window's first check has given the facts (it
+/// opens at the scene's 600, about the form's height with a clear fleet), keeps its top edge and its width, grows at
+/// once when "What Founderizer can see" comes with its findings, a fact wraps or a send's line comes, so that nothing is
+/// cut and Send stays in view, and shrinks only after a check answered or a send ended (`ProblemReport.PageHeight`). A
+/// screen too low for the page gives it the screen's visible height, and the page scrolls in it. **Once he gives the
+/// window a height himself it keeps his height**, by a drag or by Window › Zoom, Fill, Move & Resize or a tile
+/// (`ProblemReport.WindowFit`): the window's resizing rules stay the scene's (`FounderizerApp`).
+private struct FormHeightWindow: NSViewRepresentable {
+    /// The page's whole height, from the window's top edge to the room under its last block; nil before its first layout
+    /// and before the first check has given the facts.
+    let height: Double?
+
+    func makeNSView(context: Context) -> Fitter { Fitter() }
+
+    func updateNSView(_ view: Fitter, context: Context) { view.height = height }
+
+    final class Fitter: NSView {
+        var height: Double? {
+            didSet { if height != oldValue { fitSoon() } }
+        }
+        /// The rule of its frame, with the height that it set last and whether he gave the window a height of his own.
+        private var rule = ProblemReport.WindowFit()
+        private var heightBefore: CGFloat = 0
+        private var watches: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // out of its window (it closed): its watches go with it
+            watches.forEach(NotificationCenter.default.removeObserver)
+            watches = []
+            guard let window else { return }
+            let center = NotificationCenter.default
+            watches.append(center.addObserver(forName: NSWindow.willStartLiveResizeNotification, object: window,
+                                              queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let height = self.window?.frame.height ?? 0     // read before the change (ExclusiveAccessTests)
+                    self.heightBefore = height
+                }
+            })
+            watches.append(center.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: window,
+                                              queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let window = self.window else { return }
+                    self.rule.resized(from: Double(self.heightBefore), to: Double(window.frame.height))
+                    // a change of the width alone wraps the page again: it takes its height again, as a request
+                    // card's own window does at the end of a resize, after the resize has ended
+                    self.fitSoon()
+                }
+            })
+            fitSoon()
+        }
+
+        /// After the layout that read the height: a window's frame set inside SwiftUI's update lays the page out again
+        /// inside that update.
+        private func fitSoon() {
+            DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.fit() } }
+        }
+
+        private func fit() {
+            guard let window, !window.inLiveResize, !window.styleMask.contains(.fullScreen) else { return }
+            // the room that the window's frame has over its content (none with the hidden title bar)
+            let over = window.frame.height - (window.contentView?.frame.height ?? window.frame.height)
+            guard let frame = rule.frame(page: height, window: window.frame, over: Double(over),
+                                         room: window.screen?.visibleFrame) else { return }
+            window.setFrame(frame, display: true)
+            rule.took(Double(window.frame.height))
         }
     }
 }

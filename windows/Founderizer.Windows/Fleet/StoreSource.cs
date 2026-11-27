@@ -117,11 +117,16 @@ public sealed class StoreSource : IFleetSource
         {
             Calls = Founderizer.Owner.Reads.OwnerReads.Of(store),
             Fleet = () => store.State.Fleet,
+            Hub = () => store.State.Hub,
             Choices = Choices(),
             Refresh = store.RefreshAsync,
             Fresh = () => store.State.IsFresh(DateTimeOffset.UtcNow),
         }, mark);
     }
+
+    /// <summary>**The manager's rename that this reading shows** (piece U3b, <see cref="ManagerSetupMark.TakeRename"/>): the
+    /// kept mark goes to the new name, and the window moves the manager's pages there. Null for none.</summary>
+    internal (string Was, string Now)? TakeRename(StoreState next) => ManagerSetupMark.TakeRename(next, Choices());
 
     private Func<CloudProvider, ICloud>? clouds;
 
