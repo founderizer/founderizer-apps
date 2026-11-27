@@ -277,6 +277,11 @@ public enum DoorAccess {
             /// {owner/name: read, write or deploy}: the agent's GitHub grants, by which the door makes its tokens once
             /// the hub asks it for every token (plan 13, item 4). nil from a hub before that.
             public var repos: [String: String]? = nil
+            /// The repositories of `repos` that the door may make commit targets of for an Operator (the Door area's
+            /// read of 26 November 2026): each hold at write or deploy, and each hold that no record of the hub's
+            /// names. A read that the manager gave, or the owner's Give at read, is none, because the door commits with
+            /// its own token. nil from a hub before it: each hold, as before.
+            public var targets: [String]? = nil
         }
         /// The hub's own GitHub App key, which the app moves to the door (plan 13, item 4): its id, and the path of its
         /// file on the hub machine, which only root and the hub's user read.
@@ -773,7 +778,10 @@ public enum DoorAccess {
                 + apps.filter { accounts.contains($0.owner.lowercased()) }.map { "github:\($0.owner)" }
             entry["providers"] = providers.isEmpty ? nil : Array(Set(providers)).sorted()
             let taken = others(agent)
-            let wanted = Set(held.filter { !taken.contains($0.lowercased()) })
+            let allowed = hub.agents[agent]?.targets.map { Set($0.map { $0.lowercased() }) }
+            let wanted = Set(held.filter { repo in
+                !taken.contains(repo.lowercased()) && (allowed?.contains(repo.lowercased()) ?? true)
+            })
             var targets = entry["repos"] as? [String: Any] ?? [:]
             for (repo, value) in targets {
                 guard var target = value as? [String: Any], let kind = target["kind"] as? String,

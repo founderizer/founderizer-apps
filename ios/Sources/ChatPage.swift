@@ -789,8 +789,10 @@ struct ChatPage: View {
     /// that this run takes the place of, or nil.
     private func bubbles(_ run: Run, isNewest: Bool, arrived: [String: Date], taking line: ChatWaiting?) -> some View {
         let side: HorizontalAlignment = run.fromAgent ? .leading : .trailing
-        // The chat app his messages of this run came from, on the corner of the run's last bubble.
+        // The chat app his messages of this run came from, on the corner of the run's last bubble; or the AI session
+        // that sent them for him, there too (`OwnerHand`).
         let app = run.fromAgent ? nil : ChatAppMark.app(of: run.items.last?.client)
+        let mark = run.fromAgent ? nil : run.items.last.flatMap { Self.look(of: $0, features: store.features).mark }
         // Bare reports of one run stand a paragraph apart; his bubbles of one run touch, as one block.
         let spacing: CGFloat = run.fromAgent ? 12 : 2
         return VStack(alignment: side, spacing: spacing) {
@@ -802,7 +804,8 @@ struct ChatPage: View {
                         if let waiting, item.id == waitingItem?.id {
                             waitingBubble(waiting)
                         } else {
-                            bubble(item, fromAgent: run.fromAgent, app: item.id == run.items.last?.id ? app : nil)
+                            let last = item.id == run.items.last?.id
+                            bubble(item, fromAgent: run.fromAgent, app: last ? app : nil, mark: last ? mark : nil)
                         }
                     }
                     .opacity(shown)
@@ -833,8 +836,12 @@ struct ChatPage: View {
     /// message of a conversation. An agent's report is drawn from its Markdown, as the Mac draws it, bare on the page;
     /// the owner's own message is drawn from its Markdown too, in the Mac's grey bubble (D-6). It was violet, and the
     /// agent's report sat in a grey bubble: the two screens drew one conversation two ways. His words were literal
-    /// until 3 November 2026, when his numbered list read as one block of plain text ("it is so plain").
-    @ViewBuilder private func bubble(_ item: MobileChatItem, fromAgent: Bool, app: String? = nil) -> some View {
+    /// until 3 November 2026, when his numbered list read as one block of plain text ("it is so plain"). **Words that
+    /// another hand sent for him stand in the bubble's outline** (owner feature `message_hands`, `OwnerHand`), and the
+    /// AI session's mark (`mark`) on the corner where a chat app's goes.
+    @ViewBuilder private func bubble(_ item: MobileChatItem, fromAgent: Bool, app: String? = nil,
+                                     mark: OwnerHand.Runtime? = nil) -> some View {
+        let look = fromAgent ? OwnerHand.Look.his : Self.look(of: item, features: store.features)
         let body = VStack(alignment: fromAgent ? .leading : .trailing, spacing: 4) {
             // A message may carry files and no words: then the files are the message, and no empty bubble shows.
             if !item.text.isEmpty {
@@ -849,10 +856,21 @@ struct ChatPage: View {
                         .foregroundStyle(Color.primary)
                         .multilineTextAlignment(.leading)
                         .padding(.horizontal, 14).padding(.vertical, 9)
-                        .background(Brand.bubble, in: Self.bubbleShape)
-                        // Where he wrote it, when it was WhatsApp or Discord: the app's mark on the bubble's corner.
+                        .background {
+                            if look.outlined {
+                                Self.bubbleShape.strokeBorder(Brand.bubbleEdge, lineWidth: 1)
+                            } else {
+                                Self.bubbleShape.fill(Brand.bubble)
+                            }
+                        }
+                        // Where he wrote it, when it was WhatsApp or Discord: the app's mark on the bubble's corner; or
+                        // the mark of the AI session that wrote it for him.
                         .overlay(alignment: .bottomLeading) {
-                            if let app { ChatAppMark(app: app).offset(x: -9, y: 9) }
+                            if let app {
+                                ChatAppMark(app: app).offset(ChatAppMark.corner)
+                            } else if let mark {
+                                AISessionMark(runtime: mark).offset(AISessionMark.corner)
+                            }
                         }
                 }
             }
@@ -881,6 +899,13 @@ struct ChatPage: View {
 
     /// His bubble: one radius at every corner, as the Mac's bubble has.
     private static let bubbleShape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+
+    /// **The look of his bubble of this message** (owner feature `message_hands`): the Mac's rule (`OwnerHand.look`) on
+    /// the hand that the hub gives the item. A report is no bubble of his.
+    static func look(of item: MobileChatItem, features: Set<String>) -> OwnerHand.Look {
+        item.kind == .message ? OwnerHand.look(features: Array(features), hand: item.hand, runtime: item.runtime) : .his
+    }
+
     /// The room at the left of his bubble.
     private static let bubbleRoom: CGFloat = 75
 

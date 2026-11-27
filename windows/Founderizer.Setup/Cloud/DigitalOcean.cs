@@ -186,8 +186,9 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
     }
 
     /// <summary>DigitalOcean's droplets (up to 200), each with its project's name when the team has more than one project,
-    /// and what this app made it for by its tag, so that the account's list shows a stray droplet as this app's and not
-    /// as a server to choose.</summary>
+    /// and what this app made it for by its tag (<see cref="CloudExisting.MadeFor"/>), as at Vultr and Akamai. No PC code
+    /// reads that value yet: the Mac's rule that makes such a server no server to choose (<c>CloudExisting.unfit</c>)
+    /// comes to the PC with pieces L3 and L4, and takes it from here.</summary>
     private protected override async Task<IReadOnlyList<CloudExisting>> ListAsync(CloudCall call, CancellationToken cancel)
     {
         var listed = await call.SendAsync("GET", "droplets", [("per_page", "200")], null, cancel).ConfigureAwait(false);

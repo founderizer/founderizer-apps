@@ -687,7 +687,7 @@ struct FleetView: View {
         // **The line, in its one order** (`ChatList.line`): a request that waits for him and is the newest thing in its
         // chat, in orange; else his answer with a saved key, the check of its card with no words; else its words.
         let line = ChatList.line(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
-                                 needs: store.state?.needs ?? [], tasks: open)
+                                 needs: store.state?.needs ?? [], tasks: open, features: store.state?.ui_features)
         let request = line?.request, savedKey = line?.isSavedKey == true, preview = line?.words
         // **While the agent works, its line says what it does now** (`AgentActivity.actionNow`, hub 1.148; the owner, 13
         // November 2026, to the picture of this line: "Yes, build it"): the agent's own words for its command, or the

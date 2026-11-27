@@ -169,7 +169,8 @@ struct SearchPalette: View {
         // The line of its sidebar row, in the same one order (`ChatList.line`): a request that waits for him in orange,
         // the check of a saved key's card, or its words.
         let line = ChatList.line(agent.name, entries: entries, whole: entries.count >= store.chatTimeline.count(for: agent.name),
-                                 needs: store.state?.needs ?? [], tasks: store.state?.tasks ?? [])
+                                 needs: store.state?.needs ?? [], tasks: store.state?.tasks ?? [],
+                                 features: store.state?.ui_features)
         let request = line?.request, savedKey = line?.isSavedKey == true, preview = line?.words
         return SearchRow(highlighted: highlighted, height: 48) { open(.agent(agent)) } content: {
             // The `row` step, 22 pt, with its dot (D-8; fix round 2: a search avatar is 18–24, and this was 28).

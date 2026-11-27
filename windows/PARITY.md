@@ -311,9 +311,17 @@ Mac, and a device route is all that the PC reaches.
   key's hour (`FollowUp`, `FollowReads`), which deletes the server that comes, again while it stays, and never two. A
   server that does not go keeps its firewall; Hetzner's `locked` deletion is asked again; a gateway's page of HTML is
   said by its status; the words are the Mac's catalog's (the vectors hold them). A 4xx stays a refusal with no read.
-  The PC's one difference: the Mac's Back on its way is a stop of the call (a cancel) on the PC, which ends as a call
-  with no answer; the PC's first run has no Back while a build runs (`SetupStore.Runs`), and a cancelled build changes
-  nothing of its page (`CloudStep`, as the Mac's build). Start again's firewall deletion is the Mac's and did not change:
+  The PC's two differences: (1) the Mac's Back on its way is a stop of the call (a cancel) on the PC, which ends as a
+  call with no answer; the PC's first run has no Back while a build runs (`SetupStore.Runs`), and a cancelled build
+  changes nothing of its page (`CloudStep`, as the Mac's build); (2) a stop before the call for the server goes sends
+  nothing (`CloudServers.CreateCallAsync`): the PC takes the firewall back, and the build's record stays not known
+  (`CloudStep`'s cancel), where the Mac reads the mark and ends `Unsure`. The PC's way is the safer one: no request
+  went, so no server can come, and the name stays in use all the same. **A gap:** the account's list carries what this
+  app made each server for (`CloudExisting.MadeFor`, at DigitalOcean now too), and no PC code reads it yet: the Mac's
+  `CloudExisting.unfit` ("Used by Founderizer") comes with pieces L3 and L4, so until then a stray server of an unsure
+  end (a `hub-1` that the provider made late) can show as a card in the first run's list (`SetupScreens`) until the
+  reads delete it. It costs nothing: a chosen server makes no build (`CloudStep.MakeNew`). L4 ports `unfit` with
+  `madeFor`. Start again's firewall deletion is the Mac's and did not change:
   a 5xx at Vultr or Akamai is asked again, at most 10 times, and there only a firewall that nothing but the deleted
   servers uses is asked. **A limit, as on the Mac:** the reads run while the app runs; the mark is not kept in the
   build's record, so a start of the app does not read for it again (the words tell the owner what to delete).

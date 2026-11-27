@@ -394,7 +394,9 @@ struct NeedAnswerBox: View {
         VStack(alignment: .leading, spacing: 8) {
             // owner feature need_clarify: his talk with the manager under the card, over its answers (also where the
             // card takes no more of it, as after a switch of the manager: the talk stays his record)
-            if !talk.isEmpty { NeedTalkLines(talk: talk, font: words).padding(.bottom, 2) }
+            if !talk.isEmpty {
+                NeedTalkLines(talk: talk, font: words, features: store.state?.ui_features).padding(.bottom, 2)
+            }
             if need.choices.isEmpty {
                 // **One look for an answer option** (T-22): the app's own three replies are rows like the ones an
                 // agent offers, and a press sends one as an option's press does. A page showed 24-pt dark chips under
@@ -1006,23 +1008,38 @@ extension NeedAnswerBox {
 
 /// **His talk with the manager under a card** (Needs clarification, owner feature `need_clarify`): his messages at the
 /// right in the chat's own bubble, the agent's replies at the left with its glyph, compact, over the card's answers. The
-/// words are plain text, as he and the agent wrote them.
+/// words are plain text, as he and the agent wrote them. **A line that an AI session sent for him is in the bubble's
+/// outline with the AI's mark, as in the chat** (owner feature `message_hands`, `OwnerHand`).
 struct NeedTalkLines: View {
     let talk: [NeedMessage]
     /// The words of the card's answers: 13 points in a chat's card, the step's 15 on Needs you.
     let font: Font
+    /// The hub's features, for the look of his lines (`NeedMessage.look`).
+    let features: [String]?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(talk.enumerated()), id: \.offset) { _, line in
                 if line.fromOwner {
+                    let look = line.look(features: features)
                     Text(line.text).font(font).foregroundStyle(FleetStyle.text).textSelection(.enabled)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(ChatStyle.bubble, in: RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius))
+                        .background {
+                            let shape = RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius)
+                            if look.outlined {
+                                shape.strokeBorder(FleetStyle.hairline(0.16), lineWidth: 1)
+                            } else {
+                                shape.fill(ChatStyle.bubble)
+                            }
+                        }
+                        // "You: " only before his own words (`OwnerHand.Look.spoken`)
+                        .accessibilityElement(children: .ignore).accessibilityLabel(Text(verbatim: look.spoken(line.text)))
+                        .overlay(alignment: .bottomLeading) {
+                            if let mark = look.mark { AISessionMark(runtime: mark).offset(ChatAppMark.corner) }
+                        }
                         .padding(.leading, 48)
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                        .accessibilityElement(children: .ignore).accessibilityLabel(Text("You: \(line.text)"))
                 } else {
                     HStack(alignment: .top, spacing: 8) {
                         AgentGlyph(name: line.who, presence: .online, size: GlyphSize.inline, dot: false).padding(.top, 1)
@@ -1578,7 +1595,7 @@ struct NeedRequestCard: View {
                             // request's answers: a key request that took another's place carries his question
                             let talk = need.isOpen ? need.shownTalk(features: store.state?.ui_features) : []
                             if !talk.isEmpty {
-                                NeedTalkLines(talk: talk, font: FormMetrics.text)
+                                NeedTalkLines(talk: talk, font: FormMetrics.text, features: store.state?.ui_features)
                                     // his bubble ends where the form under it ends (`SecretFormWidth`)
                                     .frame(maxWidth: formWidth ?? SecretEntryView.width(of: need, onStep: false),
                                            alignment: .leading)
@@ -1724,7 +1741,7 @@ struct NeedRequestCard: View {
             // answer too); an open card has it over its answers (`NeedAnswerBox`)
             if !need.isOpen {
                 let talk = need.shownTalk(features: store.state?.ui_features)
-                if !talk.isEmpty { NeedTalkLines(talk: talk, font: FormMetrics.text) }
+                if !talk.isEmpty { NeedTalkLines(talk: talk, font: FormMetrics.text, features: store.state?.ui_features) }
             }
             NeedAnswerGiven(store: store, need: need, names: names)
             // Who asks, by the name the sidebar gives it and its glyph before it (D-8), and when: a clock time today

@@ -876,9 +876,8 @@ public struct ConversationItem: Decodable, Equatable, Sendable, Identifiable {
 /// request ID and the current `db`; a write without an answer can have arrived, so the page reads again before the
 /// owner tries once more.
 public final class PeopleClient: Sendable {
-    private let session: URLSession
-
-    public init() {
+    /// A session keeps its delegate until it is invalidated. All clients use this one for the life of the app.
+    private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
@@ -886,8 +885,10 @@ public final class PeopleClient: Sendable {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 45
-        session = URLSession(configuration: configuration, delegate: PeopleNoRedirect(), delegateQueue: nil)
-    }
+        return URLSession(configuration: configuration, delegate: PeopleNoRedirect(), delegateQueue: nil)
+    }()
+
+    public init() {}
 
     public func people(hub: URL, database: String) async throws -> PeopleSnapshot {
         let snapshot = try JSONDecoder().decode(PeopleSnapshot.self, from: await get("ui/people", hub: hub, database: database))
@@ -1023,12 +1024,12 @@ public final class PeopleClient: Sendable {
     private func perform(_ request: URLRequest) async throws -> Data {
         // A read of the hub that is on its way already, through any client with the same time limits, is the answer to
         // the same read now (`HubReads`, fix round 2); a write never is.
-        guard let key = HubReads.key(request, in: session.configuration) else { return try await fetch(request) }
+        guard let key = HubReads.key(request, in: Self.session.configuration) else { return try await fetch(request) }
         return try await HubReads.shared.share(key) { [self] in HubReads.Answer(data: try await fetch(request), response: nil) }.data
     }
 
     private func fetch(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.hubData(for: request)
+        let (data, response) = try await Self.session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }

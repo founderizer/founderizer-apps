@@ -515,7 +515,9 @@ private struct SentMessageView: View {
             // bubble it kept 26 points under every message he sent, so a reply stood 57 points from his question
             // and 29 from his next one. A message of files alone has no bubble, and keeps it under its files.
             if !message.text.isEmpty || !gifts.isEmpty {
-                OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer), names: names,
+                // **An AI session's words in the outline, with its mark** (`OwnerHand`): the filled bubble is his own words
+                OwnerBubble(text: message.text, origin: message.origin, beside: AnyView(footer),
+                            hand: message.look(features: store.state?.ui_features), names: names,
                             over: about ? AnyView(AboutBadgeView(store: store, message: message)) : nil, gifts: gifts,
                             mentions: message.mentions?.tags)
             } else if about {

@@ -696,6 +696,10 @@ public struct TaskSteer: Decodable, Identifiable, Equatable, Sendable {
     /// **The files that the owner sent with it** (owner API 1.223), each as a message's file is; `[]` or nil for none
     /// (nil from a hub before 1.223). The thread shows them under the guidance's bubble, as a chat shows a message's.
     public let attachments: [MessageAttachment]?
+    /// The hand that sent it and its AI's program (owner feature `message_hands`, `OwnerHand`), as on his messages: an
+    /// AI session steers through the owner tools too; nil from a hub before the feature.
+    public var hand: String? = nil
+    public var runtime: String? = nil
     /// Its files are not part of it: a file that this app does not know (a type of a later hub) is checked where it
     /// opens, as a message's file is, and never makes the whole state unreadable.
     public var isValid: Bool { id > 0 && task > 0 && attempt > 0 && !text.isEmpty && text.count <= 4000 && created.isFinite }

@@ -194,6 +194,10 @@ struct MobilePreview: Decodable, Sendable {
     /// `owner` or `agent`.
     let side: String
     let preview: String
+    /// His message's hand and its AI's program (owner feature `message_hands`, `OwnerHand`); nil on an agent's line and
+    /// from a hub before the feature.
+    let hand: String?
+    let runtime: String?
     var isFromAgent: Bool { side == "agent" }
 }
 
@@ -319,6 +323,10 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
     /// A report: the owner's message whose turn it took, when it names none (hub 1.190): no link, only the place of
     /// the row of what he asked for (`ChatAskPlaces`). nil on a hub from before it.
     let turn: String?
+    /// A message: the hand that sent it and the program of the AI session that sent it (owner feature `message_hands`,
+    /// `OwnerHand`); nil on a row from before owner API 1.289, on a hub without the feature, and on a report.
+    let hand: String?
+    let runtime: String?
 
     var id: String { "\(kind.rawValue)-\(key)" }
     /// The agent wrote this to the owner first: it answers no message.
@@ -343,10 +351,14 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         // His answer in words to a request is his message in the chat too (`ChatPage.waitingAnswers`).
         answer_to = request.needID
         turn = nil
+        // his own words from this phone: the hub's copy names its hand
+        hand = nil
+        runtime = nil
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, ts, id, text, client, read_at, replaces, about, in_reply_to, attachments, pushed, answer_to, turn
+        case kind, ts, id, text, client, read_at, replaces, about, in_reply_to, attachments, pushed, answer_to, turn, hand
+        case runtime
     }
 
     init(from decoder: Decoder) throws {
@@ -366,6 +378,8 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         pushed = try data.decodeIfPresent(Bool.self, forKey: .pushed)
         answer_to = try data.decodeIfPresent(Int.self, forKey: .answer_to)
         turn = try data.decodeIfPresent(String.self, forKey: .turn)
+        hand = try data.decodeIfPresent(String.self, forKey: .hand)
+        runtime = try data.decodeIfPresent(String.self, forKey: .runtime)
     }
 
     /// This item in the hub's own words, so that the phone keeps a chat between launches and reads it back with the
@@ -381,6 +395,8 @@ struct MobileChatItem: Decodable, Identifiable, Sendable, Equatable {
         if let pushed { fields["pushed"] = pushed }
         if let answer_to { fields["answer_to"] = answer_to }
         if let turn { fields["turn"] = turn }
+        if let hand { fields["hand"] = hand }
+        if let runtime { fields["runtime"] = runtime }
         return fields
     }
 }

@@ -821,9 +821,8 @@ public enum ChatApps {
 /// can have arrived: the page reads again before the owner tries again. An account write goes against the team.json
 /// version that the page read (`base_sha256`); the hub refuses an old version (409).
 public final class ChatAppsClient: Sendable {
-    private let session: URLSession
-
-    public init() {
+    /// A session keeps its delegate until it is invalidated. All clients use this one for the life of the app.
+    private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
@@ -831,8 +830,10 @@ public final class ChatAppsClient: Sendable {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 60        // an account write commits and pushes team.json first
         configuration.timeoutIntervalForResource = 90
-        session = URLSession(configuration: configuration, delegate: ChatNoRedirect(), delegateQueue: nil)
-    }
+        return URLSession(configuration: configuration, delegate: ChatNoRedirect(), delegateQueue: nil)
+    }()
+
+    public init() {}
 
     /// The accounts, with the team.json version: from `GET /ui/team` before the accounts, so that a change between the
     /// two reads makes the next write fail (409) and not overwrite it.
@@ -989,12 +990,12 @@ public final class ChatAppsClient: Sendable {
     private func perform(_ request: URLRequest) async throws -> Data {
         // A read of the hub that is on its way already, through any client with the same time limits, is the answer to
         // the same read now (`HubReads`, fix round 2); a write never is.
-        guard let key = HubReads.key(request, in: session.configuration) else { return try await fetch(request) }
+        guard let key = HubReads.key(request, in: Self.session.configuration) else { return try await fetch(request) }
         return try await HubReads.shared.share(key) { [self] in HubReads.Answer(data: try await fetch(request), response: nil) }.data
     }
 
     private func fetch(_ request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.hubData(for: request)
+        let (data, response) = try await Self.session.hubData(for: request)
         HubWrites.note(request)
         guard let response = response as? HTTPURLResponse else { throw HubError.invalidResponse }
         guard response.statusCode == 200 else { throw HubError.refusal(.read(status: response.statusCode, body: data)) }

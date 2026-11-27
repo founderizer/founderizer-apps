@@ -192,7 +192,8 @@ struct RuntimeActivity: View {
                     }.padding(.bottom, activityFooter)
                 case .steer(let steer):
                     VStack(alignment: .trailing, spacing: 5) {
-                        OwnerBubble(text: steer.text)
+                        // an AI session's guidance in the outline, with its mark, as in his chat (`OwnerHand`)
+                        OwnerBubble(text: steer.text, hand: steer.look(features: store?.state?.ui_features))
                         // Its files under its bubble, as a chat message's are (owner API 1.223).
                         if let store, let files = steer.attachments, !files.isEmpty {
                             MessageFilesView(store: store, files: files, plain: true)

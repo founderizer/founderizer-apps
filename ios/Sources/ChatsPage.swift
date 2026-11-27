@@ -174,7 +174,7 @@ struct ChatsPage: View {
     private func line(of agent: MobileAgent, _ state: AgentState) -> (text: String, needsYou: Bool) {
         if state == .working, let action = store.snapshot?.action(of: agent.name) { return (action, false) }
         if let request = request(of: agent) { return (request.title, true) }
-        return (lastLine(agent.last), false)
+        return (Self.lastLine(agent.last, features: store.features), false)
     }
 
     /// The request whose card is the newest thing in this agent's chat and that waits for him, or nil.
@@ -309,11 +309,15 @@ struct ChatsPage: View {
     }
 
     /// The last line of the conversation: who wrote it and its first words. Its words lose their Markdown marks here,
-    /// as its bubble draws them, the owner's as an agent's (the Mac's list does the same).
-    private func lastLine(_ last: MobilePreview?) -> String {
+    /// as its bubble draws them, the owner's as an agent's (the Mac's list does the same). **"You: " only before his
+    /// own words**: words that another hand sent for him, which his chat draws in the bubble's outline (owner feature
+    /// `message_hands`, `OwnerHand`), stand alone.
+    static func lastLine(_ last: MobilePreview?, features: Set<String>) -> String {
         // No full stop: an empty line in the Mac's form (fix round 2, item 35).
         guard let last else { return String(l10n: "No messages yet") }
-        let text = last.isFromAgent ? MessageBlock.plain(last.preview) : String(l10n: "You: \(MessageBlock.plain(last.preview))")
+        let his = !last.isFromAgent
+            && !OwnerHand.look(features: Array(features), hand: last.hand, runtime: last.runtime).outlined
+        let text = his ? String(l10n: "You: \(MessageBlock.plain(last.preview))") : MessageBlock.plain(last.preview)
         return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
     }
 }

@@ -34,8 +34,9 @@ public abstract partial class CloudServers : ICloud
     /// <summary>How many times a firewall that a deleted server still holds is asked to go.</summary>
     internal const int RemoveReads = 10;
     /// <summary>The reads after a call whose end is not known, and the wait before each: the join key's life, an hour, in
-    /// which a server that the provider made later can still join (the Mac's <c>followReads</c> and <c>followStep</c>,
-    /// held equal by the vectors).</summary>
+    /// which a server that the provider made later can still join (the Mac's <c>followReads</c> and <c>followStep</c>).
+    /// The vectors hold the count (<c>follow_reads</c>), not the wait: no test catches another <see cref="FollowStep"/>
+    /// (3 s would end the reads after about 6 minutes).</summary>
     internal const int FollowReads = CloudJoin.KeyLife / 30;
     internal static readonly TimeSpan FollowStep = TimeSpan.FromSeconds(30);
     /// <summary>The memory that the server check asks of a hub's server and of a server for agents (the Mac's

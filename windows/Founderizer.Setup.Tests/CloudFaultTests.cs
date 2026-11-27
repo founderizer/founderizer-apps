@@ -149,8 +149,10 @@ public sealed class CloudFaultTests
         CollectionAssert.AreEqual(new[] { "/v1/servers/1001", "/v1/firewalls/77" }, Deleted(stand));
     }
 
-    /// <summary>**A droplet that this app made shows in the account's list as this app's, by its tag**, as at Vultr and
-    /// Akamai, so a stray droplet of an unsure end is no server to choose. Bug: DigitalOcean's list that reads no tag.</summary>
+    /// <summary>**A droplet that this app made carries in the account's list what this app made it for, by its tag**, as
+    /// at Vultr and Akamai, for the Mac's rule that makes it no server to choose (<c>CloudExisting.unfit</c>, which the PC
+    /// takes with pieces L3 and L4). Bug: DigitalOcean's list that reads no tag, so that rule would offer a stray droplet
+    /// of an unsure end.</summary>
     [TestMethod]
     public async Task A_droplet_with_this_apps_tag_is_listed_as_this_apps()
     {

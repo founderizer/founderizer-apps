@@ -923,7 +923,7 @@ private struct NeedStep: View {
                 // **Over a key's form, his talk is as wide as the form**, in the middle as the form is, so his bubble
                 // ends where the form ends (`SecretFormWidth`); it keeps that width once the request ended, so it does
                 // not jump when the form goes
-                NeedTalkLines(talk: talk, font: SetupMetrics.textFont)
+                NeedTalkLines(talk: talk, font: SetupMetrics.textFont, features: store.state?.ui_features)
                     .frame(maxWidth: need.asksForSecret
                            ? formWidth ?? SecretEntryView.width(of: need, onStep: true) : .infinity)
             }

@@ -304,6 +304,32 @@ struct DoorAccessTests {
         #expect(Self.agent(file, "mia")["repos"] == nil && Self.agent(file, "mia")["providers"] == nil)
     }
 
+    /// The Door area's read of 26 November 2026: a hold that the hub does not name in `targets` (a read that the manager
+    /// gave, or the owner's Give at read) is no commit target, because the door commits with its own token: else a
+    /// read becomes a write the day its agent gets a server. A hub before it sends no `targets`: each hold, as before.
+    /// Bug: a default read of an Operator gets an `app` target, and its push runs the repository's jobs.
+    @Test func aHoldThatTheHubDoesNotNameAsATargetGetsNoCommitTarget() {
+        var access = Self.access
+        var agents = access["agents"] as? [String: Any] ?? [:]
+        var one = agents["ops-one"] as? [String: Any] ?? [:]
+        one["repos"] = ["one-org/given": ["kind": "app"]]          // a plain target of an earlier round goes
+        agents["ops-one"] = one
+        access["agents"] = agents
+        var facts = Self.facts()
+        var otto = DoorAccess.HubDoor.Agent(address: "100.64.0.11", user: "fleet-ops-one",
+                                 repos: ["one-org/own": "read", "one-org/given": "read", "one-org/web": "write"])
+        otto.targets = ["one-org/own", "one-org/web"]
+        facts.hub = Self.hubDoor(agents: ["otto": otto])
+        let targets = Self.agent(Self.object(DoorAccess.plan(current: access, facts: facts).file), "otto")["repos"]
+            as? [String: [String: String]] ?? [:]
+        #expect(targets == ["one-org/own": ["kind": "app"], "one-org/web": ["kind": "app"]])
+        otto.targets = nil                                          // a hub before it
+        facts.hub = Self.hubDoor(agents: ["otto": otto])
+        let before = Self.agent(Self.object(DoorAccess.plan(current: access, facts: facts).file), "otto")["repos"]
+            as? [String: [String: String]] ?? [:]
+        #expect(Set(before.keys) == ["one-org/own", "one-org/given", "one-org/web"])
+    }
+
     /// DevOps plan X3 (API 1.111): the manager's door_gitops gives Operators a GitOps repository through the door, with
     /// no GitHub grant. Each named agent of the file gets {kind: gitops, sync} in place of a target of another kind for
     /// that repository, a GitOps target that the hub no longer gives goes, and a name that the file does not hold, or a

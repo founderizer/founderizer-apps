@@ -998,13 +998,56 @@ struct MobileChatTests {
         #expect(abs(gap(60) - gap(40)) < 0.05)
     }
 
-    @Test("Only a chat app gets a mark on his bubble's corner: his own apps have none")
-    func theMarkOfAChatApp() {
+    /// The owner's "B, go ahead" of 24 November 2026 (owner feature `message_hands`): an AI session's message is no
+    /// filled bubble of his. The bugs: the phone does not read the hand, or loses it in the chat that it keeps between
+    /// launches, so an AI session's words look like his again after a launch; the mark on his own words or on a report;
+    /// the outline on a hub that gives no hands; and a mark that VoiceOver does not name.
+    @Test("Only a chat app or an AI session gets a mark on his bubble's corner: his own apps have none")
+    func theMarkOfAChatApp() throws {
         #expect(ChatAppMark.app(of: "fleet-channels/1/discord-studio") == "discord")
         #expect(ChatAppMark.app(of: "fleet-channels/1/whatsapp-main") == "whatsapp")
         #expect(ChatAppMark.app(of: "founderizer-ios/1/abc") == nil)
         #expect(ChatAppMark.app(of: "founderizer-swift/1/abc") == nil)
         #expect(ChatAppMark.app(of: nil) == nil)
+
+        let hands: Set<String> = ["direct_chat", OwnerHand.feature]
+        let ai = try item(#"{"kind": "message", "ts": 1, "id": "m-1", "text": "Draft it", "client": "example-tool/1/x", "hand": "tool", "runtime": "claude-code"}"#)
+        #expect(ChatPage.look(of: ai, features: hands) == OwnerHand.Look(outlined: true, mark: .claude))
+        #expect(ChatAppMark.app(of: ai.client) == nil)
+        let phone = try item(#"{"kind": "message", "ts": 2, "id": "m-2", "text": "Hi", "client": "founderizer-ios/1/abc", "hand": "device", "runtime": null}"#)
+        #expect(ChatPage.look(of: phone, features: hands) == .his)
+        let old = try item(#"{"kind": "message", "ts": 3, "id": "m-3", "text": "Hi", "client": "founderizer-ios/1/abc"}"#)
+        #expect(old.hand == nil && ChatPage.look(of: old, features: hands) == .his)
+        let report = try item(#"{"kind": "report", "ts": 4, "id": 7, "text": "Done", "hand": "tool", "runtime": "codex"}"#)
+        #expect(ChatPage.look(of: report, features: hands) == .his)
+        #expect(ChatPage.look(of: ai, features: ["direct_chat"]) == .his)
+        // the chat that the phone keeps reads back with its hand
+        let kept = try JSONDecoder().decode(MobileChatItem.self, from: JSONSerialization.data(withJSONObject: ai.wire))
+        #expect(kept == ai && kept.hand == "tool" && kept.runtime == "claude-code")
+        // VoiceOver reads the Mac's hover words
+        #expect(AISessionMark.words == "Sent by your AI session")
+    }
+
+    /// The list of chats writes "You: " before his own last words only (owner feature `message_hands`). The bugs: an AI
+    /// session's, a connected app's or a later hand's words read as his there, or his own lose the "You: ", or a hub
+    /// without the feature changes the row.
+    @Test("The list of chats says \"You: \" before his own words only")
+    func theChatsRowNamesOnlyHisOwnWords() throws {
+        func last(_ fields: String) throws -> MobilePreview {
+            try JSONDecoder().decode(MobilePreview.self,
+                                     from: Data((#"{"ts": 1, "side": "owner", "preview": "Draft **it**""# + fields + "}").utf8))
+        }
+        let hands: Set<String> = [OwnerHand.feature]
+        #expect(ChatsPage.lastLine(try last(#", "hand": "tool", "runtime": "claude-code""#), features: hands) == "Draft it")
+        for hand in ["other", "connected", "job"] {
+            #expect(ChatsPage.lastLine(try last(#", "hand": "\#(hand)", "runtime": null"#), features: hands) == "Draft it")
+        }
+        for fields in [#", "hand": "device", "runtime": null"#, #", "hand": null"#, ""] {
+            #expect(ChatsPage.lastLine(try last(fields), features: hands) == "You: Draft it", "\(fields)")
+        }
+        #expect(ChatsPage.lastLine(try last(#", "hand": "tool""#), features: []) == "You: Draft it")
+        let reply = try JSONDecoder().decode(MobilePreview.self, from: Data(#"{"ts": 1, "side": "agent", "preview": "Done"}"#.utf8))
+        #expect(ChatsPage.lastLine(reply, features: hands) == "Done")
     }
 
     @Test("A mark's path data reads into its own box, arcs included")
@@ -1020,6 +1063,8 @@ struct MobileChatTests {
     @Test("Each provider has its real logo on the phone")
     func providerLogos() {
         for runtime in ["claude", "codex", "grok"] { #expect(ProviderLogo.image(runtime) != nil) }
+        // each program that marks a bubble has its glyph: one without would show an empty tile (`AISessionMark`)
+        for runtime in OwnerHand.Runtime.allCases { #expect(ProviderLogo.glyph(runtime.rawValue) != nil, "\(runtime)") }
     }
 
     /// The owner, 14 November 2026: "why does the preview not show the card if the card is the latest element on the

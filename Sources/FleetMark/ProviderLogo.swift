@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import SwiftUI
 #if canImport(AppKit)
 import AppKit
@@ -35,6 +37,102 @@ public enum ProviderLogo {
     private static let openCode = decode(openCodeBytes)
     private static let openRouter = decode(openRouterBytes)
     private static let ollama = decode(ollamaBytes)
+
+    /// **The glyph of a logo alone, as a template image that takes the colour that its view gives** (owner feature
+    /// `message_hands`; the owner's "B, go ahead" of 24 November 2026): the mark of an AI session on the corner of a
+    /// bubble that it sent for him, in white on the small round tile of a chat app's mark. Read from the logo's own
+    /// pixels, so the apps still bundle no image file. Nil for a logo whose glyph this does not know.
+    public static func glyph(_ runtime: String) -> Image? {
+        switch runtime {
+        case "claude": claudeGlyph
+        case "codex": chatGPTGlyph
+        case "grok": grokGlyph
+        case "opencode": openCodeGlyph
+        default: nil
+        }
+    }
+
+    private static let claudeGlyph = template(glyphMask(claudeBytes, claudeTones))
+    private static let chatGPTGlyph = template(glyphMask(chatGPTBytes, chatGPTTones))
+    private static let grokGlyph = template(glyphMask(grokBytes, grokTones))
+    private static let openCodeGlyph = template(glyphMask(openCodeBytes, openCodeTones))
+
+    /// What of a logo is its glyph, in luminance of 255: a pixel at `clear` (the tile's side) is no part of it, one at
+    /// `solid` is whole, and one between them is in proportion. `solid` under `clear` is a dark glyph on a light tile.
+    struct Tones {
+        let clear: Double, solid: Double
+    }
+    /// Claude's white star on its orange.
+    static let claudeTones = Tones(clear: 170, solid: 215)
+    /// ChatGPT's dark knot on its white.
+    static let chatGPTTones = Tones(clear: 215, solid: 170)
+    /// Grok's light ball on its near-black, with its two eyes open. The ball runs off the icon's lower edge, so the
+    /// circle below is its edge there.
+    static let grokTones = Tones(clear: 90, solid: 150)
+    /// OpenCode's light frame on its near-black; the grey of its inner lower half stays a faint part of it.
+    static let openCodeTones = Tones(clear: 40, solid: 215)
+
+    /// **The glyph of a logo's tile, cut to its own bounds**: white, with each pixel as opaque as its luminance stands
+    /// from the tile's to the glyph's (`Tones`). Only the pixels inside the circle that holds the glyph count (36 % of
+    /// the side from the middle), so the tile's edge and its shadow are no part of it. Nil for bytes that are no square
+    /// picture, or where no pixel stands out.
+    static func glyphMask(_ bytes: String, _ tones: Tones) -> CGImage? {
+        guard let data = Data(base64Encoded: bytes),
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let logo = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              logo.width > 0, logo.width == logo.height,
+              let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        let side = logo.width
+        let order = CGImageAlphaInfo.premultipliedLast.rawValue
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8,
+                                          bytesPerRow: side * 4, space: space, bitmapInfo: order) else { return false }
+            context.draw(logo, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        guard drawn else { return nil }
+        var mask = [UInt8](repeating: 0, count: side * side)
+        let middle = Double(side) / 2, reach = Double(side) * 0.36
+        var left = side, top = side, right = -1, bottom = -1
+        for y in 0..<side {
+            for x in 0..<side {
+                let dx = Double(x) + 0.5 - middle, dy = Double(y) + 0.5 - middle
+                let at = (y * side + x) * 4
+                guard dx * dx + dy * dy <= reach * reach, pixels[at + 3] >= 250 else { continue }
+                let luminance = 0.299 * Double(pixels[at]) + 0.587 * Double(pixels[at + 1]) + 0.114 * Double(pixels[at + 2])
+                let share = min(1, max(0, (luminance - tones.clear) / (tones.solid - tones.clear)))
+                guard share > 0 else { continue }
+                mask[y * side + x] = UInt8((share * 255).rounded())
+                left = min(left, x); right = max(right, x); top = min(top, y); bottom = max(bottom, y)
+            }
+        }
+        guard right >= left, bottom >= top else { return nil }
+        let width = right - left + 1, height = bottom - top + 1
+        var glyph = [UInt8](repeating: 0, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                // white, premultiplied: each colour is the pixel's own opacity
+                let opacity = mask[(top + y) * side + left + x], at = (y * width + x) * 4
+                glyph[at] = opacity; glyph[at + 1] = opacity; glyph[at + 2] = opacity; glyph[at + 3] = opacity
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(glyph) as CFData) else { return nil }
+        return CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                       space: space, bitmapInfo: CGBitmapInfo(rawValue: order), provider: provider, decode: nil,
+                       shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    private static func template(_ mask: CGImage?) -> Image? {
+        guard let mask else { return nil }
+        #if canImport(AppKit)
+        let image = NSImage(cgImage: mask, size: NSSize(width: mask.width, height: mask.height))
+        image.isTemplate = true
+        return Image(nsImage: image)
+        #else
+        return Image(uiImage: UIImage(cgImage: mask).withRenderingMode(.alwaysTemplate))
+        #endif
+    }
 
     private static func decode(_ bytes: String) -> Image? {
         guard let data = Data(base64Encoded: bytes) else { return nil }

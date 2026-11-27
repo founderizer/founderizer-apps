@@ -11,14 +11,14 @@ struct ChatListTests {
         ])))
     }
 
-    private func message(_ text: String, files: [String] = []) throws -> ChatEntry {
+    private func message(_ text: String, files: [String] = [], hand: String? = nil) throws -> ChatEntry {
         let attachments = files.enumerated().map { index, name in
             ["id": index + 1, "name": name, "mime": "text/plain", "size": 3, "sha256": "", "created": 1.0] as [String: Any]
         }
-        return .message(try JSONDecoder().decode(OwnerMessage.self, from: JSONSerialization.data(withJSONObject: [
-            "request_id": "r", "recipient": "vps", "kind": "message", "text": text, "event_id": 1,
-            "created": 9.0, "client": "test", "attachments": attachments,
-        ])))
+        var fields: [String: Any] = ["request_id": "r", "recipient": "vps", "kind": "message", "text": text, "event_id": 1,
+                                     "created": 9.0, "client": "test", "attachments": attachments]
+        if let hand { fields["hand"] = hand; fields["runtime"] = hand == "tool" ? "claude-code" : NSNull() }
+        return .message(try JSONDecoder().decode(OwnerMessage.self, from: JSONSerialization.data(withJSONObject: fields)))
     }
 
     /// A task created at 1 that last moved at `moved`.
@@ -39,6 +39,9 @@ struct ChatListTests {
         #expect(ChatList.order(hub, pinned: ["gone", "worker4"]) == ["worker4", "manager", "vps", "studio"])
     }
 
+    /// "You: " stands only before his own words (owner feature `message_hands`): the bugs are an AI session's, a
+    /// connected app's or a later hand's words that read as his on the row, his own that lose it, a hub without the
+    /// feature that changes the row, and a row's line that does not pass the hub's features on.
     @Test func theLineIsTheLastMessageAndHisOwnSaysSo() throws {
         #expect(ChatList.preview("vps", last: try report("The page is live."), tasks: []) == "The page is live.")
         #expect(ChatList.preview("vps", last: try message("Is it live?"), tasks: []) == "You: Is it live?")
@@ -48,6 +51,16 @@ struct ChatListTests {
         // Before the first message there is no line, and the row shows the name alone.
         #expect(ChatList.preview("vps", last: nil, tasks: []) == nil)
         #expect(ChatList.preview("vps", last: try message(""), tasks: []) == nil)
+
+        let hands = ["direct_chat", OwnerHand.feature]
+        for hand in ["tool", "connected", "other", "job"] {
+            #expect(ChatList.preview("vps", last: try message("Draft **it**", hand: hand), tasks: [], features: hands)
+                    == "Draft it", "\(hand)")
+        }
+        #expect(ChatList.preview("vps", last: try message("Draft it", hand: "app"), tasks: [], features: hands) == "You: Draft it")
+        #expect(ChatList.preview("vps", last: try message("Draft it", hand: "tool"), tasks: []) == "You: Draft it")
+        #expect(ChatList.line("vps", entries: [try message("Draft it", hand: "tool")], whole: true, needs: [], tasks: [],
+                              features: hands)?.words == "Draft it")
     }
 
     /// The line is the newest thing the agent did: a task that moved after its last message says what it is doing,

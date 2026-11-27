@@ -1,6 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import FleetCore
+import FleetMark
 import SwiftUI
 
 // The small views that the Channels pages, Settings and the agent chat share: the brand marks, the status line, a QR
@@ -61,13 +62,45 @@ struct ChatAppMark: View {
     var size: CGFloat = 18
     var help: String?
 
+    /// **Where the mark stands on a bubble**: 18 points, its centre 7 points left of the bubble's lower left corner's
+    /// edge and 5 under it, over the bubble's corner (`OwnerBubble`, `NeedTalkLines`). An AI session's mark stands there
+    /// too (`AISessionMark`).
+    static let onBubble: CGFloat = 18
+    static let corner = CGSize(width: -7, height: 5)
+
     var body: some View {
-        BrandMark(app: app, size: size * 0.58).foregroundStyle(FleetStyle.text)
+        Self.tile(size: size, help: help ?? ChatApps.title(app)) { BrandMark(app: app, size: size * 0.58) }
+    }
+
+    /// The small round tile of such a mark, with its glyph in white in it: the words are the hover text and the label.
+    static func tile<Glyph: View>(size: CGFloat, help: String, @ViewBuilder glyph: () -> Glyph) -> some View {
+        glyph().foregroundStyle(FleetStyle.text)
             .frame(width: size, height: size)
             .background(FleetStyle.surface, in: Circle())
             .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5))
-            .help(help ?? ChatApps.title(app))
-            .accessibilityElement().accessibilityLabel(help ?? ChatApps.title(app))
+            .accessibilityElement().accessibilityLabel(help)
+            // after the element, so that VoiceOver's help of the mark is its hover words too
+            .help(help)
+    }
+}
+
+/// **The mark of the AI session that sent a message for him** (owner feature `message_hands`, `OwnerHand`; the owner's
+/// "B, go ahead" of 24 November 2026 to its picture): the AI's glyph in white in the tile of a chat app's mark, on the
+/// lower left corner of the bubble, which is in its outline (`OwnerHand.Look`). "Sent by your AI session" is the hover
+/// text and the label.
+struct AISessionMark: View {
+    let runtime: OwnerHand.Runtime
+    var size: CGFloat = ChatAppMark.onBubble
+
+    static var words: String { OwnerHand.sentByAISession }
+
+    var body: some View {
+        ChatAppMark.tile(size: size, help: Self.words) {
+            if let glyph = ProviderLogo.glyph(runtime.rawValue) {
+                glyph.renderingMode(.template).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                    .frame(width: size * 0.58, height: size * 0.58).accessibilityHidden(true)
+            }
+        }
     }
 }
 

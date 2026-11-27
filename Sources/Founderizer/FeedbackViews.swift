@@ -154,7 +154,10 @@ struct FeedbackRows: View {
                     if message.replaces_request_id != nil {
                         Text("Correction").font(ChatStyle.detail).foregroundStyle(FleetStyle.muted)
                     }
-                    if !message.text.isEmpty { OwnerBubble(text: message.text, origin: message.origin, names: book) }
+                    if !message.text.isEmpty {
+                        OwnerBubble(text: message.text, origin: message.origin, hand: message.look(features: state.ui_features),
+                                    names: book)
+                    }
                     if let files = message.attachments, !files.isEmpty {
                         MessageFilesView(store: store, files: files).padding(.top, message.text.isEmpty ? 0 : 6)
                     }

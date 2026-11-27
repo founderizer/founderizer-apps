@@ -82,6 +82,13 @@ enum Brand {
         traits.accessibilityContrast == .high ? strongEdge(traits) : .clear
     })
 
+    /// **The outline of his bubble of words that another hand sent for him** (owner feature `message_hands`,
+    /// `OwnerHand`): the Mac's hairline, the words' colour at 16 %, and the strong line under Increase Contrast.
+    static let bubbleEdge = Color(uiColor: UIColor { traits in
+        traits.accessibilityContrast == .high ? strongEdge(traits)
+            : UIColor.label.resolvedColor(with: traits).withAlphaComponent(0.16)
+    })
+
     /// 3.0:1 on the light page under Increase Contrast and 3.6:1 on a card; 4.2:1 on a dark card and 6.2:1 on black.
     private static func strongEdge(_ traits: UITraitCollection) -> UIColor {
         traits.userInterfaceStyle == .dark

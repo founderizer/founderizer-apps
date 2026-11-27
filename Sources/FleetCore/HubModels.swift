@@ -605,6 +605,9 @@ public struct NeedMessage: Decodable, Equatable, Sendable {
     public let who: String
     public let text: String
     public let ts: Double
+    /// His line's hand and its AI's program, as on his messages (`OwnerMessage.hand`, `OwnerHand`); nil on an agent's.
+    public var hand: String? = nil
+    public var runtime: String? = nil
     public var fromOwner: Bool { who == "owner" }
 }
 
@@ -911,6 +914,12 @@ public struct OwnerMessage: Decodable, Identifiable, Sendable, Equatable {
     /// agent with it, with the name that the hub stored, and a skill that he asked it to use; nil from a hub before it
     /// and for his message on its way, whose gift comes with the hub's copy, as its files do.
     public var skills: MessageSkills? = nil
+    /// **The hand that sent it** (owner feature `message_hands`, `OwnerHand`): `app`, `device`, `chat`, `connected`,
+    /// `tool` (an AI session through the owner tools) or `other`; nil on a row from before owner API 1.289, from a hub
+    /// before the feature, and for his message on its way from this Mac.
+    public var hand: String? = nil
+    /// The program of the AI session that sent it (`OwnerHand.Runtime`), when the hand is `tool` and the hub knows it.
+    public var runtime: String? = nil
     public var id: String { request_id }
 }
 

@@ -786,7 +786,7 @@ struct NeedCard: View {
             // owner feature need_clarify: his talk with the agent under the card, over its answers, also where the
             // card takes no more of it: the talk is his record of the item, and it stays whole beside his answer
             let talk = store.talk(of: need)
-            if !talk.isEmpty { NeedTalkLines(talk: talk) }
+            if !talk.isEmpty { NeedTalkLines(talk: talk, features: store.features) }
             if need.asksForSecret {
                 NeedSecretNote(need: need)
                 // Needs clarification, under the line about the Mac, for a hub that takes his words from a phone
@@ -1261,7 +1261,7 @@ private struct NeedAnswered: View {
             let talk = store.talk(of: need)
             if !talk.isEmpty {
                 RowLine()
-                NeedTalkLines(talk: talk)
+                NeedTalkLines(talk: talk, features: store.features)
             }
             if !answer.isEmpty || !files.isEmpty {
                 RowLine()
@@ -2285,9 +2285,13 @@ struct NeedClarify: View {
 /// Mac's card shows it (`NeedTalkLines` there), in the look of this phone's chat: his messages at the trailing side in
 /// his bubble, and the agent's replies at the leading side after its mark, at rest, oldest first. Each line keeps the
 /// other side's room free, so none takes the whole width of an answer's row. The words are plain text, as he and the
-/// agent wrote them. It stands over the answers of an open card, and read only before his answer on an answered one.
+/// agent wrote them. It stands over the answers of an open card, and read only before his answer on an answered one. **A
+/// line that an AI session sent for him is in the bubble's outline with the AI's mark, as in the chat** (owner feature
+/// `message_hands`, `OwnerHand`).
 struct NeedTalkLines: View {
     let talk: [NeedMessage]
+    /// The hub's features, for the look of his lines (`NeedMessage.look`).
+    let features: Set<String>
     /// The agent's mark beside its reply's first line, at a request's head's size, growing by half at most.
     @ScaledMetric(relativeTo: .body) private var mark: CGFloat = 20
     /// Half the height of the words' capitals: the mark's centre stands this far over the first line's baseline.
@@ -2306,18 +2310,26 @@ struct NeedTalkLines: View {
         }
     }
 
-    /// His message: the bubble of his messages in a chat.
+    /// His message: the bubble of his messages in a chat; in its outline with the AI's mark where an AI session sent it.
     private func own(_ line: NeedMessage) -> some View {
-        Text(verbatim: line.text)
+        let look = line.look(features: Array(features))
+        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+        return Text(verbatim: line.text)
             .textSelection(.enabled)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 14).padding(.vertical, 9)
-            .background(Brand.bubble, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background {
+                if look.outlined { shape.strokeBorder(Brand.bubbleEdge, lineWidth: 1) } else { shape.fill(Brand.bubble) }
+            }
+            .accessibilityElement(children: .ignore)
+            // "You: " only before his own words (`OwnerHand.Look.spoken`)
+            .accessibilityLabel(Text(verbatim: look.spoken(line.text)))
+            .overlay(alignment: .bottomLeading) {
+                if let mark = look.mark { AISessionMark(runtime: mark).offset(AISessionMark.corner) }
+            }
             .padding(.leading, room)
             .frame(maxWidth: .infinity, alignment: .trailing)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("You: \(line.text)"))
     }
 
     /// The agent's reply: its words bare after its mark, as an agent's words stand in a chat; at the accessibility

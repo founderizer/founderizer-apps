@@ -20,8 +20,10 @@ public enum ChatList {
     /// "You: " in front so that he never reads his words as the agent's — or, when one of its open tasks moved
     /// after that message, what it is doing (`AgentActivity.doingNow`, the line that row had before), as a chat app
     /// says "typing…". A question the agent asks in its chat while it works is newer than its task, so it is not
-    /// hidden behind the task. Nil before the first message, and the row then shows the name alone.
-    public static func preview(_ agent: String, last: ChatEntry?, tasks: [FleetTask]) -> String? {
+    /// hidden behind the task. Nil before the first message, and the row then shows the name alone. **"You: " only
+    /// before his own words**: words that another hand sent for him, which his chat draws in the bubble's outline
+    /// (owner feature `message_hands`, `OwnerHand`; `features`, the hub's), stand alone, as on the iPhone and the PC.
+    public static func preview(_ agent: String, last: ChatEntry?, tasks: [FleetTask], features: [String]? = nil) -> String? {
         if let doing = AgentActivity.doingNow(agent, tasks: tasks), let moved = moved(agent, tasks: tasks),
            moved >= last?.created ?? 0 {
             return doing
@@ -31,7 +33,8 @@ public enum ChatList {
         case .message(let message):
             // A message of files alone is its files, as the chat shows it.
             let files = (message.attachments ?? []).map(\.name).joined(separator: ", ")
-            return (plain(message.text) ?? plain(files)).map { String(l10n: "You: \($0)") }
+            let words = plain(message.text) ?? plain(files)
+            return message.look(features: features).outlined ? words : words.map { String(l10n: "You: \($0)") }
         case nil: return nil
         }
     }

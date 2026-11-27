@@ -18720,6 +18720,16 @@
         }
       }
     },
+    "Sent by your AI session" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviado por tu sesión de IA"
+          }
+        }
+      }
+    },
     "Sent from %@" : {
       "localizations" : {
         "es" : {

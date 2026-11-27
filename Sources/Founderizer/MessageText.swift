@@ -485,6 +485,10 @@ struct OwnerBubble: View {
     /// of a chat that he only reads stands (`ReadBubble`): the filled bubble is always his own words. A task that an
     /// agent asked for opens with that agent's request so (`TaskRequest`).
     var theirs = false
+    /// **Whose hand sent these words** (owner feature `message_hands`, `OwnerHand`): words that another hand sent for
+    /// him stand in the bubble's outline, still at the right, and an AI session's have its mark in the bubble's lower
+    /// left corner, where a chat app's mark goes (`AISessionMark`; the owner's "B, go ahead" of 24 November 2026).
+    var hand: OwnerHand.Look = .his
     /// The names that his words draw as badges, in an agent's chat (`MessageText.chatNames`).
     var names: ChatNames? = nil
     /// What stands over his words, 6 points over them, inside the bubble and above its fold: the badge of the task or
@@ -568,11 +572,19 @@ struct OwnerBubble: View {
         }.padding(.horizontal, 16).padding(.vertical, 12)
             .background {
                 let shape = RoundedRectangle(cornerRadius: ChatStyle.bubbleRadius)
-                if theirs { shape.strokeBorder(FleetStyle.hairline(0.16), lineWidth: 1) } else { shape.fill(ChatStyle.bubble) }
+                if theirs || hand.outlined {
+                    shape.strokeBorder(FleetStyle.hairline(0.16), lineWidth: 1)
+                } else {
+                    shape.fill(ChatStyle.bubble)
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 if let origin {
-                    ChatAppMark(app: origin.app, size: 18, help: String(l10n: "Sent from \(ChatApps.title(origin.app))")).offset(x: -7, y: 5)
+                    ChatAppMark(app: origin.app, size: ChatAppMark.onBubble,
+                                help: String(l10n: "Sent from \(ChatApps.title(origin.app))"))
+                        .offset(ChatAppMark.corner)
+                } else if let mark = hand.mark {
+                    AISessionMark(runtime: mark).offset(ChatAppMark.corner)
                 }
             }
             .overlay(alignment: .bottomLeading) {

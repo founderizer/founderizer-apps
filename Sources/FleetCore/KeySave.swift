@@ -163,9 +163,11 @@ extension ChatList {
 
     /// The line of `agent`'s row (`Line`). `entries`: the newest entries of its chat, oldest first; `whole`: they are its
     /// whole chat. Nil before the first message, and the row then shows the name alone.
-    public static func line(_ agent: String, entries: [ChatEntry], whole: Bool, needs: [OwnerNeed], tasks: [FleetTask]) -> Line? {
+    /// `features`: the hub's, for the words of his last message (`preview`).
+    public static func line(_ agent: String, entries: [ChatEntry], whole: Bool, needs: [OwnerNeed], tasks: [FleetTask],
+                            features: [String]? = nil) -> Line? {
         if let request = waitingRequest(agent, entries: entries, whole: whole, needs: needs) { return .waiting(request) }
         if savedKey(agent, last: entries.last, tasks: tasks, needs: needs) { return .savedKey }
-        return preview(agent, last: entries.last, tasks: tasks).map(Line.words)
+        return preview(agent, last: entries.last, tasks: tasks, features: features).map(Line.words)
     }
 }

@@ -227,7 +227,7 @@ struct InstallCauseTests {
         // a Mac's own tools and settings, and a few that say in their own words what to do. Each part is held to a
         // sentence, so that none stays here after its sentence has gone.
         let others = ["and the line says --kind", "fleet_reboot_time", "unknown option", "--port must", "--claim-wait must", "--runtime must",
-                      "$name_rule", "fleet_shape_step", "fleet_hub_server=shared",
+                      "$name_rule", "$access_rule", "fleet_shape_step", "fleet_hub_server=shared",
                       "is there and is not a founderizer checkout", "is not a copy of the founderizer repository",
                       "is not a git checkout with a commit", "could not make a folder for the auth key",
                       "could not make a temporary file", "the hub's own repository could not be made",
