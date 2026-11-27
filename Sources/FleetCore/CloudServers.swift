@@ -424,7 +424,7 @@ public struct CloudServers: Sendable {
                 if answer.code == "resource_unavailable" || answer.code == "placement_error" { continue }
                 guard answer.ok else { throw try await failed(answer, &made, call) }
                 guard let server = answer.object["server"] as? [String: Any], let id = server["id"] as? Int else {
-                    throw CloudError.notUnderstood(provider)
+                    throw try await unread(&made, call)
                 }
                 made.server = String(id)
                 let ipv4 = ((server["public_net"] as? [String: Any])?["ipv4"] as? [String: Any])?["ip"] as? String
@@ -548,7 +548,7 @@ public struct CloudServers: Sendable {
                 if Self.saysUnavailable(answer) { refusal = answer; continue }
                 guard answer.ok else { throw try await failed(answer, &made, call) }
                 guard let id = (answer.object["droplet"] as? [String: Any])?["id"] as? Int else {
-                    throw CloudError.notUnderstood(provider)
+                    throw try await unread(&made, call)
                 }
                 taken = (id, offer)
                 break
@@ -679,7 +679,7 @@ public struct CloudServers: Sendable {
                 "enable_ipv6": true, "backups": "disabled", "activation_email": false, "tags": [Self.tag(use)]], &made, call)
             guard answer.ok else { throw try await failed(answer, &made, call) }
             guard let id = (answer.object["instance"] as? [String: Any])?["id"] as? String, !id.isEmpty else {
-                throw CloudError.notUnderstood(provider)
+                throw try await unread(&made, call)
             }
             made.server = id
             let ipv4 = try await vultrWait(id, call)
@@ -828,7 +828,7 @@ public struct CloudServers: Sendable {
                 "metadata": ["user_data": Data(userData.utf8).base64EncodedString()],
                 "booted": true, "backups_enabled": false, "private_ip": false, "tags": [Self.tag(use)]], &made, call)
             guard answer.ok else { throw try await failed(answer, &made, call) }
-            guard let id = answer.object["id"] as? Int else { throw CloudError.notUnderstood(provider) }
+            guard let id = answer.object["id"] as? Int else { throw try await unread(&made, call) }
             made.server = String(id)
             let ipv4 = try await akamaiWait(id, call)
             return CloudServer(provider: provider, id: String(id), name: made.name, ipv4: ipv4, type: chosen.type,
@@ -991,25 +991,39 @@ public struct CloudServers: Sendable {
     /// **The servers that carry this call's own mark** (the Door area's read of ab7318f29, its MUST 2: a name and a
     /// time can be another build's server, of another fleet in the same account or of another Mac of this fleet): at
     /// Hetzner the servers that its firewall stands in front of, at Akamai the Linodes of its firewall's devices, at
-    /// Vultr the instances of that name behind its firewall group, at DigitalOcean the droplets with its tag. One read,
-    /// and nothing else of the account.
+    /// Vultr the instances behind its firewall group, at DigitalOcean the droplets with its tag. Each one
+    /// of the call's own name only: a person's other server put behind the call's new firewall in that hour, or given
+    /// its tag, is not the call's (the PC readers' point 3 of 26 November 2026). One read, and nothing else of the
+    /// account; at Hetzner, whose firewall names its servers by id only, a second one, of the servers of that name.
     private func madeBehind(_ made: Made, _ call: CloudCall) async throws -> [String] {
         switch provider {
         case .hetzner:
             guard let firewall = made.firewall else { return [] }
             let read = try await call.send("GET", provider.firewallPath(firewall))
             let uses = ((read["firewall"] as? [String: Any])?["applied_to"] as? [[String: Any]]) ?? []
-            return uses.compactMap { (($0["server"] as? [String: Any])?["id"] as? Int).map(String.init) }
+            let behind = uses.compactMap { (($0["server"] as? [String: Any])?["id"] as? Int).map(String.init) }
+            guard !behind.isEmpty else { return [] }
+            let named = try await call.send("GET", "servers", query: [URLQueryItem(name: "name", value: made.name)])
+            let ids = Set(((named["servers"] as? [[String: Any]]) ?? []).compactMap { server -> String? in
+                guard server["name"] as? String == made.name else { return nil }
+                return (server["id"] as? Int).map(String.init)
+            })
+            return behind.filter(ids.contains)
         case .digitalOcean:
             let read = try await call.send("GET", "droplets", query: [URLQueryItem(name: "tag_name", value: made.firewallName),
                                                                       URLQueryItem(name: "per_page", value: "200")])
-            return ((read["droplets"] as? [[String: Any]]) ?? []).compactMap { ($0["id"] as? Int).map(String.init) }
+            return ((read["droplets"] as? [[String: Any]]) ?? []).compactMap { droplet in
+                guard droplet["name"] as? String == made.name else { return nil }
+                return (droplet["id"] as? Int).map(String.init)
+            }
         case .vultr:
             guard let firewall = made.firewall else { return [] }
             let read = try await call.send("GET", "instances", query: [URLQueryItem(name: "label", value: made.name),
                                                                        URLQueryItem(name: "per_page", value: "500")])
             return ((read["instances"] as? [[String: Any]]) ?? []).compactMap { instance in
-                guard instance["firewall_group_id"] as? String == firewall else { return nil }
+                guard instance["firewall_group_id"] as? String == firewall, instance["label"] as? String == made.name else {
+                    return nil
+                }
                 return instance["id"] as? String
             }
         case .akamai:
@@ -1017,7 +1031,8 @@ public struct CloudServers: Sendable {
             let read = try await call.send("GET", provider.firewallPath(firewall) + "/devices",
                                            query: [URLQueryItem(name: "page_size", value: "500")])
             return ((read["data"] as? [[String: Any]]) ?? []).compactMap { device in
-                guard let entity = device["entity"] as? [String: Any], entity["type"] as? String == "linode" else { return nil }
+                guard let entity = device["entity"] as? [String: Any], entity["type"] as? String == "linode",
+                      entity["label"] as? String == made.name else { return nil }
                 return (entity["id"] as? Int).map(String.init)
             }
         }
@@ -1073,6 +1088,17 @@ public struct CloudServers: Sendable {
         return .takenBack(provider, says: says, server: made.name)
     }
 
+    /// **A success to the call for the server, with no id that this app reads** (the PC readers' point 1 of 26 November
+    /// 2026): the provider made the server, so the servers with this call's mark are read, as after a fault answer.
+    /// The one there is `made.server`, which `undo` then deletes with the rest; every other end is `unread`, and
+    /// nothing is taken back, as after `unsure`. Before, the firewall went with no read, and at Akamai a Linode that
+    /// stayed had none.
+    private func unread(_ made: inout Made, _ call: CloudCall) async throws -> CloudError {
+        let unsure = CloudError.unread(provider, server: made.name, mark: made.firewallName)
+        made.server = try await madeMeanwhile(made, call, unsure: unsure)
+        return .unreadTakenBack(provider, server: made.name)
+    }
+
     /// The call for the server, whose answer this Mac may not get: a time-out, a connection that ended, or the owner's
     /// Back while it was on its way. The provider can have made the server all the same (the Door area's read of
     /// ab7318f29, its MUST 1), so the servers with the call's mark are read as after a fault answer: the one there goes
@@ -1090,14 +1116,20 @@ public struct CloudServers: Sendable {
     /// Takes away what one call made, and says so when it could not. It runs as a task of its own, so that a create the
     /// owner cancelled still leaves no server running at his cost.
     private func undo(_ made: Made, after error: Error, _ call: CloudCall) async -> Error {
-        let left = await Task { await self.remove(made, call) }.value.left
-        guard !left.isEmpty else { return error }
+        let removed = await Task { await self.remove(made, call) }.value
+        guard !removed.left.isEmpty else { return error }
         // A server that the call found and could not delete is said in the provider's own words, never as deleted.
-        let said: Error = if case .takenBack(_, let says, _)? = error as? CloudError {
-            says.map { CloudError.refused(provider, $0) } ?? CloudError.unreachable(provider)
-        } else { error }
+        let (said, found): (Error, Bool) = switch error as? CloudError {
+        case .takenBack(_, let says, _)?: (says.map { CloudError.refused(provider, $0) } ?? CloudError.unreachable(provider), true)
+        case .unreadTakenBack?: (CloudError.notUnderstood(provider), true)
+        default: (error, false)
+        }
+        // One that the mark read found and that does not go now (Hetzner's `locked` while it still makes the server) is
+        // read for and deleted in the hour after, as one that comes late (the PC readers' point 5 and the Vault area's
+        // SHOULD 3 of 26 November 2026): else it runs on at the owner's cost.
+        if found, removed.serverStays { followUp(made, call) }
         let reason = (said as? LocalizedError)?.errorDescription ?? String(describing: said)
-        return CloudError.leftBehind(provider, reason: reason, left: left)
+        return CloudError.leftBehind(provider, reason: reason, left: removed.left)
     }
 
     /// Deletes the server, then its firewall, and answers what is still there. At Hetzner and Vultr a firewall goes only
@@ -1657,6 +1689,13 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
     /// The provider answered that call with a fault of its own (`says`), or not at all (nil), and had made `server` all
     /// the same; this app deleted it, with what else the call made (the validation of 2be411f3b: "refused" was untrue).
     case takenBack(CloudProvider, says: String?, server: String)
+    /// **The provider answered that call with a success that holds no id that this app reads, and no one server with
+    /// the call's own mark was there** (`CloudServers.unread`; the PC readers' point 1 of 26 November 2026): the
+    /// provider can have made `server`, so this app looks for it for an hour while it runs, as after `unsure`.
+    case unread(CloudProvider, server: String, mark: String)
+    /// The provider answered that call with a success that this app could not read, and the one server with the
+    /// call's mark was `server`: this app deleted it, with what else the call made.
+    case unreadTakenBack(CloudProvider, server: String)
     /// The provider answered something this app does not understand.
     case notUnderstood(CloudProvider)
     /// The provider has no type that fits free in any location now.
@@ -1705,6 +1744,10 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
             String(l10n: "\(provider.name) did not answer the call that makes \(server), but it had made it all the same, so this app deleted it.")
         case .unsure(let provider, nil, let server, let mark):
             String(l10n: "\(provider.name) did not answer the call that makes \(server), so it may have made it all the same. While this app is open, it looks for \(server) for an hour and deletes it if it comes. If you quit it sooner, delete the \(server) \(Self.marked(mark, at: provider)) at \(provider.name) if it is there.")
+        case .unread(let provider, let server, let mark):
+            String(l10n: "\(provider.name) may have made \(server), but this app cannot read its answer. While this app is open, it looks for \(server) for an hour and deletes it if it comes. If you quit it sooner, delete the \(server) \(Self.marked(mark, at: provider)) at \(provider.name) if it is there.")
+        case .unreadTakenBack(let provider, let server):
+            String(l10n: "\(provider.name) made \(server), but this app cannot read its answer, so this app deleted \(server).")
         case .notUnderstood(let provider): String(l10n: "\(provider.name) answered something this app does not understand.")
         // Every size that fits was asked, in every location: "smallest" and "near you" were not what was looked at.
         case .noRoom(let provider): String(l10n: "\(provider.name) has no server free now.")

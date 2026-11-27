@@ -182,11 +182,23 @@ struct CloudVectorsTests {
         let fault = hetzner()
         fault.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
         fault.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
-                     + "\"server\":{\"id\":1001}}]}}")
+                     + "\"server\":{\"id\":1001}},{\"type\":\"server\",\"server\":{\"id\":1002}}]}}")
+        fault.answer("GET", "/v1/servers", 200, "{\"servers\":[{\"id\":1001,\"name\":\"hub-1\"},{\"id\":1002,\"name\":\"hub-10\"}]}")
         fault.answer("DELETE", "/v1/servers/1001", 200, "{\"action\":{\"id\":601,\"command\":\"delete_server\",\"status\":\"running\"}}")
         fault.answer("GET", "/v1/actions/601", 200, "{\"action\":{\"id\":601,\"status\":\"success\"}}")
         fault.answer("DELETE", "/v1/firewalls/77", 204, "")
         add("a fault answer to the server: the server behind the call's firewall goes, then the firewall", make(), fault)
+        // A success to the call for the server with no id that this app reads: read as after a fault answer.
+        let noID = hetzner()
+        noID.answer("POST", "/v1/servers", 201, "{\"server\":{\"name\":\"hub-1\"}}")
+        noID.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
+                    + "\"server\":{\"id\":1001}}]}}")
+        noID.answer("GET", "/v1/servers", 200, "{\"servers\":[{\"id\":1001,\"name\":\"hub-1\"}]}")
+        noID.answer("DELETE", "/v1/servers/1001", 200, "{\"action\":{\"id\":601,\"command\":\"delete_server\",\"status\":\"running\"}}")
+        noID.answer("GET", "/v1/actions/601", 200, "{\"action\":{\"id\":601,\"status\":\"success\"}}")
+        noID.answer("DELETE", "/v1/firewalls/77", 204, "")
+        add("a success with no id to the server: the server of its name behind the call's firewall goes, then the firewall",
+            make(), noID)
         // No answer at all to the call for the server: none behind its firewall now, nor in the reads after it, so
         // nothing is taken back and the firewall stays.
         let lost = hetzner()
@@ -198,6 +210,7 @@ struct CloudVectorsTests {
         locked.answer("POST", "/v1/servers", 503, "{\"error\":{\"code\":\"unavailable\",\"message\":\"service unavailable\"}}")
         locked.answer("GET", "/v1/firewalls/77", 200, "{\"firewall\":{\"id\":77,\"applied_to\":[{\"type\":\"server\","
                       + "\"server\":{\"id\":1001}}]}}")
+        locked.answer("GET", "/v1/servers", 200, "{\"servers\":[{\"id\":1001,\"name\":\"hub-1\"}]}")
         locked.answer("DELETE", "/v1/servers/1001", 423, "{\"error\":{\"code\":\"locked\",\"message\":\"server is locked\"}}")
         locked.answer("DELETE", "/v1/servers/1001", 200, "{\"action\":{\"id\":601,\"command\":\"delete_server\",\"status\":\"running\"}}")
         locked.answer("GET", "/v1/actions/601", 200, "{\"action\":{\"id\":601,\"status\":\"success\"}}")
@@ -425,6 +438,17 @@ struct CloudVectorsTests {
         gateway.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\"}]}")
         gateway.answer("DELETE", droplet, 204, "")
         add("a 502 to the droplet: the droplet with the call's tag goes", make(), gateway)
+        // The droplet with the call's tag and another name is not the call's: it stays, and the end is not known.
+        let renamed = digitalOcean()
+        renamed.answer("POST", "/v2/droplets", 502, "{\"id\":\"bad_gateway\",\"message\":\"502 Bad Gateway\"}")
+        renamed.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164445,\"name\":\"shop\"}]}")
+        add("a 502 to the droplet and one with its tag of another name: it stays", make(), renamed)
+        // A success with no id: read as after a fault answer, and the droplet with the call's tag goes.
+        let noID = digitalOcean()
+        noID.answer("POST", "/v2/droplets", 202, "{\"droplet\":{\"name\":\"hub-1\"}}")
+        noID.answer("GET", "/v2/droplets", 200, "{\"droplets\":[{\"id\":3164444,\"name\":\"hub-1\"}]}")
+        noID.answer("DELETE", droplet, 204, "")
+        add("a success with no id to the droplet: the droplet with the call's tag goes", make(), noID)
         // None with its tag yet: the end is not known, and the droplet that comes at a later read goes.
         let late = digitalOcean()
         late.answer("POST", "/v2/droplets", 500, "{\"id\":\"server_error\",\"message\":\"try again\"}")
@@ -554,10 +578,19 @@ struct CloudVectorsTests {
         timeout.answer("POST", "/v2/instances", 504, "{\"error\":\"Gateway Timeout\"}")
         timeout.answer("GET", "/v2/instances", 200, "{\"instances\":[{\"id\":\"\(vultrInstance)\",\"label\":\"hub-1\","
                        + "\"firewall_group_id\":\"\(vultrFirewall)\"},{\"id\":\"another\",\"label\":\"hub-1\","
-                       + "\"firewall_group_id\":\"another-group\"}]}")
+                       + "\"firewall_group_id\":\"another-group\"},{\"id\":\"shop\",\"label\":\"shop\","
+                       + "\"firewall_group_id\":\"\(vultrFirewall)\"}]}")
         timeout.answer("DELETE", "/v2/instances/\(vultrInstance)", 204, "")
         timeout.answer("DELETE", "/v2/firewalls/\(vultrFirewall)", 204, "")
         add("a 504 to the instance: the one behind the call's own group goes, with the group", make(), timeout)
+        let noID = vultr()
+        noID.answer("POST", "/v2/firewalls", 201, "{\"firewall_group\":{\"id\":\"\(vultrFirewall)\"}}")
+        noID.answer("POST", "/v2/instances", 202, "{\"instance\":{\"label\":\"hub-1\"}}")
+        noID.answer("GET", "/v2/instances", 200, "{\"instances\":[{\"id\":\"\(vultrInstance)\",\"label\":\"hub-1\","
+                    + "\"firewall_group_id\":\"\(vultrFirewall)\"}]}")
+        noID.answer("DELETE", "/v2/instances/\(vultrInstance)", 204, "")
+        noID.answer("DELETE", "/v2/firewalls/\(vultrFirewall)", 204, "")
+        add("a success with no id to the instance: the one of its name behind the call's group goes, with the group", make(), noID)
         let stuck = vultr()
         stuck.answer("POST", "/v2/firewalls", 201, "{\"firewall_group\":{\"id\":\"\(vultrFirewall)\"}}")
         stuck.answer("POST", "/v2/instances", 202, "{\"instance\":{\"id\":\"\(vultrInstance)\"}}")
@@ -666,12 +699,18 @@ struct CloudVectorsTests {
         unread.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
         unread.answer("GET", "/v4/networking/firewalls/\(akamaiFirewall)/devices", 500, "{\"errors\":[{\"reason\":\"x\"}]}")
         add("a 500 to the Linode and devices that cannot be read: nothing is taken back", make(), unread)
+        let blank = akamai()
+        blank.answer("POST", "/v4/networking/firewalls", 200, "{\"id\":\(akamaiFirewall)}")
+        blank.answer("POST", "/v4/linode/instances", 200, "{\"label\":\"hub-1\"}")
+        blank.answer("GET", "/v4/networking/firewalls/\(akamaiFirewall)/devices", 500, "{\"errors\":[{\"reason\":\"x\"}]}")
+        add("a success with no id to the Linode and devices that cannot be read: nothing is taken back", make(), blank)
         // A Linode that does not go keeps its firewall, which Akamai would delete in front of it.
         let stays = akamai()
         stays.answer("POST", "/v4/networking/firewalls", 200, "{\"id\":\(akamaiFirewall)}")
         stays.answer("POST", "/v4/linode/instances", 500, "{\"errors\":[{\"reason\":\"Please try again\"}]}")
         stays.answer("GET", "/v4/networking/firewalls/\(akamaiFirewall)/devices", 200,
-                     "{\"data\":[{\"entity\":{\"id\":\(linode),\"type\":\"linode\"}}]}")
+                     "{\"data\":[{\"entity\":{\"id\":\(linode),\"type\":\"linode\",\"label\":\"hub-1\"}},"
+                     + "{\"entity\":{\"id\":4242,\"type\":\"linode\",\"label\":\"shop\"}}]}")
         stays.answer("DELETE", "/v4/linode/instances/\(linode)", 500, "{\"errors\":[{\"reason\":\"busy\"}]}")
         add("a Linode found that does not go keeps its firewall", make(), stays)
         let refused = akamai()
@@ -815,6 +854,9 @@ struct CloudVectorsTests {
         case .unsure(_, let says, let server, let mark):
             named["case"] = "unsure"; named["says"] = says.map(shown) as Any? ?? NSNull(); named["server"] = server
             named["mark"] = shown(mark)
+        case .unread(_, let server, let mark):
+            named["case"] = "unread"; named["server"] = server; named["mark"] = shown(mark)
+        case .unreadTakenBack(_, let server): named["case"] = "unread_taken_back"; named["server"] = server
         case .notUnderstood: named["case"] = "not_understood"
         case .noRoom: named["case"] = "no_room"
         case .full: named["case"] = "full"
@@ -845,6 +887,7 @@ struct CloudVectorsTests {
              .unsure(provider, says: "an example fault", server: "worker-3", mark: "founderizer-worker-3-k3j9x2"),
              .unsure(provider, says: nil, server: "worker-3", mark: "fz-worker-3-k3j9x2"),
              .takenBack(provider, says: "an example fault", server: "worker-3"), .takenBack(provider, says: nil, server: "worker-3"),
+             .unread(provider, server: "worker-3", mark: "founderizer-worker-3-k3j9x2"), .unreadTakenBack(provider, server: "worker-3"),
              .notUnderstood(provider),
              .noRoom(provider), .full(provider), .taken(provider), .notReady(provider),
              .leftBehind(provider, reason: "It failed.", left: ["the server hub-1"]),
@@ -925,7 +968,8 @@ struct CloudVectorsTests {
             "constants": ["ubuntu": CloudServers.ubuntu, "join_key_life": CloudServers.joinKeyLife,
                           "wait_reads": CloudServers.waitReads, "remove_reads": CloudServers.removeReads,
                           "hub_memory_mb": ServerCheck.hubMemory.megabytes, "agent_memory_mb": ServerCheck.agentMemory.megabytes,
-                          "apt_lock_wait": InstallPlan.aptLockWait, "follow_reads": CloudServers.followReads],
+                          "apt_lock_wait": InstallPlan.aptLockWait, "follow_reads": CloudServers.followReads,
+                          "follow_step": Int(CloudServers.followStep.components.seconds)],
         ]
     }
 

@@ -1435,6 +1435,26 @@
         }
       }
     },
+    "%@ made %@, but this app cannot read its answer, so this app deleted %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ creó %2$@, pero esta app no puede leer su respuesta, así que esta app borró %3$@."
+          }
+        }
+      }
+    },
+    "%@ may have made %@, but this app cannot read its answer. While this app is open, it looks for %@ for an hour and deletes it if it comes. If you quit it sooner, delete the %@ %@ at %@ if it is there." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puede que %1$@ haya creado %2$@, pero esta app no puede leer su respuesta. Mientras esta app esté abierta, busca %3$@ durante una hora y lo borra si aparece. Si la cierras antes, borra el %4$@ %5$@ en %6$@ si está allí."
+          }
+        }
+      }
+    },
     "%@ nears its usage limit" : {
       "localizations" : {
         "es" : {
