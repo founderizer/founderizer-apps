@@ -28,5 +28,7 @@
     <None Include="../../ios/Sources/AgentPage.swift;../../ios/Sources/ChatPage.swift" Link="sources/ios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- The window's own source, whose rules WindowRulesTests reads: WinUI, which it calls, loads in no test. -->
     <None Include="../Founderizer.Windows/**/*.cs;../Founderizer.Windows/**/*.xaml" Exclude="../Founderizer.Windows/bin/**;../Founderizer.Windows/obj/**" Link="sources/windows/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The launcher's source: WindowRulesTests holds the starts of a program in it and in the window's. -->
+    <None Include="../Founderizer.Launcher/**/*.cs" Exclude="../Founderizer.Launcher/bin/**;../Founderizer.Launcher/obj/**" Link="sources/launcher/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

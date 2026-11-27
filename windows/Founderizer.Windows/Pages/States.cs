@@ -13,8 +13,8 @@ namespace Founderizer.Windows.Pages;
 /// <summary>What a page may ask of the window: the store, a move to another page, and Needs you at one request.</summary>
 internal sealed record PageServices(IFleetSource Source, Action<Page> Go, Action<long> OpenNeed, Func<IntPtr> Window);
 
-/// <summary>A message's files on the PC: the pictures' bytes as images, a file opened in its own app (through a copy in
-/// the user's temporary folder), and the files that he picks with Windows' picker.</summary>
+/// <summary>A message's files on the PC: the pictures' bytes as images, a file opened through a marked copy in the
+/// user's temporary folder (<see cref="ChatFileCopy"/>), and the files that he picks with Windows' picker.</summary>
 internal static class Files
 {
     public static async System.Threading.Tasks.Task<ImageSource?> Picture(byte[] bytes)
@@ -26,16 +26,10 @@ internal static class Files
         return image;
     }
 
-    /// <summary>Opens a file of a message in the app that Windows gives its kind.</summary>
-    public static void Open(MessageAttachment file, byte[] bytes)
-    {
-        var folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Founderizer", file.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        System.IO.Directory.CreateDirectory(folder);
-        var name = string.Concat(file.Name.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-        var path = System.IO.Path.Combine(folder, name.Length == 0 ? "file" : name);
-        System.IO.File.WriteAllBytes(path, bytes);
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
-    }
+    /// <summary>Opens a file of a message through a copy with the mark of a download: an inert kind in the app that
+    /// Windows gives its kind, each other kind selected in File Explorer (<see cref="ChatFileCopy.Open(MessageAttachment, byte[])"/>).
+    /// A copy that has no mark throws an <see cref="System.IO.IOException"/> and does not open.</summary>
+    public static void Open(MessageAttachment file, byte[] bytes) => ChatFileCopy.Open(file, bytes);
 
     /// <summary>Windows' picker for one or more files; each with its name, bytes and kind.</summary>
     public static async System.Threading.Tasks.Task<System.Collections.Generic.List<(string Name, byte[] Bytes, string? Mime)>> Pick(IntPtr window)
@@ -59,8 +53,7 @@ internal static class Files
 /// <summary>The pictures of a page's files, a message's and a request option's (owner feature `need_pictures`), through
 /// the library's <see cref="PictureLoads{T}"/>: one read at a time, through the store (which keeps its "Not loaded"), in
 /// the order asked; a failed read waits for Read again; each picture kept by its id and SHA-256 for the hub's generation
-/// that the page shows. The page draws again when a read ended. A press opens a file in the app that Windows gives its
-/// kind.</summary>
+/// that the page shows. The page draws again when a read ended. A press opens a file through <see cref="Files.Open"/>.</summary>
 internal sealed class PictureReads
 {
     private readonly IFleetSource source;
@@ -84,8 +77,9 @@ internal sealed class PictureReads
     /// <summary>A request's options with their pictures marked as <see cref="Mark(FileTile)"/> marks one.</summary>
     public OptionsModel Mark(OptionsModel options) => loads.Mark(options);
 
-    /// <summary>A press on a file or a picture: its bytes, checked, in the app that Windows gives its kind. Bytes that do
-    /// not come or are not the file's open nothing; the store keeps the file as not loaded.</summary>
+    /// <summary>A press on a file or a picture: its bytes, checked, through <see cref="Files.Open"/>. Bytes that do not
+    /// come or are not the file's open nothing; the store keeps the file as not loaded. A copy with no mark of a download
+    /// opens nothing either.</summary>
     public async void Open(FileTile tile)
     {
         try

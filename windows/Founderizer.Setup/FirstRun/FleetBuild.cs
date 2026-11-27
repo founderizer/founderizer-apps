@@ -388,14 +388,15 @@ public sealed class CloudStep(CloudDeps deps)
     private static string AppLaunchOf(CloudDeps deps) => deps.Builds.Launch;
 
     /// <summary>What a call that ended with this error left at the provider (the Mac's <c>AtProvider.after</c>). A
-    /// provider's own fault answer (a 5xx), or no answer, to the call for the server is <c>Nothing</c> only when the
-    /// provider held the server that it made all the same and this app deleted it (<c>TakenBack</c>); its other end
-    /// (<c>Unsure</c>) is <c>NotKnown</c>, and the name stays in use.</summary>
+    /// provider's own fault answer (a 5xx), no answer, or a success with no id that this app reads, to the call for the
+    /// server is <c>Nothing</c> only when the provider held the server that it made and this app deleted it
+    /// (<c>TakenBack</c>, <c>UnreadTakenBack</c>); its other end (<c>Unsure</c>, <c>Unread</c>) is <c>NotKnown</c>, and
+    /// the name stays in use.</summary>
     public static AtProvider After(Exception error) => error switch
     {
         OperationCanceledException => AtProvider.Nothing,
         CloudException { Failure: CloudFailure.LeftBehind } => AtProvider.LeftBehind,
-        CloudException { Failure: CloudFailure.Unreachable or CloudFailure.NotUnderstood or CloudFailure.Unsure } => AtProvider.NotKnown,
+        CloudException { Failure: CloudFailure.Unreachable or CloudFailure.NotUnderstood or CloudFailure.Unsure or CloudFailure.Unread } => AtProvider.NotKnown,
         CloudException => AtProvider.Nothing,
         _ => AtProvider.NotKnown,
     };

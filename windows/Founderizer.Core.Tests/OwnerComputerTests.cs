@@ -185,6 +185,33 @@ public sealed class OwnerComputerTests
         Assert.IsTrue((await store.OwnerGetAsync("ui/servers", CoreJson.Default.MobileDeviceList)).IsGenerationChanged);
     }
 
+    /// <summary>**A change of hub raises no state that pairs the new hub with the old hub's current reading** (reader B on
+    /// b20146a50): as the owner's computer, the change runs in several updates (the hub, the key of the new place, the
+    /// generation), and each raises its change; one that named the new hub with the old fleet and its fresh time read as a
+    /// current reading of the new hub. The bug: a rule that acts on a current reading of its hub acts on the old fleet, as
+    /// the PC's spelling notes did: a note of the new hub went as a note of another generation, so after a move to another
+    /// hub and back the manager's name kept the plain capitals.</summary>
+    [TestMethod]
+    public async Task AChangeOfHubRaisesNoStateOfTheNewHubWithTheOldReading()
+    {
+        var first = Hub();
+        var box = new MemorySecretBox();
+        OwnerPcKey.Promote(box, first.Address, OwnerPcKey.Make());
+        // A second hub that this PC owns and that does not answer: no state of it is current but one with the old reading.
+        var second = HubClient.Address("http://127.0.0.1:9/");
+        OwnerPcKey.Promote(box, second, OwnerPcKey.Make());
+        await using var store = new OwnerStore(new StoreSettings { Folder = Folder(), Keys = new MemoryKeyStore(), Box = box });
+        await store.ConnectOwnerAsync(first.Address);
+        await store.RefreshAsync();
+        Assert.IsTrue(store.State.IsFresh(DateTimeOffset.UtcNow), "the first hub's reading is current");
+        var raised = new System.Collections.Concurrent.ConcurrentQueue<(StoreState State, DateTimeOffset At)>();
+        store.Changed += (_, change) => raised.Enqueue((change.After, DateTimeOffset.UtcNow));
+        await store.ConnectAsync(second.ToString());
+        Assert.AreEqual(HubRole.Owner, store.State.Role, "the owner's computer of the second hub");
+        Assert.IsTrue(raised.Any(r => r.State.Hub == second), "the change of hub was raised");
+        Assert.IsFalse(raised.Any(r => r.State.Hub == second && r.State.IsFresh(r.At)), "no state of the new hub with the old reading");
+    }
+
     // ------------------------------------------------------------ the claim of a new hub
 
     /// <summary>The claim's listener and then the hub on one address (the Mac's KeyedHub): the listener keeps the

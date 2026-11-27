@@ -135,12 +135,52 @@ final class OwnerRequestTests {
         #expect(post.header("X-Fleet-Session") == "claude-code/test-session-1")
     }
 
-    @Test func theSessionLabelIsClaudeCodesSessionIdAndNothingElse() {
+    @Test func theSessionLabelIsAClaudeCodeSessionsOwnIdAndNothingElse() {
         #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "0d8aa41c-95ba"]) == "claude-code/0d8aa41c-95ba")
-        #expect(SessionLabel.current([:]) == nil)
-        #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "  "]) == nil)
+        #expect(SessionLabel.current([:], client: nil) == nil)
+        #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "  "], client: nil) == nil)
         #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": "not a name"]) == nil)       // the hub would refuse it
         #expect(SessionLabel.current(["CLAUDE_CODE_SESSION_ID": String(repeating: "a", count: 120)]) == nil)
+    }
+
+    /// **A Codex session names itself too** (both signs proven on 26 November 2026), as `owner_mcp.py`'s: its thread's
+    /// id in a shell command's environment, and in the MCP form only its own name in the client's initialize. A client
+    /// of no known name names no session. A bug here leaves a Codex session's message with no AI mark and no session,
+    /// or marks another client as an AI's.
+    @Test func aCodexSessionIsNamedByItsThreadOrByItsClientsName() {
+        let thread = "a1b2c3d4-0000-4000-8000-000000000001"
+        #expect(SessionLabel.current(["CODEX_THREAD_ID": thread], client: nil) == "codex/" + thread)
+        #expect(SessionLabel.current(["CODEX_THREAD_ID": thread, "CLAUDE_CODE_SESSION_ID": "0d8aa41c-95ba"], client: nil)
+                == "claude-code/0d8aa41c-95ba")
+        #expect(SessionLabel.current([:], client: nil) == nil)
+        let session = SessionLabel.clientSession("codex-mcp-client")
+        #expect(session?.hasPrefix("codex/mcp-") == true)
+        #expect(SessionLabel.current([:], client: session) == session)
+        #expect(SessionLabel.clientSession("grok-cli") == nil && SessionLabel.clientSession(nil) == nil)
+    }
+
+    /// **The MCP form keeps the session that its client's initialize names** (`OwnerMCP.rpc`, `SessionLabel.noteClient`),
+    /// once for the process, and a client of no known name, or a name that is no text, keeps none. A bug here (the call
+    /// left out of the initialize, or a later initialize that replaces the first) leaves a Codex session's MCP messages
+    /// with no mark, or gives one process two sessions. It reads the kept session itself, not the environment, which
+    /// another test of this suite sets.
+    @Test func theMCPFormKeepsTheSessionThatItsClientsInitializeNames() {
+        SessionLabel.forget()
+        defer { SessionLabel.forget() }
+        let mcp = OwnerMCP(tools: Fixture.tools(nil, home: home), version: "0.1.0", sink: { _ in })
+        func initialize(_ name: JSONValue) {
+            _ = mcp.rpc(.object(["jsonrpc": .string("2.0"), "id": .int(1), "method": .string("initialize"),
+                                 "params": .object(["clientInfo": .object(["name": name])])]))
+        }
+        initialize(.string("grok-cli"))
+        initialize(.array([.string("codex-mcp-client")]))
+        #expect(SessionLabel.keptSession == nil)
+        initialize(.string("codex-mcp-client"))
+        let first = SessionLabel.keptSession
+        #expect(first?.hasPrefix("codex/mcp-") == true && first?.count == "codex/mcp-".count + 32)
+        initialize(.string("codex-mcp-client"))
+        #expect(SessionLabel.keptSession == first)
+        #expect(SessionLabel.current([:]) == first)        // the public form, which every request of the program calls
     }
 
     @Test func aPlainToolLeavesANullOutAndTakesTheAgentsRequestID() throws {

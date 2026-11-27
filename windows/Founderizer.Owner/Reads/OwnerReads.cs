@@ -27,6 +27,7 @@ namespace Founderizer.Owner.Reads;
 [JsonSerializable(typeof(MoveAsk))]
 [JsonSerializable(typeof(MoveReceipt))]
 [JsonSerializable(typeof(RenameAsk))]
+[JsonSerializable(typeof(RespellAsk))]
 [JsonSerializable(typeof(RenameReceipt))]
 [JsonSerializable(typeof(SignInAsk))]
 [JsonSerializable(typeof(SignInCode))]
@@ -41,7 +42,7 @@ public sealed partial class ReadsJson : JsonSerializerContext;
 
 /// <summary>**The owner's reads of servers, machines and the team, and the writes of the agent setup**, as the owner's
 /// computer (the Mac's <c>HubClient.servers</c>, <c>machines</c>, <c>team</c>, <c>joinCode</c>, <c>moveAgent</c>,
-/// <c>addServerAgent</c> and the commands <c>machineSignin</c>, <c>machineSigninCode</c>, <c>machineCheck</c> and
+/// <c>addServerAgent</c>, <c>nameManager</c>, <c>respellAgent</c> and the commands <c>machineSignin</c>, <c>machineSigninCode</c>, <c>machineCheck</c> and
 /// <c>agentActivation</c>), through the store's owner calls. Each read has the
 /// Mac's size cap and its check of the answer; a changed generation is its own answer, and the store then reads the
 /// fleet again.</summary>
@@ -137,6 +138,25 @@ public static class OwnerReads
                                            ReadsJson.Default.RenameReceipt, id, cancel).ConfigureAwait(false);
         if (answer.Value is { } r && !(r.Ok && Same(r.RequestId, id) && r.Agent == name && r.Was == agent))
             throw HubException.InvalidResponse($"POST /ui/team/agents/{agent}/rename", "the answer is not the rename of this request");
+        return answer;
+    }
+
+    /// <summary>**A new spelling of the same name** (POST /ui/team/agents/&lt;agent&gt;/rename with the name that the agent
+    /// has; hub feature <c>agent_spelling</c>, owner API 1.339; the Mac's <c>respellAgent</c>): only the spelling in
+    /// team.json changes, so the hub allows it for every agent, the manager too, and its answer names no server and no
+    /// job. Only the name in other capitals goes (<see cref="AgentBook.Spelling"/>): a name in small letters is no
+    /// spelling, and the same name with no new spelling is 409. The caller sends it only to a hub that serves the
+    /// feature: an older one refuses the field.</summary>
+    public static async Task<OwnerAnswer<RenameReceipt>> RespellAsync(ICalls calls, string agent, string sha256, string spelling,
+                                                                      Guid? requestId = null, CancellationToken cancel = default)
+    {
+        if (!AgentName(agent) || AgentBook.Spelling(spelling, agent, served: true) != spelling || !Sha(sha256))
+            throw new ArgumentException("the agent, the spelling or the base is of no valid shape");
+        var id = requestId ?? Guid.NewGuid();
+        var answer = await calls.PostAsync($"ui/team/agents/{agent}/rename", new RespellAsk(sha256, agent, spelling), ReadsJson.Default.RespellAsk,
+                                           ReadsJson.Default.RenameReceipt, id, cancel).ConfigureAwait(false);
+        if (answer.Value is { } r && !(r.Ok && Same(r.RequestId, id) && r.Agent == agent && r.Was == agent))
+            throw HubException.InvalidResponse($"POST /ui/team/agents/{agent}/rename", "the answer is not the spelling of this request");
         return answer;
     }
 

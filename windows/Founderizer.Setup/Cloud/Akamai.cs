@@ -61,7 +61,7 @@ internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpa
                 ["type"] = chosen.Type,
             }, made, call, cancel).ConfigureAwait(false);
             if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
-            if (Json.Long(Json.At(answer.Object, "id")) is not { } id) throw new CloudException(CloudFailure.NotUnderstood, Provider);
+            if (Json.Long(Json.At(answer.Object, "id")) is not { } id) throw await UnreadAsync(made, call).ConfigureAwait(false);
             made.Server = id.ToString(CultureInfo.InvariantCulture);
             var ipv4 = await WaitAsync(id, call, cancel).ConfigureAwait(false);
             return new CloudServer(Provider, made.Server, made.Name, ipv4, chosen.Type, chosen.Location, chosen.Price, chosen.Currency,
@@ -73,14 +73,14 @@ internal sealed class Akamai(HttpMessageHandler handler, ISecretBox box, TimeSpa
         }
     }
 
-    /// <summary>The Linodes among the call's firewall's devices.</summary>
+    /// <summary>The Linodes of the call's name (the device's label) among the call's firewall's devices.</summary>
     private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
     {
         if (made.Firewall is not { } firewall) return [];
         var read = await call.SendAsync("GET", Provider.FirewallPath(firewall) + "/devices", [("page_size", "500")], null, cancel).ConfigureAwait(false);
         return (AllObjects(Json.At(read, "data")) ?? []).Select(d => Json.At(d, "entity") as JsonObject)
-            .Where(e => e is not null && Json.String(Json.At(e, "type")) == "linode").Select(e => Json.Long(Json.At(e, "id"))).OfType<long>()
-            .Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
+            .Where(e => e is not null && Json.String(Json.At(e, "type")) == "linode" && Json.String(Json.At(e, "label")) == made.Name)
+            .Select(e => Json.Long(Json.At(e, "id"))).OfType<long>().Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
     }
 
     /// <summary>The root password that Akamai asks of every Linode made from an image: 32 characters of chance, sent once

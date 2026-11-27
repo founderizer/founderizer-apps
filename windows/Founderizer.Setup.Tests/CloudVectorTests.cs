@@ -101,8 +101,8 @@ public sealed class CloudVectorTests
     {
         var named = new JsonObject { ["case"] = Same.Snake(e.Failure), ["words"] = e.Message };
         if (e.Failure is CloudFailure.Refused or CloudFailure.LeftBehind or CloudFailure.Unsure or CloudFailure.TakenBack) named["says"] = e.Says;
-        if (e.Failure is CloudFailure.Unsure or CloudFailure.TakenBack) named["server"] = e.Server;
-        if (e.Failure == CloudFailure.Unsure) named["mark"] = e.Mark;
+        if (e.Failure is CloudFailure.Unsure or CloudFailure.TakenBack or CloudFailure.Unread or CloudFailure.UnreadTakenBack) named["server"] = e.Server;
+        if (e.Failure is CloudFailure.Unsure or CloudFailure.Unread) named["mark"] = e.Mark;
         if (e.Failure == CloudFailure.LeftBehind) named["left"] = Same.Strings(e.Left);
         return named;
     }
@@ -236,6 +236,8 @@ public sealed class CloudVectorTests
                 new CloudException(CloudFailure.Unsure, provider, null, null, "worker-3", "fz-worker-3-k3j9x2"),
                 new CloudException(CloudFailure.TakenBack, provider, "an example fault", null, "worker-3"),
                 new CloudException(CloudFailure.TakenBack, provider, null, null, "worker-3"),
+                new CloudException(CloudFailure.Unread, provider, null, null, "worker-3", "founderizer-worker-3-k3j9x2"),
+                new CloudException(CloudFailure.UnreadTakenBack, provider, null, null, "worker-3"),
                 new CloudException(CloudFailure.NotUnderstood, provider),
                 new CloudException(CloudFailure.NoRoom, provider), new CloudException(CloudFailure.Full, provider),
                 new CloudException(CloudFailure.Taken, provider), new CloudException(CloudFailure.NotReady, provider),
@@ -300,7 +302,7 @@ public sealed class CloudVectorTests
             ["ubuntu"] = CloudServers.Ubuntu, ["join_key_life"] = CloudJoin.KeyLife, ["wait_reads"] = CloudServers.WaitReads,
             ["remove_reads"] = CloudServers.RemoveReads, ["hub_memory_mb"] = CloudServers.HubMemoryMb,
             ["agent_memory_mb"] = CloudServers.AgentMemoryMb, ["apt_lock_wait"] = CloudServers.AptLockWait,
-            ["follow_reads"] = CloudServers.FollowReads,
+            ["follow_reads"] = CloudServers.FollowReads, ["follow_step"] = (int)CloudServers.FollowStep.TotalSeconds,
         }, "constants", problems);
         Same.None(problems, count);
     }

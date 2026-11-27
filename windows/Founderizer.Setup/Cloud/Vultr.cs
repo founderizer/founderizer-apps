@@ -55,7 +55,7 @@ internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan
             }, made, call, cancel).ConfigureAwait(false);
             if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
             if (Json.String(Json.At(Json.At(answer.Object, "instance"), "id")) is not { Length: > 0 } id)
-                throw new CloudException(CloudFailure.NotUnderstood, Provider);
+                throw await UnreadAsync(made, call).ConfigureAwait(false);
             made.Server = id;
             var ipv4 = await WaitAsync(id, call, cancel).ConfigureAwait(false);
             return new CloudServer(Provider, id, made.Name, ipv4, chosen.Type, chosen.Location, chosen.Price, chosen.Currency, firewallId);
@@ -66,12 +66,14 @@ internal sealed class Vultr(HttpMessageHandler handler, ISecretBox box, TimeSpan
         }
     }
 
-    /// <summary>The instances of the call's name behind its firewall group.</summary>
+    /// <summary>The instances of the call's name behind its firewall group: the list is asked for that label, and each
+    /// instance's own label is compared too.</summary>
     private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
     {
         if (made.Firewall is not { } firewall) return [];
         var read = await call.SendAsync("GET", "instances", [("label", made.Name), ("per_page", "500")], null, cancel).ConfigureAwait(false);
-        return (AllObjects(Json.At(read, "instances")) ?? []).Where(i => Json.String(Json.At(i, "firewall_group_id")) == firewall)
+        return (AllObjects(Json.At(read, "instances")) ?? [])
+            .Where(i => Json.String(Json.At(i, "firewall_group_id")) == firewall && Json.String(Json.At(i, "label")) == made.Name)
             .Select(i => Json.String(Json.At(i, "id"))).OfType<string>().ToList();
     }
 

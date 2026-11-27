@@ -313,7 +313,8 @@ renamed or removed without a word to the screens lane.
     apart in a chat's card and 8 at hand, and "Your answer" under them. While its bytes come, the square keeps its size
     with the tile's words in it ("Reading…", or "Not loaded" with Read again), as a picture of a message.
   - A click goes through `OptionsModel.Click(index, onPicture)`: on a picture, `Open` with its `FileTile`, which opens
-    it as a file of a message opens (`FileAsync`, then the app that Windows gives its kind), and sends nothing; on the
+    it as a file of a message opens (`FileAsync`, then `Files.Open`: a marked copy, a picture in the app that Windows
+    gives its kind; `Fleet/ChatFileCopy.cs`), and sends nothing; on the
     words, `Press` with the option's index (`Press(need, index)`, `choice`), or `Tick` for options that combine, whose
     ticks and "Send N" stay under the pictures.
   - A page reads its pictures, a message's and an option's, through `PictureLoads<T>`: one read at a time, in the order
@@ -444,9 +445,10 @@ renamed or removed without a word to the screens lane.
     `CloudOffer` with its words `Size`, `Choice`, `Row`, `Brief`, `Pick`, `Amount`), `ServersAsync()` (a
     `CloudExisting` with its `Summary`), `MakeAsync(new CloudOrder(name, use, publicKey, authKey, offer))` (behind a
     firewall that lets nothing in, on the network from its first boot; a step that fails takes back what it made, or
-    says what is left; after a 5xx or no answer to the call for the server, the servers with the call's own mark are
-    read first: the one there is taken back (`TakenBack`), else nothing is (`Unsure`), and the reads go on for the mark
-    for an hour in a task that `follow` starts), `DeleteAsync(id, accepted)`, `FirewallsAsync`, `DeleteFirewallsAsync`, `DeleteFirewallAsync`,
+    says what is left; after a 5xx or no answer to the call for the server, the servers of its name with the call's own
+    mark are read first: the one there is taken back (`TakenBack`), else nothing is (`Unsure`), and the reads go on for
+    the mark for an hour in a task that `follow` starts; after a success with no id, the same as `UnreadTakenBack` and
+    `Unread`), `DeleteAsync(id, accepted)`, `FirewallsAsync`, `DeleteFirewallsAsync`, `DeleteFirewallAsync`,
     `DeleteKeyAsync`. A stop is a `CloudException`; `CloudStop` says whether it asks for the token again or reads the
     list again. `CloudJoin.WaitAsync` waits for a new server on the network for its key's hour. The page's link for a
     token is `provider.TokenPage()`. The rules of the list that need the install's systems, the hub's list or this
@@ -744,6 +746,24 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   `Pages/Agents/Setup/ManagerNamePage.cs`, in the look of the first run's `NamePage`. Back on the provider's page goes
   to it (`ManagerSetupScreen.Back`, `BackToName()`, Esc; the Mac's `SetupBack`), for a manager with no server whose
   name's page came first; the name's page is the first, with no Back.
+- **His capitals of the first run's manager** (hub feature `agent_spelling`, owner API 1.339; the validator's W-S1): the
+  installer names the manager in small letters, so the first run's hand-over keeps the name as he typed it
+  (`AgentSpellingNotes.Note(choices, hub, db, agent, typed)`, in the first run's kept answers; only the name in other
+  capitals is a note, by `AgentBook.Spelling`), and `AgentSpellingSender.NoteAsync(state, now)`, which `StoreSource` makes
+  beside `ManagerPlacing`, sends it once at a current reading of that hub and generation that lists the agent and shows
+  no spelling of it, from a hub that serves the feature, as a new spelling of the same name (`OwnerReads.RespellAsync`),
+  against the team read first and read again once on 409 `team_changed`; one send at a time. The hub's answer or its
+  refusal ends the note, and so does, with no command, a reading that shows **any** spelling of the agent (the installer
+  gives the first run's manager none, so a spelling there came after the note: his newer word on another device stays)
+  or that does not list the agent (renamed or removed). A send that came to nothing (no answer, a team read that does
+  not read or of another generation, an answer that is not this command's, or a second `team_changed`) keeps it for a
+  later reading, `AgentSpellingNotes.SendsMost` (3) sends in all: each note counts its sends in its own line before each
+  one goes, so a start of the app goes on with the count, and the end of a send takes away only its own note, so a newer
+  one stays. A current reading of the same hub in another generation takes that generation's notes away
+  (`ForgetOtherGenerations`), and Start again takes the notes of its hub away (`ForgetHub`). Nothing shows on a page.
+  These rules depart from the Mac's, whose notes live in memory only (PARITY row `agent_spelling`). Gaps: an app that
+  ends between the hub's claim and the hand-over keeps no note (the Mac's gap too); if he takes the capitals away
+  elsewhere before the PC's first send, the PC sends the older spelling, at most 3 times.
 - **The setup of an agent that is not the manager of a new fleet** (piece L4b): `ManagerSetup.ForAgent(settings, hub, db,
   agent)`, with the same loop, presses and pages, for an agent that the hub shows in setup (a team card added it, and the
   hub's job installs it on its server) or signed out. **No window makes it yet**: the window of piece U5 (or wave C's
@@ -799,7 +819,7 @@ FleetCore's own code writes (`Tests/FleetCoreTests/SetupWordsVectorsTests.swift`
   the PC proved: **Other VPS is not here yet**, because its check, the password once and the key once are in `SetupStore`,
   for the hub's install alone.
 - **The reads**: `OwnerReads.ServersAsync`, `MachinesAsync`, `TeamAsync` (the Mac's caps and checks), and the writes
-  `JoinCodeAsync`, `MoveAsync`, `RenameAsync`, `SignInAsync`, `SignInCodeAsync`, and of L4b `CheckAsync`, `ActivateAsync` and
+  `JoinCodeAsync`, `MoveAsync`, `RenameAsync`, `RespellAsync`, `SignInAsync`, `SignInCodeAsync`, and of L4b `CheckAsync`, `ActivateAsync` and
   `AddAgentAsync` (a failed install again), through `OwnerReads.Of(store)`. The text of a
   `SignInPage`, a `JobPrompt`, a `MachineLogin` and a `JoinCode` names no link, no code and no command. A field that the Mac reads
   with `try?` is a `JsonElement` with a reader that never fails the list; fields that no page of the setup reads are

@@ -152,6 +152,7 @@ public final class OwnerMCP: @unchecked Sendable {
         }
         switch method {
         case "initialize":
+            SessionLabel.noteClient(params["clientInfo"]?.object?["name"]?.string)
             let want = params["protocolVersion"]?.string
             let chosen = want.flatMap { tools.table.supported.contains($0) ? $0 : nil } ?? tools.table.protocolVersion
             return result(.object([

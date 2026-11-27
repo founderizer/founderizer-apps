@@ -110,25 +110,38 @@ if [ "$command" = probe ]; then
         # elevated-probe, and its task goes at any end. The task's name holds this run's process id, so that it never
         # replaces another run's task; a removal that fails is said, and never turns the self-test's exit into 1.
         full_task="fz-probe-full-token-$$"
+        full_exe="fz-selftest-$$.exe"
+        # The task's name and its program's name hold this run's process id. The program is a copy of cmd.exe, so that
+        # the list marks only this run's chain ("[from the self-test's task <pid>]"), never another task whose action
+        # is cmd.exe. A task of that name that is there (a dead run's, with the same process id) stops the self-test
+        # before it makes anything, and the self-test never replaces or removes it.
+        "$vm_sh" run "\$a = New-ScheduledTaskAction -Execute \"C:\\fz\\proof-a\\$full_exe\" -Argument \"/c C:\\fz\\proof-a\\probe.cmd\"; \$p = New-ScheduledTaskPrincipal -UserId \"builder\" -LogonType Interactive -RunLevel Highest; Register-ScheduledTask -TaskName \"$full_task\" -Action \$a -Principal \$p -ErrorAction Stop | Out-Null; \"registered $full_task\"" ||
+            proof_die "self-test: its task $full_task could not be made (one of that name is there, from a dead run with the same process id?); nothing was made or removed"
+        # From here the task is this run's: it and its program go at any end. The removal reads both again, and when one
+        # stays it says so (it never turns the self-test's exit into 1).
         unregister_full() {
-            "$vm_sh" run "Unregister-ScheduledTask -TaskName \"$full_task\" -Confirm:\$false -ErrorAction SilentlyContinue" >/dev/null 2>&1 ||
-                proof_say "$full_task could not be removed: remove it in the PC's Task Scheduler"
+            "$vm_sh" run "Unregister-ScheduledTask -TaskName \"$full_task\" -Confirm:\$false -ErrorAction SilentlyContinue; Remove-Item -Path \"C:\\fz\\proof-a\\$full_exe\" -Force -ErrorAction SilentlyContinue; if ((Get-ScheduledTask -TaskName \"$full_task\" -ErrorAction SilentlyContinue) -or (Test-Path \"C:\\fz\\proof-a\\$full_exe\")) { exit 1 }" >/dev/null 2>&1 ||
+                proof_say "$full_task or C:\\fz\\proof-a\\$full_exe is still on the PC: remove them (the Task Scheduler, the folder)"
         }
         trap unregister_full EXIT
-        "$vm_sh" run "\$a = New-ScheduledTaskAction -Execute \"cmd.exe\" -Argument \"/c C:\\fz\\proof-a\\probe.cmd\"; \$p = New-ScheduledTaskPrincipal -UserId \"builder\" -LogonType Interactive -RunLevel Highest; Register-ScheduledTask -TaskName \"$full_task\" -Action \$a -Principal \$p | Out-Null; Start-ScheduledTask -TaskName \"$full_task\"; \"probe.cmd started by a task with the full token ($full_task)\""
+        "$vm_sh" run "Copy-Item -Path \"\$env:WINDIR\\System32\\cmd.exe\" -Destination \"C:\\fz\\proof-a\\$full_exe\" -Force -ErrorAction Stop; Start-ScheduledTask -TaskName \"$full_task\" -ErrorAction Stop; \"probe.cmd started by the task $full_task, with the full token, through $full_exe\"" ||
+            proof_die "self-test: its task $full_task did not start"
     else
         "$vm_sh" desktop 'Start-Process explorer.exe -ArgumentList "C:\fz\proof-a\probe.cmd"; "probe.cmd started through explorer"'
     fi
     list=""
+    # The self-test names its own run to the list, which marks only that run's chain.
+    list_args=("since=$since")
+    [ -n "$from_full" ] && list_args+=("selftest=$$")
     for _ in $(seq 1 12); do
         sleep 5
-        list="$(run_ps azure-pc-elevated.ps1 "since=$since" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
+        list="$(run_ps azure-pc-elevated.ps1 "${list_args[@]}" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
         if [ -n "$from_full" ]; then
             # Once its own task's whoami.exe is in the list, one more read: a rise in the self-test's time must be seen
             # too. A stray whoami.exe of another start does not end the wait.
-            printf '%s\n' "$list" | grep -q "^whoami.exe .*\[from a task's cmd.exe\]" || continue
+            printf '%s\n' "$list" | grep -q "^whoami.exe .*\[from the self-test's task $$\]" || continue
             sleep 5
-            list="$(run_ps azure-pc-elevated.ps1 "since=$since" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
+            list="$(run_ps azure-pc-elevated.ps1 "${list_args[@]}" | tr -d '\r')" || proof_die "the list of elevated starts did not run (SSH or the PC)"
             break
         fi
         printf '%s\n' "$list" | grep -qE '^probe=[1-9]' && break
@@ -138,10 +151,10 @@ if [ "$command" = probe ]; then
         printf '%s\n' "$list" | grep -qE '^probe=[1-9]' &&
             proof_die "self-test: a rise counted in its time, so it proves nothing: run it again when nothing else starts"
         printf '%s\n' "$list" | grep -qx 'probe=0' || proof_die "self-test: the list gave no line probe=0"
-        # The refused whoami.exe must be the one of its own task's chain (a cmd.exe that the Task Scheduler started),
-        # not a stray one of another start in its time.
-        printf '%s\n' "$list" | grep -q "^whoami.exe .*refused: not a rise .*\[from a task's cmd.exe\]" ||
-            proof_die "self-test: no whoami.exe of its task's cmd.exe was refused as no rise (did the task run?)"
+        # The refused whoami.exe must be the one of this run's own task (its fz-selftest-<pid>.exe), not a stray one of
+        # another start in its time.
+        printf '%s\n' "$list" | grep -q "^whoami.exe .*refused: not a rise .*\[from the self-test's task $$\]" ||
+            proof_die "self-test: no whoami.exe of its own task was refused as no rise (did the task run?)"
         proof_say "self-test passed: the whoami.exe of a full token was refused and the list says probe=0; no elevated-probe was written"
         exit 0
     fi

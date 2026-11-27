@@ -269,7 +269,8 @@ internal static class Lists
 /// <c>firstRunManagerName</c>, <c>firstRunAIProvider</c>, <c>firstRunServersStep</c>, <c>firstRunErrorReports</c> and
 /// the answer that waits for a hub). No key, token or password is one of them, and no address of a server but the two of
 /// the mark of the manager's first setup (<c>ManagerSetupMark</c>): the hub's own, and, until it joined, the private address
-/// of the manager's own server that the first run made.</summary>
+/// of the manager's own server that the first run made. The hub's own is also in each note of an agent's spelling that
+/// waits for it (<c>AgentSpellingNotes</c>).</summary>
 public interface ISetupChoices
 {
     string? Get(string name);

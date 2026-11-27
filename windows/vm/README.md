@@ -569,9 +569,13 @@ goes at once, as "When the PC's life does not go as planned" says below. Then, b
    also when the probe stops. That proves the fields of event 4688 and a rise with no question on Windows Server 2025.
    A console window shows while it runs. `probe --from-full-token` is the self-test, the rig's own proof that the probe
    fails closed (probe.cmd from a task with builder's full token, whose whoami.exe is no rise). It exits 0 only when
-   the list ran, the whoami.exe of its own task's cmd.exe was refused as no rise and the list says `probe=0`, and 1
-   in every other case (no list, an SSH fault, or a rise that counted in its time); it never writes `elevated-probe`,
-   and its task (named with the run's process id) goes at any end. Run it before the run's start time: its cmd.exe,
+   the list ran, the whoami.exe of its own task was refused as no rise and the list says `probe=0`, and 1 in every
+   other case (no list, an SSH fault, or a rise that counted in its time); it never writes `elevated-probe`. Its task
+   and the task's program, a copy of cmd.exe, take the run's process id in their names (`fz-probe-full-token-<pid>`,
+   `fz-selftest-<pid>.exe`); the list marks only that program's chain, `[from the self-test's task <pid>]`, so another
+   task whose action is cmd.exe is never taken for it. A task of its name that is already there (a dead run's) stops it
+   before it makes anything, and it never replaces or removes that one. Its own task and program go at any end; the
+   removal reads both again and says so when one stays. Run it before the run's start time: its cmd.exe,
    powershell.exe and whoami.exe are OTHER lines in any `elevated` list whose `since` is before it. Then take the
    run's start time from the PC's own clock, never from this Mac's: `start="$(app/windows/vm/proof-a/azure-pc-make.sh
    now)"`, and at the end `azure-pc-make.sh elevated "$start"`. Both probe modes read the list from the PC's clock, to
@@ -782,6 +786,16 @@ the copy was deleted at the end):
 | `azure-pc-make.sh now` | "2026-11-26T01:45:49Z" (the PC's clock) |
 | the self-test with a stray full-token whoami.exe in its time (a task whose conhost.exe ran whoami.exe, 3 s after the self-test began) | exit 0. The stray whoami.exe came first (01:45:55Z), "refused: not a rise", with no mark, as "a task of builder"; the self-test did not stop its wait on it. Its own came at 01:45:59Z: "refused: not a rise ... [from a task's cmd.exe]". "probe=0", "self-test passed"; no `elevated-probe`; its task was named `fz-probe-full-token-11305`, and no task of the self-test was left |
 | a removal of the self-test's task that fails, and a self-test whose own task did not run | not run: they cannot be made cheaply in a copy; the code says each case (`proof_say` on the removal, `proof_die` on no marked whoami.exe) |
+
+**The self-test's own task, a leftover task, and the removal read again** (27 November 2026, 08:07 to 08:08 UTC,
+`5b4e30d62`, through `ship.py --mac`, a copy named `azure`; the copy was deleted at the end):
+
+| Check | Result |
+| --- | --- |
+| `azure-pc-elevated.ps1` | 0 parse errors |
+| a second register of a task name that is there, with `-ErrorAction Stop` and no `-Force`, through `vm.sh run` | exit 1 ("ResourceExists ... HRESULT 0x800700b7"): the form that the self-test uses stops on a leftover task |
+| the self-test with a stray task in its time whose action is plain `cmd.exe /c probe.cmd` (the old mark's blind spot) | exit 0. The stray's whoami.exe (08:08:12Z) was refused with no mark; the self-test's own (08:08:14Z), through `fz-selftest-98740.exe`, was refused "[from the self-test's task 98740]", the one line with a mark. "probe=0", "self-test passed"; no `elevated-probe`; after it: no task `fz-probe-full-token*`, no `fz-selftest-*.exe` |
+| a removal that fails, and a real collision of process ids | not run: neither can be made cheaply in a copy; the code says each case, and the second register above shows the stop that a collision meets |
 
 ## Limits
 

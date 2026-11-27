@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Founderizer.Core;
 using Founderizer.Install;
+using Founderizer.Setup.Agents;
 using Founderizer.Setup.Network;
 using Founderizer.Windows.Fleet;
 using Founderizer.Windows.Pages.FirstRun;
@@ -130,8 +131,9 @@ public sealed class FirstRunTests
 
     // ------------------------------------------------------------------ the kept answers
 
-    /// <summary>The bug: the owner's answers of the first run lost at the next start (the manager's name, the slider),
-    /// or a file that does not read stopping the first run.</summary>
+    /// <summary>The bug: the owner's answers of the first run lost at the next start (the manager's name, the slider, his
+    /// spelling of the manager's name that waits for the hub with the count of its sends), or a file that does not read
+    /// stopping the first run.</summary>
     [TestMethod]
     public void TheOwnersAnswersComeBackAtTheNextStart()
     {
@@ -141,7 +143,12 @@ public sealed class FirstRunTests
         first.Set("firstRunServersStep", "two");
         first.Set("firstRunAIProvider", "codex");
         first.Set("firstRunAIProvider", null);
+        var hub = new Uri("http://100.64.0.9:8765/");
+        AgentSpellingNotes.Note(first, hub, "db-1", "juno", "JuNo");
+        var counted = AgentSpellingNotes.Count(first, AgentSpellingNotes.Read(first).Single());
         var next = new FileChoices(path);
+        Assert.AreEqual(new AgentSpellingNote(hub, "db-1", "juno", "JuNo", Sends: 1), counted);
+        Assert.AreEqual(counted, AgentSpellingNotes.Read(next).Single(), "a send that came to nothing still counts at the next start");
         Assert.AreEqual("Juno", next.Get("firstRunManagerName"));
         Assert.AreEqual("two", next.Get("firstRunServersStep"));
         Assert.IsNull(next.Get("firstRunAIProvider"));

@@ -40,6 +40,10 @@ public sealed class StoreSource : IFleetSource
         {
             var placing = new ManagerPlacing(Founderizer.Owner.Reads.OwnerReads.Of(store), Choices());
             store.Changed += (_, change) => _ = placing.NoteAsync(change.After, DateTimeOffset.UtcNow);
+            // His capitals of a name that the hub took without them (the first run's manager, which the installer names in
+            // small letters), once, at a current reading, with nothing on a page (the Mac's spellingTick).
+            var spellings = new AgentSpellingSender(Founderizer.Owner.Reads.OwnerReads.Of(store), Choices(), store.RefreshAsync);
+            store.Changed += (_, change) => _ = spellings.NoteAsync(change.After, DateTimeOffset.UtcNow);
         }
     }
 

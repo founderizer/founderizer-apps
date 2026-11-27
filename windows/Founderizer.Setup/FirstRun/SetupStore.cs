@@ -1214,12 +1214,18 @@ public sealed class SetupStore
         // The manager's own server that this run made and that did not join, which the setup installs by itself once, also
         // after a start of the app (the Mac's `noteMadeServer`).
         var markMade = placed != true ? MadeHere(s, markJoined) : null;
+        var hubAddress = s.Install.ClaimedHub is { } claimed && Uri.TryCreate(claimed, UriKind.Absolute, out var address) ? address : null;
         lock (markGate)
         {
             marksEnded = true;
-            if (fleet is not null && s.Install.ClaimedHub is { } claimed && Uri.TryCreate(claimed, UriKind.Absolute, out var hubAddress))
+            if (fleet is not null && hubAddress is not null)
                 new ManagerSetupMark(hubAddress, fleet.Db, name, placed != true ? provider : null, markJoined, markMade).Keep(settings.Choices);
         }
+        // **His capitals of the manager's name** (hub feature `agent_spelling`; the validator's W-S1; the Mac's
+        // `FirstRunView.finish`): the installer took the name in small letters, so the name as he typed it on the name
+        // page goes once, under the hood, as a new spelling of the same name (AgentSpellingNotes, AgentSpellingSender).
+        if (fleet is not null && hubAddress is not null && manager is not null && Install.ManagerName.AgentName(s.ManagerName) == name)
+            AgentSpellingNotes.Note(settings.Choices, hubAddress, fleet.Db, name, s.ManagerName);
         lock (gate) handover = new Handover(name, provider, joined, asked, made);
         Set(x => x with { HandedOver = true, HandedTo = name });
     }
@@ -1387,6 +1393,8 @@ public sealed class SetupStore
                 if (Agents.ManagerSetupMark.Read(S.Choices) is { } mark && Uri.TryCreate(hub, UriKind.Absolute, out var gone) && mark.IsOf(gone))
                     Agents.ManagerSetupMark.Forget(S.Choices);
             }
+            // His spellings that wait for that hub go with it.
+            if (Uri.TryCreate(hub, UriKind.Absolute, out var spelled)) Agents.AgentSpellingNotes.ForgetHub(S.Choices, spelled);
             // The run is over: the next first run of this app's run starts as a first one (the Mac's FirstRunWork.drop),
             // with no hand-over, no sign-in asked, no install to try again, no build or choice of a provider, no key.
             lock (store.gate) { store.handover = null; store.signsIn = false; store.installed = null; }

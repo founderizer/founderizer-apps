@@ -158,6 +158,10 @@ public sealed record ActivationCheck(long Check, double CheckedAt);
 /// <c>nameManager</c>): the manager's new name, against the team.json that the app read.</summary>
 public sealed record RenameAsk(string BaseSha256, string Name);
 
+/// <summary>The body of a new spelling of the same name (hub feature <c>agent_spelling</c>, owner API 1.339; the Mac's
+/// <c>respellAgent</c>): the rename route with the name that the agent has, and the name as the owner typed it.</summary>
+public sealed record RespellAsk(string BaseSha256, string Name, string Spelling);
+
 /// <summary>The answer of the rename (the Mac's ManagerNameReceipt): <c>Agent</c> is the new name, <c>Was</c> the name
-/// that the manager had.</summary>
+/// that the manager had. A new spelling of the same name has the same answer, with both the agent's name.</summary>
 public sealed record RenameReceipt(bool Ok, string RequestId, string Agent, string Was, string Revision, string Sha256);

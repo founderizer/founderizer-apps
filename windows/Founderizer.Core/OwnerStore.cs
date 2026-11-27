@@ -2200,7 +2200,11 @@ public sealed partial class OwnerStore : IAsyncDisposable
     private void Use(Uri next, HubRole role)
     {
         var before = State;
-        Update(x => x with { Hub = next, Role = role });
+        // The reading's time goes with the hub, in this first update: each state raised while the change runs (the key,
+        // the generation) still holds the old hub's fleet, and with the time it would read as a current reading of the
+        // new hub (IsFresh), which the rules that act on a current reading of their hub would take for one (the spelling
+        // notes of the new hub as notes of another generation, for one).
+        Update(x => x with { Hub = next, Role = role, LastRead = null, ReadError = null });
         // The key of the owner's computer belongs to one hub, and a device's key to this PC: a change of either role
         // or, as the owner's computer, of the hub, reads the key of the new place.
         if (before.Role != role || role == HubRole.Owner)

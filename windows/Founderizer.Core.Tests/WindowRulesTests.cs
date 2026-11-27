@@ -53,4 +53,48 @@ public sealed class WindowRulesTests
             Assert.Contains($"button.IsEnabledChanged += (_, _) => {mark}.Opacity = button.IsEnabled ? 1 : 0.45;",
                             Method(Source(file), head), file);
     }
+
+    /// <summary>A chat's file goes to the shell only through its marked copy (<c>Fleet/ChatFileCopy.cs</c>), which opens
+    /// an inert kind in its own app and shows each other kind selected in File Explorer. The starts of a program in the
+    /// window and in the launcher are these, counted in each file, and each other start is not of a chat's file: the
+    /// shell's open of a web link of Tailscale's setup, Tailscale's own program, the launcher and PowerShell. The bugs
+    /// that this catches: a page that starts a file itself, through the shell (<c>UseShellExecute = true</c>), through
+    /// <c>Process.Start(copy)</c> (CreateProcess runs a <c>.bat</c> through cmd), through a second start in a file that
+    /// has one, through Windows' launcher (<c>LaunchFileAsync</c>), through <c>new Process</c> or <c>ShellExecute</c>, or
+    /// through Explorer with the copy and no <c>/select,</c>, as <c>Files.Open</c> did before 26 November 2026; and a
+    /// start of the marked copy that is not the whole start of its way.</summary>
+    [TestMethod]
+    public void AChatsFileGoesToTheShellOnlyThroughItsMarkedCopy()
+    {
+        var launcher = Path.Combine(AppContext.BaseDirectory, "sources", "launcher");
+        var sources = Directory.EnumerateFiles(Root, "*.cs", SearchOption.AllDirectories)
+            .Select(f => (Name: Path.GetRelativePath(Root, f), Text: File.ReadAllText(f)))
+            .Concat(Directory.EnumerateFiles(launcher, "*.cs", SearchOption.AllDirectories)
+                .Select(f => (Name: "launcher/" + Path.GetRelativePath(launcher, f), Text: File.ReadAllText(f))))
+            .Select(s => (Name: s.Name.Replace('\\', '/'), Text: s.Text.Replace("\r\n", "\n")))
+            .ToList();
+        // Each file with its count of the pattern, in the order of the files' names; and the files alone.
+        (string Name, int Count)[] Found(string pattern) => sources
+            .Select(s => (s.Name, Count: System.Text.RegularExpressions.Regex.Count(s.Text, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+            .Where(s => s.Count > 0).OrderBy(s => s.Name, StringComparer.Ordinal).ToArray();
+        string Counts(string pattern) => string.Join(", ", Found(pattern).Select(s => $"{s.Name} {s.Count}"));
+        string Files(string pattern) => string.Join(", ", Found(pattern).Select(s => s.Name));
+        Assert.AreEqual("Fleet/ChatFileCopy.cs 1, Fleet/TailscaleSetup.cs 3, Fleet/WindowsParts.cs 1, Update/Updater.cs 1, launcher/Program.cs 3",
+                        Counts(@"Process\s*\.\s*Start\s*\("));
+        Assert.AreEqual("Fleet/ChatFileCopy.cs 1, Fleet/TailscaleSetup.cs 1", Counts(@"UseShellExecute\s*=\s*true"));
+        foreach (var pattern in new[] { @"\bShellStarts\b", @"\bOpenStart\b", @"\bShowStart\b", @"\bexplorer\.exe\b" })
+            Assert.AreEqual("Fleet/ChatFileCopy.cs", Files(pattern), pattern);
+        foreach (var pattern in new[] { @"\bLaunchFileAsync\b", @"\bLaunchFolder", @"\bCreateProcess", @"\bShellExecute(Ex)?[AW]?\b",
+                                        @"\bSHOpenFolderAndSelectItems\b", @"\bWinExec\b", @"\bnew\s+(System\s*\.\s*Diagnostics\s*\.\s*)?Process\s*[({]" })
+            Assert.AreEqual("", Files(pattern), pattern);
+
+        // The marked copy: one start, of the whole start of each way, and the shell's open only in OpenStart.
+        var copy = sources.Single(s => s.Name == "Fleet/ChatFileCopy.cs").Text;
+        Assert.Contains("public static readonly ShellStarts Shared = new(info => Process.Start(info)?.Dispose());", copy);
+        Assert.Contains("public static ProcessStartInfo OpenStart(string copy) => new(copy) { UseShellExecute = true };", copy);
+        Assert.Contains("ProcessStartInfo(link.AbsoluteUri) { UseShellExecute = true }",
+                        sources.Single(s => s.Name == "Fleet/TailscaleSetup.cs").Text);
+        Assert.Contains("public static void Open(MessageAttachment file, byte[] bytes) => ChatFileCopy.Open(file, bytes);",
+                        sources.Single(s => s.Name == "Pages/States.cs").Text);
+    }
 }

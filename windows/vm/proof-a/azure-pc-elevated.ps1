@@ -10,9 +10,11 @@
 #                              SubjectUserSid S-1-5-18 (Windows' own service that elevates), the TargetUserName builder
 #                              and %%1937, which svchost.exe did not start, before $probeAt (the time of the probe that
 #                              passed; the caller sets it, or nothing during the probe itself); and its conhost.exe.
-#                              Each whoami.exe's fields are printed, counted or refused, with "[from a task's
-#                              cmd.exe]" when a cmd.exe that the Task Scheduler started is in its chain (the
-#                              self-test's task: azure-pc-make.sh probe --from-full-token)
+#                              Each whoami.exe's fields are printed, counted or refused, with "[from the
+#                              self-test's task <pid>]" when $selftest (a process id; only azure-pc-make.sh probe
+#                              --from-full-token sets it) names the run whose program, fz-selftest-<pid>.exe (a copy of
+#                              cmd.exe that the Task Scheduler started), is in its chain. Another task whose action is
+#                              cmd.exe has no mark
 #   "a task of builder"        a scheduled task of builder and what it starts: on the Azure PC (the built-in
 #                              Administrator with FilterAdministratorToken 1) a task has the full token, so each
 #                              command of vm.sh desktop and the typer (type-pipe.ps1) is in this list. A task's start
@@ -35,13 +37,15 @@ $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4688, 46
 $starts = 0
 $task = @{}
 $probe = @{}
-$cmdtask = @{}
+$selfchain = @{}
+if ($selftest -and $selftest -notmatch '^[0-9]{1,10}$') { throw "selftest is a process id, not: $selftest" }
+$selfImage = if ($selftest) { "fz-selftest-$selftest.exe" } else { $null }
 $count = @{ probe = 0; task = 0; other = 0 }
 $rises = 0
 $names = @{ probe = "the probe's whoami.exe"; task = 'a task of builder'; other = 'OTHER' }
 foreach ($e in ($events | Sort-Object RecordId)) {
     if ($e.Id -eq 4608) {
-        $task.Clear(); $probe.Clear(); $cmdtask.Clear()
+        $task.Clear(); $probe.Clear(); $selfchain.Clear()
         "Windows started {0:u}: the kinds of all process ids are emptied" -f $e.TimeCreated.ToUniversalTime()
         continue
     }
@@ -53,7 +57,7 @@ foreach ($e in ($events | Sort-Object RecordId)) {
     $user = if ($data.TargetUserName -and $data.TargetUserName -ne '-') { $data.TargetUserName } else { $data.SubjectUserName }
     $leaf = Split-Path -Leaf $data.NewProcessName
     $parent = if ($data.ParentProcessName) { Split-Path -Leaf $data.ParentProcessName } else { '' }
-    $fromCmdTask = [bool]($cmdtask[$data.ProcessId] -or ($leaf -eq 'cmd.exe' -and $parent -eq 'svchost.exe'))
+    $fromSelf = [bool]($selfchain[$data.ProcessId] -or ($selfImage -and $leaf -eq $selfImage -and $parent -eq 'svchost.exe'))
     if ($task[$data.ProcessId] -or ($leaf -eq 'conhost.exe' -and $parent -eq 'svchost.exe')) { $kind = 'task' }
     elseif ($leaf -eq 'conhost.exe' -and $probe[$data.ProcessId]) { $kind = 'probe' }
     else { $kind = 'other' }
@@ -65,11 +69,11 @@ foreach ($e in ($events | Sort-Object RecordId)) {
         else { $verdict = 'refused: not a rise' }
         "whoami.exe {0:u}: {1} (SubjectUserSid {2}, TargetUserName {3}, TokenElevationType {4}, started by {5}){6}" -f `
             $e.TimeCreated.ToUniversalTime(), $verdict, $data.SubjectUserSid, $data.TargetUserName, `
-            $data.TokenElevationType, $data.ParentProcessName, $(if ($fromCmdTask) { " [from a task's cmd.exe]" } else { '' })
+            $data.TokenElevationType, $data.ParentProcessName, $(if ($fromSelf) { " [from the self-test's task $selftest]" } else { '' })
     }
     $task[$data.NewProcessId] = ($kind -eq 'task')
     $probe[$data.NewProcessId] = ($kind -eq 'probe')
-    $cmdtask[$data.NewProcessId] = $fromCmdTask
+    $selfchain[$data.NewProcessId] = $fromSelf
     if ($user -ne 'builder' -or $data.TokenElevationType -ne '%%1937') { continue }
     $count[$kind]++
     "{0:u}  {1}  {2}  (started by {3})" -f $e.TimeCreated.ToUniversalTime(), $names[$kind], $data.NewProcessName, $data.ParentProcessName

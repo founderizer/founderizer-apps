@@ -737,6 +737,175 @@ public sealed class ManagerSetupTests
         await placing.NoteAsync(state, now);
         Assert.AreEqual((null as ManagerSetupMark, reads + 1), (ManagerSetupMark.Read(choices), hub.Reads));
     }
+
+    /// <summary>**His capitals of the first run's manager go to the hub once, at a current reading, also after a start of
+    /// the app** (the validator's W-S1; the Mac's <c>SpellingNotes</c> and <c>spellingTick</c>, with its A-S1 point): the
+    /// installer names the manager in small letters, and nothing else gives the hub "McBot", so every place would show
+    /// "Mcbot". The bugs: a note that only this run of the app holds; a spelling in small letters or of other words that
+    /// goes (the hub would keep it as none, or refuse it); a send to a hub without the feature (400), from a device, of
+    /// another hub or for an old reading; a second send; an older note that writes over a newer spelling, or that goes to a
+    /// later agent of the same name; a team that changed under the command and loses the spelling; a refusal that goes
+    /// again at each reading; sends that come to nothing and go on for good, also across starts of the app; two sends at
+    /// once; the end of a send that takes a newer note away; a note of another generation that is taken for this one, or
+    /// that stays in the kept answers.</summary>
+    [TestMethod]
+    public async Task His_capitals_of_the_first_runs_manager_go_once_at_a_current_reading()
+    {
+        var choices = new MemoryChoices();
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "mcbot");
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBob");
+        Assert.AreEqual(0, AgentSpellingNotes.Read(choices).Count, "the name in small letters, or other words, is no note");
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", " McBot ");
+        Assert.AreEqual(new AgentSpellingNote(Hub, "db-1", "mcbot", "McBot"), AgentSpellingNotes.Read(choices).Single());
+
+        static MobileSnapshot Reading(string? spelling = null, bool served = true, string name = "mcbot") =>
+            new(1, "db-1", 1763700100,
+                [new MobileAgent(name, "manager", "claude", 0, [], Title: "Fleet Manager",
+                                 // A parsed value: these tests have no JSON by reflection.
+                                 RawSpelling: spelling is null ? null : JsonDocument.Parse("\"" + spelling + "\"").RootElement.Clone())],
+                [], [], [], [], [], UiFeatures: served ? ["servers", AgentBook.SpellingFeature] : ["servers"]);
+        var other = new Uri("http://100.64.0.10:8765/");
+        var hub = new SetupHub { TeamLines = "[{\"agent\": \"mcbot\", \"role\": \"manager\"}]" };
+        var refreshes = 0;
+        var now = DateTimeOffset.UtcNow;
+        var state = new StoreState { Hub = Hub, Role = HubRole.Owner, Fleet = Reading(), LastRead = now, Clock = now };
+        // A sender of its own, as after a start of the app: the note comes from the kept answers.
+        var sender = new AgentSpellingSender(hub, choices, () => { Interlocked.Increment(ref refreshes); return Task.CompletedTask; });
+        // The gates, with the agent listed and with it not listed: a device, an old reading, a hub without the feature and
+        // another hub neither send nor end the note.
+        foreach (var name in new[] { "mcbot", "nova" })
+        {
+            await sender.NoteAsync(state with { Role = HubRole.Device, Fleet = Reading(name: name) }, now);
+            await sender.NoteAsync(state with { LastRead = now - TimeSpan.FromMinutes(5), Fleet = Reading(name: name) }, now);
+            await sender.NoteAsync(state with { Fleet = Reading(served: false, name: name) }, now);
+            await sender.NoteAsync(state with { Hub = other, Fleet = Reading(name: name) }, now);
+            Assert.AreEqual((0, 0, 1), (hub.Routes.Count, hub.Reads, AgentSpellingNotes.Read(choices).Count), "nothing goes, and the note waits: " + name);
+        }
+
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual("{\"base_sha256\":\"" + new string('b', 64) + "\",\"name\":\"mcbot\",\"spelling\":\"McBot\"}",
+                        hub.PostsTo("/agents/mcbot/rename").Single(), "the same name with his capitals, against the team read first");
+        Assert.AreEqual((0, 1), (AgentSpellingNotes.Read(choices).Count, refreshes), "the note goes, and the store reads again");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual(1, hub.Routes.Count, "once");
+
+        // **Any spelling of the agent in a reading ends the note with no command**: this one (an answer that was lost), or a
+        // newer one that he gave on another device or with an owner tool, which the older note must not write over.
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+        await sender.NoteAsync(state with { Fleet = Reading(spelling: "McBot") }, now);
+        Assert.AreEqual((1, 0), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count), "kept already");
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+        await sender.NoteAsync(state with { Fleet = Reading(spelling: "MCBot") }, now);
+        Assert.AreEqual((1, 0), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count), "a newer spelling stays");
+
+        // **A reading of its hub and generation that does not list the agent ends the note** (renamed or removed): a later
+        // agent of that name is another one.
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+        await sender.NoteAsync(state with { Fleet = Reading(name: "nova") }, now);
+        Assert.AreEqual((1, 0), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count), "no agent of that name");
+
+        // A team that changed under the command is read again, once, and the spelling goes again.
+        var refusals = 0;
+        var teamChanged = HubException.Refusal(409, null, "The team changed.", ManagerRename.TeamChanged);
+        hub.Refuses = _ => Interlocked.Increment(ref refusals) <= 1 ? teamChanged : null;
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "MCBot");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((3, 0, 2), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count, refreshes), "taken at the second command");
+
+        // A second change in a row comes to nothing, as no answer does (the Mac's later): the note waits for the next
+        // reading, with one send counted.
+        refusals = 0;
+        hub.Refuses = _ => Interlocked.Increment(ref refusals) <= 2 ? teamChanged : null;
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "MCBOT");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((5, 1), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Single().Sends), "two commands, and the note waits");
+
+        // Any other refusal ends the note: the name keeps the plain capitals.
+        hub.Refuses = _ => HubException.Refusal(409, null, "McBot has this name already.");
+        await sender.NoteAsync(state, now);
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((6, 0, 2), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count, refreshes), "one command, and no more");
+
+        // A team read that does not read, or that is of another generation, comes to nothing too: no command, and one send
+        // counted each time; then a reading that answers sends it.
+        hub.Refuses = null;
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+        hub.Throws = route => route == "ui/team" ? HubException.InvalidResponse("GET /ui/team", "the test's") : null;
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((6, 1), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Single().Sends), "a team that does not read");
+        hub.Throws = null;
+        (hub.Database, hub.TeamDb) = ("db-2", "db-2");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((6, 2), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Single().Sends), "a team of another generation");
+        (hub.Database, hub.TeamDb) = ("db-1", null);
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((7, 0, 3), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count, refreshes), "the next reading sends it");
+
+        // **Three sends that came to nothing, and the note is given up** (S1): the count is in the note's own line of the kept
+        // answers, so a start of the app (a new store with that text, as a new FileChoices reads it, and a sender of its own)
+        // goes on with it, and no fourth send goes.
+        hub.Refuses = _ => HubException.NoAnswer();
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((8, 1), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Single().Sends), "no answer: the note stays");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((9, 2), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Single().Sends), "two sends, counted");
+        var restarted = new MemoryChoices();
+        restarted.Set(AgentSpellingNotes.ChoiceName, choices.Get(AgentSpellingNotes.ChoiceName));
+        var started = new AgentSpellingSender(hub, restarted);
+        await started.NoteAsync(state, now);
+        Assert.AreEqual((10, 0), (hub.Routes.Count, AgentSpellingNotes.Read(restarted).Count), "the third send was the last");
+        await started.NoteAsync(state, now);
+        Assert.AreEqual(10, hub.Routes.Count, "and no fourth");
+        choices.Set(AgentSpellingNotes.ChoiceName, null);
+
+        // **One send at a time**: a reading while a send waits for its answer sends nothing more. The wait for the held
+        // answer has an end of its own, so a send that comes twice ends this test too.
+        hub.Refuses = null;
+        using (var held = new ManualResetEventSlim(false))
+        {
+            var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            hub.BeforeAnswer = _ => { reached.TrySetResult(); held.Wait(TimeSpan.FromSeconds(5)); };
+            AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+            var first = Task.Run(() => sender.NoteAsync(state, now));
+            await reached.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await sender.NoteAsync(state, now);
+            var during = hub.Routes.Count;
+            held.Set();
+            await first.WaitAsync(TimeSpan.FromSeconds(10));
+            hub.BeforeAnswer = null;
+            Assert.AreEqual((11, 11, 0), (during, hub.Routes.Count, AgentSpellingNotes.Read(choices).Count), "one send");
+        }
+
+        // **The end of a send takes only its own note away** (the Mac's 0fb82692e): he typed a newer spelling while the
+        // older one was on its way, so the newer one stays and goes at the next reading.
+        hub.Refuses = _ =>
+        {
+            AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "MCBot");
+            return null;
+        };
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "McBot");
+        await sender.NoteAsync(state, now);
+        Assert.AreEqual((12, "MCBot"), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Single().Spelling), "the newer note stays");
+        hub.Refuses = null;
+        await sender.NoteAsync(state, now);
+        StringAssert.Contains(hub.PostsTo("/agents/mcbot/rename").Last(), "\"spelling\":\"MCBot\"");
+        Assert.AreEqual((13, 0), (hub.Routes.Count, AgentSpellingNotes.Read(choices).Count), "and goes at the next reading");
+
+        // **A note is of its hub and its generation**, and a current reading of the same hub in another generation takes the
+        // other generation's notes away (S2), also from a hub without the feature; another hub's note stays.
+        AgentSpellingNotes.Note(choices, Hub, "db-0", "mcbot", "McBot");
+        AgentSpellingNotes.Note(choices, Hub, "db-1", "mcbot", "MCBot");
+        AgentSpellingNotes.Note(choices, other, "db-0", "mcbot", "McBot");
+        Assert.AreEqual(3, AgentSpellingNotes.Read(choices).Count, "one note for each hub and generation");
+        await sender.NoteAsync(state with { Fleet = Reading(served: false) }, now);
+        CollectionAssert.AreEquivalent(new[] { ("db-1", Hub), ("db-0", other) },
+                                       AgentSpellingNotes.Read(choices).Select(n => (n.Db, n.Hub)).ToArray(), "the dead note goes");
+
+        // The command itself never sends a name in small letters.
+        await Assert.ThrowsExactlyAsync<ArgumentException>(() => OwnerReads.RespellAsync(hub, "mcbot", new string('b', 64), "mcbot"));
+        Assert.AreEqual(13, hub.Routes.Count);
+    }
 }
 
 /// <summary>**The hub's owner routes of an agent's setup**, as the test sets them: its list of servers, its machines, its
@@ -744,6 +913,8 @@ public sealed class ManagerSetupTests
 internal sealed class SetupHub : OwnerReads.ICalls
 {
     public string? Database { get; set; } = "db-1";
+    /// <summary>The generation that the team's read names, when a test gives one: else db-1.</summary>
+    public string? TeamDb { get; set; }
     /// <summary>The team's lines (GET /ui/team), the manager alone unless a test gives others.</summary>
     public string TeamLines { get; set; } = "[{\"agent\": \"juno\", \"role\": \"manager\"}]";
     public string Servers { get; set; } = ServerList(managerOn: null);
@@ -781,7 +952,7 @@ internal sealed class SetupHub : OwnerReads.ICalls
             "ui/servers" when ServersFail => throw HubException.NoAnswer(),
             "ui/servers" => Servers,
             "ui/machines" => Machines,
-            "ui/team" => "{\"db\": \"db-1\", \"revision\": \"" + new string('a', 40) + "\", \"sha256\": \"" +
+            "ui/team" => "{\"db\": \"" + (TeamDb ?? "db-1") + "\", \"revision\": \"" + new string('a', 40) + "\", \"sha256\": \"" +
                          (TeamShas.TryDequeue(out var sha) ? sha : new string('b', 64)) +
                          "\", \"lines\": " + TeamLines + ", \"open_tasks\": {}}",
             _ => throw new InvalidOperationException("no read " + route),
@@ -815,6 +986,10 @@ internal sealed class SetupHub : OwnerReads.ICalls
             // The rename of a manager with no server: no job and no server (POST /ui/team/agents/<agent>/rename).
             RenameAsk rename => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{rename.Name}\", \"was\": \"{route.Split('/')[3]}\", " +
                                 $"\"server\": null, \"job\": null, \"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('d', 64)}\"}}",
+            // A new spelling of the same name: the agent keeps its name, and nothing moves on a server.
+            RespellAsk respell => $"{{\"ok\": true, \"request_id\": \"{id}\", \"agent\": \"{respell.Name}\", \"was\": \"{respell.Name}\", " +
+                                  $"\"server\": null, \"job\": null, \"revision\": \"{new string('a', 40)}\", \"sha256\": \"{new string('d', 64)}\", " +
+                                  $"\"spelling\": \"{respell.Spelling}\"}}",
             _ => $"{{\"ok\": true, \"request_id\": \"{id}\"}}",
         };
         return Task.FromResult(new OwnerAnswer<TAnswer>(JsonSerializer.Deserialize(json, answerType)));

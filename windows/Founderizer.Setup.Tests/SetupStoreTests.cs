@@ -205,9 +205,9 @@ public sealed class SetupStoreTests
         Assert.IsTrue(own.Remote.Calls.All(c => c.Login is RemoteLogin.AppKey));
     }
 
-    private static async Task<SetupRig> Built(SetupRig rig, ServersStep step = ServersStep.Two)
+    private static async Task<SetupRig> Built(SetupRig rig, ServersStep step = ServersStep.Two, string name = "Juno")
     {
-        rig.ThroughTheFirstPages(step);
+        rig.ThroughTheFirstPages(step, name);
         rig.Store.ChooseProvider(CloudProvider.Hetzner);
         await rig.Until(x => x.Cloud?.Offer is not null && (step == ServersStep.One || x.ManagersCloud?.Offer is not null), "the offers");
         Assert.IsTrue(rig.Store.MakeFleet());
@@ -220,7 +220,8 @@ public sealed class SetupStoreTests
     /// join whose installer was made without its plan's key (24 November 2026): the key step wrote an empty key, and the
     /// joined server never reached the private network; and a second key made for the installer, which is not the one
     /// that the plan was made with. The key step shows in the join's progress, and done in its record, and no line of
-    /// the join holds the key, also where the server prints it back.</summary>
+    /// the join holds the key, also where the server prints it back. The hand-over keeps his capitals of the manager's
+    /// name, which the installer took in small letters, for the hub (the validator's W-S1: "McBot" showed as "Mcbot").</summary>
     [TestMethod]
     public async Task The_hand_over_comes_at_the_joins_end_with_the_server_that_joined()
     {
@@ -234,11 +235,13 @@ public sealed class SetupStoreTests
             keys.Enqueue((call.Target.Host, key));
             return StandInRemote.Said("got " + key + "\n" + (ClaimCode.IsPrivateAddress(call.Target.Host) ? call.Target.Host : Printed.PrivateAddress));
         }) { Fleet = SetupRig.NewFleet() };
-        await Built(rig);
+        await Built(rig, name: "JuNo");
         var s = await rig.Until(x => x.HandedOver, "the hand-over");
         Assert.IsNotNull(s.ManagerInstall.Checklist, "the join ended before the hand-over");
         var handed = rig.Store.HandedOver!;
         Assert.AreEqual(("juno", "claude", s.ManagersServer!.Name, false, null as MadeServer), (handed.Manager, handed.Provider, handed.Joined, handed.SignInAsked, handed.Made));
+        Assert.AreEqual(new Agents.AgentSpellingNote(new Uri(s.Install.ClaimedHub!), "db-1", "juno", "JuNo"),
+                        Agents.AgentSpellingNotes.Read(rig.Choices).SingleOrDefault(), "his spelling waits for the hub");
         Assert.AreEqual(0, rig.Calls.SignIns, "a manager with no server gets its provider with its server, and no sign-in now");
         Assert.AreEqual(1, rig.Calls.Posts.Count(p => p == "ui/servers/join"));
 
@@ -565,18 +568,22 @@ public sealed class SetupStoreTests
     }
 
     /// <summary>**Start again ends its last step for a hub recorded with a path or a query**: the manager's mark of that hub
-    /// goes, and the PC forgets the hub. The bug: the mark's check of the hub's address throws for such an address, and
-    /// Start again stops in its last step with the hub, its records and the mark still on the PC.</summary>
+    /// goes, with the spellings that wait for it, and the PC forgets the hub. The bug: the mark's check of the hub's address
+    /// throws for such an address, and Start again stops in its last step with the hub, its records and the mark still on
+    /// the PC; or the kept answers still hold the address of a hub that went.</summary>
     [TestMethod]
     public async Task Start_again_ends_for_a_hub_recorded_with_a_path()
     {
         await using var rig = new SetupRig();
         new Agents.ManagerSetupMark(new Uri("http://100.64.0.9:8765/"), "db-1", "juno", "claude").Keep(rig.Choices);
+        Agents.AgentSpellingNotes.Note(rig.Choices, new Uri("http://100.64.0.9:8765/"), "db-1", "juno", "JuNo");
+        Agents.AgentSpellingNotes.Note(rig.Choices, new Uri("http://100.64.0.12:8765/"), "db-2", "nova", "NoVa");
         const string recorded = "http://100.64.0.9:8765/claim?from=install";
         var plan = await rig.Store.StartAgainPlanAsync(recorded);
         var steps = await rig.Store.StartAgainRunAsync(plan);
         Assert.IsTrue(steps.All(x => x.State == StartAgain.StepState.Done), string.Join("; ", steps.Select(x => $"{x.Title} {x.State} {x.Says}")));
         Assert.IsNull(Agents.ManagerSetupMark.Read(rig.Choices), "the mark of that hub goes");
+        Assert.AreEqual("nova", Agents.AgentSpellingNotes.Read(rig.Choices).Single().Agent, "its spelling goes, and another hub's stays");
         CollectionAssert.AreEqual(new[] { (new Uri(recorded), false) }, rig.Forgotten, "the PC forgets the hub");
     }
 

@@ -196,11 +196,13 @@ public sealed record CloudDeletion(bool Deleted, CloudException? NotThere = null
 /// <summary>Why a step with a provider stopped (the Mac's <c>CloudError</c>). <c>Unsure</c>: the provider answered the
 /// call that makes the server with a fault of its own (a 5xx), or not at all, and this PC does not know whether the server
 /// is there (finding 3 of the checked audit of 24 November 2026); <c>TakenBack</c>: it had made the server all the same,
-/// and this app deleted it.</summary>
+/// and this app deleted it. <c>Unread</c> and <c>UnreadTakenBack</c> are the same two ends after a success answer that
+/// holds no id that this app reads (the Mac's <c>unread</c> and <c>unreadTakenBack</c>; the PC readers' point 1 of 26
+/// November 2026).</summary>
 public enum CloudFailure
 {
-    NotAToken, NoToken, TokenNotAccepted, ReadOnlyToken, RateLimited, Unreachable, Refused, Unsure, TakenBack, NotUnderstood,
-    NoRoom, Full, Taken, NotReady, NotAServerName, NotAPublicKey, NotAnAuthKey, LeftBehind,
+    NotAToken, NoToken, TokenNotAccepted, ReadOnlyToken, RateLimited, Unreachable, Refused, Unsure, TakenBack, Unread,
+    UnreadTakenBack, NotUnderstood, NoRoom, Full, Taken, NotReady, NotAServerName, NotAPublicKey, NotAnAuthKey, LeftBehind,
 }
 
 /// <summary>A step with a provider that stopped, with the PC's words for it (the Mac's sentences with "PC" for "Mac").
@@ -208,7 +210,8 @@ public enum CloudFailure
 /// with the token taken out; <see cref="Left"/> what is still there. An end that is not sure, or a server taken back,
 /// names its <see cref="Server"/>; an end that is not sure also names the call's own <see cref="Mark"/>: its firewall,
 /// or at DigitalOcean the tag of its droplet, by which the owner tells that server from another of the same name in
-/// the provider's own pages (the Mac's <c>CloudError.unsure</c> and <c>takenBack</c>).</summary>
+/// the provider's own pages (the Mac's <c>CloudError.unsure</c>, <c>takenBack</c>, <c>unread</c> and
+/// <c>unreadTakenBack</c>).</summary>
 public sealed class CloudException(CloudFailure failure, CloudProvider provider, string? says = null, IReadOnlyList<string>? left = null,
                                    string? server = null, string? mark = null)
     : Exception(Words(failure, provider, says, left ?? [], server, mark))
@@ -251,6 +254,9 @@ public sealed class CloudException(CloudFailure failure, CloudProvider provider,
             CloudFailure.TakenBack when says is not null =>
                 $"{name} answered with a fault of its own ({says}), but it had made {server} all the same, so this app deleted it.",
             CloudFailure.TakenBack => $"{name} did not answer the call that makes {server}, but it had made it all the same, so this app deleted it.",
+            CloudFailure.Unread =>
+                $"{name} may have made {server}, but this app cannot read its answer. While this app is open, it looks for {server} for an hour and deletes it if it comes. If you quit it sooner, delete the {server} {Marked(mark, provider)} at {name} if it is there.",
+            CloudFailure.UnreadTakenBack => $"{name} made {server}, but this app cannot read its answer, so this app deleted {server}.",
             CloudFailure.NotUnderstood => $"{name} answered something this app does not understand.",
             CloudFailure.NoRoom => $"{name} has no server free now.",
             CloudFailure.Full => $"{name} has no room for another server in your account.",

@@ -19,9 +19,9 @@ namespace Founderizer.Setup.Cloud;
 /// that fits what it is for, near this PC; on the owner's private network from its first boot, with a single-use key
 /// that lives one hour; behind a provider firewall with no inbound rule at all; with this app's own SSH key. A step that
 /// fails takes away what this call made, the server and its firewall, and leaves the SSH key, which the next server uses
-/// again; after the provider's own fault answer (a 5xx), or no answer, to the call that makes the server, the servers
-/// with the call's own mark are read first (<see cref="MadeMeanwhileAsync"/>). The token stays in the secret box and
-/// goes to its provider and nowhere else.
+/// again; after the provider's own fault answer (a 5xx), no answer, or a success with no id that this app reads, to the
+/// call that makes the server, the servers with the call's own mark are read first (<see cref="MadeMeanwhileAsync"/>).
+/// The token stays in the secret box and goes to its provider and nowhere else.
 ///
 /// <see cref="For"/> gives the provider's own class; each one's file holds what is its own.</summary>
 public abstract partial class CloudServers : ICloud
@@ -34,9 +34,8 @@ public abstract partial class CloudServers : ICloud
     /// <summary>How many times a firewall that a deleted server still holds is asked to go.</summary>
     internal const int RemoveReads = 10;
     /// <summary>The reads after a call whose end is not known, and the wait before each: the join key's life, an hour, in
-    /// which a server that the provider made later can still join (the Mac's <c>followReads</c> and <c>followStep</c>).
-    /// The vectors hold the count (<c>follow_reads</c>), not the wait: no test catches another <see cref="FollowStep"/>
-    /// (3 s would end the reads after about 6 minutes).</summary>
+    /// which a server that the provider made later can still join (the Mac's <c>followReads</c> and <c>followStep</c>,
+    /// held equal by the vectors: <c>follow_reads</c> and, since <c>cc751f285</c>, <c>follow_step</c>).</summary>
     internal const int FollowReads = CloudJoin.KeyLife / 30;
     internal static readonly TimeSpan FollowStep = TimeSpan.FromSeconds(30);
     /// <summary>The memory that the server check asks of a hub's server and of a server for agents (the Mac's
@@ -292,10 +291,12 @@ public abstract partial class CloudServers : ICloud
     }
 
     /// <summary>**The servers that carry this call's own mark** (the Mac's <c>madeBehind</c>): at Hetzner the servers that
-    /// its firewall stands in front of, at Akamai the Linodes of its firewall's devices, at Vultr the instances of that
-    /// name behind its firewall group, at DigitalOcean the droplets with its tag. One read, and nothing else of the
-    /// account: a name alone can be another build's server, of another fleet in the same account or of another computer
-    /// of this fleet.</summary>
+    /// its firewall stands in front of, at Akamai the Linodes of its firewall's devices, at Vultr the instances behind its
+    /// firewall group, at DigitalOcean the droplets with its tag. Each one of the call's own name only: a person's other
+    /// server put behind the call's new firewall in that hour, or given its tag, is not the call's (the PC readers' point
+    /// 3 of 26 November 2026). One read, and nothing else of the account: a name alone can be another build's server, of
+    /// another fleet in the same account or of another computer of this fleet. At Hetzner, whose firewall names its
+    /// servers by id only, a second read, of the servers of that name.</summary>
     private protected abstract Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel);
 
     /// <summary>The servers with the call's mark, or null when the read does not get through.</summary>
@@ -305,8 +306,9 @@ public abstract partial class CloudServers : ICloud
         catch (Exception e) when (e is not OutOfMemoryException) { return null; }
     }
 
-    /// <summary>**After the provider's own fault answer (a 5xx), or no answer at all, to the call that makes the server**
-    /// (finding 3 of the checked audit of 24 November 2026; the Mac's <c>madeMeanwhile</c>): the provider can have made
+    /// <summary>**After the provider's own fault answer (a 5xx), no answer at all, or a success with no id that this app
+    /// reads, to the call that makes the server** (finding 3 of the checked audit of 24 November 2026, and the PC readers'
+    /// point 1 of 26 November 2026; the Mac's <c>madeMeanwhile</c>): the provider can have made
     /// the server all the same, so the servers with this call's mark are read before anything is taken back, the
     /// firewall included, with no cancel (the owner's stop of the call must not cut this read short). The one server
     /// there is this call's: its id is what <see cref="UndoAsync"/> then deletes with the rest. Every other end throws
@@ -379,20 +381,40 @@ public abstract partial class CloudServers : ICloud
         return new CloudException(CloudFailure.TakenBack, Provider, says, null, made.Name);
     }
 
+    /// <summary>**A success to the call for the server, with no id that this app reads** (the Mac's <c>unread</c>; the PC
+    /// readers' point 1 of 26 November 2026): the provider made the server, so the servers with this call's mark are
+    /// read, as after a fault answer. The one there is <c>made.Server</c>, which <see cref="UndoAsync"/> then deletes with
+    /// the rest (<c>UnreadTakenBack</c>); every other end is <c>Unread</c>, and nothing is taken back, as after
+    /// <c>Unsure</c>. Before, the firewall went with no read, and at Akamai a Linode that stayed had none.</summary>
+    private protected async Task<CloudException> UnreadAsync(Made made, CloudCall call)
+    {
+        var unsure = new CloudException(CloudFailure.Unread, Provider, null, null, made.Name, made.FirewallName);
+        made.Server = await MadeMeanwhileAsync(made, call, unsure).ConfigureAwait(false);
+        return new CloudException(CloudFailure.UnreadTakenBack, Provider, null, null, made.Name);
+    }
+
     /// <summary>Takes away what one call made, and says so when it could not. It runs to its end also when the call was
     /// cancelled, so that a create the owner stopped still leaves no server running at his cost. A call whose end is not
-    /// known (<c>Unsure</c>) takes nothing back: a server that the provider made all the same can stand behind the
-    /// firewall that this call made, and Akamai deletes a firewall that a Linode uses.</summary>
+    /// known (<c>Unsure</c>, <c>Unread</c>) takes nothing back: a server that the provider made all the same can stand
+    /// behind the firewall that this call made, and Akamai deletes a firewall that a Linode uses.</summary>
     private protected async Task<Exception> UndoAsync(Made made, Exception error, CloudCall call)
     {
-        if (error is CloudException { Failure: CloudFailure.Unsure }) return error;
-        var (left, _) = await RemoveAsync(made, call).ConfigureAwait(false);
+        if (error is CloudException { Failure: CloudFailure.Unsure or CloudFailure.Unread }) return error;
+        var (left, serverStays) = await RemoveAsync(made, call).ConfigureAwait(false);
         if (left.Count == 0) return error;
-        // A server that the call found and could not delete is said in the provider's own words, never as deleted.
-        var said = error is CloudException { Failure: CloudFailure.TakenBack } back
-            ? back.Says is { } says ? new CloudException(CloudFailure.Refused, Provider, says) : new CloudException(CloudFailure.Unreachable, Provider)
-            : error;
-        return new CloudException(CloudFailure.LeftBehind, Provider, said.Message, left);
+        // A server that the call found and could not delete is said as the answer was, never as deleted.
+        (Exception Said, bool Found) told = error switch
+        {
+            CloudException { Failure: CloudFailure.TakenBack } back =>
+                (back.Says is { } says ? new CloudException(CloudFailure.Refused, Provider, says) : new CloudException(CloudFailure.Unreachable, Provider), true),
+            CloudException { Failure: CloudFailure.UnreadTakenBack } => (new CloudException(CloudFailure.NotUnderstood, Provider), true),
+            _ => (error, false),
+        };
+        // One that the mark read found and that does not go now (Hetzner's `locked` while it still makes the server) is
+        // read for and deleted in the hour after, as one that comes late (the Mac's undo; the PC readers' point 5 and the
+        // Vault area's SHOULD 3 of 26 November 2026): else it runs on at the owner's cost.
+        if (told.Found && serverStays) FollowUp(made, call);
+        return new CloudException(CloudFailure.LeftBehind, Provider, told.Said.Message, left);
     }
 
     /// <summary>Deletes the server, then its firewall, and answers what is still there, and whether the server stays. A

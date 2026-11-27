@@ -56,7 +56,7 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
                 if (SaysUnavailable(answer)) { refusal = answer; continue; }
                 if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
                 if (Json.Long(Json.At(Json.At(answer.Object, "droplet"), "id")) is not { } id)
-                    throw new CloudException(CloudFailure.NotUnderstood, Provider);
+                    throw await UnreadAsync(made, call).ConfigureAwait(false);
                 taken = (id, offer);
                 break;
             }
@@ -96,12 +96,12 @@ internal sealed class DigitalOcean(HttpMessageHandler handler, ISecretBox box, T
             new JsonObject { ["destinations"] = Everywhere(), ["protocol"] = "icmp" });
     }
 
-    /// <summary>The droplets with the call's tag.</summary>
+    /// <summary>The droplets of the call's name with the call's tag.</summary>
     private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
     {
         var read = await call.SendAsync("GET", "droplets", [("tag_name", made.FirewallName), ("per_page", "200")], null, cancel).ConfigureAwait(false);
-        return (AllObjects(Json.At(read, "droplets")) ?? []).Select(d => Json.Long(Json.At(d, "id"))).OfType<long>()
-            .Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
+        return (AllObjects(Json.At(read, "droplets")) ?? []).Where(d => Json.String(Json.At(d, "name")) == made.Name)
+            .Select(d => Json.Long(Json.At(d, "id"))).OfType<long>().Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
     }
 
     /// <summary>The id of this app's SSH key at DigitalOcean: found by its fingerprint, or registered once.</summary>

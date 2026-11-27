@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The tests of the screens' own parts that call no WinUI: the sample fleet as the store's state, read by the
-       library's models, the window's history, the publisher check, Tailscale's install and sign-in link, and the first
-       run's own parts. They need no window; the plan runs them on Windows. -->
+       library's models, the window's history, the publisher check, Tailscale's install and sign-in link, the first
+       run's own parts, and the marked copy of a chat's file. They need no window; the plan runs them on Windows. -->
   <PropertyGroup>
     <!-- Windows' target: the Windows parts of the key and of Tailscale are tested on Windows. -->
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -31,6 +31,7 @@
     <Compile Include="../Founderizer.Windows/Fleet/FileChoices.cs" Link="Linked/FileChoices.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/OwnerKeyLine.cs" Link="Linked/OwnerKeyLine.cs" />
     <Compile Include="../Founderizer.Windows/Fleet/ClipboardGuard.cs" Link="Linked/ClipboardGuard.cs" />
+    <Compile Include="../Founderizer.Windows/Fleet/ChatFileCopy.cs" Link="Linked/ChatFileCopy.cs" />
     <Compile Include="../Founderizer.Windows/Pages/FirstRun/WelcomePlan.cs" Link="Linked/WelcomePlan.cs" />
     <Compile Include="../Founderizer.Windows/Pages/FirstRun/SetupViewWords.cs" Link="Linked/SetupViewWords.cs" />
     <Compile Include="../Founderizer.Windows/Pages/FirstRun/BuildRows.cs" Link="Linked/BuildRows.cs" />

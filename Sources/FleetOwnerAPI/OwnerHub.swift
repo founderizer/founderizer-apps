@@ -768,20 +768,70 @@ public final class OwnerHub: @unchecked Sendable {
     }
 }
 
-/// **The AI session that sends a command**, for `X-Fleet-Session`: `claude-code/<session id>` from the environment that
-/// Claude Code gives the processes that it starts (this program's MCP form and its shell form alike), as
-/// `owner_mcp.py`'s `session_label`. The hub keeps it with the request and marks the request as an AI session's
-/// (`request_hand`; the review of 20 November 2026, issue 4: the hub could not tell an AI session's answer to the
-/// owner's card from the owner's own). Nil outside such a session, or for an id that is no name.
+/// **The AI session that sends a command**, for `X-Fleet-Session`, as `owner_mcp.py`'s `session_label`: the first of
+/// `variables` that the environment gives names it, with that session's own id (Claude Code gives its variable to this
+/// program's MCP form and its shell form alike; Codex 0.171.0 gives its own to a shell command only); else, in the MCP
+/// form, the client of its initialize (`noteClient`; Codex names itself `codex-mcp-client` there and gives no
+/// variable). Each sign was proven on 26 November 2026; Grok and OpenCode gave none, so their sessions carry no mark.
+/// A known limit: a Codex that a Claude Code session starts has both variables, and the outer session names the
+/// command. The MCP form's session is one for its process, not one for each Codex thread, and a job that an AI session's
+/// shell left running keeps that session's id.
+/// The hub keeps it with the request and marks the request as an AI session's (`request_hand`; the review of 20
+/// November 2026, issue 4: the hub could not tell an AI session's answer to the owner's card from the owner's own).
+/// Nil outside such a session, or for an id that is no name.
 public enum SessionLabel {
+    /// `owner_mcp.py`'s SESSION_VARIABLES and SESSION_CLIENTS: the runtimes' own names of hub.MESSAGE_RUNTIMES.
+    static let variables = [("CLAUDE_CODE_SESSION_ID", "claude-code"), ("CODEX_THREAD_ID", "codex")]
+    static let clients = ["codex-mcp-client": "codex"]
+    private static let kept = KeptSession()
+
     public static func current(_ environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
-        guard let id = environment["CLAUDE_CODE_SESSION_ID"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !id.isEmpty else { return nil }
-        let label = "claude-code/" + id
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:/-")
-        guard label.count <= 128, label.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
-        return label
+        current(environment, client: kept.label)
     }
+
+    /// The label from these variables, else `client`: the session that this process's MCP client named.
+    static func current(_ environment: [String: String], client: String?) -> String? {
+        for (variable, runtime) in variables {
+            guard let id = environment[variable]?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else {
+                continue
+            }
+            let label = runtime + "/" + id
+            let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:/-")
+            guard label.count <= 128, label.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
+            return label
+        }
+        return client
+    }
+
+    /// The session of this program's MCP form from its client's initialize (`clientInfo.name`), for a runtime that
+    /// gives its MCP servers no session variable: the runtime, and an id of this process's own. Nil for a client of no
+    /// known name.
+    static func clientSession(_ name: String?) -> String? {
+        name.flatMap { clients[$0] }.map {
+            $0 + "/mcp-" + UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "")   // as uuid4().hex
+        }
+    }
+
+    /// The session that this process's MCP client named, if any.
+    static var keptSession: String? { kept.label }
+
+    /// Forgets it: for a test that reads it.
+    static func forget() { kept.reset() }
+
+    /// Keeps the session that the client's initialize names, once for this process (`owner_mcp.py`'s
+    /// `client_session`).
+    static func noteClient(_ name: String?) {
+        if let session = clientSession(name) { kept.keepFirst(session) }
+    }
+}
+
+/// The one session of this program's MCP form, from its client's first initialize that names a known runtime.
+final class KeptSession: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: String?
+    var label: String? { lock.withLock { value } }
+    func keepFirst(_ session: String) { lock.withLock { if value == nil { value = session } } }
+    func reset() { lock.withLock { value = nil } }
 }
 
 /// **This installation's own public label** for `X-Fleet-Client`, kept across runs as the app keeps its installation

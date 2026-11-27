@@ -14,7 +14,9 @@ namespace Founderizer.Windows.Fleet;
 /// a token or a password, and no server's address but the two of the mark of the manager's first setup
 /// (<c>ManagerSetupMark</c>: the hub's scheme, host and port, its generation, the manager, its chosen provider, the name of
 /// the server that joined for it, and the name and the private address of the server that the first run made for it and
-/// that did not join). A file that does not read is no answer: the first run asks again.</summary>
+/// that did not join), and the hub's own again in each note of an agent's spelling that waits for it
+/// (<c>AgentSpellingNotes</c>: the hub, its generation, the agent and the name as the owner typed it). A file that does
+/// not read is no answer: the first run asks again.</summary>
 internal sealed class FileChoices(string path) : ISetupChoices
 {
     private readonly object gate = new();

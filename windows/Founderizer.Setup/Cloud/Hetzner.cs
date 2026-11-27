@@ -60,7 +60,7 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
                 if (answer.Code is "resource_unavailable" or "placement_error") continue;
                 if (!answer.Ok) throw await FailedAsync(answer, made, call).ConfigureAwait(false);
                 if (Json.At(answer.Object, "server") is not JsonObject server || Json.Long(Json.At(server, "id")) is not { } id)
-                    throw new CloudException(CloudFailure.NotUnderstood, Provider);
+                    throw await UnreadAsync(made, call).ConfigureAwait(false);
                 made.Server = id.ToString(CultureInfo.InvariantCulture);
                 var ipv4 = Json.String(Json.At(Json.At(Json.At(server, "public_net"), "ipv4"), "ip"));
                 if (ipv4 is null || !IsIpv4(ipv4) || Json.Long(Json.At(Json.At(answer.Object, "action"), "id")) is not { } action)
@@ -77,13 +77,21 @@ internal sealed class Hetzner(HttpMessageHandler handler, ISecretBox box, TimeSp
         }
     }
 
-    /// <summary>The servers that the call's firewall stands in front of.</summary>
+    /// <summary>The servers of the call's name that the call's firewall stands in front of: the firewall names them by id
+    /// only, so a second read takes the servers of that name, and a server behind it of another name is not the call's.
+    /// When the second read does not get through, the mark read does not either (<c>MarkedAsync</c>), and nothing is
+    /// deleted.</summary>
     private protected override async Task<IReadOnlyList<string>> MadeBehindAsync(Made made, CloudCall call, CancellationToken cancel)
     {
         if (made.Firewall is not { } firewall) return [];
         var read = await call.SendAsync("GET", Provider.FirewallPath(firewall), null, null, cancel).ConfigureAwait(false);
-        return (AllObjects(Json.At(Json.At(read, "firewall"), "applied_to")) ?? [])
+        var behind = (AllObjects(Json.At(Json.At(read, "firewall"), "applied_to")) ?? [])
             .Select(u => Json.Long(Json.At(Json.At(u, "server"), "id"))).OfType<long>().Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
+        if (behind.Count == 0) return [];
+        var named = await call.SendAsync("GET", "servers", [("name", made.Name)], null, cancel).ConfigureAwait(false);
+        var ids = (AllObjects(Json.At(named, "servers")) ?? []).Where(s => Json.String(Json.At(s, "name")) == made.Name)
+            .Select(s => Json.Long(Json.At(s, "id"))).OfType<long>().Select(id => id.ToString(CultureInfo.InvariantCulture)).ToHashSet(StringComparer.Ordinal);
+        return behind.Where(ids.Contains).ToList();
     }
 
     /// <summary>The id of this app's SSH key at Hetzner: found by its fingerprint, or registered once.</summary>
