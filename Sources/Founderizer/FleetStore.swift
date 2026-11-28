@@ -373,6 +373,7 @@ final class FleetStore {
             forgetFilesOfAnotherFleet()     // a new hub or database numbers its files from 1 again
             dropUnsendableGuidanceFiles()   // a task's box that can send no more keeps no file
             JobColumns.shared.note(state)   // each job card's time in its column, at every reading (ColumnTimes)
+            blocksDrawn = blocksTaken       // the blocks that this state was joined with (`showOlder`)
             // **The card over the window shows only what this reading lists** (`DetailCard.kept`): a task or a job that
             // the hub lists no more, another hub or generation, or a moment with no reading closes it, and nothing opens
             // it again. `-openPage task.<id>` opens it at the first reading (`askedCard`).
@@ -1834,6 +1835,13 @@ final class FleetStore {
     @ObservationIgnored private var olderRead: Task<Void, Never>?
     @ObservationIgnored private var olderReads = 0
     @ObservationIgnored private var olderShown = ContinuousClock.now
+    /// One more at each block that a read takes, of older tasks or of older rows; and its value at the last state that
+    /// the pages drew (`state`). Equal, the blocks are the ones that the state was joined with (`showOlder`).
+    @ObservationIgnored private var blocksTaken = 0
+    @ObservationIgnored private var blocksDrawn = 0
+    /// A read of the blocks of older tasks or of older rows runs now (`readOlder`, `readOlderRows`): a test waits for
+    /// its end.
+    var readsOlderBlocks: Bool { olderRead != nil || olderRowsRead != nil }
     /// The newest write or removal of a block's file, each after the one before it: a later answer of a block is
     /// never under an earlier one on the disk, and `forgetFleet` removes the folder again after the last of them.
     @ObservationIgnored private var olderWrite: Task<Void, Never>?
@@ -1980,6 +1988,7 @@ final class FleetStore {
                     let (block, data) = try await client.olderBlock(at: hub, database: database, from: entry.from)
                     guard mine() else { return }
                     older.take(block)
+                    blocksTaken += 1
                     keepBlock(data, from: entry.from, hub: hub)
                 } catch where OlderTasks.blockFailed(error) {
                     guard mine() else { return }
@@ -2004,16 +2013,40 @@ final class FleetStore {
     }
 
     /// The pages draw the newest window read with the blocks as they are now.
+    ///
+    /// **A read of the blocks that changed none of them draws nothing again**: every launch that kept its blocks reads
+    /// the hub's lists once to learn that they are the hub's own (`OlderTasks.isBehind`), and that join gave the rows
+    /// that the pages drew already. A new state draws every page that reads it again, the chat with its 60 rows
+    /// before all (two of them in the launch's first 1.4 s, 26 November 2026). The state is the join of the same
+    /// window (each state is one, `readState`) and of the same blocks (no block came since, `blocksTaken`), so the
+    /// same rows in the same order are the same rows: what the join can still change is a row that left (a block that
+    /// the list no longer names, a row that waited for its block), and that changes the rows.
     private func showOlder() {
         olderShown = .now
         guard let window = lastWindow, let shown = state, shown.db == window.db else { return }
         let fresh = joined(window, shown: shown)
+        guard blocksTaken != blocksDrawn || !Self.sameRows(fresh, shown) else {
+            markRepliesSeen()               // the reports' blocks may be the hub's own now
+            return
+        }
         state = fresh
         // The chats draw from the timeline, and a new generation's marks of seen replies wait for every report
         // (`markRepliesSeen`): both follow the blocks as they come, and not only the next read of the state.
         var timeline = chatTimeline
         if timeline.update(messages: fresh.messages, reports: fresh.reports) { chatTimeline = timeline }
         markRepliesSeen()
+    }
+
+    /// The same rows, by id and in their order, in each list that a join of the blocks makes (`showOlder`).
+    private static func sameRows(_ one: HubState, _ other: HubState) -> Bool {
+        func same<Row: Identifiable>(_ a: [Row]?, _ b: [Row]?) -> Bool {
+            (a ?? []).lazy.map(\.id).elementsEqual((b ?? []).lazy.map(\.id))
+        }
+        return same(one.tasks, other.tasks) && same(one.notes, other.notes) && same(one.permissions, other.permissions)
+            && same(one.holds, other.holds) && same(one.outcomes, other.outcomes) && same(one.steers, other.steers)
+            && same(one.needs, other.needs) && same(one.reports, other.reports) && same(one.messages, other.messages)
+            && (one.holds == nil) == (other.holds == nil) && (one.outcomes == nil) == (other.outcomes == nil)
+            && (one.steers == nil) == (other.steers == nil)
     }
 
     /// The reading that the pages draw for a window read: joined with the blocks of older tasks, and then with the
@@ -2101,6 +2134,7 @@ final class FleetStore {
                                                                             from: entry.from)
                         guard mine() else { return }
                         olderRows.take(block, size: index.block)
+                        blocksTaken += 1
                         keepRowBlock(data, list: list, from: entry.from, hub: hub)
                     } catch where OlderTasks.blockFailed(error) {
                         guard mine() else { return }
