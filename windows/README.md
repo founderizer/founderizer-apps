@@ -189,7 +189,17 @@ renamed or removed without a word to the screens lane.
   `findHub`); `state.Search` (`HubSearch`: `Looking`, `NoNetwork`, `NoHub`, `Found`) says how it stands, with no words of
   its own: a PC with no hub shows its page with no hub, as the iPhone does, and a hub that does not answer has the
   iPhone's line ("Your hub did not answer. Check that its server is on."). `EnrollAsync(code)` sends the PC's kind, so
-  the hub names it "PC". Settings' address field starts with `state.Hub` (found or typed), and Connect is
+  the hub names it "PC". **The code that carries its hub** (`PairingCode`, FleetCore's PairingCode of Setup's F7 B3 and
+  B6, held against `app/vectors/join-code.json`): the Mac shows 13 characters (`AAAAA-CCCC-CCCC`) for a hub at a
+  Tailscale address at port 8765; a PC with no hub sends the last 8 to the hub that they carry and takes that hub only
+  with the key that it gave (a refusal leaves it with no hub); a PC with a Tailscale hub checks the 5 against it
+  (another one: `PairingCode.OtherHubWords`); every hub gets the last 8 only. It still reads an older Mac's 8.
+  `EnrollForm.Typed(code, hub)` sends 13, or 8 of an older Mac (`PairingCode.Whole`): 8 wait after a first group of
+  5, where their first 5 carry the Tailscale hub that the PC knows, and, with no hub or a hub that the rule cannot
+  compare, in any form but `XXXX-XXXX`; and
+  `EnrollForm.Answered(problem, hub)` sends the code that he typed on while the last one was on its way. Until the Mac
+  shows the 13 (B6) and the owner says yes to their words, the field's placeholder (`XXXX-XXXX`) and its words are
+  those of before. Settings' address field starts with `state.Hub` (found or typed), and Connect is
   `ConnectAsync(text)`, whose refusal `state.AddressError` keeps. The key stays between starts in its file, so a start
   needs no new code; Forget the key takes the file away.
 - **The app's own update (slice 1.6, the library's part)**: `WindowsManifest.Check(data, keys, channel, arch)` (the

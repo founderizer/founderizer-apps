@@ -300,8 +300,9 @@ public sealed partial class HubClient : IDisposable
 
     // ---------------------------------------------------------------- enrollment
 
-    /// <summary>The eight characters of a code from what the owner typed, or null. The alphabet leaves out the letters
-    /// and digits that look alike, so a code holds no I, O, 0 or 1.</summary>
+    /// <summary>The eight characters of a code from what the owner typed, or null: what the hub takes. The alphabet
+    /// leaves out the letters and digits that look alike, so a code holds no I, O, 0 or 1. A code of 13 characters, which
+    /// carries its hub, is read by <see cref="PairingCode"/>, which gives its last 8 to this.</summary>
     public static string? NormalizedCode(string typed)
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";

@@ -35043,6 +35043,162 @@
      "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
     },
     {
+     "base64": "UEsDBBQAAAAIAAAAIQBCv6ajBAAAAAIAAAAKAAAAZmxlZXQuanNvbquuBQBQSwMEFAAAAAgAAAAhAIymGwEHAAAABQAAAAoAAABSRVNUT1JFLm1ky8svSS0GAFBLAwQUAAAACAAAACEAigLU6RwAAAAaAAAADQAAAGZsZWV0LnNxbGl0ZTNLrUjMLchJVShKTc4vSilWyE9TSFRIy0lNLQEAUEsBAhQAFAAAAAgAAAAhAEK/pqMEAAAAAgAAAAoAAAAAAAAAAAAAAAAAAAAAAGZsZWV0Lmpzb25QSwECFAAUAAAACAAAACEAjKYbAQcAAAAFAAAACgAAAAAAAAAAAAAAAAAsAAAAUkVTVE9SRS5tZFBLAQIUABQAAAAIAAAAIQCKAtTpHAAAABoAAAANAAAAAAAAAAAAAAAAAFsAAABmbGVldC5zcWxpdGUzUEsFBgAAAAADAAMAqwAAAKIAAAAAAA==",
+     "headers": {
+      "Content-Type": "application/zip",
+      "X-Fleet-Backup-SHA256": "4b26e1a8f7098b7569ceca2fd392ed4a890232c4fd1a0ea04902ce40aa04d1e6"
+     },
+     "status": 200
+    }
+   ],
+   "arguments": {
+    "path": "<tmp>/c.zip"
+   },
+   "name": "take_backup: a copy with a copy whose CRC is wrong in both heads",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "The hub's copy is not a copy in the form that a hub writes (one zip with fleet.json, RESTORE.md and fleet.sqlite3, each member once and under a plain name), so nothing was kept, and the hub was not told that the copy is kept."
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/backup",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "take_backup"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
+     "base64": "UEsDBBQAAAAAAAAAIQBDv6ajBAAAAAIAAAAKAAAAZmxlZXQuanNvbquuBQBQSwMEFAAAAAgAAAAhAIymGwEHAAAABQAAAAoAAABSRVNUT1JFLm1ky8svSS0GAFBLAwQUAAAACAAAACEAigLU6RwAAAAaAAAADQAAAGZsZWV0LnNxbGl0ZTNLrUjMLchJVShKTc4vSilWyE9TSFRIy0lNLQEAUEsBAhQAFAAAAAAAAAAhAEO/pqMEAAAAAgAAAAoAAAAAAAAAAAAAAAAAAAAAAGZsZWV0Lmpzb25QSwECFAAUAAAACAAAACEAjKYbAQcAAAAFAAAACgAAAAAAAAAAAAAAAAAsAAAAUkVTVE9SRS5tZFBLAQIUABQAAAAIAAAAIQCKAtTpHAAAABoAAAANAAAAAAAAAAAAAAAAAFsAAABmbGVldC5zcWxpdGUzUEsFBgAAAAADAAMAqwAAAKIAAAAAAA==",
+     "headers": {
+      "Content-Type": "application/zip",
+      "X-Fleet-Backup-SHA256": "0457f31c5de57c7bef228f2bfd4abcc3f44b79354f8065b79320dc16dec0863b"
+     },
+     "status": 200
+    }
+   ],
+   "arguments": {
+    "path": "<tmp>/c.zip"
+   },
+   "name": "take_backup: a copy with a stored member whose bytes are a deflate stream of its stated size and CRC",
+   "older_hub": 0,
+   "outcome": {
+    "refusal": "The hub's copy is not a copy in the form that a hub writes (one zip with fleet.json, RESTORE.md and fleet.sqlite3, each member once and under a plain name), so nothing was kept, and the hub was not told that the copy is kept."
+   },
+   "requests": [
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/state",
+     "query": {
+      "head": [
+       "1"
+      ],
+      "tasks": [
+       "window"
+      ]
+     }
+    },
+    {
+     "body": null,
+     "headers": {
+      "authorization": false,
+      "content-type": null,
+      "origin": false,
+      "x-fleet-client": false,
+      "x-fleet-name": null,
+      "x-fleet-request-id": null
+     },
+     "method": "GET",
+     "path": "/ui/backup",
+     "query": {
+      "db": [
+       "g1"
+      ]
+     }
+    }
+   ],
+   "setup": {
+    "files": {},
+    "folders": [],
+    "links": {}
+   },
+   "tool": "take_backup"
+  },
+  {
+   "after": {
+    "files": {},
+    "folders": []
+   },
+   "answers": [
+    {
+     "headers": {
+      "Content-Type": "application/json"
+     },
+     "status": 200,
+     "text": "{\"db\": \"g1\", \"time\": 1763078400, \"ui_features\": [\"agent_auth\", \"agent_move\", \"agent_remove\", \"agent_rename\", \"agent_spelling\", \"attachments\", \"chat_apps\", \"conversations\", \"goals\", \"google\", \"login_create\", \"machine_access\", \"machine_check\", \"machine_signin\", \"machines\", \"manager_start\", \"mcp\", \"mcp_check\", \"memory_undo\", \"mobile\", \"need_clarify\", \"owner_knowledge\", \"people\", \"releases\", \"reporting_lines\", \"resource_grants\", \"responsibilities\", \"runtime_switch\", \"secrets\", \"server_prepare\", \"servers\", \"settings\", \"standing\", \"task_controls\", \"task_steering\", \"teams_claim\", \"triggers\", \"vault_access\"], \"head\": true}"
+    },
+    {
      "base64": "UEsDBBQAAAAIAAAAIQBDv6ajBAAAAAIAAAAKAAAAZmxlZXQuanNvbquuBQBQSwMEFAAAAAgAAAAhAIymGwEHAAAABQAAAAoAAABSRVNUT1JFLm1ky8svSS0GAFBLAwQUAAAACAAAACEAigLU6R0AAAAaAAAADQAAAGZsZWV0LnNxbGl0ZTNLrUjMLchJVShKTc4vSilWyE9TSFRIy0lNLQEASlBLAQIUABQAAAAIAAAAIQBDv6ajBAAAAAIAAAAKAAAAAAAAAAAAAAAAAAAAAABmbGVldC5qc29uUEsBAhQAFAAAAAgAAAAhAIymGwEHAAAABQAAAAoAAAAAAAAAAAAAAAAALAAAAFJFU1RPUkUubWRQSwECFAAUAAAACAAAACEAigLU6R0AAAAaAAAADQAAAAAAAAAAAAAAAABbAAAAZmxlZXQuc3FsaXRlM1BLBQYAAAAAAwADAKsAAACjAAAAAAA=",
      "headers": {
       "Content-Type": "application/zip",

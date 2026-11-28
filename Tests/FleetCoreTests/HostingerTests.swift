@@ -346,8 +346,9 @@ struct HostingerTests {
         #expect(CloudProvider.hetzner.guide(language: "en")?.absoluteString == "https://founderizer.com/guides/hetzner")
         #expect(CloudProvider.digitalOcean.guide(language: "es-ES")?.absoluteString == "https://founderizer.com/es/guides/digitalocean")
         #expect(CloudProvider.shown.allSatisfy { $0.guide(language: nil) != nil })
-        // Hostinger's guide is not on the site yet: its key page shows no link to a page that is missing.
-        #expect(CloudProvider.hostinger.guide(language: "en") == nil)
+        // Hostinger's key page links its own guide, in the app's language.
+        #expect(CloudProvider.hostinger.guide(language: "en")?.absoluteString == "https://founderizer.com/guides/hostinger")
+        #expect(CloudProvider.hostinger.guide(language: "es")?.absoluteString == "https://founderizer.com/es/guides/hostinger")
         // The first run waits for its own step; Add server shows the card that the owner said yes to.
         #expect(!CloudProvider.shown.contains(.hostinger) && CloudProvider.addServer.last == .hostinger)
     }

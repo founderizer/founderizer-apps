@@ -1880,19 +1880,28 @@ public sealed partial class OwnerStore : IAsyncDisposable
 
     // ---------------------------------------------------------------- enrollment, Connect, the key, the device
 
-    /// <summary>Enrolls this PC with a code from the Mac app. Null when it took its key; else the owner's words (a code
-    /// that the hub refused may not go again).</summary>
+    /// <summary>Enrolls this PC with a code from the Mac app (<see cref="PairingCode"/>): 13 characters carry the hub,
+    /// which this PC takes when it has none, or which must be its own Tailscale hub; 8 go to the hub that it knows. The
+    /// hub gets the code's last 8 characters only. Null when it took its key; else the owner's words (a code that the
+    /// hub refused may not go again).</summary>
     public async Task<string?> EnrollAsync(string code)
     {
-        if (HubClient.NormalizedCode(code) is null) return "A code is eight characters, as the Mac app shows it (XXXX-XXXX).";
-        if (State.Hub is not { } hub) return "Give your hub's address in Settings first.";
+        if (PairingCode.Read(code) is not { } reading) return PairingCode.CodeWords;
+        var known = State.Hub;
+        var (target, join, refusal) = PairingCode.Target(reading, known);
+        if (refusal is not null || target is null) return refusal ?? PairingCode.NoHubWords;
         try
         {
-            var enrollment = await client.EnrollAsync(hub, code);
+            // **A code of 13 on a PC with no hub** goes to the hub that it carries, and this PC takes that hub only with
+            // the key that the hub gave: a code that the hub refused, a hub that did not answer, or a typing fault that
+            // the check bits did not see leaves this PC with no hub, as before the code.
+            var hub = join ? HubClient.Address(target.ToString()) : target;
+            var enrollment = await client.EnrollAsync(hub, reading.Code);
             // **He went to another hub while the code waited** (the iPhone's enrollAlone, F7 round of the enroll key fix):
             // nothing of the hub that answered moves in. Its key is tied to this PC's address at that hub, so kept
             // here it went to the other hub at the next read, which refused it and gave no access; the code is spent.
-            if (!Equals(State.Hub, hub)) return "This PC could not keep its key. Make a new code.";
+            // The search of a PC with no hub that found the code's own hub meanwhile is no other hub.
+            if (!Equals(State.Hub, known) && !(join && Equals(State.Hub, hub))) return "This PC could not keep its key. Make a new code.";
             try
             {
                 settings.Keys.Write(enrollment.Key);
@@ -1902,6 +1911,7 @@ public sealed partial class OwnerStore : IAsyncDisposable
                 Update(x => x with { KeyDetail = e.Message });
                 return "This PC could not keep its key. Make a new code.";
             }
+            if (join) TakeHub(hub, HubSearch.None);
             key = enrollment.Key;
             keyWaits = false;
             if (State.Role != HubRole.Device)
@@ -1939,6 +1949,15 @@ public sealed partial class OwnerStore : IAsyncDisposable
             Update(x => x with { AddressError = e.Message });
             return e.Message;
         }
+        TakeHub(next, search);
+        await RefreshAsync();
+        return null;
+    }
+
+    /// <summary>Connect's steps before its read: <paramref name="next"/> is this PC's hub, kept in hub.json, with its role
+    /// there. Also the join of a code that carries its hub (<see cref="EnrollAsync"/>).</summary>
+    private void TakeHub(Uri next, HubSearch search)
+    {
         Update(x => x with { AddressError = null, Search = search });
         // One role for each hub: the address that the PC has keeps its role, and another address is the owner's
         // computer's when the box holds a key of the owner's computer for it, else a device's.
@@ -1949,8 +1968,6 @@ public sealed partial class OwnerStore : IAsyncDisposable
             Use(next, role);
             if (role == HubRole.Owner) Unlock();
         }
-        await RefreshAsync();
-        return null;
     }
 
     /// <summary>The box holds a key of the owner's computer for <paramref name="hub"/>, or a value there that does not

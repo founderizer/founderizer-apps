@@ -1,0 +1,395 @@
+{
+  "about": "The code that carries its hub (FleetCore PairingCode, F7 B3): for a hub at http://<an IPv4 address in 100.64.0.0/10>:8765 the Mac shows 13 characters, AAAAA-CCCC-CCCC: 5 for the address, then the hub's own code of 8, which is what a device sends to POST /ui/owner/enroll. Each character is 5 bits, its place in alphabet. The 5 hold 25 bits, highest first: the 22 bits of the address minus 100.64.0.0, then 3 check bits: the CRC-3 with x^3 + x + 1 (1011) of those 22 bits followed by the 40 bits of the code's 8 characters, each from its highest bit (the remainder of those 62 bits followed by three zeros). Any other hub (another port, a name, https, an address outside the network, a path) keeps the code of 8. A reader drops spaces and hyphens, takes small letters as capitals, refuses any other character, takes 8 characters as a code for the hub that it knows, and 13 as a hub and a code when the check bits match; anything else it refuses before any request.",
+  "made_by": "app/vectors/makers/join_code.py",
+  "alphabet": "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+  "port": 8765,
+  "network": "100.64.0.0/10",
+  "polynomial": "1011",
+  "shown": [
+    {
+      "name": "the app's own example address",
+      "hub": "http://100.84.1.20:8765",
+      "code": "YD92-MYTA",
+      "shown": "LACFB-YD92-MYTA",
+      "reads_as": {
+        "hub": "http://100.84.1.20:8765",
+        "code": "YD92-MYTA"
+      }
+    },
+    {
+      "name": "the first address of 100.64.0.0/10",
+      "hub": "http://100.64.0.0:8765",
+      "code": "9VV7-AL6Z",
+      "shown": "AAAAB-9VV7-AL6Z",
+      "reads_as": {
+        "hub": "http://100.64.0.0:8765",
+        "code": "9VV7-AL6Z"
+      }
+    },
+    {
+      "name": "the last address of 100.64.0.0/10",
+      "hub": "http://100.127.255.255:8765",
+      "code": "K9WF-YV3K",
+      "shown": "99995-K9WF-YV3K",
+      "reads_as": {
+        "hub": "http://100.127.255.255:8765",
+        "code": "K9WF-YV3K"
+      }
+    },
+    {
+      "name": "a hub written with a slash at its end",
+      "hub": "http://100.100.100.100:8765/",
+      "code": "YD92-MYTA",
+      "shown": "UGJ3A-YD92-MYTA",
+      "reads_as": {
+        "hub": "http://100.100.100.100:8765",
+        "code": "YD92-MYTA"
+      }
+    },
+    {
+      "name": "example 1",
+      "hub": "http://100.74.237.66:8765",
+      "code": "SPKU-3Z76",
+      "shown": "FQ4SY-SPKU-3Z76",
+      "reads_as": {
+        "hub": "http://100.74.237.66:8765",
+        "code": "SPKU-3Z76"
+      }
+    },
+    {
+      "name": "example 2",
+      "hub": "http://100.92.46.163:8765",
+      "code": "RH3Q-UZKU",
+      "shown": "QC7J2-RH3Q-UZKU",
+      "reads_as": {
+        "hub": "http://100.92.46.163:8765",
+        "code": "RH3Q-UZKU"
+      }
+    },
+    {
+      "name": "example 3",
+      "hub": "http://100.78.34.40:8765",
+      "code": "228T-BYZL",
+      "shown": "HCELC-228T-BYZL",
+      "reads_as": {
+        "hub": "http://100.78.34.40:8765",
+        "code": "228T-BYZL"
+      }
+    },
+    {
+      "name": "example 4",
+      "hub": "http://100.121.105.47:8765",
+      "code": "MRNU-YUGF",
+      "shown": "6YUM4-MRNU-YUGF",
+      "reads_as": {
+        "hub": "http://100.121.105.47:8765",
+        "code": "MRNU-YUGF"
+      }
+    },
+    {
+      "name": "example 5",
+      "hub": "http://100.124.74.172:8765",
+      "code": "SEB4-TLE4",
+      "shown": "8EXMF-SEB4-TLE4",
+      "reads_as": {
+        "hub": "http://100.124.74.172:8765",
+        "code": "SEB4-TLE4"
+      }
+    },
+    {
+      "name": "example 6",
+      "hub": "http://100.92.197.77:8765",
+      "code": "DNGH-W4SE",
+      "shown": "QNLVK-DNGH-W4SE",
+      "reads_as": {
+        "hub": "http://100.92.197.77:8765",
+        "code": "DNGH-W4SE"
+      }
+    },
+    {
+      "name": "example 7",
+      "hub": "http://100.75.25.24:8765",
+      "code": "G6ZJ-L2FU",
+      "shown": "FTUGA-G6ZJ-L2FU",
+      "reads_as": {
+        "hub": "http://100.75.25.24:8765",
+        "code": "G6ZJ-L2FU"
+      }
+    },
+    {
+      "name": "example 8",
+      "hub": "http://100.76.163.2:8765",
+      "code": "SVNK-B3HV",
+      "shown": "GLGAU-SVNK-B3HV",
+      "reads_as": {
+        "hub": "http://100.76.163.2:8765",
+        "code": "SVNK-B3HV"
+      }
+    },
+    {
+      "name": "example 9",
+      "hub": "http://100.78.114.194:8765",
+      "code": "343F-W39M",
+      "shown": "HHFSX-343F-W39M",
+      "reads_as": {
+        "hub": "http://100.78.114.194:8765",
+        "code": "343F-W39M"
+      }
+    },
+    {
+      "name": "example 10",
+      "hub": "http://100.114.224.31:8765",
+      "code": "4NFF-78RS",
+      "shown": "3QAH8-4NFF-78RS",
+      "reads_as": {
+        "hub": "http://100.114.224.31:8765",
+        "code": "4NFF-78RS"
+      }
+    },
+    {
+      "name": "example 11",
+      "hub": "http://100.78.53.196:8765",
+      "code": "LTVB-43WS",
+      "shown": "HDMTA-LTVB-43WS",
+      "reads_as": {
+        "hub": "http://100.78.53.196:8765",
+        "code": "LTVB-43WS"
+      }
+    },
+    {
+      "name": "example 12",
+      "hub": "http://100.85.183.115:8765",
+      "code": "W42Q-AC4M",
+      "shown": "L5Q69-W42Q-AC4M",
+      "reads_as": {
+        "hub": "http://100.85.183.115:8765",
+        "code": "W42Q-AC4M"
+      }
+    },
+    {
+      "name": "example 13",
+      "hub": "http://100.126.242.78:8765",
+      "code": "C7WZ-3Z8M",
+      "shown": "9REVS-C7WZ-3Z8M",
+      "reads_as": {
+        "hub": "http://100.126.242.78:8765",
+        "code": "C7WZ-3Z8M"
+      }
+    },
+    {
+      "name": "example 14",
+      "hub": "http://100.99.232.101:8765",
+      "code": "C8BT-7JDW",
+      "shown": "T8S3L-C8BT-7JDW",
+      "reads_as": {
+        "hub": "http://100.99.232.101:8765",
+        "code": "C8BT-7JDW"
+      }
+    },
+    {
+      "name": "example 15",
+      "hub": "http://100.109.253.213:8765",
+      "code": "SW6S-4NW6",
+      "shown": "Y95XN-SW6S-4NW6",
+      "reads_as": {
+        "hub": "http://100.109.253.213:8765",
+        "code": "SW6S-4NW6"
+      }
+    },
+    {
+      "name": "example 16",
+      "hub": "http://100.124.198.167:8765",
+      "code": "F37M-AQJH",
+      "shown": "8NPK8-F37M-AQJH",
+      "reads_as": {
+        "hub": "http://100.124.198.167:8765",
+        "code": "F37M-AQJH"
+      }
+    },
+    {
+      "name": "another port",
+      "hub": "http://100.84.1.20:9000",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "no port",
+      "hub": "http://100.84.1.20",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "a name",
+      "hub": "http://hub.example.ts.net:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "https",
+      "hub": "https://100.84.1.20:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "the address before 100.64.0.0/10",
+      "hub": "http://100.63.255.255:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "the address after 100.64.0.0/10",
+      "hub": "http://100.128.0.0:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "an address of another network",
+      "hub": "http://192.0.2.10:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "an IPv6 address of Tailscale",
+      "hub": "http://[fd7a:115c:a1e0::1]:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "a path",
+      "hub": "http://100.84.1.20:8765/hub",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "a user",
+      "hub": "http://owner@100.84.1.20:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "a query",
+      "hub": "http://100.84.1.20:8765?x=1",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    },
+    {
+      "name": "an address with a zero in front of a number",
+      "hub": "http://100.084.1.20:8765",
+      "code": "YD92-MYTA",
+      "shown": "YD92-MYTA",
+      "reads_as": null
+    }
+  ],
+  "read": [
+    {
+      "name": "the code as the Mac shows it",
+      "typed": "LACFB-YD92-MYTA",
+      "hub": "http://100.84.1.20:8765",
+      "code": "YD92-MYTA"
+    },
+    {
+      "name": "small letters and spaces",
+      "typed": "lacfb yd92 myta",
+      "hub": "http://100.84.1.20:8765",
+      "code": "YD92-MYTA"
+    },
+    {
+      "name": "no hyphens",
+      "typed": "LACFBYD92MYTA",
+      "hub": "http://100.84.1.20:8765",
+      "code": "YD92-MYTA"
+    },
+    {
+      "name": "hyphens in other places, and spaces at the ends",
+      "typed": "  LA-CFBYD-92MYTA ",
+      "hub": "http://100.84.1.20:8765",
+      "code": "YD92-MYTA"
+    },
+    {
+      "name": "8 characters: a code for the hub that the device knows",
+      "typed": "yd92 myta",
+      "hub": null,
+      "code": "YD92-MYTA"
+    },
+    {
+      "name": "a typing fault that the three check bits do not see (about 3 in 31 of a character's changes): it reads as another hub, which then does not answer",
+      "typed": "LAKFB-YD92-MYTA",
+      "hub": "http://100.84.4.148:8765",
+      "code": "YD92-MYTA"
+    }
+  ],
+  "refused": [
+    {
+      "name": "the check character changed",
+      "typed": "LACFA-YD92-MYTA"
+    },
+    {
+      "name": "a character of the address changed",
+      "typed": "LBCFB-YD92-MYTA"
+    },
+    {
+      "name": "a character of the code changed",
+      "typed": "LACFB-YD92-MBTA"
+    },
+    {
+      "name": "two characters side by side swapped",
+      "typed": "ALCFB-YD92-MYTA"
+    },
+    {
+      "name": "12 characters",
+      "typed": "LACFB-YD92-MYT"
+    },
+    {
+      "name": "14 characters",
+      "typed": "LACFB-YD92-MYTAA"
+    },
+    {
+      "name": "7 characters",
+      "typed": "YD92-MYT"
+    },
+    {
+      "name": "9 characters",
+      "typed": "YD92-MYTAA"
+    },
+    {
+      "name": "the letter O, which the alphabet does not have",
+      "typed": "OACFB-YD92-MYTA"
+    },
+    {
+      "name": "the digit 0",
+      "typed": "0ACFB-YD92-MYTA"
+    },
+    {
+      "name": "the letter I",
+      "typed": "IACFB-YD92-MYTA"
+    },
+    {
+      "name": "the digit 1",
+      "typed": "1ACFB-YD92-MYTA"
+    },
+    {
+      "name": "dots in place of hyphens",
+      "typed": "LACFB.YD92.MYTA"
+    },
+    {
+      "name": "nothing",
+      "typed": ""
+    }
+  ],
+  "single_changes": {
+    "of": "LACFB-YD92-MYTA",
+    "changes": 403,
+    "refused": 364
+  }
+}

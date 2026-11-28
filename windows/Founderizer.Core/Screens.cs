@@ -2400,6 +2400,8 @@ public sealed record EnrollForm
 {
     public const string Title = "Add this PC";
     public const string Heading = "The code";
+    /// <summary>The form that every Mac shows until Setup's F7 B6, whose 13 characters (<see cref="PairingCode"/>) this
+    /// field reads already: the placeholder changes with B6 and the owner's yes.</summary>
     public const string Placeholder = "XXXX-XXXX";
     public const string Footer = "In the Mac app: Settings, Servers, Add device, New code. The code works for ten minutes and once.";
 
@@ -2409,11 +2411,14 @@ public sealed record EnrollForm
     public bool Working { get; init; }
     public string? Problem { get; init; }
 
-    /// <summary>He typed: the form with the new code, and whether a whole new code sends itself now.</summary>
-    public (EnrollForm Form, bool Send) Typed(string code)
+    /// <summary>He typed: the form with the new code, and whether a whole new code sends itself now
+    /// (<see cref="PairingCode.Whole"/>: 13 characters go, and 8 of an older Mac; 8 wait after a first group of 5, where
+    /// their first 5 carry the Tailscale hub that this PC knows, and, with no hub or a hub that the rule cannot compare,
+    /// in any form but XXXX-XXXX). <paramref name="hub"/>: the hub that this PC knows, or null; each caller gives it.</summary>
+    public (EnrollForm Form, bool Send) Typed(string code, Uri? hub)
     {
         var form = this with { Code = code };
-        if (HubClient.NormalizedCode(code) is not { } whole || whole == Sent || Working) return (form, false);
+        if (PairingCode.Whole(code, hub) is not { } whole || whole == Sent || Working) return (form, false);
         return (form with { Sent = whole, Working = true, Problem = null }, true);
     }
 
@@ -2424,8 +2429,17 @@ public sealed record EnrollForm
     public EnrollForm Answered(string? problem) =>
         problem is null ? this with { Code = "", Working = false, Problem = null } : this with { Working = false, Problem = problem };
 
+    /// <summary>The hub answered (<see cref="Answered(string)"/>), and whether the field's code goes now: a code that he
+    /// typed on while the last one was on its way goes when it is whole and new (8 of an older Mac's form went, then
+    /// the 13 came), as <see cref="Typed"/> gives it.</summary>
+    public (EnrollForm Form, bool Send) Answered(string? problem, Uri? hub)
+    {
+        var form = Answered(problem);
+        return problem is null ? (form, false) : form.Typed(form.Code, hub);
+    }
+
     public bool ShowsTryAgain =>
-        !Working && HubClient.NormalizedCode(Code) is { } code && code == Sent && !RefusedCode(Problem);
+        !Working && PairingCode.Letters(Code) is { } code && code == Sent && !RefusedCode(Problem);
 
     /// <summary>The words of a code that the hub refused, which cannot go again.</summary>
     public static bool RefusedCode(string? words) =>

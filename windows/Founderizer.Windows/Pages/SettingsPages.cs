@@ -153,7 +153,7 @@ internal sealed class AddThisPcPage : IPageView
         stack.Children.Add(Form.Heading(EnrollForm.Heading));
         code = new Field(56, 26, 11, Form.TextBox(Look.Brush(Look.White(0.4)), centred: true, semibold: true, spacing: 19, nudge: 9));
         code.Box.CharacterCasing = CharacterCasing.Upper;
-        code.Box.MaxLength = 16;
+        code.Box.MaxLength = 20;
         code.Show(EnrollForm.Placeholder, showsPlus: false, canSend: false);
         code.Typed += Typed;
         stack.Children.Add(Form.Card(new StackPanel { Padding = new Thickness(16, 12, 16, 12), Children = { code } }));
@@ -170,16 +170,20 @@ internal sealed class AddThisPcPage : IPageView
 
     private async void Typed(string text)
     {
-        var (next, send) = form.Typed(text);
+        // the hub that this PC knows decides where 8 letters wait for 13 (PairingCode.Whole)
+        var (next, send) = form.Typed(text, source.State.Hub);
         form = next;
-        if (!send || form.Sent is not { } whole) return;
-        problem.Visibility = Visibility.Collapsed;
-        var refused = await source.EnrollAsync(whole);
-        Readings.Note("enroll: " + (refused ?? "the PC took its key"));
-        form = form.Answered(refused);
-        if (refused is null) code.Clear();
-        problem.Text = form.Problem ?? "";
-        problem.Visibility = form.Problem is null ? Visibility.Collapsed : Visibility.Visible;
+        // the code that he typed on while the last one was on its way goes after its answer, when it is whole and new
+        while (send && form.Sent is { } whole)
+        {
+            problem.Visibility = Visibility.Collapsed;
+            var refused = await source.EnrollAsync(whole);
+            Readings.Note("enroll: " + (refused ?? "the PC took its key"));
+            (form, send) = form.Answered(refused, source.State.Hub);
+            if (refused is null) code.Clear();
+            problem.Text = form.Problem ?? "";
+            problem.Visibility = form.Problem is null ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 }
 

@@ -1815,8 +1815,8 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
     /// **Its step-by-step guide on founderizer.com**, in the language of the app's words (the owner's "Yes, as drawn" of
     /// 25 November 2026 to the link under each key page's field): nil for a provider whose guide is not on the site.
     public func guide(language: String?) -> URL? {
-        // Hostinger's guide joins once its page is live on the site.
-        guard [.hetzner, .digitalOcean, .vultr, .akamai].contains(self) else { return nil }
+        // A provider's guide joins once its page is live on the site.
+        guard [.hetzner, .digitalOcean, .vultr, .akamai, .hostinger].contains(self) else { return nil }
         let spanish = language.map { $0 == "es" || $0.hasPrefix("es-") || $0.hasPrefix("es_") } == true
         return URL(string: "https://founderizer.com\(spanish ? "/es" : "")/guides/\(rawValue)")
     }

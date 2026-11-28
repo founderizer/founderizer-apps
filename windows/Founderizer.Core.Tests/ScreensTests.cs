@@ -445,12 +445,12 @@ public sealed class ScreensTests
     public void AWholeCodeSendsItselfOnceAndARefusedCodeMayNotGoAgain()
     {
         var form = new EnrollForm();
-        var (typed, send) = form.Typed("ABCD-EF");
+        var (typed, send) = form.Typed("ABCD-EF", null);
         Assert.IsFalse(send);
-        (typed, send) = typed.Typed("ABCD-EFGH");
+        (typed, send) = typed.Typed("ABCD-EFGH", null);
         Assert.IsTrue(send);
         Assert.IsTrue(typed.Working);
-        (typed, send) = typed.Typed("abcd efgh");
+        (typed, send) = typed.Typed("abcd efgh", null);
         Assert.IsFalse(send, "a code goes once");
         var refused = typed.Answered("This code did not work. Make a new one on your Mac.");
         Assert.IsFalse(refused.ShowsTryAgain);
