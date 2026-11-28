@@ -2,7 +2,9 @@ import FleetCore
 import SwiftUI
 
 /// One person (UI-API.md 1.17): what the agent is told about them, who they may write to, where they write from, and
-/// the conversations they have had. Each control saves itself, as in an agent's Settings: a dropdown and a checkbox
+/// the conversations they have had. **Where they write from has no Add** (the owner's answer of 26 November 2026 to
+/// question 3 of `channels-2026-11-26`: "A typed number is only a claim"): a sender's ID comes from Wrote and was not
+/// answered, with Add, and a person of the org links their own chat app. Each control saves itself, as in an agent's Settings: a dropdown and a checkbox
 /// at once, a field when it loses focus or on Return.
 ///
 /// Remove takes everything of theirs with it — their conversations and every message — so it asks once in its own
@@ -23,11 +25,6 @@ struct PersonPage: View {
     @State private var daily = ""
     @State private var editing: String?
     @State private var saving: [String: SaveState] = [:]
-    @State private var newHandle: PersonInput.HandleInput?
-    /// Telegram: the link of a person's invite (CHAT-APPS.md 19.4), with the person that it is for, or why there is
-    /// none.
-    @State private var inviteLink: (person: Int, url: URL)?
-    @State private var inviteProblem: String?
     @State private var confirming = false
     @State private var problem: String?
     @FocusState private var focus: String?
@@ -39,9 +36,6 @@ struct PersonPage: View {
     private var canWrite: Bool { store.writesNow && store.state?.db != nil }
     /// The agents a person may reach: every configured agent but the fleet's manager, which the hub refuses.
     private var agents: [FleetAgent] { (store.state?.agents ?? []).filter { $0.role != "manager" } }
-    /// The fleet's chat accounts, which say whose agents have a Telegram bot: the store's reading, which the agent
-    /// pages keep too (`AgentPage.prefetch`).
-    private var channels: ChatAppsSnapshot? { store.reading(AgentPage.channelsName) }
 
     var body: some View {
         FleetPage(person?.name ?? String(l10n: "Person"), back: FleetBack("People", action: back)) {
@@ -76,11 +70,6 @@ struct PersonPage: View {
         }
         .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
         .task(id: id) { fill() }
-        // again when the hub's reading is current again (`isFresh`): a read of an old one does not go
-        .task(id: "\(store.hub)/\(store.state?.db ?? "")/\(id)/\(store.isFresh)") { await readChannels() }
-        // the Telegram form that closes, in any way, takes its link with it: the next one asks the kept invite again
-        // (`KeptInvite.serves`), which the person may have used since
-        .onChange(of: newHandle?.app == "telegram") { _, shows in if !shows { inviteLink = nil; inviteProblem = nil } }
         .onChange(of: person?.name) { if focus != "name" { fill() } }
         .onChange(of: person?.note) { if focus != "note" { fill() } }
         .onChange(of: person?.daily_set) { if focus != "daily" { fill() } }
@@ -164,163 +153,17 @@ struct PersonPage: View {
                     HStack(spacing: 8) {
                         BrandMark(app: handle.app, size: 13).foregroundStyle(FleetStyle.muted)
                         IconButton(symbol: "trash", words: String(l10n: "Remove this handle")) {
-                            Task { await writeHandle(.exact(app: handle.app, handle: handle.handle), delete: true) }
+                            Task { await removeHandle(.exact(app: handle.app, handle: handle.handle)) }
                         }.disabled(!canWrite)
                             .accessibilityIdentifier("person-handle-remove-\(handle.id)")
                     }
                 }
             }
-            if let draft = newHandle {
-                if draft.app == "telegram" { inviteForm(person) } else { handleForm(draft, of: person) }
-            }
-            if person.handles.isEmpty, newHandle == nil {
+            if person.handles.isEmpty {
                 FormRow("No handle yet", symbol: "bubble.left",
                         warning: String(l10n: "Without one they cannot reach \(People.agentWords(person.agentNames))."))
             }
-        } accessory: {
-            if newHandle == nil, person.handles.count < People.handlesMax {
-                Button("Add handle") { newHandle = .init() }.buttonStyle(FleetOutlineButtonStyle())
-                    .disabled(!canWrite).accessibilityIdentifier("person-handle-add")
-            }
         }
-    }
-
-    /// One more place this person writes from. The owner writes their phone number, not a WhatsApp ID: the app
-    /// makes the ID and shows what it made (`PersonInput.HandleInput`).
-    private func handleForm(_ draft: PersonInput.HandleInput, of person: PeopleSnapshot.Person) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                appChoice(draft, of: person)
-                TextField(text: Binding(get: { draft.typed }, set: { newHandle?.typed = $0 }), prompt: Text(verbatim: "")) {
-                    Text(People.handlePlaceholder(draft.app))
-                }
-                    .fieldPlaceholder(People.handlePlaceholder(draft.app), shows: draft.typed.isEmpty)
-                    .fleetField().frame(width: 220)
-                    .onSubmit { Task { await writeHandle(draft) } }
-                    .accessibilityIdentifier("person-handle-id")
-                Spacer(minLength: 8)
-                Button("Cancel") { newHandle = nil }.buttonStyle(FleetOutlineButtonStyle())
-                Button("Add") { Task { await writeHandle(draft) } }.buttonStyle(FleetPrimaryButtonStyle())
-                    .disabled(!canWrite || draft.problem != nil).accessibilityIdentifier("person-handle-save")
-            }
-            Text(handleLine(draft))
-                .font(FormMetrics.detail)
-                .foregroundStyle(draft.problem != nil && !draft.typed.isEmpty ? .orange : FleetStyle.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }.padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 12)
-    }
-
-    /// The chat app of a new handle: Telegram too on a hub that serves it, for a person with an agent on Telegram (the
-    /// owner's "Yes, as recommended" of 17 November 2026), whose handle comes from an invite. While Telegram is the
-    /// choice, it stays one of the options.
-    private func appChoice(_ draft: PersonInput.HandleInput, of person: PeopleSnapshot.Person) -> some View {
-        let served = store.state?.ui_features?.contains(ChatApps.telegramFeature) == true
-        let telegram = served && (draft.app == "telegram" || !telegramAgents(of: person, in: channels).isEmpty)
-        let apps = People.apps + (telegram ? ["telegram"] : [])
-        return FleetSelect("App", selection: Binding(get: { draft.app }, set: { newHandle?.app = $0 }),
-                           options: apps.map { FleetOption($0, ChatApps.title($0), mark: .chatApp($0)) })
-            .accessibilityIdentifier("person-handle-app")
-    }
-
-    /// Telegram (CHAT-APPS.md 19.4): Telegram's apps do not show a person their ID, so in place of a field the person's
-    /// own invite link to the bot of one of their agents, as a QR code and as a link with Copy. Their Telegram is theirs
-    /// when they open it and press Start; the row then shows here by itself.
-    private func inviteForm(_ person: PeopleSnapshot.Person) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                appChoice(newHandle ?? .init(app: "telegram"), of: person)
-                Spacer(minLength: 8)
-                Button("Cancel") { newHandle = nil; inviteLink = nil; inviteProblem = nil }.buttonStyle(FleetOutlineButtonStyle())
-            }
-            if let link = inviteLink.flatMap({ $0.person == person.id ? $0.url : nil }) {
-                HStack(alignment: .center, spacing: 14) {
-                    QRCodeView(text: link.absoluteString, size: 132).accessibilityIdentifier("person-invite-qr")
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Text(verbatim: link.absoluteString).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                                .accessibilityIdentifier("person-invite-link")
-                            MessageAction(symbol: "square.on.square", label: String(l10n: "Copy link")) { copyMessage(link.absoluteString) }
-                                .foregroundStyle(FleetStyle.muted)
-                        }
-                        Text("\(person.name) opens it and presses Start. It works for 7 days.")
-                            .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            } else if let inviteProblem {
-                Text(inviteProblem).font(FormMetrics.detail).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("person-invite-problem")
-            }
-            // While the hub makes the link, no line shows (the owner's "Yes, as recommended" of 17 November 2026).
-        }
-        .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 12)
-        // again when the app may write again (`canWrite`, which is `writesNow`): the link comes by itself
-        .task(id: "\(person.id)/\(canWrite)") { await makeInvite(person) }
-    }
-
-    /// The fleet's chat accounts again as the page opens, on a hub that serves Telegram: Add handle offers Telegram
-    /// from them. A read that fails keeps the last reading.
-    private func readChannels() async {
-        guard store.state?.ui_features?.contains(ChatApps.telegramFeature) == true, store.isFresh,
-              let db = store.state?.db else { return }
-        let start = store.pageReadStart()
-        if let fresh = try? await AgentPage.readAccounts(store, hub: store.hub, database: db, from: start), !Task.isCancelled {
-            store.keep(fresh, as: AgentPage.channelsName, from: start)
-        }
-    }
-
-    /// The person's agents whose Telegram bot can take their invite now, in the order of their list: a bot that is on
-    /// and has said its name (`telegramInviteAccount`, the hub's own test).
-    private func telegramAgents(of person: PeopleSnapshot.Person, in accounts: ChatAppsSnapshot?) -> [String] {
-        person.agentNames.filter { accounts?.canInviteOnTelegram(to: $0) == true }
-    }
-
-    /// The invite, for the first of the person's agents that has a Telegram bot. Add handle offers Telegram only for a
-    /// person who has one; when the accounts read here show none of theirs any more, the form closes, as Cancel
-    /// closes it, and Telegram is no longer offered.
-    private func makeInvite(_ person: PeopleSnapshot.Person) async {
-        // a link of this person that shows stays: a reading that is current again makes no new one
-        guard canWrite, let db = store.state?.db, inviteLink?.person != person.id else { return }
-        inviteLink = nil; inviteProblem = nil
-        let chat = ChatAppsClient(), hub = store.hub
-        do {
-            var accounts: ChatAppsSnapshot
-            // A write can change which bot may issue the invite while the accounts are on their way.
-            repeat {
-                let start = store.pageReadStart()
-                accounts = try await AgentPage.readAccounts(store, hub: hub, database: db, from: start)
-                guard !Task.isCancelled, store.hub == hub, store.state?.db == db, canWrite else { return }
-                if store.keep(accounts, as: AgentPage.channelsName, from: start) { break }
-            } while true
-            // the agent of the invite that this Mac keeps, while it is still theirs and on Telegram: the hub keeps one
-            // open invite for each person, so another agent's would stop the link that the owner sent
-            let onTelegram = telegramAgents(of: person, in: accounts)
-            let kept = store.keptInviteAgent(for: person)
-            guard let agent = onTelegram.first(where: { $0 == kept }) ?? onTelegram.first,
-                  let bot = accounts.telegramInviteAccount(of: agent) else {
-                if newHandle?.app == "telegram" { newHandle = nil }
-                return
-            }
-            let made = try await store.telegramInvite(for: person, agent: agent, bot: bot) {
-                try await chat.makeInvite(hub: hub, database: db, client: store.installation, person: person.id, agent: agent)
-            }
-            guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
-            // the link on the bot that the invite is for, as the setup steps take it (`LinkCode.link(on:)`)
-            guard let link = made.link(on: bot.id) else {
-                inviteProblem = String(l10n: "The hub gave no link.")
-                return
-            }
-            inviteLink = (person.id, link)
-        } catch {
-            // a read that the form stopped (it closed, or the hub's reading turned old) says nothing
-            if !Task.isCancelled, store.hub == hub, store.state?.db == db { inviteProblem = People.reason(error) }
-        }
-    }
-
-    /// One line under the field: what the app made of what the owner wrote, what is wrong with it, or what to write.
-    private func handleLine(_ draft: PersonInput.HandleInput) -> String {
-        if draft.typed.isEmpty { return People.handleHint(draft.app) }
-        if let why = draft.problem { return why }
-        return String(l10n: "\(ChatApps.title(draft.app)) ID: \(draft.handle)")
     }
 
     // MARK: their conversations
@@ -451,22 +294,12 @@ struct PersonPage: View {
         }
     }
 
-    private func writeHandle(_ handle: PersonInput.HandleInput, delete: Bool = false) async {
+    private func removeHandle(_ handle: PersonInput.HandleInput) async {
         guard let person, canWrite, let db = store.state?.db else { return }
-        if !delete, let why = handle.problem { problem = why; return }
         problem = nil
-        // a Telegram handle that goes takes the kept invite with it, before the hub's answer, which can be lost: the
-        // person may have used its code. An open Telegram form closes with it, as a write that goes through closes
-        // it, so a refused delete leaves no empty form
-        if delete, handle.app == "telegram" {
-            store.forgetTelegramInvite(of: person.id)
-            inviteLink = nil
-            if newHandle?.app == "telegram" { newHandle = nil }
-        }
         do {
             _ = try await client.handle(hub: store.hub, database: db, client: store.installation,
-                                        person: person.id, handle: handle, delete: delete)
-            newHandle = nil
+                                        person: person.id, handle: handle, delete: true)
             await changed()
         } catch {
             problem = People.reason(error)
@@ -493,37 +326,5 @@ struct PersonPage: View {
             try? await Task.sleep(for: .seconds(2))
             if saving[field] == .saved { saving[field] = nil }
         }
-    }
-}
-
-extension FleetStore {
-    /// A person's Telegram invite: the one that this Mac keeps, while a visit may show it again
-    /// (`KeptInvite.serves`), else a new one from the hub. A new one always takes the kept one's place, because the
-    /// hub has just deleted that one's code: it is kept only with a link on its bot (`KeptInvite.init`), and else
-    /// nothing is kept, so the next visit asks the hub again.
-    func telegramInvite(for person: PeopleSnapshot.Person, agent: String, bot: ChatAppsSnapshot.Account?,
-                        make: () async throws -> LinkCode) async throws -> LinkCode {
-        let name = "people.invite.\(person.id)"
-        if let kept: KeptInvite = reading(name),
-           kept.serves(person, agent: agent, bot: bot, serverTime: state?.time ?? 0, readAt: lastSuccess ?? Date(), now: Date()) {
-            return kept.invite
-        }
-        let address = hub, database = state?.db
-        let made = try await make()
-        guard hub == address, state?.db == database else { throw CancellationError() }
-        keep(KeptInvite(made, person: person, agent: agent, bot: bot), as: name)
-        return made
-    }
-
-    /// No kept invite for this person: their Telegram handle went, so its code may be used already, and a visit
-    /// that showed it again would give a link that no longer works.
-    func forgetTelegramInvite(of person: Int) {
-        keep(nil, as: "people.invite.\(person)")
-    }
-
-    /// The agent of the invite that this Mac keeps for this person, or nil.
-    func keptInviteAgent(for person: PeopleSnapshot.Person) -> String? {
-        guard let kept: KeptInvite = reading("people.invite.\(person.id)"), kept.added == person.added else { return nil }
-        return kept.agent
     }
 }

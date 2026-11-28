@@ -45,6 +45,22 @@ struct PeopleSnapshotTests {
         #expect(people.peopleList.map(\.name) == ["Laura", "Ana Ruiz", "Tom Vega"])
     }
 
+    /// **Only the owner's own people count toward the limit of 200**: a person whom an account's rule for people
+    /// outside the org made (`stranger`, owner API 1.358) is apart from it, as the hub keeps them, and a person of an
+    /// older hub, which sends no `stranger`, counts. Add person counted every row, so 50 people and 150 such senders
+    /// read as "You already have 200 people." and nothing was sent.
+    @Test func onlyTheOwnersOwnPeopleCountTowardTheLimit() throws {
+        var object = try #require(try JSONSerialization.jsonObject(with: fixture("people-full")) as? [String: Any])
+        var people = try #require(object["people"] as? [[String: Any]])
+        #expect(people.count == 3)
+        people[0]["stranger"] = "whatsapp-studio"
+        people[1]["stranger"] = NSNull()
+        object["people"] = people
+        let read = try JSONDecoder().decode(PeopleSnapshot.self, from: json(object))
+        #expect(read.peopleList.count == 3 && read.ownCount == 2 && read.peopleList[0].stranger == "whatsapp-studio")
+        #expect(try snapshot().ownCount == 3)
+    }
+
     /// Plan P1: the roles are data the owner writes, so the list is whatever the hub sends — any name, in its order,
     /// and no daily limit for a role of staff. A role of a newer shape takes nothing else of the page with it.
     @Test func theRolesAreTheHubsOwnWithAnyNameAndNoLimitForStaff() throws {
@@ -283,11 +299,21 @@ struct PersonInputTests {
         #expect(handle.problem?.contains("200 characters") == true)
     }
 
+    /// **An ID that the hub holds or that a chat app sent is taken as it is, of any chat app**: removing one sends it
+    /// back exactly, and Add on a sender of Wrote and was not answered (the one way a customer gets a handle since 26
+    /// November 2026) adds a Telegram sender too, whose ID is the user's number. The check of a typed handle took only
+    /// WhatsApp and Discord, so Add person refused a Telegram sender with "Choose WhatsApp or Discord."
     @Test func aHandleTheHubAlreadyHoldsIsNeverRewritten() {
         // Removing one sends the ID back exactly as the hub gave it, whatever shape it has.
         let odd = PersonInput.HandleInput.exact(app: "whatsapp", handle: "34600111999")
         #expect(odd.handle == "34600111999" && odd.problem == nil)
         #expect(PersonInput.HandleInput.exact(app: "discord", handle: "500600700").handle == "500600700")
+        var sender = PersonInput()
+        sender.name = "Sam"
+        sender.handles = [.exact(app: "telegram", handle: "5000000002")]
+        #expect(sender.problem() == nil && sender.addFields["handles"] as? [[String: String]] == [["app": "telegram", "handle": "5000000002"]])
+        // a chat app that the hub does not serve is still refused, sent or typed
+        #expect(PersonInput.HandleInput.exact(app: "signal", handle: "5000000002").problem == "Choose WhatsApp or Discord.")
     }
 
     @Test func aNewPersonCarriesEveryPlaceTheyWriteFromAndTheirAgentsSorted() throws {
@@ -516,7 +542,6 @@ struct PeopleWordsTests {
     @Test func theWordsOfAPageAreShortAndTrue() {
         #expect(People.roleWord("customer") == "Customer" && People.roleWord("supervisor") == "Supervisor")
         #expect(People.roleWord("deputy") == "Deputy" && People.roleWord("peer") == "Peer")
-        #expect(People.handleAsk("whatsapp") == "Their phone number" && People.handleAsk("discord").contains("Discord"))
         #expect(People.whatsappID(from: "+34 600 111 999") == "34600111999@s.whatsapp.net")
         #expect(People.whatsappID(from: "12345") == nil && People.whatsappID(from: "") == nil)
         #expect(People.roleWord("something-new") == "Something-new")     // an unknown role shows as its own text

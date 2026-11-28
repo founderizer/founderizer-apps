@@ -15,14 +15,14 @@ import SwiftUI
 ///   4. **Who can Ana talk to?** Each agent as its own mark and name, as the sidebar draws it (the owner, the same day:
 ///      "here we should see each agent icon, make it more visual!"). One that cannot hold a conversation says why on
 ///      hover. Opened from one agent's People, the person reaches that agent and this step is left out.
-///   5. **Where does Ana write from?** Every place they write from, and the two apps that add one more: the same
-///      person writes from WhatsApp and from Discord and is one person. Add person is here.
-///   6. **Ana's phone number**, or their Discord user ID: one field, and under it where to find it, which stays while
-///      he types. Founderizer makes the chat app's own ID from it, so the owner never types
-///      `34600111222@s.whatsapp.net`.
+///   5. **Where does Ana write from?** Only for a sender nobody answered (Settings › People › Wrote and was not
+///      answered, Add): the ID that the chat app really sent, which nobody can change here, and Add person.
 ///
-/// A button shows only while it can be pressed, and while the hub adds the person the title is its moving words.
-/// The hub takes the whole person in one command, with every handle (`POST /ui/people`).
+/// **No field takes a number or an ID** (the owner's "From 'Wrote and was not answered', with Add" of 26 November 2026
+/// to question 3 of `channels-2026-11-26`: "A typed number is only a claim"). A person whom Add person opened with no
+/// sender has no place here: the last step of the ones above adds them (Add person on step four, and a role's card on
+/// step three where step four is left out). A button shows only while it can be pressed, and while the hub adds the
+/// person the title is its moving words. The hub takes the whole person in one command (`POST /ui/people`).
 struct AddPersonView: View {
     @Bindable var store: FleetStore
     /// The roles as the hub serves them. The People page opens this wizard only once it has read them.
@@ -35,12 +35,10 @@ struct AddPersonView: View {
     let back: () -> Void
     let added: (Int) -> Void
 
-    private enum Page { case who, note, role, agents, places, handle }
+    enum Page { case who, note, role, agents, places }
 
     @State private var page = Page.who
     @State private var input = PersonInput()
-    /// The place that page six is asking about.
-    @State private var draft = PersonInput.HandleInput()
     @State private var busy = false
     @State private var problem: String?
     @State private var filled = false
@@ -54,17 +52,23 @@ struct AddPersonView: View {
     /// Who reads the note: the agent whose People this is, or every agent they will talk to.
     private var reader: String { agent.map(People.agentWord) ?? "your agents" }
 
+    /// The step that adds the person: Where does Ana write from? for a sender nobody answered, else the last one before.
+    private var last: Page { Self.last(agent: agent, places: !input.handles.isEmpty) }
+
     var body: some View {
         // Back stands at the page's top left, where every setup page has it.
         SetupPage { backLink } step: {
             Group {
-                switch page {
-                case .who: whoPage
-                case .note: notePage
-                case .role: rolePage
-                case .agents: agentsPage
-                case .places: placesPage
-                case .handle: handlePage
+                if busy {
+                    SetupStep(title: String(l10n: "Adding \(who)"), waits: true) { mark }
+                } else {
+                    switch page {
+                    case .who: whoPage
+                    case .note: notePage
+                    case .role: rolePage
+                    case .agents: agentsPage
+                    case .places: placesPage
+                    }
                 }
             }.animation(.easeInOut(duration: 0.18), value: page)
         }
@@ -82,7 +86,6 @@ struct AddPersonView: View {
         case .role: String(l10n: "What is \(who) to you?")
         case .agents: String(l10n: "Who can \(who) talk to?")
         case .places: String(l10n: "Where does \(who) write from?")
-        case .handle: draft.app == "whatsapp" ? String(l10n: "\(who)'s phone number") : String(l10n: "\(who)'s Discord user ID")
         }
     }
 
@@ -107,23 +110,40 @@ struct AddPersonView: View {
         }
     }
 
-    /// One step on from `from`, or back from it. A Return that the field and the default button both take moves one
-    /// step and not two: the second press is no longer on the page it was made on.
+    /// One step on from `from`, or back from it; on from the last step, the hub adds the person. A Return that the
+    /// field and the default button both take moves one step and not two: the second press is no longer on the page it
+    /// was made on.
     private func step(from: Page, back: Bool = false) {
         guard page == from else { return }
         problem = nil
-        switch (from, back) {
-        case (.who, false): page = .note
-        case (.note, false): page = .role
-        case (.note, true): page = .who
-        case (.role, false): page = agent == nil ? .agents : .places
-        case (.role, true): page = .note
-        case (.agents, false): page = .places
-        case (.agents, true): page = .role
-        case (.places, true): page = agent == nil ? .agents : .role
-        case (.handle, true): page = .places
-        default: break
+        if !back, from == last {
+            Task { await add() }
+            return
         }
+        if let next = Self.next(from: from, back: back, agent: agent) { page = next }
+    }
+
+    /// **The page after `from`, or before it**, or nil where there is none: step four only with no agent of the page
+    /// around, and step five only when the person has a place (`last`).
+    static func next(from: Page, back: Bool, agent: String?) -> Page? {
+        switch (from, back) {
+        case (.who, false): .note
+        case (.note, false): .role
+        case (.note, true): .who
+        case (.role, false): agent == nil ? .agents : .places
+        case (.role, true): .note
+        case (.agents, false): .places
+        case (.agents, true): .role
+        case (.places, true): agent == nil ? .agents : .role
+        default: nil
+        }
+    }
+
+    /// **The step whose way on adds the person**: Where does Ana write from? for a person with a place (a sender
+    /// nobody answered), else step four, or step three where the agent of the page left step four out. A person with
+    /// no place never sees a step five with nothing on it.
+    static func last(agent: String?, places: Bool) -> Page {
+        places ? .places : agent == nil ? .agents : .role
     }
 
     // MARK: one: their name
@@ -187,6 +207,8 @@ struct AddPersonView: View {
             VStack(spacing: FleetSpace.inside) {
                 ForEach(roles) { role in roleCard(role) }
             }
+            // The last step where a role's card adds the person: what the hub refused stays under the cards.
+            if last == .role, let problem { SetupWarning(problem).accessibilityIdentifier("new-person-problem") }
         }
     }
 
@@ -220,11 +242,15 @@ struct AddPersonView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 12)], spacing: 12) {
                 ForEach(agents) { one in agentTile(one) }
             }
-            // A fleet of many agents scrolls: Continue stays in view (`SetupAction`).
+            // A fleet of many agents scrolls: the way on stays in view (`SetupAction`).
             SetupAction {
-                Button("Continue") { step(from: .agents) }
-                    .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                    .accessibilityIdentifier("add-person-agents-on")
+                if last == .agents {
+                    adding
+                } else {
+                    Button("Continue") { step(from: .agents) }
+                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                        .accessibilityIdentifier("add-person-agents-on")
+                }
             }
         }
     }
@@ -267,92 +293,35 @@ struct AddPersonView: View {
 
     // MARK: five: where they write from
 
-    @ViewBuilder private var placesPage: some View {
-        if busy {
-            SetupStep(title: String(l10n: "Adding \(who)"), waits: true) { mark }
-        } else {
-            SetupStep(title: title) { mark } content: {
-                if !input.handles.isEmpty {
-                    VStack(spacing: 8) { ForEach(input.handles) { place in placeRow(place) } }
-                }
-                if input.handles.count < People.handlesMax {
-                    HStack(alignment: .top, spacing: 14) { ForEach(People.apps, id: \.self) { app in appCard(app) } }
-                }
-                SetupAction {
-                    if let warning = problem ?? reason { SetupWarning(warning).accessibilityIdentifier("new-person-problem") }
-                    if reason == nil, canWrite {
-                        Button("Add person") { Task { await add() } }
-                            .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                            .accessibilityIdentifier("new-person-save")
-                    }
-                }
-            }
+    private var placesPage: some View {
+        SetupStep(title: title) { mark } content: {
+            VStack(spacing: 8) { ForEach(input.handles) { place in placeRow(place) } }
+            SetupAction { adding }
         }
     }
 
-    /// One place they write from: the app's own mark and the ID, as their row shows it later, and its removal.
+    /// The way on of the last step: what the hub would refuse or refused, and the white Add person.
+    @ViewBuilder private var adding: some View {
+        if let warning = problem ?? reason { SetupWarning(warning).accessibilityIdentifier("new-person-problem") }
+        if reason == nil, canWrite {
+            Button("Add person") { Task { await add() } }
+                .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("new-person-save")
+        }
+    }
+
+    /// One place they write from: the app's own mark and the ID that the chat app sent, as their row shows it later.
+    /// It has no control: nobody changes the ID that the app sent.
     private func placeRow(_ place: PersonInput.HandleInput) -> some View {
         HStack(spacing: 12) {
             BrandMark(app: place.app, size: 17).foregroundStyle(BrandMark.color(place.app))
             Text(place.handle.split(separator: "@").first.map(String.init) ?? place.handle).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 8)
-            IconButton(symbol: "trash", words: String(l10n: "Remove this one")) {
-                input.handles.removeAll { $0.id == place.id }
-            }.accessibilityIdentifier("add-person-remove-\(place.app)")
         }
-        .padding(.leading, 16).padding(.trailing, 8).padding(.vertical, 8)
+        .padding(.horizontal, 16).padding(.vertical, 12)
         .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.radius))
         .overlay(RoundedRectangle(cornerRadius: FormMetrics.radius).strokeBorder(FleetStyle.line, lineWidth: 0.5))
-    }
-
-    /// One chat app, as a card with its own mark: the brand's, never a speech bubble.
-    private func appCard(_ app: String) -> some View {
-        Button {
-            draft = .init(app: app)
-            page = .handle
-        } label: {
-            HStack(spacing: 12) {
-                BrandMark(app: app, size: 24).foregroundStyle(BrandMark.color(app))
-                Text(ChatApps.title(app)).fontWeight(.medium).foregroundStyle(FleetStyle.text)
-                Spacer(minLength: 0)
-            }
-            .padding(18).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-        }
-        .buttonStyle(FleetCardButtonStyle())
-        .accessibilityIdentifier("add-person-app-\(app)")
-    }
-
-    // MARK: six: the one field
-
-    private var handlePage: some View {
-        SetupStep(title: title) {
-            BrandMark(app: draft.app, size: SetupMetrics.mark).foregroundStyle(BrandMark.color(draft.app))
-        } content: {
-            SetupField(placeholder: People.handlePlaceholder(draft.app), text: $draft.typed,
-                       wrong: !draft.typed.isEmpty && draft.problem != nil) { keep() }
-                .accessibilityIdentifier("new-person-handle")
-            // Where to find it stays under the field while he types; what is wrong with it is said under that.
-            Text(People.handleHint(draft.app)).foregroundStyle(FleetStyle.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("add-person-hint")
-            if !draft.typed.isEmpty, let why = draft.problem {
-                SetupWarning(why).accessibilityIdentifier("add-person-handle-problem")
-            } else if draft.problem == nil {
-                Button("Add") { keep() }
-                    .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                    .accessibilityIdentifier("add-person-keep")
-            }
-        }
-    }
-
-    /// The place goes on the person's own list, and the owner is back where every place of theirs is.
-    private func keep() {
-        guard draft.problem == nil else { return }
-        if !input.handles.contains(where: { $0.app == draft.app && $0.handle == draft.handle }) {
-            input.handles.append(draft)
-        }
-        draft = .init()
-        page = .places
+        .accessibilityIdentifier("add-person-place-\(place.app)")
     }
 
     // MARK: the hub
@@ -371,7 +340,9 @@ struct AddPersonView: View {
     }
 
     private func add() async {
-        guard canWrite, reason == nil, let db = store.state?.db else { return }
+        guard canWrite, let db = store.state?.db else { return }
+        // A role's card that adds the person has no place for the line of a refusal before the press: it says it after.
+        if let reason { problem = reason; return }
         busy = true; problem = nil
         defer { busy = false }
         do {

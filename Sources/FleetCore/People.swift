@@ -191,6 +191,9 @@ extension PeopleSnapshot {
         public let agents: [PersonAgent]
         public let handles: [PersonHandle]
         public let conversations: [PersonConversation]
+        /// **The account whose rule for people outside the org made this person**, or nil for a person whom the owner
+        /// added (owner API 1.358). Such a person is not one of the owner's 200 people (`PeopleSnapshot.ownCount`).
+        public let stranger: String?
 
         public var isBlocked: Bool { blocked != nil }
         public var roleWord: String { People.roleWord(role) }
@@ -252,6 +255,11 @@ extension PeopleSnapshot {
     public var roleList: [Role] { roles ?? [] }
     /// Every person the owner added, in the hub's order.
     public var peopleList: [Person] { people ?? [] }
+    /// **The people of the owner's limit of 200** (`People.peopleMax`): every person but those whom an account's rule
+    /// for people outside the org made (`stranger`), which the hub keeps apart from that limit. A person of an older hub,
+    /// which sends no `stranger`, is one of them. With 50 people and 150 such senders, Add person said "You already
+    /// have 200 people." and sent nothing, while the hub had room.
+    public var ownCount: Int { peopleList.filter { $0.stranger == nil }.count }
     /// The hub answers the people of 1.17: without it the People page says so instead of showing an empty list.
     public var hasPeople: Bool { people != nil && roles != nil }
     public func role(_ name: String) -> Role? { roleList.first { $0.role == name } }
@@ -473,8 +481,9 @@ public struct PersonInput: Equatable, Sendable {
     }
 
     /// One place a person writes from. The owner writes what he knows — a phone number on WhatsApp, the user ID on
-    /// Discord — and this makes the ID the chat app sends. An ID that the hub already holds is kept exactly
-    /// (`exact`), so removing one never rewrites it.
+    /// Discord — and this makes the ID the chat app sends. An ID that the hub already holds, or that a chat app sent
+    /// (a sender of Wrote and was not answered), is kept exactly (`exact`), so removing one never rewrites it, and it
+    /// may be of any chat app, Telegram's too. Since 26 November 2026 the app has no field that types one.
     public struct HandleInput: Equatable, Sendable, Identifiable {
         public var app = "whatsapp"
         /// What the owner wrote.
@@ -512,7 +521,8 @@ public struct PersonInput: Equatable, Sendable {
 
         /// What this handle would be refused for, in the owner's words, or nil.
         public var problem: String? {
-            if !People.apps.contains(app) { return String(l10n: "Choose WhatsApp or Discord.") }
+            // An ID that the chat app sent may be Telegram's: only a typed one is WhatsApp's or Discord's.
+            if !(raw == nil ? People.apps : People.chatApps).contains(app) { return String(l10n: "Choose WhatsApp or Discord.") }
             let said = People.oneLine(typed)
             if said.isEmpty {
                 return app == "whatsapp" ? String(l10n: "Write their phone number, with the country code.")
@@ -599,20 +609,6 @@ extension People {
     /// Every chat app a handle can be on: Telegram's comes from the person's own invite link, never typed (CHAT-APPS.md
     /// 19.4), because Telegram's apps do not show a person their ID.
     public static let chatApps = ["whatsapp", "discord", "telegram"]
-
-    /// What the owner is asked for on each chat app, because the app makes the ID itself.
-    public static func handleAsk(_ app: String) -> String {
-        app == "whatsapp" ? "Their phone number" : "Their Discord user ID"
-    }
-
-    public static func handlePlaceholder(_ app: String) -> String {
-        app == "whatsapp" ? "+34 600 111 222" : "100200300"
-    }
-
-    public static func handleHint(_ app: String) -> String {
-        app == "whatsapp" ? String(l10n: "With the country code. Founderizer makes the WhatsApp ID itself.")
-                          : String(l10n: "Discord, Settings, Advanced, Developer Mode: right-click them and Copy User ID.")
-    }
 }
 
 // MARK: - the roles (plan P1, owner feature `contact_roles`)

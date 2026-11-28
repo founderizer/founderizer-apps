@@ -121,6 +121,10 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         /// A message of one of the owner's handles came in through this account (hub 1.243; nil from an older hub). A
         /// Telegram bot writes first to the owner only then: each bot needs his own Start (CHAT-APPS.md 19.4).
         public let owner_wrote: Bool?
+        /// **What the account does with a sender who is not the owner and no person of the People page**
+        /// (`team.json` `chat_apps.<id>.unknown`, CHAT-APPS.md 6.5): `ignore`, and from owner API 1.358 `customers`. nil
+        /// from a reading without it, which is `ignore`.
+        public let unknown: String?
 
         public var isEnabled: Bool { enabled != false }
         /// **No phone holds this WhatsApp number now**: it is not connected, the bridge knows no number for it, and the
@@ -178,22 +182,6 @@ public struct ChatAppsSnapshot: Decodable, Sendable {
         let own = accounts.filter { $0.app == app && $0.belongs(to: agent) }
         return own.first(where: \.isConnected) ?? own.first(where: \.isEnabled) ?? own.first
     }
-
-    /// **The account that a person's Telegram invite to this agent goes through** (CHAT-APPS.md 19.4), or nil when
-    /// none can take one now: a Telegram account of this agent alone that is on, whose bot has said its name, which the
-    /// link needs; a connected one first. It is the hub's own test (`new_invite_code`, `telegram_link`), so a person's
-    /// Add handle offers Telegram only where the hub makes the link; `channel` also gives an account that is off, whose
-    /// card still shows.
-    public func telegramInviteAccount(of agent: String) -> Account? {
-        let takers = accounts.filter { account in
-            account.app == "telegram" && account.belongs(to: agent) && account.isEnabled
-                && (account.name ?? "").range(of: "^[A-Za-z][A-Za-z0-9_]{3,31}$", options: .regularExpression) != nil
-        }
-        return takers.first(where: \.isConnected) ?? takers.first
-    }
-
-    /// A person's Telegram invite to this agent can be made now (`telegramInviteAccount`).
-    public func canInviteOnTelegram(to agent: String) -> Bool { telegramInviteAccount(of: agent) != nil }
 
     /// A channel of this agent needs the owner: its card is orange. The sidebar's dot and the card read the same state.
     public func needsOwner(_ agent: String, serverTime: Double?) -> Bool {
@@ -320,6 +308,67 @@ public struct ChannelCard: Equatable, Sendable {
     public func menu(for people: PeopleSnapshot?) -> [MenuItem] {
         (asksForOwnerLink(people) ? [.linkMe] : []) + menu
     }
+}
+
+/// **The row "People outside the org" of a channel card** (the owner's "Yes, build it" of 26 November 2026 to question 4
+/// of `channels-2026-11-26`, and his correction of the same day, the coordinator's D132: "it should only be unlimited for
+/// customers but never treat them as colleagues unless they are already Founderize users"): what the agent does with a
+/// message from a sender who is not the owner and no person of the People page (`ChatAppsSnapshot.Account.unknown`,
+/// CHAT-APPS.md 6.5). Two values: Ignore (the default) and As customers. Under its control stand only the lines that
+/// its pictures draw, one for each reason why the agent cannot take such a sender, under both values:
+///
+/// - **The agent's Shell box is on**: "Works only when <agent>'s Shell box is off." (DevOps D5: no stranger's words
+///   reach a session with a shell; a customer's agent runs with its Shell box off and keeps its connected tools).
+/// - **The agent runs on Other models** (`FleetAgent.model_account`): "Does not work when <agent> runs on Other
+///   models.": such an agent's server has no closed runtime (the hub's `conversation_refusal`).
+///
+/// A value that the app does not know, `colleagues` among them, shows as Ignore, and a choice of Ignore writes it. **The
+/// row shows only on a hub whose `ui_features` lists `chat_outsiders`** (`feature`): an older one takes `ignore` alone.
+/// As customers needs a live Teams licence (D132): while the fleet has none the hub refuses it with `teams_off` (409),
+/// whose words are the card's refusal line, and an account that holds it acts as Ignore. A card that is not connected
+/// has no row, as the pictures draw it on the connected card only, and neither has the fleet's manager, whom no person
+/// reaches (the hub's decision D6).
+public struct OutsidersRow: Equatable, Sendable {
+    /// `ui_features` of a hub that takes As customers (owner API 1.358).
+    public static let feature = "chat_outsiders"
+
+    public enum Rule: String, CaseIterable, Sendable {
+        case ignore, customers
+
+        public var words: String {
+            switch self {
+            case .ignore: String(l10n: "Ignore")
+            case .customers: String(l10n: "As customers")
+            }
+        }
+    }
+
+    public let rule: Rule
+    /// The account's rule as the hub holds it (`unknown`, `ignore` when the reading has none).
+    public let stored: String
+    /// The muted lines under the control, in order: one for each reason why the agent cannot take such a sender.
+    public let facts: [String]
+
+    /// The row of a card, or nil where the card has none. `agent` is the agent of the hub's reading, nil when the
+    /// reading has none; `features` is the hub's `ui_features`.
+    public init?(card: ChannelCard, agent name: String, in agent: FleetAgent?, features: [String]?) {
+        guard features?.contains(Self.feature) == true, card.kind == .connected, let account = card.account,
+              agent?.role != "manager" else { return nil }
+        stored = account.unknown ?? Rule.ignore.rawValue
+        rule = Rule(rawValue: stored) ?? .ignore
+        guard let agent else { facts = []; return }
+        let who = name.agentLabel
+        var facts: [String] = []
+        if ["worker", "lead"].contains(agent.role) && agent.can.contains("shell") {
+            facts.append(String(l10n: "Works only when \(who)'s Shell box is off."))
+        }
+        if agent.model_account != nil { facts.append(String(l10n: "Does not work when \(who) runs on Other models.")) }
+        self.facts = facts
+    }
+
+    /// **A choice of this value writes the account**: it differs from the rule that the hub holds. A rule that the app
+    /// does not know shows as Ignore, and a choice of Ignore must still write `ignore` over it.
+    public func changes(to choice: Rule) -> Bool { choice.rawValue != stored }
 }
 
 /// The Discord page (17.3) after Save: the bridge's first report after the send says how the new token went.
@@ -467,61 +516,11 @@ public struct LinkCode: Decodable, Sendable {
     /// The code as the owner types it: `XXXX-XXXX`.
     public var display: String { ChatApps.displayCode(code ?? "") }
 
-    /// **The link of this code on one account's bot**, or nil: the account of a person's Telegram invite. An answer
-    /// with none for it is the line "The hub gave no link." (CHAT-APPS.md 19.4), on a person's page as on the setup
-    /// steps, never a form that waits for ever.
-    public func link(on account: String?) -> URL? {
-        guard let account else { return nil }
-        return targets.first { $0.account == account }?.link
-    }
-
     /// Where to send the code: the first of `accounts` that has a link, else any target with a link, else the first
     /// of `accounts`, else the first target.
     public func target(preferring accounts: [String]) -> Target? {
         let preferred = accounts.compactMap { id in targets.first { $0.account == id } }
         return preferred.first { $0.link != nil } ?? targets.first { $0.link != nil } ?? preferred.first ?? targets.first
-    }
-}
-
-/// **A person's Telegram invite as this Mac made it** (CHAT-APPS.md 19.4). The hub keeps no code, and a new invite of a
-/// person replaces their open one, so a page that made a new one at each visit stopped the link that the owner had sent
-/// already. A visit shows the kept invite again while it works for another hour, is for the same agent and the same bot
-/// (its account and its username, which the link names), for the same person (with their `added` time, a second guard:
-/// since owner API 1.232 a removed person's number never comes back), and the person took no Telegram link since; else
-/// it asks the hub for a new one. **It keeps only an invite with a link on its bot**: one with none would show "The hub
-/// gave no link." at each visit for its 7 days, and make no new one.
-public struct KeptInvite: Sendable {
-    public let invite: LinkCode
-    public let agent: String
-    /// The bot's account and its username, which the link names.
-    public let bot: String
-    public let added: Double?
-    /// The person's Telegram handles when the invite was made.
-    public let handles: [String]
-
-    /// The invite to keep for this person's next visit, or nil when it has no link on its bot.
-    public init?(_ invite: LinkCode, person: PeopleSnapshot.Person, agent: String, bot: ChatAppsSnapshot.Account?) {
-        guard invite.link(on: bot?.id) != nil else { return nil }
-        self.invite = invite
-        self.agent = agent
-        self.bot = Self.name(of: bot)
-        self.added = person.added
-        self.handles = Self.telegramHandles(of: person)
-    }
-
-    /// A visit shows this invite again: the same person, agent and bot, no Telegram link of the person's since, and
-    /// more than an hour left by the hub's clock (`ChatApps.remaining`).
-    public func serves(_ person: PeopleSnapshot.Person, agent: String, bot: ChatAppsSnapshot.Account?,
-                       serverTime: Double, readAt: Date, now: Date) -> Bool {
-        self.agent == agent && bot != nil && self.bot == Self.name(of: bot) && added == person.added
-            && handles == Self.telegramHandles(of: person)
-            && ChatApps.remaining(expires: invite.expires, serverTime: serverTime, readAt: readAt, now: now) > 3600
-    }
-
-    static func name(of bot: ChatAppsSnapshot.Account?) -> String { bot.map { "\($0.id) \($0.name ?? "")" } ?? "" }
-
-    static func telegramHandles(of person: PeopleSnapshot.Person) -> [String] {
-        person.handles.filter { $0.app == "telegram" }.map(\.handle).sorted()
     }
 }
 
@@ -655,24 +654,30 @@ public struct ChatReceipt: Decodable, Sendable {
 }
 
 /// One account as the owner saves it in team.json (`POST /ui/team/chat-apps`): for one agent, with no `default`
-/// (CHAT-APPS.md 17.5). `unknown` is always `ignore`.
+/// (CHAT-APPS.md 17.5). **Its rule for people outside the org (`unknown`) is the one that the hub holds**: a write of
+/// another field (Turn on, a new label) sends the account's own rule back, and only a new account starts at `ignore`.
+/// Until 26 November 2026 every write sent `ignore`, which a hub before owner API 1.358 held alone; with the row "People
+/// outside the org" a Turn on would have taken his choice away and said nothing.
 public struct ChatAccountInput: Equatable, Sendable {
     public var app: String
     public var label: String
     public var agents: [String]
     public var enabled: Bool
+    /// `ignore` or `customers` (`OutsidersRow.Rule`), or the value that the hub holds, which a write sends back as it is.
+    public var unknown: String
 
-    public init(app: String, label: String, agents: [String], enabled: Bool = true) {
-        self.app = app; self.label = label; self.agents = agents; self.enabled = enabled
+    public init(app: String, label: String, agents: [String], enabled: Bool = true, unknown: String = OutsidersRow.Rule.ignore.rawValue) {
+        self.app = app; self.label = label; self.agents = agents; self.enabled = enabled; self.unknown = unknown
     }
 
     public init(_ account: ChatAppsSnapshot.Account) {
-        self.init(app: account.app, label: account.label, agents: account.agents, enabled: account.isEnabled)
+        self.init(app: account.app, label: account.label, agents: account.agents, enabled: account.isEnabled,
+                  unknown: account.unknown ?? OutsidersRow.Rule.ignore.rawValue)
     }
 
     /// The JSON object: `enabled` only when it is off.
     public var fields: [String: Any] {
-        var fields: [String: Any] = ["app": app, "label": label, "agents": agents, "unknown": "ignore"]
+        var fields: [String: Any] = ["app": app, "label": label, "agents": agents, "unknown": unknown]
         if !enabled { fields["enabled"] = false }
         return fields
     }
@@ -701,6 +706,14 @@ public enum ChatApps {
         case "telegram": "Telegram"
         default: app.capitalized
         }
+    }
+
+    /// **An account write that the hub refused as a conflict is read again and sent once more**: a 409 of team.json's
+    /// version, which another write changed under the page. Not a 409 with the code `teams_off` (As customers with no
+    /// live Teams licence, D132): the same write would be refused again, so its words stand in the card at once.
+    public static func triesAgain(after error: Error) -> Bool {
+        guard case HubError.refusal(let refusal) = error else { return false }
+        return refusal.status == 409 && refusal.code != "teams_off"
     }
 
     public static func isAccountID(_ id: String) -> Bool { id.range(of: "^[a-z0-9][a-z0-9-]{0,39}$", options: .regularExpression) != nil }
@@ -889,17 +902,6 @@ public final class ChatAppsClient: Sendable {
         return code
     }
 
-    /// A person's invite link on Telegram (CHAT-APPS.md 19.4): one code for that person, for 7 days, in the deep link
-    /// of `agent`'s bot. A new one replaces the open one.
-    public func makeInvite(hub: URL, database: String, client: String, person: Int, agent: String) async throws -> LinkCode {
-        let requestID = UUID().uuidString.lowercased()
-        let code = try JSONDecoder().decode(LinkCode.self, from: await post(.invite(person: person, agent: agent), requestID: requestID,
-                                                                           hub: hub, database: database, client: client))
-        guard code.ok, code.request_id.lowercased() == requestID, code.client == client, code.code?.isEmpty == false
-        else { throw HubError.invalidResponse }
-        return code
-    }
-
     /// Sends a Discord or Telegram bot's token to the hub, once and directly: the hub writes the bot's token file. nil
     /// removes the file. A send without an answer can have arrived; the caller asks the owner to paste the token again.
     public func saveToken(hub: URL, database: String, client: String, account: String, token: BotToken?) async throws -> TokenReceipt {
@@ -930,8 +932,6 @@ public final class ChatAppsClient: Sendable {
         case sendAgain(Int)
         case code(String)
         case token(account: String, token: BotToken?)
-        /// A person's invite on Telegram (CHAT-APPS.md 19.4): a code for that person, in the deep link of the agent's bot.
-        case invite(person: Int, agent: String)
 
         var route: String? {
             switch self {
@@ -942,7 +942,6 @@ public final class ChatAppsClient: Sendable {
             case .sendAgain(let outbound): outbound > 0 ? "ui/outbound/\(outbound)/again" : nil
             case .code: "ui/people/codes"
             case .token(let account, _): ChatApps.isAccountID(account) ? "ui/chat-apps/\(account)/token" : nil
-            case .invite(let person, let agent): person > 0 && !agent.isEmpty ? "ui/people/codes" : nil
             }
         }
 
@@ -953,7 +952,6 @@ public final class ChatAppsClient: Sendable {
             case .link, .unlink, .sendAgain: [:]
             case .code(let app): ["purpose": "owner", "app": app]
             case .token(_, let token): token.map { ["token": $0.value] } ?? ["delete": true]
-            case .invite(let person, let agent): ["purpose": "invite", "app": "telegram", "person": person, "agent": agent]
             }
         }
 

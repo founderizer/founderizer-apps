@@ -115,16 +115,6 @@
         }
       }
     },
-    "%@ ID: %@" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ID de %@: %@"
-          }
-        }
-      }
-    },
     "%@ Nothing was sent." : {
       "localizations" : {
         "es" : {
@@ -1655,16 +1645,6 @@
         }
       }
     },
-    "%@ opens it and presses Start. It works for 7 days." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ lo abre y pulsa Iniciar. Funciona durante 7 días."
-          }
-        }
-      }
-    },
     "%@ percent used" : {
       "localizations" : {
         "es" : {
@@ -2178,16 +2158,6 @@
         }
       }
     },
-    "%@'s Discord user ID" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ID de usuario de Discord de %@"
-          }
-        }
-      }
-    },
     "%@'s browser does not run now, so there is no screen to take over" : {
       "localizations" : {
         "es" : {
@@ -2214,16 +2184,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El propio servicio de %@, que es lo que carga la nueva copia de trabajo."
-          }
-        }
-      }
-    },
-    "%@'s phone number" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Número de teléfono de %@"
           }
         }
       }
@@ -4340,16 +4300,6 @@
         }
       }
     },
-    "Add handle" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadir identificador"
-          }
-        }
-      }
-    },
     "Add it to your server" : {
       "localizations" : {
         "es" : {
@@ -5150,16 +5100,6 @@
         }
       }
     },
-    "App" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "App"
-          }
-        }
-      }
-    },
     "App %@. Agents get a one-hour token for their own repositories." : {
       "localizations" : {
         "es" : {
@@ -5206,6 +5146,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apps"
+          }
+        }
+      }
+    },
+    "As customers" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Como clientes"
           }
         }
       }
@@ -7140,16 +7090,6 @@
         }
       }
     },
-    "Copy link" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copiar el enlace"
-          }
-        }
-      }
-    },
     "Copy message" : {
       "localizations" : {
         "es" : {
@@ -7920,16 +7860,6 @@
         }
       }
     },
-    "Discord, Settings, Advanced, Developer Mode: right-click them and Copy User ID." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Discord, Ajustes, Avanzado, Modo desarrollador: haz clic derecho en esa persona y elige Copiar ID de usuario."
-          }
-        }
-      }
-    },
     "Disk" : {
       "localizations" : {
         "es" : {
@@ -7956,6 +7886,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No lo leen · %lld"
+          }
+        }
+      }
+    },
+    "Does not work when %@ runs on Other models." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No funciona cuando %@ usa Otros modelos."
           }
         }
       }
@@ -10630,6 +10570,16 @@
         }
       }
     },
+    "Ignore" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ignorar"
+          }
+        }
+      }
+    },
     "Import" : {
       "localizations" : {
         "es" : {
@@ -11026,16 +10976,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Instalando el servidor"
-          }
-        }
-      }
-    },
-    "Invite %@ on Telegram" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Invita a %@ en Telegram"
           }
         }
       }
@@ -15980,6 +15920,16 @@
         }
       }
     },
+    "People outside the org" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personas de fuera de la organización"
+          }
+        }
+      }
+    },
     "Per day" : {
       "localizations" : {
         "es" : {
@@ -17176,16 +17126,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Quitar este identificador"
-          }
-        }
-      }
-    },
-    "Remove this one" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quitar este"
           }
         }
       }
@@ -22276,16 +22216,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "El hub no devolvió el comando. Genera uno nuevo."
-          }
-        }
-      }
-    },
-    "The hub gave no link." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El hub no dio ningún enlace."
           }
         }
       }
@@ -27980,16 +27910,6 @@
         }
       }
     },
-    "With the country code. Founderizer makes the WhatsApp ID itself." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Con el prefijo del país. Founderizer crea el ID de WhatsApp por sí mismo."
-          }
-        }
-      }
-    },
     "Without one they cannot reach %@." : {
       "localizations" : {
         "es" : {
@@ -28056,6 +27976,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Trabajando…"
+          }
+        }
+      }
+    },
+    "Works only when %@'s Shell box is off." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solo funciona cuando %@ tiene la shell desactivada."
           }
         }
       }

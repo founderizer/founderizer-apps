@@ -214,8 +214,10 @@ struct WhatsAppSetupPage: View {
 ///   1. **Who can write to <agent>?** (only for an agent that people can reach: not the fleet's manager, and not one
 ///      that cannot hold a conversation) **You** first, then each person of the fleet as a tile, and New person. You is
 ///      ticked while the owner has an ID of this app, and is then no button: the hub knows that ID on every account of
-///      the app. Else a click on You opens step two, which comes back here with You ticked. A click on a person gives
-///      the person this agent, and asks first for their number or ID of this app when they have none. A person who
+///      the app. Else a click on You opens step two, which comes back here with You ticked. A click on a person with a
+///      number or an ID of this app gives the person this agent. A person with none is no button: no field here takes
+///      one (the owner's answer of 26 November 2026 to question 3 of `channels-2026-11-26`: "A typed number is only a
+///      claim"), so their ID comes from Wrote and was not answered, with Add, or from their own link. A person who
 ///      could write here already is ticked and is no button: their own page changes that. New person opens Add person,
 ///      with this agent.
 ///   2. **Write to <agent> from your phone** (or "from your Discord"): the owner's own link. The hub makes a one-time
@@ -238,11 +240,10 @@ struct ChannelFollowSteps: View {
     let refresh: () async -> Void
     let close: () -> Void
 
-    private enum Page: Equatable { case me, who, handle(Int), newPerson, done }
+    private enum Page: Equatable { case me, who, newPerson, done }
     /// What a tick of the tiles wrote for one person: it is undone when the tick goes.
     private struct Tick: Equatable {
         var agent = false
-        var handle: PersonInput.HandleInput?
     }
 
     /// The page that he went to; nil is the page that the steps open on.
@@ -255,11 +256,7 @@ struct ChannelFollowSteps: View {
     @State private var ticked: [Int: Tick] = [:]
     /// The people that New person made from these steps.
     @State private var newPeople: Set<Int> = []
-    @State private var draft = PersonInput.HandleInput()
     @State private var writing: Int?
-    /// Telegram: the invite of the person whose page shows (CHAT-APPS.md 19.4), and that person.
-    @State private var invite: LinkCode?
-    @State private var invited: Int?
     private let chat = ChatAppsClient()
     private let client = PeopleClient()
 
@@ -299,10 +296,9 @@ struct ChannelFollowSteps: View {
         Group {
             if page == .newPerson {
                 // Add person is a setup of its own, with its own Back: this agent is theirs from its first step.
-                AddPersonView(store: store, roles: people?.roleList ?? [], existing: people?.peopleList.count ?? 0, handle: nil,
+                AddPersonView(store: store, roles: people?.roleList ?? [], existing: people?.ownCount ?? 0, handle: nil,
                               agent: agent, back: { chosen = .who },
-                              // Telegram: a new person writes from it only after their invite (CHAT-APPS.md 19.4)
-                              added: { id in newPeople.insert(id); chosen = telegram ? .handle(id) : .who; Task { await refresh() } })
+                              added: { id in newPeople.insert(id); chosen = .who; Task { await refresh() } })
             } else {
                 SetupPage {
                     SetupBack(action: back).keyboardShortcut(.cancelAction).accessibilityIdentifier("channel-steps-back")
@@ -311,8 +307,6 @@ struct ChannelFollowSteps: View {
                         switch page {
                         case .me: me
                         case .who: who
-                        // A person who is gone while their page shows: the tiles again.
-                        case .handle(let id): if let person = people?.person(id) { handle(person) } else { who }
                         case .done: done
                         case .newPerson: EmptyView()
                         }
@@ -335,7 +329,7 @@ struct ChannelFollowSteps: View {
         switch page {
         case .me: if flow && takesPeople { chosen = .who } else { close() }
         case .who: close()
-        case .handle, .newPerson: chosen = .who
+        case .newPerson: chosen = .who
         case .done: if takesPeople { chosen = .who } else if ownerLinked { close() } else { chosen = .me }
         }
     }
@@ -514,16 +508,16 @@ struct ChannelFollowSteps: View {
     private func tile(_ person: PeopleSnapshot.Person) -> some View {
         let on = reaches(person), mine = ticked[person.id] != nil
         return Button {
-            // Who could write here before these steps is theirs to change on their own page. A tile that is not ticked
-            // ticks, also after a half of its write went in: the try sends the other half.
-            guard !on || mine else { return }
+            // Who could write here before these steps is theirs to change on their own page.
+            guard Self.ticks(person, app: app, on: on, mine: mine) else { return }
             Task { if on { await untick(person) } else { await tick(person) } }
         } label: {
             face(Text(person.name), Text(person.roleWord), on: on)
         }
         .buttonStyle(FleetCardButtonStyle())
-        // No button for who could write here before, or while a write is on its way: a card of this look does not fade.
-        .disabled((on && !mine) || !canWrite)
+        // No button for who could write here before, for who has no ID of this app, or while a write is on its way: a
+        // card of this look does not fade.
+        .disabled(!Self.ticks(person, app: app, on: on, mine: mine) || !canWrite)
         .accessibilityLabel(person.name)
         .accessibilityValue(on ? Text("Chosen") : Text("Not chosen"))
         .accessibilityIdentifier("channel-who-\(person.id)")
@@ -562,31 +556,28 @@ struct ChannelFollowSteps: View {
         .accessibilityIdentifier("channel-who-new")
     }
 
-    /// A tick: the person gets this agent. One with no number or ID of this app is asked for it first.
-    private func tick(_ person: PeopleSnapshot.Person) async {
-        problem = nil
-        guard person.handles.contains(where: { $0.app == app }) else {
-            draft = .init(app: app)
-            chosen = .handle(person.id)
-            return
-        }
-        _ = await write(person, handle: nil)
+    /// **A tile is a button**: a tile that this visit ticked, to untick it, or a person who cannot write here yet and
+    /// has a number or an ID of this app, to give them this agent. A person with no ID of this app is no button: no
+    /// field of these steps takes one (`ChannelFollowSteps`), and a tick that gave only the agent would show no tick.
+    static func ticks(_ person: PeopleSnapshot.Person, app: String, on: Bool, mine: Bool) -> Bool {
+        on ? mine : person.handles.contains { $0.app == app }
     }
 
-    /// What a tick writes: their number or ID of this app when they had none, then this agent on their list. True when
-    /// the hub took all of it. A try after a half of it went in sends only the other half.
-    private func write(_ person: PeopleSnapshot.Person, handle: PersonInput.HandleInput?) async -> Bool {
+    /// A tick: the person, who has a number or an ID of this app, gets this agent.
+    private func tick(_ person: PeopleSnapshot.Person) async {
+        problem = nil
+        guard person.handles.contains(where: { $0.app == app }) else { return }
+        _ = await write(person)
+    }
+
+    /// What a tick writes: this agent on their list. True when the hub took it.
+    private func write(_ person: PeopleSnapshot.Person) async -> Bool {
         guard canWrite, let db = store.state?.db else { return false }
         writing = person.id
         defer { writing = nil }
         var wrote = ticked[person.id] ?? Tick()
         var done = false
         do {
-            if let handle, wrote.handle?.handle != handle.handle {
-                _ = try await client.handle(hub: store.hub, database: db, client: store.installation, person: person.id, handle: handle)
-                wrote.handle = handle
-                ticked[person.id] = wrote
-            }
             if !person.agentNames.contains(agent) {
                 var input = PersonInput(person)
                 input.agents = (person.agentNames + [agent]).sorted()
@@ -618,118 +609,11 @@ struct ChannelFollowSteps: View {
                 input.agents = person.agentNames.filter { $0 != agent }
                 _ = try await client.change(hub: store.hub, database: db, client: store.installation, person: person, to: input)
             }
-            if let handle = wrote.handle {
-                _ = try await client.handle(hub: store.hub, database: db, client: store.installation, person: person.id,
-                                            handle: handle, delete: true)
-            }
             ticked[person.id] = nil
         } catch {
             problem = People.reason(error)
         }
         await refresh()
-    }
-
-    // MARK: their number or ID of this app
-
-    @ViewBuilder private func handle(_ person: PeopleSnapshot.Person) -> some View {
-        if telegram { invitePage(person) } else { typedHandle(person) }
-    }
-
-    private func typedHandle(_ person: PeopleSnapshot.Person) -> some View {
-        SetupStep(title: whatsApp ? String(l10n: "\(person.name)'s phone number") : String(l10n: "\(person.name)'s Discord user ID")) {
-            mark
-        } content: {
-            SetupField(placeholder: People.handlePlaceholder(app), text: $draft.typed,
-                       wrong: !draft.typed.isEmpty && draft.problem != nil) { Task { await keep(person) } }
-                .accessibilityIdentifier("channel-who-handle")
-            // Where to find it stays under the field while he types; what is wrong with it is said under that.
-            Text(People.handleHint(app)).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("channel-who-hint")
-            if !draft.typed.isEmpty, let why = draft.problem {
-                SetupWarning(why).accessibilityIdentifier("channel-who-handle-problem")
-            } else {
-                // The hub's refusal stays over the way on, which is there for the next try.
-                if let problem { SetupWarning(problem).accessibilityIdentifier("channel-who-handle-refused") }
-                if draft.problem == nil, canWrite {
-                    Button("Add") { Task { await keep(person) } }
-                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                        .accessibilityIdentifier("channel-who-keep")
-                }
-            }
-        }
-        // What he types next is a new try: the refusal of the last one goes.
-        .onChange(of: draft.typed) { problem = nil }
-    }
-
-    /// One press of Add, or Return: a second one while the first is on its way does nothing.
-    private func keep(_ person: PeopleSnapshot.Person) async {
-        guard draft.problem == nil, canWrite else { return }
-        problem = nil
-        if await write(person, handle: draft) { draft = .init(); chosen = .who }
-    }
-
-    // MARK: Telegram — a person's invite link (CHAT-APPS.md 19.4)
-
-    /// Telegram's apps do not show a person their own ID, so the person gets a link of their own to the agent's bot. He
-    /// sends it to them in any way; when they open it and press Start, the hub binds their Telegram to them. Continue
-    /// gives them this agent now, so their first message after Start reaches it. The link works once, for 7 days.
-    private func invitePage(_ person: PeopleSnapshot.Person) -> some View {
-        let link = invited == person.id ? invite?.link(on: account?.id) : nil
-        return SetupStep(title: String(l10n: "Invite \(person.name) on Telegram"), waits: link == nil && problem == nil) {
-            mark
-        } content: {
-            if let link {
-                QRCodeView(text: link.absoluteString, size: 196).accessibilityIdentifier("channel-invite-qr")
-                HStack(spacing: 8) {
-                    Text(verbatim: link.absoluteString).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                        .accessibilityIdentifier("channel-invite-link")
-                    Spacer(minLength: 8)
-                    MessageAction(symbol: "square.on.square", label: String(l10n: "Copy link")) { copyMessage(link.absoluteString) }
-                        .foregroundStyle(FleetStyle.muted)
-                }
-                .padding(.leading, 12).padding(.trailing, 6).frame(width: SetupMetrics.field, height: SetupMetrics.fieldHeight)
-                .background(FleetStyle.surface, in: RoundedRectangle(cornerRadius: FormMetrics.inner))
-                .overlay(RoundedRectangle(cornerRadius: FormMetrics.inner).strokeBorder(FleetStyle.line, lineWidth: 0.5))
-                Text("\(person.name) opens it and presses Start. It works for 7 days.").foregroundStyle(FleetStyle.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            SetupAction {
-                if let problem { SetupWarning(problem).accessibilityIdentifier("channel-invite-problem") }
-                if link != nil || problem != nil {
-                    Button("Continue") { Task { await keepInvite(person) } }
-                        .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction).disabled(!canWrite)
-                        .accessibilityIdentifier("channel-invite-on")
-                }
-            }
-        }
-        // again when the app may write again (`writesNow`, as for the owner's own code): the link comes by itself
-        .task(id: "\(person.id)/\(store.writesNow)") { await makeInvite(person) }
-    }
-
-    /// The person's invite, once for each visit of their page: a new one replaces the one before it at the hub.
-    private func makeInvite(_ person: PeopleSnapshot.Person) async {
-        guard invited != person.id, store.writesNow, let db = store.state?.db else { return }
-        let hub = store.hub
-        problem = nil
-        do {
-            let made = try await store.telegramInvite(for: person, agent: agent, bot: account) {
-                try await chat.makeInvite(hub: hub, database: db, client: store.installation, person: person.id, agent: agent)
-            }
-            guard !Task.isCancelled, store.hub == hub, store.state?.db == db else { return }
-            guard made.link(on: account?.id) != nil else {
-                problem = String(l10n: "The hub gave no link.")
-                return
-            }
-            invite = made; invited = person.id
-        } catch {
-            // a read that the page stopped (it went on, or the hub's reading turned old) says nothing
-            if !Task.isCancelled, store.hub == hub, store.state?.db == db { problem = People.reason(error) }
-        }
-    }
-
-    /// Continue: the person gets this agent (their Telegram comes with their Start), and the tiles show again.
-    private func keepInvite(_ person: PeopleSnapshot.Person) async {
-        if await write(person, handle: nil) { invite = nil; invited = nil; chosen = .who }
     }
 
     // MARK: the end

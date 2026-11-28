@@ -99,7 +99,7 @@ struct PeoplePage: View {
             case .add(let app, let handle, let name):
                 // From one agent's People the person reaches that agent, so the wizard does not ask who (the owner,
                 // 28 October 2026). The fleet's limit counts every person, not this agent's.
-                AddPersonView(store: store, roles: roles, existing: reading.value?.peopleList.count ?? 0,
+                AddPersonView(store: store, roles: roles, existing: reading.value?.ownCount ?? 0,
                               handle: app.map { app in
                                   var one = PersonInput.HandleInput.exact(app: app, handle: handle ?? "")
                                   one.name = name ?? ""

@@ -198,6 +198,72 @@ struct ChannelAttentionTests {
     }
 }
 
+/// **The row "People outside the org" of a channel card** (the owner's "Yes, build it" of 26 November 2026 to question 4
+/// of `channels-2026-11-26`, and his correction of the same day, the coordinator's D132: Ignore and As customers alone):
+/// its value, its choices, and only the lines that its pictures draw.
+struct OutsidersRowTests {
+    private func agent(role: String = "worker", can: [String] = [], otherModels: Bool = false) throws -> FleetAgent {
+        var fields: [String: Any] = ["name": "studio", "role": role, "runtime": "claude", "can": can]
+        if otherModels { fields["model_account"] = ["kind": "key", "provider": "google", "label": "Gemini", "address": NSNull()] }
+        return try JSONDecoder().decode(FleetAgent.self, from: json(fields))
+    }
+
+    private func row(_ unknown: String?, on app: String = "whatsapp", of agent: FleetAgent?,
+                     features: [String]? = [OutsidersRow.feature]) throws -> OutsidersRow? {
+        var account = app == "whatsapp" ? number() : bot()
+        account["unknown"] = unknown
+        return OutsidersRow(card: try card(app, [account]), agent: "studio", in: agent, features: features)
+    }
+
+    /// The control shows the account's own rule (a reading with none is Ignore); a stored rule that the app does not
+    /// know, `colleagues` among them, shows as Ignore, and a choice of Ignore still writes over it, or the owner could
+    /// never clear it; only a hub that lists `chat_outsiders` has the row, since an older one refuses As customers; and
+    /// only a connected card of an agent that people can reach: a row on the manager's card would offer a choice that
+    /// the hub never acts on.
+    @Test func theRowShowsTheAccountsRuleOnAConnectedCardOfAnAgentThatPeopleReach() throws {
+        let shell = try agent(can: ["shell"])
+        let customers = try #require(try row("customers", of: shell))
+        #expect(customers.rule == .customers && OutsidersRow.Rule.allCases == [.ignore, .customers])
+        #expect(!customers.changes(to: .customers) && customers.changes(to: .ignore))
+        #expect(try row("customers", on: "discord", of: shell)?.rule == .customers)
+        #expect(try row(nil, of: shell).map { $0.rule == .ignore && !$0.changes(to: .ignore) } == true)
+        let colleagues = try #require(try row("colleagues", of: shell))
+        #expect(colleagues.rule == .ignore && colleagues.changes(to: .ignore))
+        #expect(try row("ignore", of: shell, features: ["telegram"]) == nil && row("ignore", of: shell, features: nil) == nil)
+        #expect(try OutsidersRow(card: card("whatsapp", [lost()]), agent: "studio", in: shell, features: [OutsidersRow.feature]) == nil)
+        #expect(try OutsidersRow(card: card("discord", []), agent: "studio", in: shell, features: [OutsidersRow.feature]) == nil)
+        #expect(try row("ignore", of: agent(role: "manager", can: ["shell"])) == nil)
+    }
+
+    /// **Each line stands only where its picture draws it**, under both values: "Works only when <agent>'s Shell box is
+    /// off." for a worker or a lead whose Shell box is on, "Does not work when <agent> runs on Other models." for an
+    /// agent on Other models, both in that order, and no line for an agent that can take such a sender.
+    @Test func eachLineStandsOnlyWhereItsPictureDrawsIt() throws {
+        let shellLine = "Works only when Studio's Shell box is off."
+        let otherLine = "Does not work when Studio runs on Other models."
+        for rule in ["ignore", "customers"] {
+            #expect(try row(rule, of: agent(can: ["shell", "browser"]))?.facts == [shellLine], "\(rule)")
+            #expect(try row(rule, of: agent(role: "lead", can: ["shell"]))?.facts == [shellLine], "\(rule)")
+            #expect(try row(rule, of: agent(can: ["browser"]))?.facts == [], "\(rule)")
+            #expect(try row(rule, of: agent(otherModels: true))?.facts == [otherLine], "\(rule)")
+            #expect(try row(rule, of: agent(can: ["shell"], otherModels: true))?.facts == [shellLine, otherLine], "\(rule)")
+        }
+        // an agent that the reading does not have: the value, and no line that the reading cannot say
+        #expect(try row("customers", of: nil).map { $0.rule == .customers && $0.facts.isEmpty } == true)
+    }
+
+    /// **An account write is sent once more only after a 409 of team.json's version**: As customers with no live Teams
+    /// licence (`teams_off`, D132) would be refused again, so its words stand in the card at once and the hub gets no
+    /// second write; a 400 or no answer is not tried again either.
+    @Test func onlyAConflictOfTheVersionIsTriedAgain() {
+        #expect(ChatApps.triesAgain(after: HubError.refusal(.read(status: 409, body: Data(#"{"error": "team.json changed"}"#.utf8)))))
+        let teams = Data(#"{"error": "This needs Founderizer for Teams, which this fleet does not have.", "code": "teams_off"}"#.utf8)
+        #expect(!ChatApps.triesAgain(after: HubError.refusal(.read(status: 409, body: teams))))
+        #expect(!ChatApps.triesAgain(after: HubError.refusal(.read(status: 400, body: Data()))))
+        #expect(!ChatApps.triesAgain(after: URLError(.timedOut)) && !ChatApps.triesAgain(after: HubError.invalidResponse))
+    }
+}
+
 struct ChannelAccountTests {
     @Test func connectWritesTheAgentsOwnAccount() throws {
         let taken = Set(try list([number(["id": "whatsapp-vps", "agents": ["vps"]]), bot()]).accounts.map(\.id))

@@ -255,17 +255,26 @@ struct ChatAppsCommandTests {
         #expect(code["purpose"] as? String == "owner" && code["app"] as? String == "discord")
     }
 
+    /// **A write of an account sends it as the hub holds it, its rule for people outside the org too**: Turn on or a
+    /// new label keeps As customers, and only a new account starts at Ignore. Every write sent `ignore` until 26
+    /// November 2026, so a Turn on would have taken the owner's choice away and said nothing.
     @Test func anAccountNeverSendsADefaultAndSendsEnabledOnlyWhenOff() throws {
         let bot = ChatAccountInput(app: "discord", label: "Studio", agents: ["studio"])
-        #expect(Set(bot.fields.keys) == ["app", "label", "agents", "unknown"])
+        #expect(Set(bot.fields.keys) == ["app", "label", "agents", "unknown"] && bot.fields["unknown"] as? String == "ignore")
         var off = bot; off.enabled = false
         #expect(off.fields["enabled"] as? Bool == false && off.fields["default"] == nil)
-        // Turn on writes the account as the hub has it, with enabled on.
-        let current = try snapshot([account(["id": "whatsapp-studio", "app": "whatsapp", "default": "studio", "enabled": false])])
+        // Turn on writes the account as the hub has it, with enabled on, and keeps its rule.
+        let current = try snapshot([account(["id": "whatsapp-studio", "app": "whatsapp", "default": "studio", "enabled": false,
+                                             "unknown": "customers"])])
         var input = ChatAccountInput(current.accounts[0])
-        #expect(input == ChatAccountInput(app: "whatsapp", label: "Studio", agents: ["studio"], enabled: false))
+        #expect(input == ChatAccountInput(app: "whatsapp", label: "Studio", agents: ["studio"], enabled: false, unknown: "customers"))
         input.enabled = true
-        #expect(Set(input.fields.keys) == ["app", "label", "agents", "unknown"])
+        input.label = "Studio 2"
+        #expect(Set(input.fields.keys) == ["app", "label", "agents", "unknown"] && input.fields["unknown"] as? String == "customers")
+        // an account of a reading with no rule is Ignore
+        var bare = account(["id": "discord-studio"])
+        bare["unknown"] = nil
+        #expect(try ChatAccountInput(snapshot([bare]).accounts[0]).fields["unknown"] as? String == "ignore")
     }
 }
 

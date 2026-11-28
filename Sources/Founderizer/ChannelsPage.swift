@@ -13,7 +13,9 @@ import SwiftUI
 /// **No line stands outside a card** (the owner, the same day: "it shows Removed outside of the card all the time"):
 /// a change that worked is the card's new state, a change on its way is the card's own status with its spinner, and
 /// only a refusal is a line, in the hub's words, in its card. Over the cards stand only what is about the reading
-/// itself: an old reading, and Paused in Settings.
+/// itself: an old reading, and Paused in Settings. **A connected card has the row "People outside the org"**
+/// (`OutsidersRow`; the owner's "Yes, build it" of 26 November 2026, and his correction of the same day): Ignore or As
+/// customers, written to the account at once, and under it only the lines that its pictures draw.
 /// The page reads the accounts every 5 seconds while it shows, and every 2 while a channel's steps show.
 struct ChannelsPage: View {
     @Bindable var store: FleetStore
@@ -172,10 +174,40 @@ struct ChannelsPage: View {
                     Text(why).font(FormMetrics.detail).foregroundStyle(.orange).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("channels-refused-\(app)")
                 }
+                if let row = OutsidersRow(card: card, agent: agent, in: store.state?.agents.first(where: { $0.name == agent }),
+                                          features: store.state?.ui_features) {
+                    outsiders(row, card)
+                }
                 if peopleOffered, let account, let ignored = people?.ignored(of: account.id) { wrote(ignored) }
             }
             .padding(.horizontal, FormMetrics.rowInset).padding(.vertical, 14)
             .accessibilityElement(children: .contain).accessibilityIdentifier("channels-card-\(app)")
+        }
+    }
+
+    /// **People outside the org** (`OutsidersRow`): the account's rule for a sender who is not the owner and no person of
+    /// the People page, one choice written at once, and under it, muted, each reason why the agent cannot take such a
+    /// sender.
+    private func outsiders(_ row: OutsidersRow, _ card: ChannelCard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            HStack(spacing: 8) {
+                Image(systemName: "person.2").font(IconMetrics.symbol(12)).foregroundStyle(FleetStyle.muted).accessibilityHidden(true)
+                Text("People outside the org").font(FormMetrics.title).foregroundStyle(FleetStyle.text)
+                Spacer(minLength: 8)
+                FleetSelect(String(l10n: "People outside the org"),
+                            selection: Binding(get: { row.rule }, set: { rule in choose(rule, row, card) }),
+                            options: OutsidersRow.Rule.allCases.map { FleetOption($0, $0.words) })
+                    .disabled(!canChange)
+                    .accessibilityIdentifier("channels-outsiders-\(card.app)")
+            }
+            if !row.facts.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(row.facts, id: \.self) { line in Text(line) }
+                }
+                .font(FormMetrics.detail).foregroundStyle(FleetStyle.muted).fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine).accessibilityIdentifier("channels-outsiders-lines-\(card.app)")
+            }
         }
     }
 
@@ -324,6 +356,20 @@ struct ChannelsPage: View {
         await read()
     }
 
+    /// A choice of People outside the org: the account as the hub holds it, with this rule. The hub's refusal (As
+    /// customers with no live Teams licence: `teams_off`) is the card's refusal line, in the hub's words.
+    private func choose(_ rule: OutsidersRow.Rule, _ row: OutsidersRow, _ card: ChannelCard) {
+        guard row.changes(to: rule), let id = card.account?.id else { return }
+        Task {
+            await save(String(l10n: "Saving…"), app: card.app) { current in
+                guard var input = current.accounts.first(where: { $0.id == id }).map(ChatAccountInput.init),
+                      input.unknown != rule.rawValue else { return nil }
+                input.unknown = rule.rawValue
+                return (id, input)
+            }
+        }
+    }
+
     private func turnOn(_ id: String, app: String) async {
         await save(String(l10n: "Turning on…"), app: app) { current in
             guard var input = current.accounts.first(where: { $0.id == id }).map(ChatAccountInput.init), !input.enabled else { return nil }
@@ -374,7 +420,7 @@ struct ChannelsPage: View {
             do {
                 _ = try await client.saveAccount(hub: hub, database: db, client: installation, sha256: sha, id: choice.id, account: choice.account)
                 return choice.id
-            } catch let error as HubError where error.conflict && attempt == 1 {
+            } catch let error as HubError where attempt == 1 && ChatApps.triesAgain(after: error) {
                 current = try await client.read(hub: hub, database: db)
             }
         }
