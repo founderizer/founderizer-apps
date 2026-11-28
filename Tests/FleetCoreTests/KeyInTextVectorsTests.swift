@@ -118,7 +118,115 @@ struct KeyInTextVectorsTests {
         ("a sentence with numbers", "Refund order 10452 for the customer and tell them it goes out on Tuesday at 9:30."),
         ("a prefix with too short a body", "sk-short and ghp_abc and AKIA1234"),
         ("a run of capitals and digits", "ref ABCDEF0123456789ABCDEF0123456789XYZ"),
+        // The base64 of a picture in a `data:` address is no key, and nothing else in such an address is let through
+        // (the knowledge page's Add file, 24 November 2026: a Markdown file with a picture in it read as 92 keys)
+        ("a run in the base64 of a picture in Markdown", "![logo](data:image/png;base64,\(random))"),
+        ("a run in the base64 of a picture's address alone", "data:image/png;base64,\(random)"),
+        ("a run in a data address with no base64", "see data:text/plain,\(random)"),
+        ("a run after a space in the base64 of a picture", "data:image/png;base64,AAA \(random)"),
+        ("the base64 of a key in a data address of text",
+         "see data:text/plain;base64," + Data(key("sk_live_", "EXAMPLEexample0123456789").utf8).base64EncodedString()),
+        ("a run in a data address with no type", "data:;base64,\(random)"),
+        ("a run after a picture in a line of JSON", "{\"logo\":\"data:image/png;base64,iVBORw0KGgo=\",\"api_key\":\"\(random)\"}"),
+        ("a run right after a picture in Markdown", "![a](data:image/png;base64,iVBORw0KGgo=)token=\(random)"),
+        // A picture ends for good, and only a picture's own letters stand in it (25 November 2026, the readers of the
+        // Windows port: a later ";base64," of the word, and "=" inside the base64, opened the exemption again)
+        ("the base64 of a key after a picture in a line of JSON",
+         "{\"logo\":\"data:image/png;base64,iVBORw0KGgo=\",\"k\":\"data:text/plain;base64,"
+             + Data(key("sk_live_", "EXAMPLEexample0123456789").utf8).base64EncodedString() + "\"}"),
+        ("a run after a second base64 mark in a line of JSON", "{\"logo\":\"data:image/png;base64,iVBORw0KGgo=\",\"k\":\"x;base64,\(random)\"}"),
+        ("a run after a base64 mark and a quote that ended the picture", "\"data:image/\",\"k\":\"x;base64,\(random)"),
+        ("a run after a base64 mark and a comma in a picture's address", "data:image/png,x;base64,\(random)"),
+        ("a run after a base64 mark and a colon in a picture's address", "data:image/png:x;base64,\(random)"),
+        ("a run after a second base64 mark in a picture's address", "data:image/png;base64,iVBORw0KGgo;base64,\(random)"),
+        ("a run after token= after a picture's padding", "data:image/png;base64,iVBORw0KGgo=token=\(random)"),
+        ("a run right after a picture's padding", "data:image/png;base64,iVBORw0KGgo=\(random)"),
+        ("a run after a picture's letters and a hyphen", "data:image/png;base64,iVBORw0KGgo-\(random)"),
+        ("a run after a picture's letters and a low line", "data:image/png;base64,iVBORw0KGgo_\(random)"),
+        ("a run after a base64 mark and a space after a picture", "![a](data:image/png;base64,AAA=) x;base64,\(random)"),
+        ("a run in a picture's address with no base64", "data:image/svg+xml,\(random)"),
+        // ... and what is a picture's base64 stays one
+        ("a picture's base64 with a plus sign, a slash and digits", "data:image/png;base64,iVBOR0+/\(random)"),
+        ("a picture's base64 to its padding", "data:image/png;base64,\(random)=="),
+        ("a picture's base64 after its type's parameter", "data:image/svg+xml;charset=utf-8;base64,\(random)"),
+        ("a picture's base64 after its type's name", "data:image/png;name=a%20b_c-d.png;base64,\(random)"),
+        ("the base64 of the second picture of a word", "![a](data:image/png;base64,iVBORw0KGgo=)![b](data:image/jpeg;base64,\(random))"),
+        ("the base64 of a picture right after a picture's padding", "data:image/png;base64,iVBORw0KGgo=data:image/png;base64,\(random)"),
+        // The readers of the Windows port (25 November 2026): a picture longer than one run, and the edges of each part
+        ("a picture's base64 longer than one run", "![logo](data:image/png;base64,\(String(repeating: random, count: 157)))"),
+        ("a run after a base64 mark and a quote in a picture's type", "data:image/png\"x;base64,\(random)"),
+        ("a run after a base64 mark and a closing bracket in a picture's type", "data:image/png)x;base64,\(random)"),
+        ("a run after a base64 mark and an opening bracket in a picture's type", "data:image/png(x;base64,\(random)"),
+        ("a run after a base64 mark and a slash in a picture's type", "data:image/png/x;base64,\(random)"),
+        ("a run in a picture's type", "data:image/png;name=\(random)"),
+        ("a run after a picture's type with no data:", "image/png;base64,\(random)"),
+        ("a run after a base64 mark with no semicolon", "data:image/pngbase64,\(random)"),
+        ("a run with a low line at its end in a picture", "data:image/png;base64,\(random)_"),
+        ("a run with a hyphen late in it in a picture", "data:image/png;base64,\(random)-Ya"),
+        ("a picture's base64 after its type's parameter in capitals", "data:image/svg+xml;charset=UTF-8;base64,\(random)"),
+        ("a run after a base64 mark and an apostrophe in a picture's type", "data:image/png'x;base64,\(random)"),
+        ("a run after a base64 mark and a square bracket in a picture's type", "data:image/png[x;base64,\(random)"),
+        ("a run after a picture's type with another scheme", "x:image/png;base64,\(random)"),
+        ("a run after a picture's double padding", "data:image/png;base64,AAAA==\(random)"),
+        ("a run in a data address of text after a picture in a line of JSON",
+         "{\"a\":\"data:image/png;base64,iVBO=\",\"b\":\"data:text/plain;base64,\(random)\"}"),
+        // The three-copy validator's gaps (25 November 2026): the marks are written in small letters, and only base64's
+        // ASCII letters stand in a picture
+        ("a run after a picture's marks in capitals", "DATA:IMAGE/PNG;BASE64,\(random)"),
+        ("a run after a base64 mark in capitals", "data:image/png;BASE64,\(random)"),
+        ("a run after a letter with an accent in a picture's type", "data:image/png\u{E9};base64,\(random)"),
+        ("a run after a letter with an accent in a picture's base64", "data:image/png;base64,AAA\u{E9}\(random)"),
+        ("a run after an Arabic-Indic digit in a picture's base64", "data:image/png;base64,AAA\u{0663}\(random)"),
+        ("a run after a full stop in a picture's base64", "data:image/png;base64,AAA.\(random)"),
+        ("a run after a percent sign in a picture's base64", "data:image/png;base64,AAA%\(random)"),
+        ("a run after a zero-width space in a picture's base64", "data:image/png;base64,AAA\u{200B}\(random)"),
+        ("a run after an emoji in a picture's base64", "data:image/png;base64,AAA\u{1F600}\(random)"),
+        // a mark newer than Unicode 15 (Python 3.12 has it as unassigned): each port holds the marks of a newer Unicode
+        ("a run after the marks of an address and a combining mark newer than Unicode 15", "https://\u{1ACF}x/" + random),
+        // held by choice: the end of an HTML comment glued to a picture's base64 makes its run no base64 (`inPicture`)
+        ("a picture's base64 glued to the end of an HTML comment", "<!-- data:image/png;base64,\(random)-->"),
+        // The edges that the hub's port of this rule met (the coordinator's validator, 24 November 2026)
+        ("a run in the path of a web address after an emoji", "https://example.com/files/\u{1F600}" + random),
+        ("a run in the path of a web address after a zero-width space", "https://example.com/files/\u{200B}" + random),
+        ("a run in the path of a web address after a unit separator", "https://example.com/files/\u{001F}" + random),
+        ("an AWS key before a circled digit", key("AKIA", "IOSFODNN7EXAMPLE") + "\u{2460}"),
+        ("an AWS key before a fullwidth low line", key("AKIA", "IOSFODNN7EXAMPLE") + "\u{FF3F}"),
+        // A spacing mark of Grapheme_Extend joins the mark before it, as a non-spacing mark does (reader 1 of round 2,
+        // 25 November 2026): no address after "://" and it, and no query or fragment after "?" or "#" and it
+        ("a run after the marks of an address and a halfwidth sound mark", "https://\u{FF9E}x/" + random),
+        ("a run after the marks of an address and a Kannada vowel sign", "https://\u{0CC0}x/" + random),
+        ("a run after a query mark and a Kannada vowel sign", "https://example.com/a?\u{0CC0}" + random),
+        ("a run after a fragment mark and a Bengali vowel sign", "https://example.com/a#\u{09BE}" + random),
+        // ICU's word boundary looks past each joiner of `tables.boundary_skips`, a spacing one and one of Apple's private
+        // use too, and Foundation's search past each of `tables.address_marks` (the Door area's reader, 25 November 2026)
+        ("a Slack token after a space and a Bengali vowel sign", " \u{09BE}" + key("xoxb-", "1234567890-EXAMPLEexample")),
+        ("a Slack token after a space and a musical spacing mark", " \u{1D165}" + key("xoxb-", "1234567890-EXAMPLEexample")),
+        ("an AWS key before one of Apple's private-use joiners", key("AKIA", "IOSFODNN7EXAMPLE") + "\u{F870}"),
+        ("a run after the marks of an address and a mark of the BMP newer than Unicode 15", "https://\u{0897}x/" + random),
+        // An address's facts belong to its word, not to the text (the Windows readers, 25 November 2026)
+        ("a run in the next word after a web address", "https://example.com/commit/3f786850e387550fdab836ed7e6dc881de23001b " + random),
+        ("a run in a web address's path after a word before it", "3f786850e387550fdab836ed7e6dc881de23001b https://example.com/files/" + random),
+        // ICU's circled letters are letters of a word, and a squared sign beside them is not (App shell's Windows port)
+        ("a key after a circled capital letter", "\u{24B6}" + shapeOnly),
+        ("a key after a squared capital letter", "\u{1F130}" + shapeOnly),
+        ("a key after a squared sign that is no letter", "\u{1F14A}" + shapeOnly),
         ("nothing", ""),
+    ]
+
+    /// **Texts whose saved form (`KeyInText.savedForm`, the hub's `knowledge_saved_text`) is not the text**: what a
+    /// knowledge file's check reads, at the Mac, the PC and the hub alike (`saved` of the file: the text, its saved form,
+    /// and the first find in the saved form).
+    static let saved: [(what: String, text: String)] = [
+        ("a private key whose lines end in CR LF", privateKey.replacingOccurrences(of: "\n", with: "\r\n")),
+        ("a private key whose lines end in CR", privateKey.replacingOccurrences(of: "\n", with: "\r")),
+        ("a run in the path of a web address after a unit separator", "https://example.com/files/\u{001F}" + random),
+        ("a run in the path of a web address after a delete", "https://example.com/files/\u{007F}" + random),
+        ("a run after a C1 control character", "use\u{0085}" + random + " now"),
+        ("a run after a tab and a null", "token\t\u{0000}" + random),
+        ("a CR LF and a lone CR before a run after its name", "line one\r\nline two\rexport STUDIO_TOKEN=" + random),
+        ("a run before a CR at the very end", "export STUDIO_TOKEN=" + random + "\r"),
+        ("a CR, a CR LF and a run after its name", "a\r\r\nexport STUDIO_TOKEN=" + random),
+        ("an emoji and a CR LF before a run after its name", "\u{1F600}\r\nexport STUDIO_TOKEN=" + random),
     ]
 
     /// Runs for `looksRandom`: names, hashes, paths and words, runs at each of its limits (few kinds of letters, few
@@ -163,6 +271,59 @@ struct KeyInTextVectorsTests {
         return parts
     }
 
+    /// **The joiners that each port holds as written lists, not from its own Unicode data** (the readers of 25 November
+    /// 2026: the hub's Python has Unicode 15.0, .NET and Apple each their own, and Apple's also counts some characters
+    /// of private use), each measured on the Mac that writes the file, from the parts that KeyInText uses, as ranges
+    /// of scalars `[first, last]`:
+    /// - `address_marks`: each unit of the BMP after which Foundation's search of a word's "://", "?" or "#" does not
+    ///   find it (KeyInText's `stands`; `theAddressRuleReadsMarksAsFoundationDoes` holds Swift's own rule to it);
+    /// - `boundary_skips`: each scalar that ICU's `\b` (the shapes' word boundary, NSRegularExpression) looks past, as
+    ///   it looks back for a word character, and before which it sees no boundary.
+    /// Both are measured live, so `theKeyVectorsAreTheCommittedFile` can fail on a Mac whose system has other Unicode data
+    /// than the Mac that wrote the file: that failure says the tables of the ports are due for a new measurement.
+    static func tables() -> [String: Any] {
+        func ranges(_ values: [UInt32]) -> [[UInt32]] {
+            values.reduce(into: [[UInt32]]()) { out, value in
+                if let last = out.last, last[1] + 1 == value { out[out.count - 1][1] = value } else { out.append([value, value]) }
+            }
+        }
+        return [
+            "about": "Joiners as ranges of scalars [first, last], measured on the Mac that wrote this file: address_marks, the "
+                + "units of the BMP after which a word's \"://\", \"?\" or \"#\" does not count; boundary_skips, the "
+                + "scalars that a shape's \\b looks past. Each port holds these lists, not its own Unicode data.",
+            "address_marks": ranges(addressMarks()),
+            "boundary_skips": ranges(boundarySkips()),
+        ]
+    }
+
+    /// The units of the BMP after which Foundation's search does not find "://" (whitespace ends a word, so none). The
+    /// search is NSString's, as the rule before searched a word that it took from an NSString: a Swift string of its own
+    /// searches by Swift's wider grapheme clusters, which also join U+0903 or U+200D.
+    static func addressMarks() -> [UInt32] {
+        (0x01...0xFFFF).compactMap { value in
+            guard let scalar = Unicode.Scalar(value), !CharacterSet.whitespacesAndNewlines.contains(scalar) else { return nil }
+            return (("x://" + String(scalar) + "a") as NSString).range(of: "://").location == NSNotFound ? UInt32(value) : nil
+        }
+    }
+
+    /// The scalars that ICU's `\b` looks past: a token after a space and the scalar is found, after a letter and the
+    /// scalar it is not. Of the scalars outside the BMP only the marks, the format characters and Grapheme_Extend can be
+    /// one, so only those are tried.
+    static func boundarySkips() -> [UInt32] {
+        let shape = try! NSRegularExpression(pattern: #"\bxox[abposr]-[A-Za-z0-9-]{10,}"#)
+        let token = key("xoxb-", "1234567890-EXAMPLEexample")
+        func finds(_ text: String) -> Bool { shape.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil }
+        let kinds: Set<Unicode.GeneralCategory> = [.nonspacingMark, .enclosingMark, .spacingMark, .format]
+        return (0x01...0x10FFFF).compactMap { value in
+            guard let scalar = Unicode.Scalar(value) else { return nil }
+            if value > 0xFFFF, !kinds.contains(scalar.properties.generalCategory), !scalar.properties.isGraphemeExtend {
+                return nil
+            }
+            let joiner = String(scalar)
+            return finds(" " + joiner + token) && !finds("a" + joiner + token) ? UInt32(value) : nil
+        }
+    }
+
     static func document() throws -> Data {
         let cases = texts.map { what, text -> [String: Any] in
             let found = KeyInText.first(in: text).map { NSRange($0, in: text) }
@@ -176,6 +337,13 @@ struct KeyInTextVectorsTests {
             "made_by": madeBy,
             "texts": cases,
             "runs": runs().map { ["run": $0, "random": KeyInText.looksRandom($0)] as [String: Any] },
+            "tables": tables(),
+            "saved": saved.map { what, text -> [String: Any] in
+                let form = KeyInText.savedForm(text)
+                let found = KeyInText.first(in: form).map { NSRange($0, in: form) }
+                return ["what": what, "text": parts(text), "saved": parts(form),
+                        "found": found.map { [$0.location, $0.length] } ?? NSNull()]
+            },
         ]
         return try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
             + Data("\n".utf8)
@@ -190,5 +358,27 @@ struct KeyInTextVectorsTests {
         }
         let committed = try Data(contentsOf: Self.folder.appendingPathComponent(Self.file))
         #expect(committed == made, "app/vectors/\(Self.file) is not what FleetCore gives: run app/vectors/make_vectors.py")
+    }
+
+    /// **KeyInText's address rule reads a joiner after "://" as Foundation's search did** (the rule before 24 November
+    /// 2026 searched each word with Foundation): for each unit of the BMP, a run after "x://", the unit and "a/" stands
+    /// in an address's path exactly when Foundation finds that "://". The bug that this catches: a joiner that Foundation
+    /// reads as part of the "/" and the rule does not, so a key after it is let through as a path (U+FF9E, U+0897).
+    @Test("KeyInText's address rule reads a joiner after :// as Foundation's search does")
+    func theAddressRuleReadsMarksAsFoundationDoes() {
+        let marks = Set(Self.addressMarks())
+        var differ: [String] = []
+        for value in 0x01...0xFFFF {
+            // "?" and "#" begin the address's query or fragment there: the run after them is in no path, on either side
+            guard value != 0x3F, value != 0x23 else { continue }
+            guard let scalar = Unicode.Scalar(value), !CharacterSet.whitespacesAndNewlines.contains(scalar) else { continue }
+            let before = "x://" + String(scalar) + "a/"
+            let text = (before + Self.random) as NSString
+            var words = KeyInText.Words(text)
+            if words.inAddressPath((before as NSString).length) == marks.contains(UInt32(value)) {
+                differ.append(String(format: "U+%04X", value))
+            }
+        }
+        #expect(differ.isEmpty, "the address rule and Foundation's search differ at \(differ.prefix(20))")
     }
 }

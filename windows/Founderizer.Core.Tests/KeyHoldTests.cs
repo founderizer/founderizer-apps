@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -111,6 +112,116 @@ public sealed class KeyHoldTests
             if (expected) random++; else plain++;
         }
         Assert.IsTrue(random >= 100 && plain >= 10, "the runs have both answers");
+    }
+
+    /// <summary>Bug that this catches (FleetCore b9d6aa270, 24 November 2026): ICU's word rule without the circled and
+    /// squared Latin letters (U+24B6-24E9, U+1F130-1F149, U+1F150-1F169, U+1F170-1F189), or with the signs next to them that
+    /// are no letter (U+1F14A-1F14F, U+1F16A-1F16F), so that a key before or after one is held on the Mac and not here, or
+    /// the reverse. Each answer is FleetCore's own, measured with the Swift of b9d6aa270 on that day.
+    /// <c>app/vectors/key-in-text.json</c> holds a key after U+24B6, U+1F130 and U+1F14A (<see
+    /// cref="TheRuleFindsWhatFleetCoresRuleFinds"/>); these are the other ranges and a key before a letter.</summary>
+    [TestMethod]
+    public void TheCircledAndSquaredLettersAreLettersAsFleetCoreReadsThem()
+    {
+        const string aws = "AKIA" + "IOSFODNN7EXAMPLE";
+        (string What, string Text, (int, int)? Found)[] cases =
+        [
+            ("an AWS key before a circled capital A", aws + "\u24B6", null),
+            ("an AWS key before a squared capital A", aws + "\U0001F130", null),
+            ("an AWS key before a negative circled capital A", aws + "\U0001F150", null),
+            ("an AWS key before a negative squared capital A", aws + "\U0001F170", null),
+            ("an AWS key before a squared HV, which is no letter", aws + "\U0001F14A", (0, 20)),
+            ("an AWS key before U+1F16A, which is no letter", aws + "\U0001F16A", (0, 20)),
+            ("a key after a circled small z", "\u24E9" + "sk-" + "abcdefghij0123456789", null),
+        ];
+        foreach (var (what, text, found) in cases) Assert.AreEqual(found, KeyInText.First(text), what);
+    }
+
+    /// <summary>Bugs that this catches (the validator of the three copies and the Door area's reader, 25 November 2026): a
+    /// joiner that this copy reads from .NET's own Unicode data or from a list of its own, where the Mac reads another:
+    /// a find of <c>://</c> that counts before U+1ACF or U+0897, which .NET's data may lack, so that a run is let through
+    /// as an address's path; or a shape's <c>\b</c> that sees a boundary before a spacing mark of Grapheme_Extend
+    /// (U+09BE, U+1D165) or one of Apple's private-use joiners (U+F870), so that a key is let through or held where the
+    /// Mac does the other. <c>KeyJoiners.cs</c> is written from the shared vectors' <c>tables</c>, which the Mac
+    /// measures (<c>make_key_joiners.py</c>), and must hold them as they are.</summary>
+    [TestMethod]
+    public void TheJoinersAreTheTablesThatTheMacMeasured()
+    {
+        var tables = Vectors.Read("key-in-text.json").GetProperty("tables");
+        (int, int)[] Of(string name) =>
+            tables.GetProperty(name).EnumerateArray().Select(r => (r[0].GetInt32(), r[1].GetInt32())).ToArray();
+        CollectionAssert.AreEqual(Of("address_marks"), KeyInText.AddressMarks.Select(r => (r.First, r.Last)).ToArray(),
+                                  "the address's joiners: run make_key_joiners.py");
+        CollectionAssert.AreEqual(Of("boundary_skips"), KeyInText.BoundarySkips.Select(r => (r.First, r.Last)).ToArray(),
+                                  "the boundary's joiners: run make_key_joiners.py");
+        var joining = 0;
+        for (var code = 0x20; code <= 0xFFFF; code++)
+            if (KeyInText.Words.ExtendsFind((char)code)) joining++;
+        Assert.AreEqual(1141, joining, "the units of the first plane before which a find does not count");
+
+        // The validator's words, with the Mac's answers: a mark of the first plane after "://" makes no address, and a
+        // shape's boundary looks past a spacing mark of Grapheme_Extend before the key, as ICU's does.
+        const string random = "Xk7Qp2Lm9Rt4Vb8Nc3Wz6Hd1Jf5Gs0Ya";
+        Assert.AreEqual((9, 34), KeyInText.First("https://" + "\u0898" + "x/" + random), "a run after the marks of an address and U+0898");
+        Assert.AreEqual((4, 20), KeyInText.First("id " + "\uFF9E" + "AKIA" + "IOSFODNN7EXAMPLE"), "an AWS key after a space and U+FF9E");
+    }
+
+    /// <summary>Bugs that this catches (the Door area's reader, 25 November 2026; FleetCore's <c>savedForm</c>): a knowledge
+    /// file checked in its raw text where the hub checks the form that it saves, so that a private key whose lines end in
+    /// CR LF is kept as a part that the hub does not have, or a run after U+001F is let through here and refused there.
+    /// Each case of the shared vectors' <c>saved</c>: the text, its saved form, and the first find in that form.</summary>
+    [TestMethod]
+    public void AKnowledgeFilesTextIsCheckedAsTheHubSavesIt()
+    {
+        var cases = Vectors.Read("key-in-text.json").GetProperty("saved").EnumerateArray().ToArray();
+        Assert.IsTrue(cases.Length >= 7, "the file's saved cases");
+        foreach (var vector in cases)
+        {
+            var what = vector.GetProperty("what").GetString();
+            string Joined(string name) => string.Concat(vector.GetProperty(name).EnumerateArray().Select(p => p.GetString()));
+            var saved = KeyInText.SavedForm(Joined("text"));
+            Assert.AreEqual(Joined("saved"), saved, what);
+            var place = vector.GetProperty("found");
+            (int, int)? expected = place.ValueKind == System.Text.Json.JsonValueKind.Null ? null : (place[0].GetInt32(), place[1].GetInt32());
+            Assert.AreEqual(expected, KeyInText.First(saved), what);
+        }
+    }
+
+    /// <summary>Bugs that this catches (the Door area's read through the Vault, 25 November 2026; the hub's c75f493ae): a
+    /// shape search that runs a shape's tail over the whole run at each start, so that <c>" " + "eyJ-"</c> repeated (each
+    /// "eyJ" after "-" has a word boundary, and each try of the signed token scans the run for a ".") or <c>"ask-"</c>
+    /// repeated (no boundary at any "sk-", which a search reached through its tail) takes minutes for a text of a few
+    /// hundred kilobytes, which he pastes or a file holds. Each must be read in one pass: under two seconds for 400 KB,
+    /// many times what one pass takes on the lane.</summary>
+    [TestMethod, Timeout(30_000)]
+    public void ALongWordOfShapeStartsIsReadInOnePass()
+    {
+        foreach (var (what, text) in new[]
+                 {
+                     ("eyJ- repeated after a space", " " + string.Concat(Enumerable.Repeat("eyJ-", 100_000))),
+                     ("ask- repeated", string.Concat(Enumerable.Repeat("ask-", 100_000))),
+                 })
+        {
+            var clock = Stopwatch.StartNew();
+            Assert.IsNull(KeyInText.First(text), what);
+            Assert.IsTrue(clock.Elapsed < TimeSpan.FromSeconds(2), $"{what}, 100,000 times: {clock.Elapsed.TotalSeconds:F2} s");
+        }
+    }
+
+    /// <summary>Bug that this catches (the validator's S1 and point 2; the Mac's 93e76f7cd): a picture's run with "=" inside
+    /// it read as base64, so that a caller that passes a raw run, not the value after its last "=", lets
+    /// <c>data:image/png;base64,iVBORw0KGgo=token=RUN</c> through. A run holds "=" only at its end.</summary>
+    [TestMethod]
+    public void APicturesRunHoldsItsEqualsSignsOnlyAtItsEnd()
+    {
+        const string picture = "data:image/png;base64,";
+        const string random = "Xk7Qp2Lm9Rt4Vb8Nc3Wz6Hd1Jf5Gs0Ya";
+        bool InPicture(string run) => new KeyInText.Words(picture + run).InPicture(picture.Length, run.Length);
+        Assert.IsTrue(InPicture(random), "the picture's letters");
+        Assert.IsTrue(InPicture(random + "=="), "padding at the end");
+        Assert.IsFalse(InPicture("iVBORw0KGgo=" + random), "letters after an equals sign");
+        Assert.IsFalse(InPicture("iVBORw0KGgo=token=" + random), "a value after a picture's padding");
+        Assert.IsFalse(InPicture(random + "-"), "a hyphen is no base64");
     }
 
     /// <summary>Bug that this catches (the review of round 4): the look for a web address's marks made a list and a

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// One file of the hub's knowledge catalog (`/ui/state` `knowledge`), without its text. The owner's files are in
@@ -129,6 +130,9 @@ public final class KnowledgeClient: Sendable {
     public static let feature = "owner_knowledge"
     /// The most text that one file can have: the hub keeps at most 1 MiB with the title and the source line.
     public static let textLimit = 1_000_000
+    /// The most text of one owner file that the hub takes in a write (1 MiB): the box's edit of a file that is there,
+    /// which another route may have made longer than `textLimit`.
+    public static let hubTextLimit = 1_048_576
     private let session: URLSession
 
     public init() {
@@ -152,9 +156,12 @@ public final class KnowledgeClient: Sendable {
         return file
     }
 
-    /// Adds a file's text as knowledge/owner/<name>.md. `source` is the file's name.
-    public func add(hub: URL, database: String, client: String, title: String, text: String, source: String) async throws -> KnowledgeReceipt {
-        try await change(hub: hub, database: database, client: client, ["title": title, "text": text, "source": source])
+    /// Adds a file's text as knowledge/owner/<name>.md. `source` is the file's name. `keyCheck`: the hub checks a file
+    /// for a key (`keyFeature`), so the write says that the owner kept no part (`key_kept`).
+    public func add(hub: URL, database: String, client: String, title: String, text: String, source: String,
+                    keyCheck: Bool) async throws -> KnowledgeReceipt {
+        try await change(hub: hub, database: database, client: client, ["title": title, "text": text, "source": source],
+                         keyCheck: keyCheck)
     }
 
     /// Owner feature `attachment_knowledge` (UI-API.md 1.30): the words of a text file the owner attached become
@@ -162,30 +169,53 @@ public final class KnowledgeClient: Sendable {
     /// the file's own first heading, and then from its name, where the owner gives none. It answers 415 for a file
     /// that cannot be text; that one is kept as the file itself (`HubClient.keep`, UI-API.md 1.31).
     public func add(attachment: Int, hub: URL, database: String, client: String,
-                    title: String? = nil) async throws -> KnowledgeReceipt {
+                    title: String? = nil, keyCheck: Bool) async throws -> KnowledgeReceipt {
         var fields: [String: Any] = ["attachment": attachment]
         if let title { fields["title"] = title }
-        return try await change(hub: hub, database: database, client: client, fields)
+        return try await change(hub: hub, database: database, client: client, fields, keyCheck: keyCheck)
     }
 
     /// The hub reads a public page and keeps its readable text.
-    public func addPage(hub: URL, database: String, client: String, url: String) async throws -> KnowledgeReceipt {
-        try await change(hub: hub, database: database, client: client, ["url": url])
+    public func addPage(hub: URL, database: String, client: String, url: String, keyCheck: Bool) async throws -> KnowledgeReceipt {
+        try await change(hub: hub, database: database, client: client, ["url": url], keyCheck: keyCheck)
     }
 
     /// Owner feature `knowledge_edit` (UI-API.md 1.84): new text for a file that is there. The hub keeps its path, its
     /// title and its source; its Source line then says "changed" and today's date, and a page is not read again.
     public static let editFeature = "knowledge_edit"
 
-    public func edit(hub: URL, database: String, client: String, path: String, text: String) async throws -> KnowledgeReceipt {
-        let receipt = try await change(hub: hub, database: database, client: client, ["path": path, "text": text])
+    /// **The hub's feature `knowledge_key`: it checks each write of an owner file for a key** (refusal `keyRefusal`)
+    /// when an app's write says `key_kept`: the SHA-256 of each part that the owner saw and kept with "Keep it", `[]`
+    /// when he kept none. So an app sends that field on every write, add, page, kept attachment and change, where the
+    /// hub lists this name, and never where it does not: an older hub refuses a field that it does not know.
+    public static let keyFeature = "knowledge_key"
+    /// The hub's refusal of a write that holds what looks like a key that the owner did not keep.
+    public static let keyRefusal = "knowledge_key"
+
+    /// `key_kept`: the SHA-256 of each part in the form that the hub saves (`KeyInText.savedForm`), as lower-case hex
+    /// of its UTF-8 bytes, each once and in order.
+    public static func keptHashes(_ parts: [String]) -> [String] {
+        Set(parts.map { part in
+            // the part as the hub saves it, which its check reads (round 8)
+            SHA256.hash(data: Data(KeyInText.savedForm(part).utf8)).map { String(format: "%02x", $0) }.joined()
+        }).sorted()
+    }
+
+    /// `keyCheck`: the hub checks a file for a key (`keyFeature`), and `kept` are the parts that the owner saw and kept
+    /// with "Keep it" (`KeyInText.all`'s parts), which the write names (`key_kept`).
+    public func edit(hub: URL, database: String, client: String, path: String, text: String,
+                     keyCheck: Bool, kept: [String] = []) async throws -> KnowledgeReceipt {
+        let receipt = try await change(hub: hub, database: database, client: client, ["path": path, "text": text],
+                                       keyCheck: keyCheck, kept: kept)
         guard receipt.path == path, receipt.deleted != true else { throw HubError.invalidResponse }
         return receipt
     }
 
     /// The hub refuses to delete a file that a profile lists (409): remove it from the profiles first.
     public func delete(hub: URL, database: String, client: String, path: String) async throws -> KnowledgeReceipt {
-        let receipt = try await change(hub: hub, database: database, client: client, ["path": path, "delete": true])
+        // the hub checks no delete for a key, so a delete never says key_kept
+        let receipt = try await change(hub: hub, database: database, client: client, ["path": path, "delete": true],
+                                       keyCheck: false)
         guard receipt.deleted == true, receipt.path == path else { throw HubError.invalidResponse }
         return receipt
     }
@@ -210,7 +240,13 @@ public final class KnowledgeClient: Sendable {
         }
     }
 
-    private func change(hub: URL, database: String, client: String, _ fields: [String: Any]) async throws -> KnowledgeReceipt {
+    /// **One write, and the one place of `key_kept`**: each write of text says it where the hub checks (`keyCheck`, which
+    /// each write must give), so no write path can leave it out; a write that leaves it out is an older app's to the
+    /// hub, which then checks nothing. A delete sends no `key_kept`: the hub checks no delete.
+    private func change(hub: URL, database: String, client: String, _ fields: [String: Any], keyCheck: Bool,
+                        kept: [String] = []) async throws -> KnowledgeReceipt {
+        var fields = fields
+        if keyCheck { fields["key_kept"] = Self.keptHashes(kept) }
         let requestID = UUID().uuidString.lowercased()
         var request = URLRequest(url: hub.appendingPathComponent("ui/knowledge"))
         request.httpMethod = "POST"
@@ -269,4 +305,9 @@ public struct KnowledgeAccessError: LocalizedError {
     public var errorDescription: String? {
         String(l10n: "The Knowledge files section of \(agent.agentLabel) has a line that is not a file. Correct it in the agent's profile first.")
     }
+}
+
+extension HubState {
+    /// The hub checks each write of an owner knowledge file for a key, and takes `key_kept` (feature `knowledge_key`).
+    public var checksKnowledgeKeys: Bool { ui_features?.contains(KnowledgeClient.keyFeature) == true }
 }

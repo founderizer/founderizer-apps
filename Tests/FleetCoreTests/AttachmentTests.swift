@@ -316,7 +316,7 @@ import Testing
                 + #""commit":"\#(String(repeating: "a", count: 40))"}"#
         }
         let receipt = try await KnowledgeClient().add(attachment: 7, hub: URL(string: "http://127.0.0.1:\(hub.port)")!,
-                                                      database: "db", client: "c")
+                                                      database: "db", client: "c", keyCheck: false)
         #expect(receipt.path == "knowledge/owner/mill-tolerances.md")
         let sent = String(decoding: hub.received, as: UTF8.self)
         #expect(sent.starts(with: "POST /ui/knowledge HTTP/1.1\r\n"))

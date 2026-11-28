@@ -43,10 +43,12 @@ struct RefusalWordsVectorsTests {
     /// for, or whose records need Zip64, and a copy coming back that the disk has no room for, 22 November 2026) wait
     /// for their Spanish; the hub's English names the sizes as this app writes them. `update_waits_for_copy` (the
     /// Update press while a copy of the fleet is on its way, 22 November 2026) waits for its Spanish too.
+    /// `knowledge_key` (a write of the owner's knowledge files that holds what looks like a key and that the owner did
+    /// not keep, owner API 1.335) waits for its Spanish; the knowledge page reads the code (`KnowledgePage.reason`).
     private static let waiting: Set<String> = ["about_unreadable", "card_words_from_tool", "copy_no_room",
                                                "copy_over_format", "join_file", "join_no_code", "join_two",
-                                               "knowledge_unread", "link_active", "link_channel", "link_file",
-                                               "link_from_tool", "link_key", "link_most", "link_no_agent",
+                                               "knowledge_key", "knowledge_unread", "link_active", "link_channel",
+                                               "link_file", "link_from_tool", "link_key", "link_most", "link_no_agent",
                                                "profile_unread", "restore_no_room", "role_no_set",
                                                "role_sets_contacts_off", "secret_app_setting", "secret_value_asked",
                                                "signature_unchecked", "teams_off", "teams_part_missing",

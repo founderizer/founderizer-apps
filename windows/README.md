@@ -367,10 +367,30 @@ renamed or removed without a word to the screens lane.
     (`KeyHoldTests`), and the test holds its 15 shapes and its run equal to the literals of `KeyInText.swift`. The
     vectors hold each text in parts that a reader joins, so that no file holds a key's whole shape. Where .NET's own
     rules differ from the Mac's, the rule takes the Mac's: ICU's word boundary (`KeyInText.Boundary`: a combining mark
-    or a format character is skipped, and a letter outside the first plane is a letter), Apple's whitespace, which
-    holds the zero-width space, and Foundation's search where it looks for `://`, `?` and `#` in a web address (by
-    UTF-16 unit, and a find does not count when a non-spacing or enclosing mark, a variation selector or U+200C comes
-    right after it; some other marks differ, see the commit).
+    or a format character is skipped, a letter outside the first plane is a letter, and so are the circled and squared
+    Latin letters), Apple's whitespace, which holds the zero-width space, and Foundation's search where it looks for
+    `://`, `?` and `#` in a web address (by UTF-16 unit). Two of those rules take their joiners from the tables that the
+    Mac measures and writes into the shared vectors (`tables`), never from .NET's own Unicode data: a find of `://`,
+    `?` or `#` does not count before one of `address_marks` (1,141 units of the first plane, `Words.ExtendsFind`), and
+    a shape's `\b` looks past each of `boundary_skips` (2,344 scalars: the marks, the format characters, every
+    character of Grapheme_Extend and Apple's private-use joiners, `Skipped`). `KeyJoiners.cs` holds them, written by
+    `Founderizer.Core/make_key_joiners.py` from the file, and `KeyHoldTests` holds the two equal. A run in the base64 of a
+    picture's `data:` address is no key: in one word,
+    "data:image/", only a media type's units, ";base64,", only base64's letters up to the run, and the run base64, with
+    "=" only at its end; any other unit, "=" too, ends the picture until another "data:image/". The marks and the
+    letters are ASCII, compared by unit. What that still lets through and what it holds by choice is written at
+    `Words.InPicture`. Each word of the text is read once, in one pass, with its address's marks found once
+    (`KeyInText.Words`, `Facts`), as FleetCore's. Each shape that begins with `\b` is tried only at its literal start
+    (`ShapeHeads`, the hub's `KEY_SHAPE_HEADS`) where ICU's boundary holds, in place, and a failed try of the signed
+    token leaves out the rest of its run, so `" " + "eyJ-"` or `"ask-"` repeated is read in one pass (the hub's
+    c75f493ae). `KeyInText.SavedForm` is a knowledge file's text as the hub saves it
+    (line ends as "\n", each other control character as a space), which a knowledge file's check and the parts that he
+    keeps must read; the PC writes no knowledge file yet (it only reads `GET /ui/knowledge`), so nothing calls it, and
+    each guard of the PC reads the raw text. The vectors' `saved` cases hold it equal to FleetCore's. **A known
+    difference that no table covers:** the word characters of a shape's `\b` (`IsWord`: letters, digits, marks) come
+    from each platform's own Unicode data, so a letter of Unicode 16 or 17 that .NET 10's data does not have, or one of
+    Apple's private-use characters that ICU reads as a letter, is no word character here: the PC sees a boundary where
+    the Mac sees none, and holds a key that the Mac lets through. The PC holds more, never less, so it is no leak.
   - `ComposerModel.KeyHold`, `AnswerBoxModel.KeyHold` and `ClarifyModel.KeyHold` (`KeyHoldModel`): while the box's
     words hold such a key and he did not keep it (`StoreState.HoldsKey(box, text)`, the boxes `KeyHold.Chat(agent)`,
     `Answer(need)` and `Talk(need)`), draw the hold over the line inside the field's edge, its `Words`, its `Line` and

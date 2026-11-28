@@ -99,6 +99,10 @@ enum KeyHold: Equatable {
 struct HeldKey: Equatable {
     let composer: String
     let hold: KeyHold
+    /// **The clipboard's text that the guard of a paste checked at Cmd+V** (`KeyPasteGuard`), until his choice: what
+    /// "Paste it anyway" pastes and keeps in the knowledge box, also when the clipboard changed meanwhile. nil for
+    /// words.
+    var checked: String? = nil
 }
 
 /// What the box of a key's question holds, which its words name: a message (the chat's box, a request's answer, Needs
@@ -210,9 +214,10 @@ struct KeyPasteGuard: ViewModifier {
                 guard !event.inPreviewWindow else { return false }  // Cmd+V there is the preview window's
                 let keys = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .function, .numericPad])
                 guard keys == .command, !event.isARepeat, event.charactersIgnoringModifiers?.lowercased() == "v",
-                      let text = NSPasteboard.general.string(forType: .string), text.count <= 100_000,
+                      let text = KeyCut.board.string(forType: .string), text.count <= 100_000,
                       KeyInText.contains(text) else { return false }
-                store.heldKey = HeldKey(composer: composer, hold: .paste)
+                store.heldKey = HeldKey(composer: composer, hold: .paste, checked: text)
+                KeyCut.target = event.window?.firstResponder as? NSTextView
                 return true
             }
             return held ? nil : event
@@ -242,8 +247,16 @@ enum KeyCut {
     }
 
     /// The clipboard's key, read at the moment of the owner's choice: nothing of it was kept before.
-    static func onClipboard() -> String? {
-        guard let text = NSPasteboard.general.string(forType: .string), text.count <= 100_000 else { return nil }
+    @MainActor static func onClipboard() -> String? {
+        guard let text = board.string(forType: .string), text.count <= 100_000 else { return nil }
         return split(text)?.key
     }
+
+    /// **The clipboard that the guard of a pasted key reads**: the Mac's own. A test gives one of its own
+    /// (`NSPasteboard(withUniqueName:)`), so that no run reads or replaces the owner's clipboard.
+    @MainActor static var board = NSPasteboard.general
+
+    /// **The text view that had the cursor when the guard of a paste held a key** (`KeyPasteGuard`): where "Paste it
+    /// anyway" of the knowledge box puts the text, and nowhere else. It goes with its view.
+    @MainActor static weak var target: NSTextView?
 }

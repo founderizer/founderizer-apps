@@ -1456,10 +1456,13 @@ final class FleetStore {
     }
 
     /// The words of this text file become one of his own knowledge files, and the original is kept with it (`POST
-    /// /ui/knowledge` `{attachment}`). The hub takes the title from the file's own first heading, or from its name.
+    /// /ui/knowledge` `{attachment}`). The hub takes the title from the file's own first heading, or from its name. A
+    /// hub that checks a file for a key (`knowledge_key`) is told that he kept no part, and refuses a file that holds
+    /// one: the file's line says so in the knowledge box's words.
     func keepAsKnowledge(_ file: MessageAttachment) async {
         await keepingWork(file) { [self] state in
-            _ = try await knowledge.add(attachment: file.id, hub: hub, database: state.db, client: installation)
+            _ = try await knowledge.add(attachment: file.id, hub: hub, database: state.db, client: installation,
+                                        keyCheck: state.checksKnowledgeKeys)
         }
     }
 
@@ -1477,6 +1480,10 @@ final class FleetStore {
             await refresh()
         } catch {
             guard generation == filesGeneration else { return }
+            if case HubError.refusal(let refused) = error, refused.code == KnowledgeClient.keyRefusal {
+                fileProblems[file.id] = String(l10n: "This file holds what looks like a key.")
+                return
+            }
             fileProblems[file.id] = HubError.said(error) ?? String(l10n: "This file could not be kept. Try again.")
         }
     }
