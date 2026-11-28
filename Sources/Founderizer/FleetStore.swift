@@ -1862,9 +1862,8 @@ final class FleetStore {
         default: break
         }
     }
-    /// The newest write of a reading that went away from the window's work (`writeReading`), for `forgetFleet`, which
-    /// removes a fleet's readings also when such a write is still on its way.
-    @ObservationIgnored private var lastWrite: Task<Void, Never>?
+    /// A final save on quit and a removal by Start again must follow each earlier save.
+    private let readingWrites = DispatchQueue(label: "com.founderizer.app.kept-readings", qos: .utility)
     /// The observer of the app's quit, which writes the newest reading.
     @ObservationIgnored private var quitting: NSObjectProtocol?
     /// **When the Mac last woke from sleep**, and its observer: a page's reads that failed before it count from then
@@ -1891,7 +1890,7 @@ final class FleetStore {
 
     /// **The last reading of the fleet stays on this Mac** (T-07), so the next launch draws the window as he left it
     /// in its first frame, and the hub's answer replaces it: at most once a minute, and when the app quits.
-    private func keepReading(_ data: Data) {
+    func keepReading(_ data: Data) {
         unwrittenReading = (data, lastReadingFile)
         if let written = readingWritten, Date().timeIntervalSince(written) < 60 { return }
         writeReading(now: false)
@@ -1909,18 +1908,20 @@ final class FleetStore {
 
     /// Writes the newest reading, and the readings kept with it: away from the window's work while the app runs, at once
     /// when it quits.
-    private func writeReading(now: Bool) {
-        let files = [unwrittenReading].compactMap { $0 } + unwrittenKept.values
-        guard !files.isEmpty else { return }
-        unwrittenReading = nil; unwrittenKept = [:]; readingWritten = Date()
-        let write: @Sendable () -> Void = {
-            for (data, file) in files {
-                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
+    func writeReading(now: Bool) {
+        let window = unwrittenReading, other = Array(unwrittenKept.values), folder = readingsFolder
+        if window != nil || !other.isEmpty {
+            unwrittenReading = nil; unwrittenKept = [:]; readingWritten = Date()
+            readingWrites.async {
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
                                                          attributes: [.posixPermissions: 0o700])
-                try? data.write(to: file, options: [.atomic])
+                if let window, let bytes = KeptWindow.stored(window.data) {
+                    try? bytes.write(to: window.file, options: .atomic)
+                }
+                for (data, file) in other { try? data.write(to: file, options: .atomic) }
             }
         }
-        if now { write() } else { lastWrite = Task.detached(priority: .utility, operation: write) }
+        if now { readingWrites.sync {} }
     }
 
     // MARK: The blocks of older tasks
@@ -2191,7 +2192,8 @@ final class FleetStore {
         // Each kept file is read only when it is a regular file of a reading's size, with no wait (`KeptFile`):
         // these reads hold the window's first frame. What is not read is no kept reading: the window waits for the
         // hub's first answer, as on a Mac that kept none.
-        if let data = KeptFile.bytes(of: lastReadingFile, atMost: KeptFile.largestReading), let kept = try? HubState.decode(data) {
+        if let bytes = KeptFile.bytes(of: lastReadingFile, atMost: HubState.maximumBytes),
+           let data = KeptWindow.restored(bytes), let kept = try? HubState.decode(data) {
             let files = KeptHistory(window: kept, hub: hub, folder: readingsFolder, tasks: true, rows: true)
             let first = KeptHistory.read(files.needed)
             if kept.older_tasks?.isValid == true { older = OlderTasks(kept: first.tasks, db: kept.db) }
@@ -2497,13 +2499,13 @@ final class FleetStore {
         }
         // In the app's own folder: the kept readings of this hub, and its records of installs and builds.
         let readings = StartAgain.readingFiles(of: old, in: readingsFolder)
-        for file in readings { try? FileManager.default.removeItem(at: file) }
-        // A write of a reading or of a block that is on its way lands after this line: its files go once it ended.
-        let late = [lastWrite, olderWrite].compactMap { $0 }
-        if !late.isEmpty {
-            Task.detached(priority: .utility) {
-                for write in late { await write.value }
-                for file in readings { try? FileManager.default.removeItem(at: file) }
+        readingWrites.sync {
+            for file in readings { try? FileManager.default.removeItem(at: file) }
+        }
+        // A block on its own writer can still land. Remove its folders after that write and before a later reconnect.
+        if olderWrite != nil {
+            afterOlderWrites {
+                for folder in readings where folder.hasDirectoryPath { try? FileManager.default.removeItem(at: folder) }
             }
         }
         BuildRecords.shared.remove { $0.hub == address }

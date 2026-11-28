@@ -70,8 +70,11 @@ public struct HubState: Decodable, Sendable {
     /// The hub says when something changed (`GET /ui/wait`).
     public var offersLiveChanges: Bool { ui_features?.contains(LiveChanges.feature) == true }
 
+    /// The largest fleet window this client can decode, from the hub or the last launch.
+    public static let maximumBytes = 16_000_000
+
     public static func decode(_ data: Data) throws -> HubState {
-        guard data.count <= 16_000_000 else { throw HubError.invalidResponse }
+        guard data.count <= maximumBytes else { throw HubError.invalidResponse }
         var state = try JSONDecoder().decode(Self.self, from: data)
         state.internalKnowledge = state.knowledge?.filter { !$0.isOwner }
         state.knowledge = state.knowledge?.filter(\.isOwner)

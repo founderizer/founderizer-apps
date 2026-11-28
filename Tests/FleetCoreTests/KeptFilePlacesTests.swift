@@ -273,7 +273,8 @@ struct KeptFilePlacesTests {
             #expect(!store.contains(own) && !views.contains(own), "\(own)")
         }
         // Each of them through the reader, with the limit of its kind.
-        for own in ["lastReadingFile", #"keptFile("health")"#, #"keptFile("releases")"#, #"keptFile("app-update")"#] {
+        #expect(store.contains("KeptFile.bytes(of: lastReadingFile, atMost: HubState.maximumBytes)"))
+        for own in [#"keptFile("health")"#, #"keptFile("releases")"#, #"keptFile("app-update")"#] {
             #expect(store.contains("KeptFile.bytes(of: \(own), atMost: KeptFile.largestReading)"), "\(own)")
         }
         #expect(store.contains("KeptFile.read(stagedURL(file), atMost: MessageAttachment.sizeLimit)"))

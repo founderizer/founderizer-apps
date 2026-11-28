@@ -48,9 +48,8 @@ public enum KeptFile {
         case unreadable(errno: Int32)
     }
 
-    /// The largest reading of the hub that the app reads for a window's first frame (`state-<hub>.json` and the
-    /// readings beside it). The reading of a fleet with more than 800 finished tasks was 5 MB (measured on 16
-    /// November 2026): this is 50 times that.
+    /// The size limit for health, releases and the app update saved beside the fleet window.
+    /// The window itself uses the smaller decoded limit in `HubState.maximumBytes`.
     public static let largestReading = 256 * 1024 * 1024
     /// The largest small record of the app that is one JSON file (the vault's removals, the key swap's state). The
     /// larger of the two was 2 KB on the same day.
