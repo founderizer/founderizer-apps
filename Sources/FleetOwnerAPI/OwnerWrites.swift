@@ -1,5 +1,6 @@
 import CryptoKit
 import Darwin
+import Compression
 import Foundation
 
 /// **The nine tools that write, as `owner_mcp.py` writes them** (slice A2): `save_profile` (`with_profile_base`),
@@ -608,6 +609,7 @@ extension OwnerTools {
         if let said = answer.headers["x-fleet-backup-sha256"], !said.isEmpty, !PyText.same(said, digest) {
             throw OwnerRefusal("the copy did not arrive whole: the hub's SHA-256 is not the one of the bytes received.")
         }
+        if let fault = CopyShape.fault(coming) { throw OwnerRefusal(fault) }
         if let folder {
             let fallback = "founderizer-\(Int(context.now().timeIntervalSince1970)).zip"
             place = try Self.intoFolder(folder, Self.hubFileName(answer, fallback: fallback))
@@ -811,6 +813,175 @@ enum PyText {
 public enum MediaType {
     public static func guess(_ name: String, _ types: [String: String]) -> String {
         types[LocalFile.suffix(name).lowercased()] ?? "application/octet-stream"
+    }
+}
+
+/// **A hub's copy, in the one form that a hub writes** (`owner_mcp.py`'s `copy_fault`, line for line): zipfile with
+/// allowZip64 off, nothing before or after it, no comment, no extra field, each local member where the directory says it
+/// is and as it says, one after the other up to the directory, with plain names. Each other file is refused, so no reader
+/// that differs from the restore's, unzip's or the app's can read a member that this check did not see; above all a
+/// member of the fleet's access key's names, which no hub writes. A member of any other plain name is kept: the hub
+/// releases before the app, so a later hub can add one.
+///
+/// FleetCore's `HubCopyForm` is the same check, line for line, for the app's own Save copy
+/// (`OwnerAccess.checkHubForm`): this program does not take FleetCore, so the two are kept apart, and a change of one is a
+/// change of the other.
+enum CopyShape {
+    /// `owner_mcp.py`'s COPY_KEY_NAMES (lifecycle.COPY_KEY_NAMES) and COPY_NEEDED.
+    static let keyNames = ["owner-access.key", "owner-access.pub"]
+    static let needed = ["fleet.json", "RESTORE.md", "fleet.sqlite3"]
+    static let entriesMost = 20_000
+    static let directoryMost = 4 * 1024 * 1024
+    static let unpackMost = 2048 * 1024 * 1024 + 2 * 1024 * 1024
+    /// The last bytes of a member that go in one at a time (`inflatesWhole`).
+    static let tailBytes = 64
+    static let withKey = "The hub's copy holds a member named owner-access.key or owner-access.pub, which no hub writes: "
+        + "only the Founderizer app puts the fleet's access key into a copy, its own. So nothing was kept, and the hub was "
+        + "not told that the copy is kept."
+    static let notHubs = "The hub's copy is not a copy in the form that a hub writes (one zip with fleet.json, RESTORE.md "
+        + "and fleet.sqlite3, each member once and under a plain name), so nothing was kept, and the hub was not told that "
+        + "the copy is kept."
+
+    /// nil for a file in the one form of a hub's copy, else the words of the refusal.
+    static func fault(_ path: String) -> String? {
+        guard LocalFile.callable(path) else { return notHubs }
+        let handle = open(path, O_RDONLY | O_CLOEXEC)
+        guard handle >= 0 else { return notHubs }
+        defer { close(handle) }
+        var info = stat()
+        guard fstat(handle, &info) == 0 else { return notHubs }
+        let size = Int(info.st_size)
+        func read(_ offset: Int, _ count: Int) -> [UInt8]? {
+            guard offset >= 0, count >= 0, count <= size, offset <= size - count else { return nil }
+            var bytes = [UInt8](repeating: 0, count: count), done = 0
+            while done < count {
+                let got = bytes.withUnsafeMutableBytes { pread(handle, $0.baseAddress! + done, count - done, off_t(offset + done)) }
+                if got < 0, errno == EINTR { continue }
+                guard got > 0 else { return nil }
+                done += got
+            }
+            return bytes
+        }
+        func number(_ bytes: [UInt8], _ at: Int, _ width: Int) -> Int {
+            (0..<width).reduce(0) { $0 | Int(bytes[at + $1]) << (8 * $1) }
+        }
+        guard size >= 22, let end = read(size - 22, 22) else { return notHubs }
+        if size >= 42, let locator = read(size - 42, 4), locator == [0x50, 0x4b, 0x06, 0x07] { return notHubs }
+        guard Array(end[0..<4]) == [0x50, 0x4b, 0x05, 0x06] else { return notHubs }
+        let disk = number(end, 4, 2), first = number(end, 6, 2), here = number(end, 8, 2), count = number(end, 10, 2)
+        let length = number(end, 12, 4), start = number(end, 16, 4), comment = number(end, 20, 2)
+        guard disk == 0, first == 0, comment == 0, here == count, count <= entriesMost, length <= directoryMost,
+              start + length == size - 22, let directory = read(start, length) else { return notHubs }
+        var raws: [[UInt8]] = [], streams: [(at: Int, packed: Int, whole: Int, check: Int)] = [], at = 0, local = 0
+        for _ in 0..<count {
+            guard at + 46 <= length, Array(directory[at..<(at + 4)]) == [0x50, 0x4b, 0x01, 0x02] else { return notHubs }
+            let flags = number(directory, at + 8, 2), method = number(directory, at + 10, 2)
+            let check = number(directory, at + 16, 4), packed = number(directory, at + 20, 4)
+            let whole = number(directory, at + 24, 4), nameSize = number(directory, at + 28, 2)
+            let extra = number(directory, at + 30, 2), note = number(directory, at + 32, 2)
+            let diskStart = number(directory, at + 34, 2), offset = number(directory, at + 42, 4)
+            // its mode: zipfile writes rw------- and no kind of file (0o600 << 16); a link or a folder is no hub's
+            let mode = number(directory, at + 38, 4), kind = (mode >> 16) & 0o170000
+            guard flags & 9 == 0, extra == 0, note == 0, diskStart == 0, kind == 0 || kind == 0o100000,
+                  mode & 0xFFFF == 0, offset == local, at + 46 + nameSize <= length else { return notHubs }
+            let name = Array(directory[(at + 46)..<(at + 46 + nameSize)])
+            // The local head: the same member, where the directory says, one after the other up to the directory.
+            guard let head = read(offset, 30 + nameSize), Array(head[0..<4]) == [0x50, 0x4b, 0x03, 0x04], method == 8,
+                  number(head, 6, 2) == flags, number(head, 8, 2) == method, number(head, 14, 4) == check,
+                  number(head, 18, 4) == packed, number(head, 22, 4) == whole, number(head, 26, 2) == nameSize,
+                  number(head, 28, 2) == 0, Array(head[30...]) == name
+            else { return notHubs }
+            raws.append(name)
+            streams.append((offset + 30 + nameSize, packed, whole, check))
+            at += 46 + nameSize
+            local = offset + 30 + nameSize + packed
+        }
+        // what a restore unpacks, which bounds the inflating below too
+        guard at == length, local == start, streams.reduce(0, { $0 + $1.whole }) <= unpackMost else { return notHubs }
+        // in any folder: no file of the fleet takes either name (lifecycle.COPY_KEY_NAMES); and with dots after it,
+        // which Windows drops when it writes a file
+        let keys = Set(keyNames.map { Array($0.utf8) })
+        for raw in raws {
+            var last = raw.split(omittingEmptySubsequences: false) { $0 == 0x2f || $0 == 0x5c }.last.map(Array.init) ?? raw
+            while last.last == 0x2e { last.removeLast() }
+            if keys.contains(last.map({ (0x41...0x5a).contains($0) ? $0 + 0x20 : $0 })) { return withKey }
+        }
+        // plain names, each member once, and the three of each copy there
+        guard raws.allSatisfy(member), Set(raws).count == raws.count,
+              Set(needed.map { Array($0.utf8) }).isSubset(of: Set(raws)) else { return notHubs }
+        for stream in streams {
+            guard inflatesWhole(handle, at: stream.at, packed: stream.packed, whole: stream.whole,
+                                check: UInt32(stream.check)) else { return notHubs }
+        }
+        return nil
+    }
+
+    /// `owner_mcp.py`'s `inflates_whole`: whether the `packed` bytes at `at` are one deflate stream that ends with its
+    /// last byte and gives `whole` bytes of this CRC-32, read in parts. A byte after the stream's end is room for a member
+    /// that the directory does not name, which a reader of a stream to its end and then of the next member finds. Apple's
+    /// decoder takes in the bytes after a stream's end that came in the same call as the end, and says nothing of them
+    /// (measured on this Mac, 25 November 2026), so the last `tailBytes` go in one byte at a time: an end before the last
+    /// byte is then an end with bytes left, and the parts before them go in whole. The decoder is called again while its
+    /// last call made output (below), so its end comes at the stream's exact end and 64 bytes leave room: measured on
+    /// 1,202 streams (zero runs of 16 and 64 MiB among them) with no wrong answer at 1, 8 or 64 bytes, and by Door's
+    /// reader on 847 copies.
+    static func inflatesWhole(_ handle: Int32, at: Int, packed: Int, whole: Int, check: UInt32) -> Bool {
+        guard packed > 0 else { return false }          // no stream at all, as zlib finds no end in nothing
+        let part = 1 << 20, tail = min(packed, tailBytes)
+        var stream = compression_stream(dst_ptr: UnsafeMutablePointer<UInt8>(bitPattern: 1)!, dst_size: 0,
+                                        src_ptr: UnsafePointer<UInt8>(bitPattern: 1)!, src_size: 0, state: nil)
+        guard compression_stream_init(&stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB) == COMPRESSION_STATUS_OK
+        else { return false }
+        defer { compression_stream_destroy(&stream) }
+        var input = [UInt8](repeating: 0, count: part), output = [UInt8](repeating: 0, count: part)
+        var read = 0, made = 0, crc: UInt32 = 0xFFFF_FFFF
+        while true {
+            let count = read < packed - tail ? min(part, packed - tail - read) : min(1, packed - read)
+            var got = 0
+            while got < count {
+                let one = input.withUnsafeMutableBytes { pread(handle, $0.baseAddress! + got, count - got, off_t(at + read + got)) }
+                if one < 0, errno == EINTR { continue }
+                guard one > 0 else { return false }
+                got += one
+            }
+            read += count
+            let last = read == packed
+            var status = COMPRESSION_STATUS_OK, left = 0, produced = 0
+            input.withUnsafeBufferPointer { inBytes in
+                stream.src_ptr = UnsafePointer(inBytes.baseAddress!)
+                stream.src_size = count
+                repeat {
+                    output.withUnsafeMutableBufferPointer { outBytes in
+                        stream.dst_ptr = outBytes.baseAddress!
+                        stream.dst_size = part
+                        status = compression_stream_process(&stream, last ? Int32(COMPRESSION_STREAM_FINALIZE.rawValue) : 0)
+                        produced = part - stream.dst_size
+                        made += produced
+                        for byte in outBytes[0..<produced] { crc = crcTable[Int((crc ^ UInt32(byte)) & 0xFF)] ^ (crc >> 8) }
+                    }
+                // on while input is left or the last call made output: the decoder can say OK with its input used
+                // up and output that it still holds (the Vault area's reader of 58ed16645: 16 MiB of zeros)
+                } while status == COMPRESSION_STATUS_OK && made <= whole && (stream.src_size > 0 || produced > 0)
+                left = stream.src_size
+            }
+            if status == COMPRESSION_STATUS_ERROR || made > whole { return false }
+            if status == COMPRESSION_STATUS_END { return left == 0 && last && made == whole && ~crc == check }
+            if last { return false }            // all of it read, and no end: a cut or broken stream
+        }
+    }
+
+    /// The table of CRC-32 (the zip's check), one entry for each byte.
+    static let crcTable: [UInt32] = (0..<256).map { index in
+        (0..<8).reduce(UInt32(index)) { crc, _ in (crc >> 1) ^ (0xEDB8_8320 & (0 &- (crc & 1))) }
+    }
+
+    /// `owner_mcp.py`'s `copy_member`: a plain name, of visible ASCII bytes with no backslash and no colon, not from the
+    /// root, and with no part between its slashes that is empty, "." or "..".
+    static func member(_ raw: [UInt8]) -> Bool {
+        guard !raw.isEmpty, raw.allSatisfy({ $0 > 0x20 && $0 < 0x7f && $0 != 0x5c && $0 != 0x3a }) else { return false }
+        return raw.split(separator: 0x2f, omittingEmptySubsequences: false).allSatisfy { part in
+            !part.isEmpty && !part.elementsEqual([0x2e]) && !part.elementsEqual([0x2e, 0x2e])
+        }
     }
 }
 
