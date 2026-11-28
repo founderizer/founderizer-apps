@@ -253,7 +253,8 @@ private func coded(_ words: String) -> AttributedString {
 /// the start of a role, a server or a repository in other capitals, a page of the app, a secret's name in other
 /// capitals or inside a longer word or code, and a name of letters only in free words stay words with no link, where a
 /// card's rules found them; and every character stays as written, in its order, but a whole role, which draws its
-/// agent's name with the role muted beside it, and a copy holds what shows (the owner, 23 November 2026: "We should
+/// agent's name with the role muted beside it, and an agent's name, which draws its role beside it
+/// (`anAgentsNameInAnAgentsWordsDrawsItsRoleBesideIt`), and a copy holds what shows (the owner, 23 November 2026: "We should
 /// ALWAYS use the name", and "The name with the role in grey"; the bug that this catches: a reply shows the role where
 /// the sidebar shows the name, the role is no part of its own, or his own bubble changes what he wrote). What
 /// the book keeps of a text that it read is the text's alone, its marks too.
@@ -262,11 +263,11 @@ private func coded(_ words: String) -> AttributedString {
     func badges(_ text: String) -> [CardNames.Target?] { chat.pieces(AttributedString(text)).map(\.badge) }
     // the owner's mock-up
     #expect(words("Leo is going ahead with 80 and updating Mia's duty.") ==
-            ["Leo", " is going ahead with 80 and updating ", "Mia", "'s duty."])
+            ["Leo\u{00A0}·\u{00A0}Web Lead", " is going ahead with 80 and updating ", "Mia\u{00A0}·\u{00A0}Web Developer", "'s duty."])
     #expect(badges("Leo is going ahead with 80 and updating Mia's duty.") == [.agent("leo"), nil, .agent("mia"), nil])
     let named = "Customer Support Lead and SEO & AI Search read acme/web; Kai’s post waits for app-1."
-    #expect(words(named) == ["Nova · Customer Support Lead", " and ", "Iris · SEO & AI Search", " read ", "acme/web", "; ",
-                             "Kai", "’s post waits for ", "app-1", "."])
+    #expect(words(named) == ["Nova\u{00A0}·\u{00A0}Customer Support Lead", " and ", "Iris\u{00A0}·\u{00A0}SEO & AI Search", " read ", "acme/web", "; ",
+                             "Kai\u{00A0}·\u{00A0}Marketing", "’s post waits for ", "app-1", "."])
     #expect(badges(named) == [.agent("nova"), nil, .agent("iris"), nil, .repository("acme/web"), nil, .agent("kai"), nil,
                               .server("app-1"), nil])
     // the book keeps what it read by the words with their marks: the same name in inline code is no badge
@@ -288,16 +289,16 @@ private func coded(_ words: String) -> AttributedString {
     #expect(chat.words(coded("export EXAMPLE_API_KEY=1")).badges.isEmpty)
     #expect(chat.words(coded("Stripe key")).badges.isEmpty)
     // a role of one word inside a sentence: its agent's name, where the badge stands in the words that a copy holds
-    #expect(words("I asked Marketing to check it.") == ["I asked ", "Kai · Marketing", " to check it."])
+    #expect(words("I asked Marketing to check it.") == ["I asked ", "Kai\u{00A0}·\u{00A0}Marketing", " to check it."])
     #expect(badges("I asked Marketing to check it.") == [nil, .agent("kai"), nil])
     #expect(badges("The quote goes to Sales today.") == [nil, .agent("bo"), nil])
-    #expect(words("I read Marketing's post.") == ["I read ", "Kai · Marketing", "'s post."])
+    #expect(words("I read Marketing's post.") == ["I read ", "Kai\u{00A0}·\u{00A0}Marketing", "'s post."])
     let asked = chat.words(AttributedString("I asked Marketing to check it."))
-    #expect(String(asked.text.characters) == "I asked Kai · Marketing to check it.")
+    #expect(String(asked.text.characters) == "I asked Kai\u{00A0}·\u{00A0}Marketing to check it.")
     #expect(asked.badges.map(\.characters) == [8..<23])
     // the role is the marked part of the badge's words, which a drawer draws muted
     #expect(asked.text.runs[RoleNames.RolePart.self].compactMap { $0.0 == true ? String(asked.text[$0.1].characters) : nil }
-            == [" · Marketing"])
+            == ["\u{00A0}·\u{00A0}Marketing"])
     // his own bubble keeps what he wrote, and the book reads it apart from the same words of an agent
     let his = chat.words(RoleNames.written(AttributedString("I asked Marketing to check it.")))
     #expect(String(his.text.characters) == "I asked Marketing to check it.")
@@ -339,11 +340,115 @@ private func coded(_ words: String) -> AttributedString {
             [.agent("nova"), .agent("mia")])
 }
 
+/// **In an agent's words in a chat, an agent's name draws its role beside it** (`RoleNames.withRoles`; the owner, 25
+/// November 2026, of a message whose badge was "Iris" alone: "I think we agreed that we should show both agent name and
+/// role? like in a nice card badge?"): "Iris · SEO & AI Search", with the role as the part that a drawer draws grey, and
+/// "'s" after the badge. The name, the dot and the role's first word are joined by no-break spaces. The role shows
+/// once in a block: not where the block writes it beside a name of the agent, either way round, or has a badge of its
+/// role or of its whole role anywhere, and only on the first name of an agent; his own words keep what he wrote; an
+/// agent with no role, the manager, whose role says its name, and an agent whose name is a person's of the fleet (in
+/// any capitals and accents) keep the name alone. The bugs that this catches:
+/// a name with no role in an agent's message, a role twice or on each mention, a role in his own bubble, a role that is
+/// no part of its own (it would draw in the name's violet), "Manager · Fleet Manager", a line that breaks between a
+/// name and its role, or a customer Mia that the words show as "Mia · Web Developer" (a review of 26 November 2026).
+@Test func anAgentsNameInAnAgentsWordsDrawsItsRoleBesideIt() {
+    let book = ChatNames(agents: [("iris", "SEO & AI Search"), ("leo", "Web Lead"), ("manager", "Fleet Manager"),
+                                  ("juno", nil), ("nova", "Customer Support Lead"), ("kai", "Marketing")])
+    func shown(_ text: AttributedString) -> [String] {
+        book.pieces(text).map { $0.badge == nil ? String($0.words.characters) : "[\(String($0.words.characters))]" }
+    }
+    func shown(_ text: String) -> [String] { shown(AttributedString(text)) }
+    #expect(shown("Iris rewrote all six guides.") == ["[Iris\u{00A0}·\u{00A0}SEO & AI Search]", " rewrote all six guides."])
+    let iris = book.words(AttributedString("Iris rewrote all six guides."))
+    #expect(iris.text.runs[RoleNames.RolePart.self].compactMap { $0.0 == true ? String(iris.text[$0.1].characters) : nil }
+            == ["\u{00A0}·\u{00A0}SEO & AI Search"])
+    #expect(iris.badges.map(\.characters) == [0..<22] && iris.badges.map(\.leads) == [true])
+    // a possessive: "'s" stays after the badge, as after a badge of a whole role ("Wren · Marketing's plan")
+    #expect(shown("Leo's team finished the patches.") == ["[Leo\u{00A0}·\u{00A0}Web Lead]", "'s team finished the patches."])
+    // the name alone: an agent with no role, the manager (its role says its name), and his own words
+    #expect(shown("Juno and Manager agreed.") == ["[Juno]", " and ", "[Manager]", " agreed."])
+    #expect(shown(RoleNames.written(AttributedString("Iris rewrote it."))) == ["[Iris]", " rewrote it."])
+    // the role once in a block: none where the block writes it beside one of the agent's names, either way round, or
+    // has a badge of its role's words or of its whole role, before or after the name
+    #expect(shown("Iris (SEO & AI Search) rewrote it.") == ["[Iris]", " (SEO & AI Search) rewrote it."])
+    #expect(shown("SEO & AI Search, Iris, rewrote it.") == ["SEO & AI Search, ", "[Iris]", ", rewrote it."])
+    #expect(shown("Marketing: Kai wrote it.") == ["Marketing: ", "[Kai]", " wrote it."])
+    #expect(shown("Iris is our SEO & AI Search.") == ["[Iris]", " is our ", "[SEO & AI Search]", "."])
+    #expect(shown("Nova is Customer Support Lead. Nova answers.") ==
+            ["[Nova]", " is ", "[Customer Support Lead]", ". ", "[Nova]", " answers."])
+    // the first name of an agent in a block only, also after a badge of its whole role
+    #expect(shown("Iris wrote it, and later Iris checked it.") ==
+            ["[Iris\u{00A0}·\u{00A0}SEO & AI Search]", " wrote it, and later ", "[Iris]", " checked it."])
+    #expect(shown("I asked Marketing. Kai checked it.") ==
+            ["I asked ", "[Kai\u{00A0}·\u{00A0}Marketing]", ". ", "[Kai]", " checked it."])
+    // the role that the block shows anywhere, also after the name: a badge of the whole role, or the role beside it
+    #expect(shown("Kai wrote the draft. Then I asked Marketing to check it.") ==
+            ["[Kai]", " wrote the draft. Then I asked ", "[Kai\u{00A0}·\u{00A0}Marketing]", " to check it."])
+    #expect(shown("Nova answered, and later Nova (Customer Support Lead) closed it.") ==
+            ["[Nova]", " answered, and later ", "[Nova]", " (Customer Support Lead) closed it."])
+    // a badge of the whole role named again is the name alone, also after an "@"
+    #expect(shown("I asked Marketing and then told Marketing.") ==
+            ["I asked ", "[Kai\u{00A0}·\u{00A0}Marketing]", " and then told ", "[Kai]", "."])
+    #expect(shown("@Kai wrote it, and @Kai checked it.") ==
+            ["[@Kai\u{00A0}·\u{00A0}Marketing]", " wrote it, and ", "[@Kai]", " checked it."])
+    // once in a message: a block after one that shows the role shows it no more (`words(_:before:)`)
+    let first = book.words(AttributedString("Iris wrote the list."))
+    #expect(first.roles == ["iris"])
+    #expect(String(book.words(AttributedString("Iris checked it."), before: first.roles).text.characters) == "Iris checked it.")
+    #expect(String(book.words(AttributedString("I asked Marketing."), before: ["kai"]).text.characters) == "I asked Kai.")
+    // one text read with two sets of earlier roles: two readings (the book's store keeps them apart)
+    #expect(String(book.words(AttributedString("Kai sent it.")).text.characters) == "Kai\u{00A0}·\u{00A0}Marketing sent it.")
+    #expect(String(book.words(AttributedString("Kai sent it."), before: ["kai"]).text.characters) == "Kai sent it.")
+    // the role written beside the name counts as shown, for the next block and for a badge of the whole role after it
+    #expect(book.words(AttributedString("Kai (Marketing) wrote it.")).roles == ["kai"])
+    #expect(shown("Kai (Marketing) wrote it. Then I asked Marketing.") ==
+            ["[Kai]", " (Marketing) wrote it. Then I asked ", "[Kai]", "."])
+    // inside quotation marks, somebody's exact words: the name alone
+    #expect(shown("The customer wrote: \"then Leo promised a refund\" and left.") ==
+            ["The customer wrote: \"then ", "[Leo]", " promised a refund\" and left."])
+    #expect(shown("She wrote \u{201C}thanks\u{201D}, and Leo replied.") ==
+            ["She wrote \u{201C}thanks\u{201D}, and ", "[Leo\u{00A0}·\u{00A0}Web Lead]", " replied."])
+    // each pair of marks, and a whole role inside them, as written
+    for (open, close) in [("\u{201C}", "\u{201D}"), ("\u{00AB}", "\u{00BB}"), ("\u{201E}", "\u{201C}"),
+                          ("\u{201D}", "\u{201D}"), ("\u{00BB}", "\u{00AB}")] {
+        #expect(shown("She wrote \(open)then Leo left\(close), and Leo came back.") ==
+                ["She wrote \(open)then ", "[Leo]", " left\(close), and ", "[Leo\u{00A0}·\u{00A0}Web Lead]", " came back."],
+                "\(open)\(close)")
+    }
+    #expect(shown("She wrote \"I asked Marketing\" today.") == ["She wrote \"I asked ", "[Marketing]", "\" today."])
+    // a mark with no partner is no quotation: an inch mark, a lone », a lone ”
+    for lone in ["The 27\" screen is late.", "Open Settings \u{00BB} People.", "It is \u{201D} late."] {
+        #expect(shown("\(lone) I asked Marketing.") == ["\(lone) I asked ", "[Kai\u{00A0}·\u{00A0}Marketing]", "."], "\(lone)")
+    }
+    // a person of the fleet's with the agent's name: the badge as before, with no role
+    let mia = "Mia asked for a refund."
+    #expect(ChatNames(agents: [("mia", "Web Developer")]).pieces(AttributedString(mia)).map { String($0.words.characters) }
+            == ["Mia\u{00A0}·\u{00A0}Web Developer", " asked for a refund."])
+    let people = ChatNames(agents: [("mia", "Web Developer")], people: ["Mia Example", "Pat"]).pieces(AttributedString(mia))
+    #expect(people.map { String($0.words.characters) } == ["Mia", " asked for a refund."])
+    #expect(people.map(\.badge) == [.agent("mia"), nil])
+    // in any capitals and with any accents, on either side
+    let zoe = ChatNames(agents: [("zoe", "Web Developer")], people: ["ZOË Example"]).pieces(AttributedString("Zoe asked."))
+    #expect(zoe.map { String($0.words.characters) } == ["Zoe", " asked."])
+    #expect(RoleNames.folded("Bjørn Weiß") == ["bjorn", "weiss"] && RoleNames.folded("Łukasz Æsir Yıldız") == ["lukasz", "aesir", "yildiz"])
+    // all the agent's words, in their order, in one person's words
+    let dev = AttributedString("Web-Dev asked.")
+    #expect(ChatNames(agents: [("web-dev", "Web Developer")], people: ["Dev Example"]).pieces(dev)
+                .map { String($0.words.characters) } == ["Web-Dev\u{00A0}·\u{00A0}Web Developer", " asked."])
+    #expect(ChatNames(agents: [("web-dev", "Web Developer")], people: ["Ann Web Dev"]).pieces(dev)
+                .map { String($0.words.characters) } == ["Web-Dev", " asked."])
+    #expect(ChatNames(agents: [("web-dev", "Web Developer")], people: ["Dev Web Example"]).pieces(dev)
+                .map { String($0.words.characters) } == ["Web-Dev\u{00A0}·\u{00A0}Web Developer", " asked."])
+}
+
 /// **A copy of a chat's words holds them as the message holds them** (the review of 21 November 2026: a no-break space
-/// before a name that began its block went into the copy, "\u{00A0}mini-2 restarts"): the words that the chat draws are
-/// the message's, character for character. A name keeps its icon's room on a character before it on its line; one that
-/// begins words of one line, left to right, keeps it in their leading space (the owner's "use always the agent badges
-/// and icons!!"), which is no character; one that a line break begins has neither, and neither has a name in a script
+/// before a name that began its block went into the copy, "\u{00A0}mini-2 restarts"): the words that the chat's book
+/// gives are the message's, character for character, but a name's role (`anAgentsNameInAnAgentsWordsDrawsItsRoleBesideIt`);
+/// the Mac app adds one no-break space before a block that wraps and begins with a name (`ChatBadgeLookTests`), the
+/// one exception that UI-PATTERNS writes. A name keeps its icon's room on a character before it on its line; one that
+/// begins the words, left to right, has no character before it, and its icon stands before the words, also where they
+/// have a line break (the owner's "use always the agent badges and icons!!", and of 25 November 2026, of a paragraph:
+/// "the agent does not show his icon!"); one that a line break begins has no room, and neither has a name in a script
 /// written right to left at the words' start. In a line written right to left, by the line's first letter (the review:
 /// "שאלתי את Nova" drew the icon on the next word), the end of a badge is a kern on the character after the name,
 /// whose side the layout gives.
@@ -363,7 +468,7 @@ private func coded(_ words: String) -> AttributedString {
         }
     }
     #expect(rooms("app-1 restarts at 22:00.") == ["leads end 4"])
-    #expect(rooms("app-1 restarts at 22:00.\nThe logs stay.") == ["none end 4"])
+    #expect(rooms("app-1 restarts at 22:00.\nThe logs stay.") == ["leads end 4"])
     #expect(rooms("We restart app-1 tonight.") == ["kern end 4"])
     #expect(rooms("We restart\napp-1 tonight.") == ["none end 4"])
     #expect(rooms("EXAMPLE_API_KEY expired at 22:00.") == ["leads end 14"])
@@ -404,7 +509,8 @@ private func coded(_ words: String) -> AttributedString {
 /// of one word counts there as after a word; any other name after such an "@" stays words, as it was. The bug that this
 /// catches: his tag drawn as another agent's badge, a removed agent's tag drawn as the agent that now has its words,
 /// "@" left outside the badge, or "@app-1" a server's badge where it was words. Every character stays, in its order, but
-/// a whole role after an agent's "@", which draws the agent's name with its role (`RoleNames`).
+/// a whole role after an agent's "@", which draws the agent's name with its role, and an agent's name after it, which
+/// draws its role (`RoleNames`).
 @Test func aTagIsItsAgentsBadgeAndAnAtBeforeANameJoinsItsBadge() {
     func tagged(_ text: String, _ agent: String, _ range: Range<Int>) -> AttributedString {
         var words = AttributedString(text)
@@ -429,10 +535,10 @@ private func coded(_ words: String) -> AttributedString {
     #expect(shown(tagged("Ask @Marketing now", "gone", 4..<14)) == ["Ask @Marketing now"])
     // an agent's reply: the name or the role after an "@" that starts a tag, with the "@"
     #expect(shown(AttributedString("I asked @Leo, then (@Marketing): ok.")) ==
-            ["I asked ", "[leo: @Leo]", ", then (", "[kai: @Kai · Marketing]", "): ok."])
-    #expect(shown(AttributedString("@Marketing drafts it.")) == ["[kai: @Kai · Marketing]", " drafts it."])
+            ["I asked ", "[leo: @Leo\u{00A0}·\u{00A0}Web Lead]", ", then (", "[kai: @Kai\u{00A0}·\u{00A0}Marketing]", "): ok."])
+    #expect(shown(AttributedString("@Marketing drafts it.")) == ["[kai: @Kai\u{00A0}·\u{00A0}Marketing]", " drafts it."])
     #expect(shown(AttributedString("@Customer Support Lead answers.")) ==
-            ["[nova: @Nova · Customer Support Lead]", " answers."])
+            ["[nova: @Nova\u{00A0}·\u{00A0}Customer Support Lead]", " answers."])
     // the agent's "@" name in the same sentence: the role stays, in addition to the name
     #expect(shown(AttributedString("@Nova is Customer Support Lead now.")) ==
             ["[nova: @Nova]", " is ", "[nova: Customer Support Lead]", " now."])
@@ -442,7 +548,7 @@ private func coded(_ words: String) -> AttributedString {
         #expect(chat.pieces(AttributedString(text)).allSatisfy { $0.badge == nil }, "\(text)")
         #expect(chat.pieces(AttributedString(text)).map { String($0.words.characters) }.joined() == text)
     }
-    #expect(chat.words(AttributedString("I asked @Leo.")).badges.map(\.characters) == [8..<12])
+    #expect(chat.words(AttributedString("I asked @Leo.")).badges.map(\.characters) == [8..<23])
 }
 
 /// **A secret of the fleet's is its name** (the owner, 21 November 2026: "task cards in both agents chat and needs you

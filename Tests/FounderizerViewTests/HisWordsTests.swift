@@ -5,21 +5,57 @@ import Testing
 @testable import Founderizer
 
 /// **His bubble and an agent's reply with the same words each draw by their own rule** (`MessageText.asWritten`; F23
-/// N1, 23 November 2026): his own words keep a role as he wrote it, and an agent's words draw the agent's name, in
-/// either order. The bug that this catches: the one store of read texts (`MessageText.blocks`) gives his bubble the
-/// agent's reading, so it shows a word that he did not write, or gives an agent's reply his.
+/// N1, 23 November 2026): his own words keep a role and a name as he wrote them, and an agent's words draw the agent's
+/// name with its role (and of a name, its role: the owner, 25 November 2026, "show both agent name and role"), in
+/// either order. **A quote in an agent's reply keeps its words as written too**, also one in a list item: it holds
+/// somebody's exact words; and **the role shows once in a message**, on the first name of its first block (reviews of 26
+/// November 2026). The words are the chat's book's, block by block (`MessageText.chatWords`). The bug that this catches:
+/// the one store of read texts (`MessageText.blocks`) gives his bubble the agent's reading, so it shows a word that he
+/// did not write, or gives an agent's reply his; a quote's "Atlas here" shows "Atlas · Marketing here", words that its
+/// writer did not write; or each item of a list, or a heading and its paragraph, show the role again.
 @MainActor @Test func hisWordsAndTheSameWordsOfAnAgentKeepTheirOwnReading() {
     let book = ChatNames(agents: [("atlas", "Marketing")])
+    @MainActor func read(_ text: String, his: Bool = false) -> [ChatWords] {
+        MessageText(text: text, chat: true, chatNames: book, asWritten: his).chatWords().compactMap { $0 }
+    }
     @MainActor func drawn(_ text: String, his: Bool) -> String {
-        MessageText(text: text, chat: true, chatNames: book, asWritten: his).blocks
-            .map { String(book.words($0.formatted).text.characters) }.joined(separator: "\n")
+        read(text, his: his).map { String($0.text.characters) }.joined(separator: "\n")
     }
     let first = "I asked Marketing for the numbers, his words first."
     #expect(drawn(first, his: true) == first)
-    #expect(drawn(first, his: false) == "I asked Atlas · Marketing for the numbers, his words first.")
+    #expect(drawn(first, his: false) == "I asked Atlas\u{00A0}·\u{00A0}Marketing for the numbers, his words first.")
     let then = "I asked Marketing for the numbers, an agent's words first."
-    #expect(drawn(then, his: false) == "I asked Atlas · Marketing for the numbers, an agent's words first.")
+    #expect(drawn(then, his: false) == "I asked Atlas\u{00A0}·\u{00A0}Marketing for the numbers, an agent's words first.")
     #expect(drawn(then, his: true) == then)
+    let named = "Atlas wrote the numbers."
+    #expect(drawn(named, his: false) == "Atlas\u{00A0}·\u{00A0}Marketing wrote the numbers.")
+    #expect(drawn(named, his: true) == named)
+    // a quote in an agent's reply: the name keeps its badge, with no role
+    #expect(drawn("> Atlas here: the invoice is wrong.", his: false) == "Atlas here: the invoice is wrong.")
+    #expect(drawn("Atlas here: the invoice is wrong.", his: false) == "Atlas\u{00A0}·\u{00A0}Marketing here: the invoice is wrong.")
+    #expect(read("> Atlas here: the invoice is wrong.").map { $0.badges.map(\.target) } == [[.agent("atlas")]])
+    #expect(drawn("- > Atlas here: the invoice is wrong.", his: false) == "> Atlas here: the invoice is wrong.")
+    #expect(drawn("- >50% of the pages, by Atlas.", his: false) == ">50% of the pages, by Atlas\u{00A0}·\u{00A0}Marketing.")
+    // the role once in a message: on the first item of a list, and in a heading and not in its paragraph
+    #expect(drawn("- Atlas wrote it.\n- Atlas checked it.", his: false)
+            == "Atlas\u{00A0}·\u{00A0}Marketing wrote it.\nAtlas checked it.")
+    #expect(drawn("# Atlas wrote it\n\nThen I asked Marketing.", his: false)
+            == "Atlas\u{00A0}·\u{00A0}Marketing wrote it\nThen I asked Atlas.")
+}
+
+/// **A quote in a request's words names an agent as Needs you does, in a chat's card too** (`MessageText.chatWords`; a
+/// review of 26 November 2026): only the chat's book keeps a quote as written, and a request's card in a chat reads its
+/// words with the card's book. The bug that this catches: a "> " quote in a request's reason draws "Marketing" in the
+/// chat's card and "Wren · Marketing" on Needs you, against his rule "We should ALWAYS use the name".
+@MainActor @Test func aQuoteInARequestsWordsDrawsTheAgentsNameOnEveryCard() {
+    let team: [(name: String, role: String?)] = [("wren", "Marketing")]
+    let book = CardNames(agents: team), roles = AgentNames.roles(team.map { ($0.name, $0.role) })
+    let quote = "> I asked Marketing to check it."
+    for card in [MessageText(text: quote, chat: true, card: true, names: book), MessageText(text: quote, step: true, names: book)] {
+        let words = card.blocks.flatMap { CardBadgeText.pieces($0.formatted, names: book, roles: roles) }
+            .map { String($0.words.characters) }
+        #expect(words.contains("Wren · Marketing"), "the card names the agent: \(words)")
+    }
 }
 
 /// **The role beside an agent's name in its badge is muted, and nothing else of the words is** (`mutedRole`; the owner's
@@ -30,9 +66,9 @@ import Testing
     let words = ChatNames(agents: [("atlas", "Marketing")]).words(AttributedString("I asked Marketing.")).text.mutedRole()
     let muted = words.runs[AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute.self]
         .compactMap { $0.0 == FleetStyle.muted ? String(words[$0.1].characters) : nil }
-    #expect(muted == [" · Marketing"])
+    #expect(muted == ["\u{00A0}·\u{00A0}Marketing"])
     #expect(words.runs[AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute.self].filter { $0.0 != nil }.count == 1)
-    #expect(String(words.characters) == "I asked Atlas · Marketing.")
+    #expect(String(words.characters) == "I asked Atlas\u{00A0}·\u{00A0}Marketing.")
 }
 
 /// **His typed answer to a request keeps a role as he wrote it, and an option that he pressed shows the agent's name

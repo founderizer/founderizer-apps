@@ -6,6 +6,8 @@ import SwiftUI
     fileprivate let context: String
     fileprivate let writes: Int
     fileprivate var at: ContinuousClock.Instant
+    /// The read to the hub whose answer this start got (`PageReply.read`): the same for every caller that joined it.
+    fileprivate var read: UUID?
 
     fileprivate init(context: String, writes: Int, at: ContinuousClock.Instant) {
         self.context = context
@@ -14,10 +16,12 @@ import SwiftUI
     }
 }
 
-/// Every waiter gets the original request time, including when the read fails.
+/// Every waiter gets the original request time, including when the read fails, and the read's own mark (`read`): one
+/// for each read to the hub, which every caller that joined it gets (`FleetStore.peopleReadFailed`).
 private struct PageReply: Sendable {
     let started: ContinuousClock.Instant
     let result: Result<any Sendable, Error>
+    let read = UUID()
 }
 
 /// **What each page read last, kept by the store, so a page that opens again draws it in its first frame** and reads
@@ -57,6 +61,18 @@ private struct PageReply: Sendable {
     /// When the live readings were last asked for, and whether that round is on its way (`FleetStore.keepLive`).
     fileprivate var liveAsked: ContinuousClock.Instant?
     fileprivate var liveRound = false
+    /// The failed reads of the People page's reading, by its context (`FleetStore.readPeopleAgain`): a refusal (4xx)
+    /// stops its reads again at once, any other failure after `againMost`.
+    fileprivate var peopleFailed: [String: Int] = [:]
+    static let againMost = 3
+    /// The reads of the People page's reading by the store that are on their way, by context: the launch's, a chat's
+    /// and one again (`FleetStore.readPeopleAgain`). A count, so the first that ends keeps the mark of the others.
+    fileprivate var peopleReading: [String: Int] = [:]
+    /// The failed reads of the People page's reading to the hub that counted, by context (`peopleFailed`): the callers
+    /// that joined one read get its mark (`PageReply.read`), so its failure counts once. Empty when a read answers.
+    fileprivate var peopleCounted: [String: Set<UUID>] = [:]
+    /// How many reads again of the People page's reading the store started, in all (`FleetStore.readPeopleAgain`).
+    fileprivate var peopleReadsAgain = 0
     /// The task threads that are read before they open, by their reading's context and name (`FleetStore.prefetchTask`).
     fileprivate var taskReads: Set<String> = []
 
@@ -212,7 +228,7 @@ extension FleetStore {
             do { return PageReply(started: origin, result: .success(try await read())) }
             catch { return PageReply(started: origin, result: .failure(error)) }
         }
-        if let start { start.at = min(start.at, reply.started) }
+        if let start { start.at = min(start.at, reply.started); start.read = reply.read }
         guard let value = try reply.result.get() as? Value else { throw HubError.invalidResponse }
         return value
     }
@@ -418,6 +434,8 @@ extension FleetStore {
         let features = state.ui_features ?? []
         let due = items.filter { $0.feature.map(features.contains) ?? true }
         readings.liveAsked = .now
+        // the People page's reading where it has no answer, beside the round and on its own (`readPeopleAgain`)
+        defer { readPeopleAgain(besides: items) }
         guard !due.isEmpty else { return }
         readings.liveRound = true
         let hub = hub, database = state.db
@@ -439,6 +457,62 @@ extension FleetStore {
         }
     }
 
+    /// **The People page's reading is read again, beside each live round and in a task of its own, while it has no
+    /// answer** (the People page keeps a failed read of its own on the page, never here): a chat's book takes the
+    /// people's names from it (`chatNames`), and with none it gives a person's name an agent's role. It goes through the
+    /// launch's read of a reading that all agents share (`prefetch`), but whatever the page kept: its reads of the name
+    /// join the others, the People page's own read among them (`read`), and it keeps its answer only where the reading
+    /// still has none and no newer answer or save came after it began (`keep(_:as:from:)`); a read that hangs holds no
+    /// round. Not while a read of it by the store is on its way in this hub generation (`peopleReading`), not after a
+    /// refusal (a 4xx: no access, or a hub with no such route) or three failed reads (`peopleFailed`), and not where the
+    /// round's own readings (`items`) hold it.
+    func readPeopleAgain(besides items: [PagePrefetch] = []) {
+        let item = PeoplePage.prefetch, name = item.name(""), context = readingContext
+        guard let state, lastSuccess != nil, item.feature.map((state.ui_features ?? []).contains) ?? true,
+              !items.contains(where: { $0.name("") == name }),
+              (reading(name) as PeopleReading<PeopleSnapshot>?)?.value == nil, readings.peopleReading[context] == nil,
+              readings.peopleFailed[context, default: 0] < PageReadings.againMost else { return }
+        peopleReadBegins(context)
+        readings.peopleReadsAgain += 1
+        let hub = hub, database = state.db
+        Task { [weak self] in
+            defer { self?.peopleReadEnds(context) }
+            _ = await self?.prefetch(item, agent: "", hub: hub, database: database, again: true)
+        }
+    }
+
+    /// A read of the People page's reading by the store is on its way in this hub generation (`readPeopleAgain`), and
+    /// how many reads again the store started: what a test waits for and counts.
+    var readsPeople: Bool { readings.peopleReading[readingContext] != nil }
+    var peopleReadsAgain: Int { readings.peopleReadsAgain }
+
+    private func peopleReadBegins(_ context: String) { readings.peopleReading[context, default: 0] += 1 }
+
+    private func peopleReadEnds(_ context: String) {
+        let left = readings.peopleReading[context, default: 1] - 1
+        readings.peopleReading[context] = left > 0 ? left : nil
+    }
+
+    /// A read of the People page's reading to the hub (`read`, its mark: nil for a caller that left before its answer)
+    /// failed, for `context`: a refusal (4xx) from any caller stops its reads again at once, but a 408 and a 429, which
+    /// ask for a later read, are failures. **A failure counts once for each read to the hub**, not once for each caller
+    /// that joined it (each chat that opens reads People), and two reads that fail together count one each. Else a hub
+    /// that restarts while the app opens two chats ends the reads again with its first 503, and the chat keeps a
+    /// person's name with an agent's role.
+    private func peopleReadFailed(_ error: any Error, context: String, read: UUID?) {
+        if case .refusal(let refusal)? = error as? HubError, (400..<500).contains(refusal.status),
+           ![408, 429].contains(refusal.status) {
+            readings.peopleFailed[context] = PageReadings.againMost
+        } else if let read, readings.peopleFailed[context, default: 0] < PageReadings.againMost,
+                  readings.peopleCounted[context, default: []].insert(read).inserted {
+            readings.peopleFailed[context, default: 0] += 1
+        }
+    }
+
+    /// The callers that wait for the store's read of the reading `name` on its way now, for the tests: a read that
+    /// joined it is one of them (`PageReads.waiters`).
+    func readers(of name: String) -> Int { readings.reads.waiters(readingContext + "\n" + name) }
+
     private static func seconds(_ time: Duration) -> TimeInterval {
         TimeInterval(time.components.seconds) + TimeInterval(time.components.attoseconds) / 1e18
     }
@@ -451,20 +525,38 @@ extension FleetStore {
     }
 
     /// Reads one reading of `item` before its page opens, and keeps it unless the page has one by then. False once
-    /// the hub or its generation changed.
-    func prefetch(_ item: PagePrefetch, agent: String, hub: URL, database: String) async -> Bool {
+    /// the hub or its generation changed. `again`: the People page's reading again where it has no answer
+    /// (`readPeopleAgain`), whatever the page kept, through the store's one read of a name (`read`). A failed read of the
+    /// People page's reading counts for its reads again (`peopleReadFailed`).
+    func prefetch(_ item: PagePrefetch, agent: String, hub: URL, database: String,
+                  again: Bool = false) async -> Bool {
         guard self.hub == hub, state?.db == database else { return false }
         let name = item.name(agent)
+        // the launch's or a chat's read of the People page's reading: no read again while it is on its way
+        let people = name == PeoplePage.prefetch.name(""), launchPeople = !again && people, context = readingContext
+        if launchPeople { peopleReadBegins(context) }
+        defer { if launchPeople { peopleReadEnds(context) } }
         if item.sharedAcrossAgents {
-            if canReuseFleetReading(name) { return true }
+            // a read again reuses no reading: it starts only where the People reading has no people (`readPeopleAgain`)
+            if !again, canReuseFleetReading(name) { return true }
             let start = pageReadStart()
             // Two chats opened in quick succession can ask while the first read is still on its way.
             let value: any Sendable
             do {
                 value = try await read(name, from: start) { try await item.read(hub, database, agent) }
-            } catch { return true }
+            } catch {
+                if people, self.hub == hub, state?.db == database {
+                    peopleReadFailed(error, context: readingContext, read: start.read)
+                }
+                return true
+            }
+            // a read of People that answered: the failed reads that counted are over
+            if people { readings.peopleCounted[context] = nil }
             guard self.hub == hub, state?.db == database else { return false }
-            // An answer that predates a save, or a newer reading from a visible page, is obsolete.
+            // An answer that predates a save, or a newer reading from a visible page, is obsolete. A read again keeps
+            // its answer only where the People page's reading still has none: a second guard beside keep(_:as:from:),
+            // which refuses an answer older than the page's
+            if again, (reading(name) as PeopleReading<PeopleSnapshot>?)?.value != nil { return true }
             keep(value, as: name, from: start)
             return true
         }

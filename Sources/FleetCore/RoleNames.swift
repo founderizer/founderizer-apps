@@ -34,8 +34,8 @@ public enum RoleNames {
         public static let name = "FleetCore.RoleNames.RolePart"
     }
 
-    /// **Words that the owner wrote himself**, which keep a role as he wrote it: his bubble in a chat
-    /// (`MessageText.asWritten`).
+    /// **Words that keep a role and a name as they were written**: the owner's own words, his bubble in a chat
+    /// (`MessageText.asWritten`), and a quote in a chat's message, which holds somebody's exact words.
     public enum Written: AttributedStringKey {
         public typealias Value = Bool
         public static let name = "FleetCore.RoleNames.Written"
@@ -69,6 +69,185 @@ public enum RoleNames {
                   !itsNameIsInTheSentence(of: index, in: pieces) else { return piece }
             return named
         }
+    }
+
+    /// **In an agent's words in a chat, a badge of an agent's name draws its role beside it** (`ChatNames.pieces`; the
+    /// owner, 25 November 2026, of a chat's message whose badge was "Iris" alone: "I think we agreed that we should show
+    /// both agent name and role? like in a nice card badge?"): "Iris" is "Iris · SEO & AI Search", with the role marked
+    /// (`RolePart`), which a drawer draws muted, as a badge of a whole role draws it (`named`), and "'s" stays after the
+    /// badge ("Leo · Web Lead's team", as "Wren · Marketing's plan"). `pieces`: the pieces of one block of a chat's
+    /// message, after `named`. **The name, the middle dot and the role's first word are joined by no-break spaces**, in
+    /// a badge of a whole role too (`joined`): a line breaks in the role or after the badge, and never leaves a name at a
+    /// line's end and its role alone on the next (a review of 26 November 2026).
+    ///
+    /// **An agent's role shows once in a message** (the owner, 21 November 2026: "show it only once!"; reviews of 26
+    /// November 2026): `before` are the agents whose role an earlier block of the message shows, and the result's
+    /// `shown` are those and the agents whose role this block shows, for the next block. A badge of an agent's whole role
+    /// after its role showed is the agent's name alone ("I asked Marketing and then told Marketing": "Kai · Marketing",
+    /// then "Kai"). **A badge of a name keeps its words**:
+    /// - in the owner's own words and in a quote of a message (`Written`): they keep what their writer wrote;
+    /// - **inside quotation marks**, a pair of them in the block (`quotations`), which hold somebody's exact words ("The
+    ///   customer wrote: "then Leo promised a refund"" keeps "Leo"), as a role in quotation marks keeps its words
+    ///   (`namesTheAgent`); a mark with no partner (the inch mark of 27") is no quotation;
+    /// - for an agent with no role beside its label (`AgentNames.role`): no role, or a role that says the name ("Fleet
+    ///   Manager" of the manager);
+    /// - **where the name can be a person of the fleet's** (`people`, the words of each name of the people that the
+    ///   owner added, of their handles and of his own, as `folded` gives them): all the agent's words, in their order,
+    ///   in one person's words ("Mia" in "Mia Example"; "Web-Dev" not in "Dev Example"). "Mia asked for a refund" can
+    ///   speak of a customer Mia, and "Mia · Web Developer" would say a false thing; a wrong badge must never also change
+    ///   the words (a review of 26 November 2026);
+    /// - **where the message shows the agent's role elsewhere**: in an earlier block, or anywhere in this one, before
+    ///   or after the name: its role written beside one of its names, behind a bracket, a comma, a dash, a colon or a
+    ///   middle dot, either way round ("Nova (Customer Support Lead)", "Marketing: Wren wrote it"), a badge of its role's
+    ///   words ("Nova is Customer Support Lead") or a badge of its whole role ("Kai wrote it. Then I asked Marketing":
+    ///   "Kai · Marketing" there, so "Kai" stays alone);
+    /// - where an earlier name of the agent has its role: only the first one has it.
+    ///
+    /// A badge of a whole role inside quotation marks keeps the words as written ("Marketing"), and one after the block
+    /// wrote the role beside a name of the agent is the name alone ("Kai (Marketing) wrote it. Then I asked Marketing").
+    /// `folds`: each agent's name as `folded` gives it, made once by the book; one that it lacks is folded here.
+    public static func withRoles(_ pieces: [CardNames.Piece], roles: [String: String], people: [[String]] = [],
+                                 folds: [String: [String]] = [:], before: Set<String> = [])
+        -> (pieces: [CardNames.Piece], shown: Set<String>) {
+        // most words name no agent that has a role
+        guard pieces.contains(where: { piece in
+            guard case .agent(let agent)? = piece.badge else { return false }
+            return AgentNames.role(agent, roles: roles) != nil
+        }) else { return (pieces, before) }
+        // the agents whose role the block writes as written: a badge of its role's words, or its role written beside one
+        // of its names; with the badges of a whole role and the earlier blocks', the agents whose role the message shows
+        var written: Set<String> = [], shown = before
+        for index in pieces.indices {
+            guard case .agent(let agent)? = pieces[index].badge else { continue }
+            let words = String(pieces[index].words.characters), name = agent.capitalized
+            if pieces[index].words.runs[RolePart.self].contains(where: { $0.0 == true }) {
+                shown.insert(agent)
+            } else if words != name, words != "@" + name {
+                written.insert(agent)
+            } else if let role = AgentNames.role(agent, roles: roles),
+                      beside(role, before: index > 0 ? String(pieces[index - 1].words.characters) : "",
+                             after: index + 1 < pieces.count ? String(pieces[index + 1].words.characters) : "") {
+                written.insert(agent)
+            }
+        }
+        shown.formUnion(written)
+        var given = before          // the agents whose role a badge of the message showed so far
+        func roled(_ piece: CardNames.Piece, quoted: Bool) -> CardNames.Piece {
+            guard case .agent(let agent)? = piece.badge else { return piece }
+            // a badge of a whole role: as written inside quotation marks; its role joined to its name, once, where the
+            // block does not write it; else the name alone
+            if piece.words.runs[RolePart.self].contains(where: { $0.0 == true }) {
+                if quoted { return CardNames.Piece(words: asWritten(piece.words), badge: piece.badge) }
+                guard !written.contains(agent), given.insert(agent).inserted else {
+                    return CardNames.Piece(words: nameAlone(piece.words), badge: piece.badge)
+                }
+                return CardNames.Piece(words: joined(piece.words), badge: piece.badge)
+            }
+            guard let role = AgentNames.role(agent, roles: roles), !isWritten(piece.words), !quoted,
+                  !shown.contains(agent), !given.contains(agent) else { return piece }
+            let words = String(piece.words.characters), name = agent.capitalized
+            // a person of the fleet's can have the name
+            guard words == name || words == "@" + name,
+                  people.isEmpty || !people.contains(where: { holds($0, folds[agent] ?? folded(agent)) })
+            else { return piece }
+            given.insert(agent)
+            var part = AttributedString(" · \(role)", attributes: piece.words.runs.last?.attributes ?? AttributeContainer())
+            part[RolePart.self] = true
+            return CardNames.Piece(words: joined(piece.words + part), badge: piece.badge)
+        }
+        // the quotations of the block, each a pair of marks; a piece inside one is somebody's exact words
+        let quotes = quotations(pieces.flatMap { Array($0.words.characters) })
+        var out: [CardNames.Piece] = [], offset = 0
+        for piece in pieces {
+            out.append(roled(piece, quoted: quotes.contains { $0.contains(offset) }))
+            offset += piece.words.characters.count
+        }
+        return (out, shown.union(given))
+    }
+
+    /// `words` hold `name`'s words, all of them, in their order and one after the other.
+    static func holds(_ words: [String], _ name: [String]) -> Bool {
+        guard !name.isEmpty, name.count <= words.count else { return false }
+        return (0...(words.count - name.count)).contains { Array(words[$0..<($0 + name.count)]) == name }
+    }
+
+    /// **The quotations of `characters`**, each from its opening mark to its closing one, in characters: a double mark
+    /// opens where none is open and closes the one that is (" “ ” « »: English “…”, French «…», German „…“ and »…«,
+    /// Swedish ”…”), and „ only opens. A mark with no partner is no quotation: the inch mark of 27", a lone » in
+    /// "Settings » People" (a review of 27 November 2026). An apostrophe is no mark: it is also "'s".
+    private static func quotations(_ characters: [Character]) -> [Range<Int>] {
+        var found: [Range<Int>] = [], open: Int?
+        for (index, character) in characters.enumerated() {
+            switch character {
+            case "\"", "\u{201C}", "\u{201D}", "\u{00AB}", "\u{00BB}":
+                if let start = open { found.append(start..<index + 1); open = nil } else { open = index }
+            case "\u{201E}":
+                if open == nil { open = index }
+            default: break
+            }
+        }
+        return found
+    }
+
+    /// The words of a badge of a whole role as written: "@" where they began with it, and the role, with no name and no
+    /// role's mark.
+    private static func asWritten(_ words: AttributedString) -> AttributedString {
+        guard let range = words.runs[RolePart.self].first(where: { $0.0 == true })?.1 else { return words }
+        var role = AttributedString(words[range])
+        role[RolePart.self] = nil
+        // the part is " · role", its spaces joined or not
+        role.characters.removeFirst(min(3, role.characters.count))
+        guard words.characters.first == "@" else { return role }
+        return AttributedString(words[words.startIndex..<words.characters.index(after: words.startIndex)]) + role
+    }
+
+    /// The words of a badge of a whole role with no role: its name, the agent's label.
+    private static func nameAlone(_ words: AttributedString) -> AttributedString {
+        var words = words
+        for (mark, range) in words.runs[RolePart.self].reversed() where mark == true { words.removeSubrange(range) }
+        return words
+    }
+
+    /// **The words of a name as `withRoles` matches a person's**: in small letters and in Latin letters with no accents
+    /// (ø, ł, æ and ß too: "Bjørn" is "bjorn", "Weiß" is "weiss"), at each character that is no letter and no digit, so
+    /// "Zoë Example" holds the agent `zoe` ("Zoe").
+    public static func folded(_ name: String) -> [String] {
+        let latin = name.applyingTransform(StringTransform("Latin-ASCII"), reverse: false) ?? name
+        return latin.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).lowercased()
+            .split { !$0.isLetter && !$0.isNumber }.map(String.init)
+    }
+
+    /// `words` of a badge with its role (`RolePart`, " · Marketing") with the spaces before and after the middle dot
+    /// as no-break spaces, so that the name, the dot and the role's first word stay on one line.
+    static func joined(_ words: AttributedString) -> AttributedString {
+        guard let range = words.runs[RolePart.self].first(where: { $0.0 == true })?.1 else { return words }
+        var words = words
+        let start = words.characters.distance(from: words.startIndex, to: range.lowerBound)
+        let characters = Array(words.characters)
+        guard start + 2 < characters.count, characters[start] == " ", characters[start + 1] == "·",
+              characters[start + 2] == " " else { return words }
+        for offset in [start, start + 2] {
+            let at = words.characters.index(words.startIndex, offsetBy: offset)
+            words.characters.replaceSubrange(at...at, with: "\u{00A0}")
+        }
+        return words
+    }
+
+    /// `role` stands right beside a name: at the start of the words after it (`after`) or at the end of the words
+    /// before it (`before`), with only a bracket, a comma, a dash, a colon or a middle dot and spaces between, in any
+    /// capitals. A role of one word there is words, and no badge (`ChatNames`), so only the words say it.
+    private static func beside(_ role: String, before: String, after: String) -> Bool {
+        let marks: Set<Character> = ["(", ",", "-", "–", "—", ":", "·"]
+        func behindAMark(_ words: [Character], _ role: [Character]) -> Bool {
+            var rest = words.drop(while: \.isWhitespace)
+            guard let mark = rest.first, marks.contains(mark) else { return false }
+            rest = rest.dropFirst().drop(while: \.isWhitespace)
+            guard rest.count >= role.count,
+                  String(rest.prefix(role.count)).caseInsensitiveCompare(String(role)) == .orderedSame else { return false }
+            // the whole role: no letter or digit goes on after it
+            return rest.dropFirst(role.count).first.map { !$0.isLetter && !$0.isNumber } ?? true
+        }
+        return behindAMark(Array(after), Array(role)) || behindAMark(Array(before.reversed()), Array(role.reversed()))
     }
 
     /// **`text` as a card draws its words, with no badge and no badge's link** (`CardJoin.join` of the pieces of

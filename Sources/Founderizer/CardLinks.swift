@@ -45,8 +45,17 @@ extension FleetStore {
             secretBadgeCache = (catalog, badges)
             return badges
         }()
+        // the names of the fleet's people, his own handles' too (the People page's reading): an agent's name that one of
+        // them holds can be that person in a chat's words, and draws no role there (`RoleNames.withRoles`); read with no
+        // watch also for a card, whose book takes no people
+        let peopleKept: PeopleReading<PeopleSnapshot>? = quietReading("people.list.fleet")
+        let people: [String] = peopleKept?.value.map { kept in
+            kept.peopleList.flatMap { [$0.name] + $0.handles.flatMap { [$0.name, $0.alias].compactMap { $0 } } }
+                + kept.owner.handles.flatMap { [$0.name, $0.alias].compactMap { $0 } }
+        } ?? []
         var hasher = Hasher()
         for agent in agents { hasher.combine(agent.name); hasher.combine(agent.role) }
+        hasher.combine(people)
         hasher.combine(repos)
         hasher.combine(names)
         hasher.combine(files)
@@ -62,8 +71,8 @@ extension FleetStore {
             return (card, kept.chat, kept.symbols)
         }
         // a new book with the same names keeps what the old one read (`ChatNames.keeping`)
-        let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets)
-            .keeping(cardBook?.chat)
+        let chat = ChatNames(agents: agents, repositories: repos, servers: names, knowledge: files, secrets: secrets,
+                             people: people).keeping(cardBook?.chat)
         let byName = Dictionary(symbols.map { ($0[0], $0[1]) }, uniquingKeysWith: { first, _ in first })
         cardBook = (key, [given: card], chat, byName)
         return (card, chat, byName)

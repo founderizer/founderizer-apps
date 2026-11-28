@@ -147,6 +147,9 @@ private final class SharedReads<Answer: Sendable>: @unchecked Sendable {
     /// The reads on their way now, for the tests.
     var inFlight: Int { lock.withLock { flights.count } }
 
+    /// The callers that wait for the read `key` on its way now, for the tests: a caller that joined it is one of them.
+    func waiters(_ key: String) -> Int { lock.withLock { flights[key]?.waiters.count ?? 0 } }
+
     /// The answer of the read `key`: the one on its way, or a new one that `read` makes.
     func share(_ key: String, _ read: @escaping @Sendable () async throws -> Answer) async throws -> Answer {
         try Task.checkCancellation()
@@ -219,6 +222,9 @@ private final class SharedReads<Answer: Sendable>: @unchecked Sendable {
 
     /// A saved answer can be reused while this count is the same as when the read began.
     public var answeredWrites: Int { reads.answeredWrites }
+
+    /// The callers that wait for the read `key` on its way now, for the tests (`SharedReads.waiters`).
+    public func waiters(_ key: String) -> Int { reads.waiters(key) }
 
     public func read<Value: Sendable>(_ key: String, _ read: @escaping @Sendable () async throws -> Value) async throws -> Value {
         let answer = try await reads.share(key) { try await read() }

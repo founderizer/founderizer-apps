@@ -45,6 +45,8 @@ final class LoopbackHub: @unchecked Sendable {
     private var inParts: [String: (fields: [String: String], between: (@Sendable () -> Void)?)] = [:]
     /// How many more requests of a route get their answer; each later one is held.
     private var answering: [String: Int] = [:]
+    /// Each request is answered on a thread of its own (`answerApart`).
+    private var apart = false
     /// How many held requests of a route the app's side gave up.
     private var cuts: [String: Int] = [:]
     private var stateWait: Double = 0
@@ -81,7 +83,7 @@ final class LoopbackHub: @unchecked Sendable {
             while true {
                 let peer = accept(listener, nil, nil)
                 guard peer >= 0 else { return }         // `stop` closed the listener
-                if lock.withLock({ !answering.isEmpty }) {      // a request that is held holds no other
+                if lock.withLock({ apart || !answering.isEmpty }) {     // a request that is held holds no other
                     Thread.detachNewThread { [self] in answer(peer) }
                 } else {
                     answer(peer)
@@ -113,6 +115,13 @@ final class LoopbackHub: @unchecked Sendable {
 
     /// Each `POST /ui/restore` is held from now on: a send that is on its way for as long as a test needs.
     func holdRestores() { lock.withLock { answering[Self.restore] = 0 } }
+
+    /// Each later request of this method to this path is held, on a thread of its own, until the app gives it up or
+    /// the hub stops: a read that hangs while the hub answers every other request.
+    func hold(_ method: String, _ path: String) { lock.withLock { answering["\(method) \(path)"] = 0 } }
+
+    /// Each later request is answered on a thread of its own: an answer that waits for the test holds no other.
+    func answerApart() { lock.withLock { apart = true } }
 
     /// What each later `GET /ui/backup` gives: a 200 with `body`, sent in parts with these header fields; `between`
     /// runs after the first part, before the rest (a test's moment while a copy arrives).

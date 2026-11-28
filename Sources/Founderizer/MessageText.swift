@@ -3,8 +3,9 @@ import FleetCore
 import SwiftUI
 
 /// Markdown is display-only: a copy of selected words takes what shows, which is an agent's name and its role where its
-/// words named it by its whole role (`RoleNames`); Copy message takes the words as they were written. Checked files use
-/// literal Text instead.
+/// words named it by its whole role or by its name (`RoleNames`, with a no-break space on each side of the middle dot),
+/// and a no-break space before a block that wraps and begins with a name (the room of its icon, `ChatBadgeText.text`);
+/// Copy message takes the words as they were written. Checked files use literal Text instead.
 struct MessageText: View, Equatable {
     let text: String
     /// An agent's text in a chat or a task thread: the chat's measures (`ChatStyle`). Else the size of a form.
@@ -156,18 +157,66 @@ struct MessageText: View, Equatable {
     /// the chat's book reads the words once (`ChatNames.words`), and `badges` are where its names stand, for their
     /// drawing (`chatBadges`). **The text is the same in every row**: the pointer that comes onto the message or leaves
     /// it makes none of its texts again (`ChatBadges`).
-    private func linked(_ block: Block, room: CGFloat = 0) -> (text: Text, badges: [ChatBadgeMap.Entry], lead: CGFloat) {
+    private func linked(_ block: Block, room: CGFloat = 0, chatWords: ChatWords? = nil) -> ChatBadgeText.Words {
         let size = step ? SetupMetrics.text : chat ? ChatStyle.size : FleetStyle.bodySize
-        var formatted = block.formatted
-        if room > 0 {
-            var before = AttributedString("\u{00A0}")
-            before.swiftUI.kern = room
-            formatted = before + formatted
+        if let chatWords { return ChatBadgeText.text(chatWords, links: block.links, size: size) }
+        return ChatBadgeText.Words(text: CardBadgeText.text(Self.room(room, block.formatted), names: names, size: size,
+                                                          values: values))
+    }
+
+    /// `words` with the room `room` before them: a kern on a no-break space (`lead`); the words as they are for 0.
+    private static func room(_ room: CGFloat, _ words: AttributedString) -> AttributedString {
+        guard room > 0 else { return words }
+        var before = AttributedString("\u{00A0}")
+        before.swiftUI.kern = room
+        return before + words
+    }
+
+    /// **The words of each block as the chat's book reads them** (`ChatNames.words`), in the message's order; nil for a
+    /// block that it does not read (code, a rule, a table) and for every block of a text with no chat's book.
+    /// - **An agent's role shows once in a message** (the owner, 21 November 2026: "show it only once!"; a review of 26
+    ///   November 2026): each block takes the agents whose role an earlier block shows (`ChatWords.roles`), so a list
+    ///   of items or a heading and a paragraph show it on the first name only.
+    /// - **A quote keeps its words as written** (`RoleNames.Written`), a quote in a list item too ("- > Hi, Kai here", not
+    ///   "- >50% via Kai"):
+    ///   it holds somebody's exact words, so its names have no role (a review of 26 November 2026). Only here, where
+    ///   the chat's book reads the words: a request's card in a chat reads them with the card's book, as Needs you does.
+    func chatWords() -> [ChatWords?] {
+        guard let chatNames else { return blocks.map { _ in nil } }
+        var before: Set<String> = []
+        return blocks.enumerated().map { index, block -> ChatWords? in
+            switch block.kind {
+            case .code, .rule, .table: return nil
+            default: break
+            }
+            var formatted = Self.room(index == 0 && block.kind == .paragraph ? lead : 0, block.formatted)
+            if block.kind == .quote || (block.kind == .item && block.text.hasPrefix("> ")) {
+                formatted = RoleNames.written(formatted)
+            }
+            let words = chatNames.words(formatted, before: before)
+            before = words.roles
+            return words
         }
-        guard let chatNames else {
-            return (CardBadgeText.text(formatted, names: names, size: size, values: values), [], 0)
+    }
+
+    /// **A block's words, selectable and with their badges** (`selectableWords`, `chatBadges`), in the form that its
+    /// width takes (`ChatBadgeText.text`): a name that begins them has its icon's room in their leading space where they
+    /// lay out on one line in the width without it, and in a no-break space before them where they wrap, so that the
+    /// lines of a block that wraps keep the column and the width of the blocks around it (a review of 21 November 2026:
+    /// a paragraph stood 21 points to the right, and then a list item took a fourth line). Each form has its own text,
+    /// badges and renderer, and one of them stands in the view. `style` gives the text its lines' space, its font or its
+    /// colour.
+    @ViewBuilder private func badged(_ words: ChatBadgeText.Words, block: Int,
+                                     style: @escaping (Text) -> some View) -> some View {
+        if let spaced = words.spaced {
+            ViewThatFits(in: .horizontal) {
+                style(words.text).selectableWords()
+                    .chatBadges(words.badges, block: block, lead: words.lead, fold: fold).padding(.leading, words.lead)
+                style(spaced.text).selectableWords().chatBadges(spaced.badges, block: block, lead: 0, fold: fold)
+            }
+        } else {
+            style(words.text).selectableWords().chatBadges(words.badges, block: block, lead: 0, fold: fold)
         }
-        return ChatBadgeText.text(chatNames.words(formatted), links: block.links, size: size)
     }
 
     var body: some View {
@@ -177,20 +226,21 @@ struct MessageText: View, Equatable {
         // a request's values, by block: their chips, their presses and VoiceOver's actions on the block's words
         // (`cardValues`)
         let valued = blocks.map { values ? CardValues.values(in: $0.formatted, names: names) : [] }
+        // the chat's book's words of each block, in order: a role once in the message (`chatWords`)
+        let read = chatWords()
         VStack(alignment: .leading, spacing: chat ? 0 : 9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
                 Group {
                 switch block.kind {
                 case .paragraph:
-                    let words = linked(block, room: index == 0 ? lead : 0)
-                    ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
-                        .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                    let words = linked(block, room: index == 0 ? lead : 0, chatWords: read[index])
+                    badged(words, block: index) { $0.lineSpacing(lines) }
                         .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                 case .heading:
-                    let words = linked(block)
-                    ChatBadgeText.led(words.text, lead: words.lead)
-                        .font(step ? Font.system(size: SetupMetrics.text, weight: .semibold) : chat ? ChatStyle.heading : FormMetrics.title)
-                        .selectableWords().chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                    let words = linked(block, chatWords: read[index])
+                    let font = step ? Font.system(size: SetupMetrics.text, weight: .semibold)
+                        : chat ? ChatStyle.heading : FormMetrics.title
+                    badged(words, block: index) { $0.font(font) }
                         .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                         .padding(.top, chat ? 0 : 3)
                 case .item:
@@ -198,17 +248,15 @@ struct MessageText: View, Equatable {
                     // after it, for each level.
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         Text(block.marker).selectableWords().frame(minWidth: 12, alignment: .trailing)
-                        let words = linked(block)
-                        ChatBadgeText.led(words.text, lead: words.lead).lineSpacing(lines).selectableWords()
-                            .chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                        let words = linked(block, chatWords: read[index])
+                        badged(words, block: index) { $0.lineSpacing(lines) }
                             .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                     }.padding(.leading, 3 + CGFloat(block.level) * 21)
                 case .quote:
                     HStack(spacing: 10) {
                         Rectangle().fill(FleetStyle.muted.opacity(0.4)).frame(width: 2)
-                        let words = linked(block)
-                        ChatBadgeText.led(words.text, lead: words.lead).foregroundStyle(FleetStyle.muted).lineSpacing(lines)
-                            .selectableWords().chatBadges(words.badges, block: index, lead: words.lead, fold: fold)
+                        let words = linked(block, chatWords: read[index])
+                        badged(words, block: index) { $0.foregroundStyle(FleetStyle.muted).lineSpacing(lines) }
                             .linkPresses(block.links, fold: fold, always: folded).cardValues(valued[index])
                     }
                 case .code: CodeBlock(text: block.text, font: chat ? ChatStyle.code : step && !script ? Self.stepCode : FormMetrics.code,
