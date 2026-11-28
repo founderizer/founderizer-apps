@@ -12,6 +12,9 @@ import Foundation
 ///   board only.
 /// - `work`: the job level of a thing of an agent's work (`WorkItem`), from a row of the card Work of that agent's chat
 ///   panel.
+/// - `ask`: **one ask of his list "Asked by me"**, by the request id of its first message (owner feature
+///   `ask_follow_ups`; the owner's "Yes, this" of 25 November 2026 to round 2 of its pictures): his messages, the
+///   answers and the work in order, with the chat field of its agent. A task's row in it opens the task level over it.
 ///
 /// A place holds keys and no values: each reading of the hub draws the card from its own tasks, so a task that opens a
 /// case leads to that case as its row in the panel does (`HubState.workItem`).
@@ -19,9 +22,12 @@ public enum DetailPlace: Hashable, Sendable {
     case task(Int)
     case job(String, board: String?)
     case work(String, WorkItem.Key)
+    case ask(String)
 
     /// The task of the task level, or nil for a job level.
     public var task: Int? { if case .task(let id) = self { id } else { nil } }
+    /// The ask of an ask's card (the request id of its first message), or nil for any other level.
+    public var ask: String? { if case .ask(let id) = self { id } else { nil } }
 }
 
 /// **The card's two levels** (design "Task details as a card over the page", 21 November 2026): the level that
@@ -66,7 +72,7 @@ public struct DetailCard: Identifiable, Equatable, Sendable {
         guard let state, before.map({ $0.db == state.db }) ?? true else { return nil }
         let levels = state.levels(of: self)
         guard levels.listed else { return nil }
-        guard under != nil, levels.under == nil else { return (self, levels) }
+        guard under != nil, levels.under == nil, levels.underAsk == nil else { return (self, levels) }
         return (DetailCard(shown), DetailLevels(shown: levels.shown, under: nil, listed: true))
     }
 }
@@ -79,6 +85,10 @@ public struct DetailLevels: Sendable {
     public let shown: JobLevel?
     public let under: JobLevel?
     public let listed: Bool
+    /// The name of the ask under a task level that a row of the ask's card opened, while his list has it; else nil.
+    public var underAsk: String? = nil
+    /// The name of the level under a task level, for its back link: the job's, or the ask's.
+    public var backTitle: String? { under?.title ?? underAsk }
 }
 
 /// **The job level, from either model of a job** (`JobDetail`): a card of the Tasks board (`Job`) and a thing of an
@@ -159,7 +169,7 @@ extension HubState {
         var boards: [String?: [Job]] = [:]
         func level(_ place: DetailPlace) -> JobLevel? {
             switch place {
-            case .task: return nil
+            case .task, .ask: return nil
             case .job(let id, let board):
                 let jobs = boards[board] ?? jobs(of: board)
                 boards[board] = jobs
@@ -181,8 +191,17 @@ extension HubState {
             }
         }
         let shown = level(card.shown)
-        let listed = card.shown.task.map { id in tasks.contains { $0.id == id } } ?? (shown != nil)
-        return DetailLevels(shown: shown, under: card.under.flatMap(level), listed: listed)
+        var listed = card.shown.task.map { id in tasks.contains { $0.id == id } } ?? (shown != nil)
+        // An ask's card shows while his list has the ask (`owner_asks`).
+        if case .ask(let id) = card.shown { listed = askName(id) != nil }
+        var levels = DetailLevels(shown: shown, under: card.under.flatMap(level), listed: listed)
+        if case .ask(let id)? = card.under { levels.underAsk = askName(id) }
+        return levels
+    }
+
+    /// The name of the ask of his list whose first message is `id`, or nil when the list does not have it.
+    func askName(_ id: String) -> String? {
+        owner_asks?.first { $0.id.caseInsensitiveCompare(id) == .orderedSame }?.name
     }
 
     /// A card of the board as the same facts: its own tasks with none that somebody canceled, as its card lists them,

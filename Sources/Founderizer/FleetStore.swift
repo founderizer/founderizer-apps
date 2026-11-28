@@ -363,6 +363,7 @@ final class FleetStore {
         didSet {
             AgentNames.shared.read((state?.agents ?? []).map { ($0.name, $0.title) })
             askCache = nil
+            askedByMeCache = nil
             openTasksByAgent = Dictionary(grouping: (state?.tasks ?? []).lazy.filter { !$0.isTerminal }, by: \.owner)
             newestReplies = (state?.reports ?? []).reduce(into: [:]) { newest, reply in
                 let agent = reply.chatAgent
@@ -445,6 +446,18 @@ final class FleetStore {
     }
     @ObservationIgnored private var answeredCache: (reading: Int, tasks: [Int: FleetTask]?,
                                                     byNeed: [AnsweredKey: (mark: AnsweredMark, task: FleetTask?)]) = (-1, nil, [:])
+    /// **His list "Asked by me" (`HubState.askedByMe`), read once for each reading**, as `asks` is: the Tasks page and
+    /// an ask's card read it at each of their frames, and it walks every task of the fleet. nil on a hub that does not
+    /// keep the list, where the Tasks page shows no switch.
+    var askedByMe: AskedByMe? {
+        guard let state else { return nil }
+        if let kept = askedByMeCache { return kept }
+        let list = state.askedByMe
+        askedByMeCache = .some(list)
+        return list
+    }
+    /// The list of this reading once it was read (`.some(nil)`: this hub keeps none), else nil.
+    @ObservationIgnored private var askedByMeCache: AskedByMe??
     private(set) var chatTimeline = ChatTimeline()
     /// The page this app opens on when somebody asked for one with
     /// `-openPage settings.<tab> | agent.<name>.<section> | task.<id> | needs | tasks | …`, which is how one screen can
@@ -964,6 +977,10 @@ final class FleetStore {
     /// message is about, so the draft of a task's or a job's card stays through a change of the card's level and a
     /// close of the card, as a guidance's draft stays with its task, and the hub's receipt empties it (`finish`).
     var feedbackDrafts: [String: String] = [:]
+    /// **The words of each ask's chat field** (`AskComposer`; owner feature `ask_follow_ups`), by its key
+    /// (`stageKey(ask:)`): its own, never the agent's chat draft, so a message from the card and the chat's words stay
+    /// apart; the hub's receipt empties it (`finish`), and a refused login text empties them all, as a card's feedback.
+    var askDrafts: [String: String] = [:]
     /// **The badge of what his message is about, in the agent's chat** (`HubState.badge(about:jobs:)`, `AboutBadgeView`).
     /// A badge reads the jobs of the board of every agent (a job's name and mark, and whether later work took a task
     /// over), which are worked out once for each reading, and only when a message names a task or a job that the reading
@@ -1043,7 +1060,7 @@ final class FleetStore {
     /// the feature (the owner's "Yes, as drawn" of 22 November 2026 names the chat box). Elsewhere, and until the hub
     /// lists it, a skill's ZIP is a file and a folder is a type that the hub does not take, as before.
     func takesSkills(_ composer: String) -> Bool {
-        state?.ui_features?.contains(SkillPackage.feature) == true && composer.hasPrefix("agent:")
+        state?.ui_features?.contains(SkillPackage.feature) == true && (composer.hasPrefix("agent:") || composer.hasPrefix("ask:"))
     }
     /// The skill's name of a staged file, while its composer takes skills: its chip shows the bolt and this name, and
     /// the message gives it. nil for a file that goes as a file.
@@ -1051,6 +1068,8 @@ final class FleetStore {
     /// The composer of one chat, or of one open request of Needs you.
     static func stageKey(agent: String) -> String { "agent:\(agent)" }
     static func stageKey(need: Int) -> String { "need:\(need)" }
+    /// The chat field of one ask's card (owner feature `ask_follow_ups`), by the request id of the ask's first message.
+    static func stageKey(ask: String) -> String { "ask:\(ask.lowercased())" }
     /// The box of the open correction, for the guard of a key (`KeyHoldBanner`) only: a correction takes no file, and its
     /// request's files are the chat's (`stageKey(of:)`). It is the correction's own (`editID`), never its message's: a
     /// "Keep it" of an earlier correction of the same message does not let a key of a later one go with no question.
@@ -1069,6 +1088,8 @@ final class FleetStore {
     /// The composer whose files a request carries: a guidance's, a request's answer's, a card's feedback's or a chat's.
     static func stageKey(of request: PendingRequest) -> String {
         if case .steer(let task, _) = request.command { return stageKey(task: task, database: request.database) }
+        // a message from an ask's card is its field's (a correction carries no ask: it is the chat's)
+        if let ask = request.ask, request.needID == nil { return stageKey(ask: ask) }
         // a correction of a feedback message is the chat's: it takes no file and no draft of the card's box
         if let about = request.about, request.needID == nil, request.replacesRequestID == nil {
             return stageKey(about: about, database: request.database)
@@ -2769,6 +2790,15 @@ final class FleetStore {
         await sendText(feedbackDrafts[composer] ?? "", recipient: feedback.recipient, files: files, about: feedback.about)
     }
 
+    /// **His message from an ask's card** (`AskComposer`; owner feature `ask_follow_ups`): the chat's own send
+    /// (`sendText`), to `agent`, from the card's own words and files, with the ask, so it goes on with it for sure.
+    func sendAsk(_ ask: String, to agent: String) async {
+        let composer = Self.stageKey(ask: ask)
+        guard let ready = await freshFiles(for: composer) else { return }
+        let (files, gifts) = outgoing(ready, of: composer)
+        await sendText(askDrafts[composer] ?? "", recipient: agent, files: files, gifts: gifts, ask: ask)
+    }
+
     /// His words to the chat's agent, or his answer to a request in words: the box's words, or `words` where the app
     /// gives them (a reply that he pressed, `NeedAnswerBox.sendQuickReply`), with the box's files either way. Words
     /// given here leave his box's own words as they are.
@@ -2954,7 +2984,7 @@ final class FleetStore {
     }
 
     private func sendText(_ value: String, needID: Int? = nil, recipient: String, replaces: String? = nil,
-                          files: [Int] = [], gifts: [Int] = [], about: MessagePlace? = nil) async {
+                          files: [Int] = [], gifts: [Int] = [], about: MessagePlace? = nil, ask: String? = nil) async {
         guard canWrite, let state else { return }
         guard needID != nil || canChat(with: recipient) else { return }
         guard files.isEmpty || supportsAttachments else { return }
@@ -2967,13 +2997,15 @@ final class FleetStore {
         if let needID, !openNeeds.contains(where: { $0.id == needID }) { return }
         // `about` only on a hub that takes it: an older hub refuses a field that it does not know.
         let about = state.ui_features?.contains("message_about") == true ? about : nil
+        // `ask` only on a hub that takes it, as `about`
+        let ask = state.ui_features?.contains(AskedByMe.feature) == true ? ask : nil
         // The @ tags of the words that go, read from them now (`AgentTags.mentions`), a correction's too: the final
         // words decide, so a tag typed in full counts and a broken one is words. [] stops the hub's own reading.
         let mentions = needID == nil ? agentTags(except: recipient)?.mentions(in: text) : nil
         let request = PendingRequest(hub: hub, database: state.db, client: installation, needID: needID,
                                      recipient: needID == nil && supportsDirectChat ? recipient : nil,
                                      replacesRequestID: replaces, attachments: files, about: about, mentions: mentions,
-                                     skills: gifts.isEmpty ? nil : gifts.map { .give($0) }, text: text)
+                                     skills: gifts.isEmpty ? nil : gifts.map { .give($0) }, ask: ask, text: text)
         do {
             try outbox.save(request)
             pending = request
@@ -3201,6 +3233,7 @@ final class FleetStore {
                 answers = [:]
                 agentDrafts = [:]
                 guidanceDrafts = [:]
+                askDrafts = [:]
                 cancelEdit()
                 do { pending = try outbox.rejectSecret(matching: request.requestID, drafts: AppDefaults.store) }
                 catch { storageError = String(l10n: "Cannot remove rejected text from local storage. Sending is blocked.") }
@@ -3256,6 +3289,11 @@ final class FleetStore {
             }
         } else if request.replacesRequestID != nil {
             if editingMessage?.id == request.replacesRequestID { cancelEdit() }
+        } else if request.needID == nil, let ask = request.ask {
+            // An ask's card empties its own field, and leaves the chat's draft as it is.
+            let box = Self.stageKey(ask: ask)
+            if askDrafts[box]?.trimmingCharacters(in: .whitespacesAndNewlines) == request.text { askDrafts[box] = nil }
+            clearStaged(box, sent: request.attachments + request.givenFiles)
         } else if request.needID == nil, let about = request.about {
             // A card's feedback empties its own box, and leaves the chat's draft as it is.
             let box = Self.stageKey(about: about, database: request.database)

@@ -293,4 +293,25 @@ struct JobsTests {
         #expect([1, 2, 3, 4, 5].map { byID[$0]?.stateSince }
                     == [Self.now - 172_800, Self.now - 900, Self.now - 300, Self.now - 500, Self.now - 100])
     }
+
+    /// The Tasks area's condition for the follow-ups (owner feature `ask_follow_ups`, 25 November 2026): **a follow-up
+    /// and its first ask make one job card**, under the first message's name and agent, in both lanes that its tasks
+    /// stand in. The bug that this catches: the follow-up's task, which names its own message, makes a second card with
+    /// the title of that task, and the first card stays in Done while his newer question is worked on.
+    @Test func aFollowUpAndItsFirstAskAreOneJobCard() throws {
+        func message(_ id: String, _ created: Double, asked: String?, ask: String?) -> [String: Any] {
+            ["request_id": id, "recipient": "lead", "kind": "message", "text": "Words of \(id)", "event_id": 1,
+             "created": created, "client": "test", "asked": asked ?? NSNull(), "ask": ask ?? NSNull()]
+        }
+        let state = try hub([
+            task(1, "completed", owner: "lead", title: "Find the orders", last: Self.now - 7200, ["ask": "m1", "accepted": 1]),
+            task(2, "working", title: "Refund them", ["ask": "m2", "works": true]),
+        ], messages: [message("m1", Self.now - 86_400, asked: "Refund the failed orders", ask: nil),
+                      message("m2", Self.now - 600, asked: nil, ask: "m1")])
+        let job = try #require(state.jobs.first)
+        #expect(state.jobs.map(\.id) == ["ask m1"])
+        #expect(job.title == "Refund the failed orders" && job.agent == "lead" && job.asked && job.column == .inProgress)
+        #expect(Set(job.tasks.map(\.id)) == [1, 2] && job.began == Self.now - 86_400)
+        #expect(state.board(period: .week).values.flatMap { $0 }.map(\.id) == ["ask m1"])
+    }
 }

@@ -205,9 +205,9 @@ struct FleetView: View {
                 .environment(\.glyphPresence, glyphPresences)
         }
         // **A task and a job open as one card over the window** (`FleetStore.detail`, `DetailCardView`): the job level
-        // as high as its content, the task level at its own size, built once (`sized`). Esc goes one level back; Done
-        // and a click on the dimmed window close it.
-        .fleetModal(item: $store.detail, sized: { $0.shown.task == nil ? nil : TaskDetail.size }, escape: { store.detailEscape() },
+        // as high as its content, the task level and an ask's card at their own size, built once (`sized`). Esc goes one
+        // level back; Done and a click on the dimmed window close it.
+        .fleetModal(item: $store.detail, sized: { DetailCardView.size(of: $0.shown) }, escape: { store.detailEscape() },
                     name: SetupChannel.detailWindow) { card in
             DetailCardView(store: store, card: card)
                 .environment(\.glyphTeam, store.state?.agents.map(\.name) ?? [])

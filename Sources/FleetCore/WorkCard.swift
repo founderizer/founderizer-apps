@@ -59,7 +59,9 @@ public struct WorkCard: Sendable {
 
     /// `asks`: `HubState.asks`, whose tasks of what he asked this agent for this card leaves to the card Asked.
     public init(_ state: HubState, agent: String, asks: [Ask]) {
-        let asked = Set(asks.filter { $0.agent == agent }.flatMap { $0.tasks.map(\.id) })
+        // each ask that this agent's chat holds a message of (`Ask.isIn(chatOf:)`): a follow-up's task that it does
+        // is on its card Asked, and not a second time here (the Mac validator, 26 November 2026)
+        let asked = Set(asks.filter { $0.isIn(chatOf: agent) }.flatMap { $0.tasks.map(\.id) })
         let mine = state.tasks.filter { $0.owner == agent && !asked.contains($0.id) }
         let open = mine.filter { !$0.isTerminal }.sorted { ($0.activityTime, $0.id) > ($1.activityTime, $1.id) }
         let owner = state.ownerWaits(of: open)

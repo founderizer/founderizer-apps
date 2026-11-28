@@ -1089,6 +1089,21 @@ public final class HubClient: Sendable {
         return report
     }
 
+    /// `GET /ui/mobile/asks/<id>` (owner feature `ask_follow_ups`, UI-API.md 1.360): the card of one ask of his, by the request
+    /// id of a message of it: his messages, the agents' answers to them and the heads of its tasks, each in time order.
+    /// A card of another generation, or of another ask, is no card of this one.
+    public func askCard(hub: URL, database: String, id: String) async throws -> AskCard {
+        guard UUID(uuidString: id) != nil else { throw HubError.invalidResponse }
+        var parts = URLComponents(url: hub.appendingPathComponent("ui/mobile/asks/\(id.lowercased())"), resolvingAgainstBaseURL: false)!
+        parts.queryItems = [.init(name: "db", value: database)]
+        var request = URLRequest(url: parts.url!)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, _) = try await boundedArtifactRead(request, limit: 4_194_304)
+        let card = try JSONDecoder().decode(AskCard.self, from: data)
+        try card.validate(database: database, id: id)
+        return card
+    }
+
     public func triggers(hub: URL, database: String) async throws -> TriggerList {
         var parts = URLComponents(url: hub.appendingPathComponent("ui/triggers"), resolvingAgainstBaseURL: false)!
         parts.queryItems = [.init(name: "db", value: database)]

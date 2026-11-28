@@ -44,6 +44,14 @@ import SwiftUI
 /// have to use the general one or go back to the agent"): "‹ Fleet Manager", which goes back to that agent's chat, as
 /// the agent's other pages have it. From the sidebar it has none, and neither has it while the hub lists that agent no
 /// more (renamed or deleted elsewhere), whose chat is gone.
+///
+/// **The main Tasks page has the switch "Asked by me · All"** at the start of its filters (owner feature
+/// `ask_follow_ups`; the owner, 25 November 2026: "If i asked for something this morning, there should be a way to
+/// easily see 4 hours later ... what is the response/status of the one thing I asked", then of a page of its own: "It
+/// adds yet another menu item, when we already have a tasks page", and "Yes, this" to the pictures of round 2,
+/// `my-asks-tracking-2026-11-25/r1` and `r2`). "Asked by me" is his list in the iPhone's look (`AskedList`), with no
+/// dropdowns; "All" is this board as it was. This Mac keeps his choice, "Asked by me" at first. An agent's own Tasks
+/// part has no switch, and neither has the page on a hub that does not keep his list.
 struct ActivityBoard: View {
     @Bindable var store: FleetStore
     /// The agent whose own Tasks part this board is, or nil for the board of the main sidebar.
@@ -53,6 +61,8 @@ struct ActivityBoard: View {
     /// The agent filter of the main sidebar's board: an agent's name, or empty for all agents.
     @AppStorage("activityAgent", store: AppDefaults.store) private var chosen = ""
     @AppStorage("activityPeriod", store: AppDefaults.store) private var periodName = ActivityPeriod.week.rawValue
+    /// The switch of the main Tasks page: "Asked by me" (true, at first) or "All".
+    @AppStorage("activityAskedByMe", store: AppDefaults.store) private var askedByMe = true
     private var period: ActivityPeriod { ActivityPeriod(rawValue: periodName) ?? .week }
     /// Ended shows the tasks behind its "more" row.
     @State private var showsRest = false
@@ -77,18 +87,22 @@ struct ActivityBoard: View {
 
     var body: some View {
         let state = store.state
-        let board = items(state)
+        // His list, on the main page of a hub that keeps it; "Asked by me" shows it in place of the lanes.
+        let list = scope == nil ? store.askedByMe : nil
+        let mine = list != nil && askedByMe
+        let board = mine ? [:] : items(state)
         FleetPage(scope == nil ? String(l10n: "Tasks") : AgentTab.tasks.heading,
                   back: back.flatMap { agent in
                       state?.agents.contains { $0.name == agent } == true
                           ? FleetBack(agent.agentLabel) { store.destination = .agent(agent) } : nil
                   },
                   fills: true, wide: true) {
-            filters(state?.activityAgents(saved: chosen) ?? [])
-            if let state, !board.isEmpty { lanes(board, state: state) }
+            filters(state?.activityAgents(saved: chosen) ?? [], switches: list != nil, mine: mine)
+            if mine, let list, let state { AskedList(store: store, list: list, state: state) }
+            else if let state, !board.isEmpty { lanes(board, state: state) }
             else {
                 empty(hasTasks: state?.tasks.contains { agent.isEmpty || $0.owner == agent } == true
-                                || store.asks.contains { $0.agent == agent })
+                                || store.asks.contains { $0.isIn(chatOf: agent) })
                 Spacer(minLength: 0)
             }
         } actions: { EmptyView() }
@@ -100,18 +114,27 @@ struct ActivityBoard: View {
         return state.board(period: period, agent: agent.isEmpty ? nil : agent)
     }
 
-    /// The period and the agent: two dropdowns on one line. An agent's own board has the period alone.
-    private func filters(_ agents: [String]) -> some View {
+    /// The period and the agent: two dropdowns on one line. An agent's own board has the period alone. `switches`: the
+    /// switch "Asked by me · All" stands first; `mine`: "Asked by me" is chosen, and the list has no dropdowns.
+    private func filters(_ agents: [String], switches: Bool = false, mine: Bool = false) -> some View {
         HStack(spacing: 8) {
-            FleetSelect("Period", selection: Binding(get: { period }, set: { periodName = $0.rawValue }),
-                        options: ActivityPeriod.allCases.map { FleetOption($0, $0.title, mark: .symbol("calendar")) })
-                .help("Show the tasks of one period").accessibilityIdentifier("activity-period")
-            if scope == nil {
-                FleetSelect("Agent", selection: $chosen, options: [FleetOption("", "All agents", mark: .symbol("person.2"))] + agents.map {
-                    FleetOption($0, $0.agentLabel, mark: .agent($0, state: store.state, isFresh: store.isFresh))
-                }).help("Show the tasks of one agent").accessibilityIdentifier("activity-agent")
+            if switches {
+                FleetSegmented("Tasks", selection: $askedByMe, options: [FleetOption(true, "Asked by me"), FleetOption(false, "All")])
+                    .fixedSize().accessibilityIdentifier("activity-asked-by-me")
             }
+            if !mine { dropdowns(agents) }
             Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder private func dropdowns(_ agents: [String]) -> some View {
+        FleetSelect("Period", selection: Binding(get: { period }, set: { periodName = $0.rawValue }),
+                    options: ActivityPeriod.allCases.map { FleetOption($0, $0.title, mark: .symbol("calendar")) })
+            .help("Show the tasks of one period").accessibilityIdentifier("activity-period")
+        if scope == nil {
+            FleetSelect("Agent", selection: $chosen, options: [FleetOption("", "All agents", mark: .symbol("person.2"))] + agents.map {
+                FleetOption($0, $0.agentLabel, mark: .agent($0, state: store.state, isFresh: store.isFresh))
+            }).help("Show the tasks of one agent").accessibilityIdentifier("activity-agent")
         }
     }
 

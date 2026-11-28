@@ -215,7 +215,9 @@ public enum ChatAskPlaces {
 
         var under: [Int: [Ask]] = [:]
         for ask in asks.sorted(by: { ($0.created, $0.id) < ($1.created, $1.id) }) {
-            guard let n = turnOf[key(ask.id)], let last = turns[n].messages.last else { continue }
+            // the newest turn of its first message or of a later message of his that goes on with it (`followUps`)
+            guard let n = ([ask.id] + ask.followUps).compactMap({ turnOf[key($0)] }).max(),
+                  let last = turns[n].messages.last else { continue }
             if let reply = turns[n].reply {
                 under[reply, default: []].append(ask)
             } else if let waiting, turns[n].ids.contains(waiting) {

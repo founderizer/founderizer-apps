@@ -20,11 +20,12 @@ struct ChatAsksTests {
         return row
     }
 
+    /// `ask`: the first message of the earlier ask that this one goes on with (owner feature `ask_follow_ups`).
     private func message(_ id: String, at created: Double, to recipient: String = "dev", asked: String? = nil,
-                         kind: String = "message", need: Int? = nil, replaces: String? = nil) -> [String: Any] {
+                         kind: String = "message", need: Int? = nil, replaces: String? = nil, ask: String? = nil) -> [String: Any] {
         ["request_id": id, "recipient": recipient, "kind": kind, "text": "Words of \(id)", "event_id": 1,
          "created": created, "client": "test", "asked": asked ?? NSNull(), "need_id": need ?? NSNull(),
-         "replaces_request_id": replaces ?? NSNull()]
+         "replaces_request_id": replaces ?? NSNull(), "ask": ask ?? NSNull()]
     }
 
     /// `pushed`: the agent wrote it first (`message_owner`), so it is no reply. A report that names no message and
@@ -68,7 +69,7 @@ struct ChatAsksTests {
         let entries = timeline.entries(for: agent, limit: .max)
         let needs = state.needs.filter { $0.by == agent }
         let places = ChatRequestPlaces.inTime(needs: needs, in: entries, whole: true)
-        let drawn = ChatAskPlaces.rows(places.rows(of: entries), asks: state.asks.filter { $0.agent == agent },
+        let drawn = ChatAskPlaces.rows(places.rows(of: entries), asks: state.asks.filter { $0.isIn(chatOf: agent) },
                                        open: needs.filter(\.isOpen), waitsOn: waitsOn)
         return (drawn.rows.map(\.id), drawn.heads.mapValues(\.id))
     }
@@ -88,6 +89,37 @@ struct ChatAsksTests {
             reports: [report(1, at: Self.now - 2990, replyingTo: "a"), report(2, at: Self.now - 2000, pushed: true),
                       report(3, at: Self.now - 990, replyingTo: "b"), report(4, at: Self.now - 500, replyingTo: "b")])
         #expect(chat(state) == ["message-a", "report-1", "ask-a", "report-2", "message-b", "report-3", "ask-b", "report-4"])
+    }
+
+    /// The bug that this catches (owner feature `ask_follow_ups`): a follow-up's work is on its first ask
+    /// (`HubState.asks`), so the row stood under the first message's turn, far up the chat, and none stood where he asked
+    /// again and where the agent answered.
+    @Test func theRowOfAnAskStandsUnderTheNewestTurnOfItsFollowUps() throws {
+        let state = try hub([task(1, "completed", ask: "a", accepted: 1), task(2, "working", ask: "b", works: true)],
+                            messages: [message("a", at: Self.now - 3000, asked: "Refund the orders"),
+                                       message("b", at: Self.now - 1000, ask: "a")],
+                            reports: [report(1, at: Self.now - 2990, replyingTo: "a"), report(2, at: Self.now - 990, replyingTo: "b")])
+        #expect(state.asks.map(\.id) == ["a"])
+        #expect(chat(state) == ["message-a", "report-1", "message-b", "report-2", "ask-a"])
+    }
+
+    /// The bug that this catches (the Mac validator, 26 November 2026): a follow-up that he sent to a second agent
+    /// makes the ask leave that agent's chat and its card Asked, because the ask is the first message's agent's; or
+    /// its task stands in that agent's panel twice, on the card Asked and on the card Work.
+    @Test func aFollowUpToASecondAgentIsInThatAgentsChatAndCardToo() throws {
+        let state = try hub([task(1, "completed", ask: "a", accepted: 1), task(2, "working", ask: "b", owner: "ops", works: true)],
+                            messages: [message("a", at: Self.now - 3000, asked: "Refund the orders"),
+                                       message("b", at: Self.now - 1000, to: "ops", ask: "a")],
+                            reports: [report(1, at: Self.now - 2990, replyingTo: "a"),
+                                      report(2, at: Self.now - 990, by: "ops", replyingTo: "b")])
+        let ask = try #require(state.asks.first)
+        #expect(state.asks.map(\.id) == ["a"] && ask.agent == "dev" && ask.alsoIn == ["ops"])
+        #expect(chat(state, agent: "ops") == ["message-b", "report-2", "ask-a"])
+        #expect(chat(state) == ["message-a", "report-1", "ask-a"])
+        #expect(AskedCard(state.asks, agent: "ops", after: 0, state: state).rows.map(\.id) == ["a"])
+        #expect(AskedCard(state.asks, agent: "manager", after: 0, state: state).isEmpty)
+        // its task in ops's panel is on the card Asked only, not a second time on the card Work
+        #expect(WorkCard(state, agent: "ops", asks: state.asks).isEmpty)
     }
 
     @Test func withNoReplyYetARowStandsUnderHisMessage() throws {

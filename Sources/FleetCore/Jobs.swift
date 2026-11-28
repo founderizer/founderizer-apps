@@ -357,7 +357,7 @@ extension HubState {
     /// Each task's links are read once: a task that the walk of another task passed has its answer already. A link to a
     /// task that the reading does not hold names that task's job all the same, so the tasks that name it stay one job.
     /// Links that go in a circle, which the hub cannot write, end at the smallest id of the tasks that the walk passed.
-    func jobKeys(byID: [Int: FleetTask]) -> [Int: Job.Key] {
+    func jobKeys(byID: [Int: FleetTask], firsts: [String: String] = [:]) -> [Int: Job.Key] {
         // Where the links of a task end, whatever its own ask.
         var ends: [Int: Job.Key] = [:]
         for task in tasks where ends[task.id] == nil {
@@ -383,7 +383,8 @@ extension HubState {
         }
         var keys: [Int: Job.Key] = [:]
         for task in tasks {
-            if let ask = task.ask, !ask.isEmpty { keys[task.id] = .ask(ask) } else { keys[task.id] = ends[task.id] }
+            // A follow-up's task names its own message, which is on the card of the ask that it goes on with (`askFirsts`)
+            if let ask = task.ask, !ask.isEmpty { keys[task.id] = .ask(firsts[ask] ?? ask) } else { keys[task.id] = ends[task.id] }
         }
         return keys
     }
@@ -397,7 +398,8 @@ extension HubState {
     /// For column times, include the named agents' parts beside the whole jobs in the same pass.
     func jobs(of agent: String?, includingPartsFor tracked: Set<String> = []) -> [Job] {
         let byID = Dictionary(tasks.map { ($0.id, $0) }) { first, _ in first }
-        let keys = jobKeys(byID: byID)
+        let firsts = askFirsts
+        let keys = jobKeys(byID: byID, firsts: firsts)
         var members: [Job.Key: [FleetTask]] = [:], order: [Job.Key] = []
         for task in tasks {
             guard let key = keys[task.id] else { continue }
@@ -406,7 +408,9 @@ extension HubState {
         }
         guard !order.isEmpty else { return [] }
         let asked = Dictionary(messages.map { ($0.request_id, $0) }) { first, _ in first }
-        let requests = Dictionary(needs.filter(\.isOpen).compactMap { need in need.ask.map { ($0, need) } }) { first, _ in first }
+        // his list's rows, for an ask whose first message is older than this reading's messages (`askFirsts`)
+        let listedAsks = Dictionary((owner_asks ?? []).map { ($0.id, $0) }) { first, _ in first }
+        let requests = Dictionary(needs.filter(\.isOpen).compactMap { need in need.ask.map { (firsts[$0] ?? $0, need) } }) { first, _ in first }
         let columns = taskColumns, waits = ownerWaits
         let held = Set((holds ?? []).filter { $0.state != "released" }.map(\.task))
         let limited = limitedTasks
@@ -425,6 +429,12 @@ extension HubState {
                     title = said.asked ?? oldest.title
                     owner = said.chatRecipient
                     created = said.created
+                } else if let row = listedAsks[message] {
+                    // its first message is older than the reading: his list's name and agent, not those of the
+                    // oldest task that the reading holds (Tasks and board, 26 November 2026)
+                    title = row.name
+                    owner = row.agent
+                    created = row.created
                 }
             case .dutyCase(let caseID):
                 id = "case \(caseID)"

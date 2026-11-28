@@ -146,7 +146,7 @@ struct ManagerView: View {
     /// **What he asked this agent for in this chat, each as a row of its own** (the owner, 16 November 2026: "this
     /// tasks should also show inside the conversation!! like in codex or claude code!"; `ChatAskPlaces`): under the
     /// agent's reply of the turn in which the work began, where it stays when the work ends.
-    private var asks: [Ask] { store.asks.filter { $0.agent == agent } }
+    private var asks: [Ask] { store.asks.filter { $0.isIn(chatOf: agent) } }   // a follow-up of it to this agent too
     /// The message of his whose reply holds the row of his ask while that message is worked on: his newest message,
     /// not an answer to a request, and only while the line would move with his answers left out
     /// (`ChatWaiting.asksWaitOn`): in the manager's chat the line moves for an answer too, and a message whose turn

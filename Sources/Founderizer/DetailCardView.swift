@@ -14,11 +14,22 @@ struct DetailCardView: View {
     @Bindable var store: FleetStore
     let card: DetailCard
 
+    /// **The card's own size for a level that has one**, which `fleetModal` builds once: the task level's, and an ask's
+    /// card (`AskDetail`), whose field stays at its foot; nil for the job level, as high as its content.
+    static func size(of place: DetailPlace) -> CGSize? {
+        if place.task != nil { return TaskDetail.size }
+        if place.ask != nil { return AskDetail.size }
+        return nil
+    }
+
     var body: some View {
         Group {
             if let state = store.state, let levels = store.detailLevels {
                 if let id = card.shown.task, let task = state.tasks.first(where: { $0.id == id }) {
-                    TaskDetail(store: store, task: task, state: state, back: levels.under?.title)
+                    // the job's name, or the ask's, under a task level that a row of either opened
+                    TaskDetail(store: store, task: task, state: state, back: levels.backTitle)
+                } else if let ask = card.shown.ask {
+                    AskDetail(store: store, id: ask, state: state)
                 } else if let level = levels.shown {
                     JobDetail(store: store, level: level, state: state)
                 }

@@ -318,8 +318,14 @@ struct AgentStatusPanel: View {
         if card.waitsInRows || showsWaits {
             ForEach(card.waits) { row in askedRow(row).transition(.opacity) }
         }
-        // Tasks keeps the agent chosen for its next visit, as its own filter does, and has this chat's back link.
-        Button { AppDefaults.store.set(agent, forKey: "activityAgent"); store.destination = .activityFrom(agent) } label: {
+        // Tasks keeps the agent chosen for its next visit, as its own filter does, and has this chat's back link. Its
+        // switch goes to All: "Asked by me" lists his asks of every agent, with no agent filter, and the agent that he
+        // came from would be lost (the Tasks and board area's read of 26 November 2026).
+        Button {
+            AppDefaults.store.set(agent, forKey: "activityAgent")
+            AppDefaults.store.set(false, forKey: "activityAskedByMe")
+            store.destination = .activityFrom(agent)
+        } label: {
             self.row(String(l10n: "View all"), muted: true, opens: true) { Color.clear.frame(width: 1, height: 1) }
         }
         .buttonStyle(FleetRowButtonStyle())

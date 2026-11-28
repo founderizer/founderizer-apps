@@ -26,7 +26,13 @@ public struct HubState: Decodable, Sendable {
     /// of older rows that this Mac holds (`OlderRows.join`, owner API 1.258), which only FleetCore sets.
     public internal(set) var needs: [OwnerNeed]
     public internal(set) var permissions: [FleetPermission]
-    public internal(set) var messages: [OwnerMessage]
+    public internal(set) var messages: [OwnerMessage] {
+        didSet { keptAskFirsts = Self.askFirsts(of: messages, asks: owner_asks) }    // a join of older rows, or a test's change
+    }
+    /// **`askFirsts`, worked out once for this reading** (Tasks and board, 25 November 2026: the board's views read
+    /// `jobs(of:)` outside the store's kept values, so the map is kept on the reading): set by `decode` and at each
+    /// change of `messages`; nil (a reading that an init made) works it out at each use.
+    var keptAskFirsts: [String: String]?
     public internal(set) var reports: [ManagerReport]
     public internal(set) var steers: [TaskSteer]?
     public internal(set) var holds: [TaskHold]?
@@ -64,6 +70,12 @@ public struct HubState: Decodable, Sendable {
     /// before it. A var, so the phone's reading (`init(phoneTime:)`) has none by itself. The key of the platform's link
     /// reads `on` (`ClaimKey.goesTo`).
     public private(set) var teams: TeamsLicence?
+    /// **His list "Asked by me"** (owner feature `ask_follow_ups`, UI-API.md 1.360; the owner's "Yes, this" of 25
+    /// November 2026 to round 2 of its pictures): the asks of his own hand that the hub keeps for it, the newest move
+    /// first, because the Mac's window of messages holds about three days. nil from a hub before it, and then the Tasks
+    /// page shows nothing new. A row that this app cannot read is no row (`OwnerAsk.isValid`), and the rest of the
+    /// reading stays. A var, so the phone's reading (`init(phoneTime:)`) has none by itself.
+    public private(set) var owner_asks: [OwnerAsk]?
 
     /// The token as one the watcher can wait from, or nil.
     public var liveToken: LiveToken? { LiveToken(token) }
@@ -78,6 +90,10 @@ public struct HubState: Decodable, Sendable {
         var state = try JSONDecoder().decode(Self.self, from: data)
         state.internalKnowledge = state.knowledge?.filter { !$0.isOwner }
         state.knowledge = state.knowledge?.filter(\.isOwner)
+        // A row of his list that this app cannot read is no row, and the first of two rows of one ask stands.
+        var listed = Set<String>()
+        state.owner_asks = state.owner_asks?.filter { $0.isValid && listed.insert($0.id.lowercased()).inserted }
+        state.keptAskFirsts = Self.askFirsts(of: state.messages, asks: state.owner_asks)
         guard state.schema_version == 1, !state.db.isEmpty,
               state.time.isFinite,
               state.goals?.allSatisfy(\.isValid) != false,
@@ -906,6 +922,9 @@ public struct OwnerMessage: Decodable, Identifiable, Sendable, Equatable {
     /// Owner feature `asks`: the name of what he asked for in this message, as his list shows it, or nil for a message
     /// that no task names. The first task of the message writes it, once.
     public let asked: String?
+    /// Owner feature `ask_follow_ups` (UI-API.md 1.360): the request id of the first message of the earlier ask that
+    /// this message goes on with, or nil. The message and its tasks are on that ask's card (`HubState.askFirsts`).
+    public let ask: String?
     /// **What the message is about** (owner feature `message_about`, API 1.279): the task or the job of the card that he
     /// wrote it on, with its title as the hub gives it; nil for a message about nothing. Never strict: a shape that
     /// this app does not read is none, and nothing else of the reading is lost.
@@ -942,6 +961,77 @@ public struct MessageMentions: Decodable, Equatable, Sendable {
     private struct Entry: Decodable {
         let mention: AgentTags.Mention?
         init(from decoder: Decoder) throws { mention = try? AgentTags.Mention(from: decoder) }
+    }
+}
+
+/// **One ask of his list "Asked by me"** (`HubState.owner_asks`, owner feature `ask_follow_ups`, UI-API.md 1.360), as
+/// the hub builds it: his first message of it, the request ids of its messages in the order he wrote them (the first
+/// one, then each follow-up: `tasks[].ask` names one of them), the newest answer to one of them, whether a task of it
+/// is open, and when it moved last. **Never strict**: a row of another shape decodes as one that is not valid
+/// (`isValid`), which the reading leaves out, and the rest of the reading stays.
+public struct OwnerAsk: Decodable, Identifiable, Sendable, Equatable {
+    /// The newest answer to a message of it: the start of the agent's report, on one line, when, and from which agent.
+    public struct Answer: Decodable, Sendable, Equatable {
+        public let text: String
+        public let at: Double
+        public let agent: String?
+
+        public init(text: String, at: Double, agent: String?) { self.text = text; self.at = at; self.agent = agent }
+    }
+
+    /// The request id of its first message.
+    public let id: String
+    public let event_id: Int
+    /// The agent that he asked: the first message's recipient.
+    public let agent: String
+    /// Its name, which an agent gave it.
+    public let name: String
+    /// When he wrote its first message.
+    public let created: Double
+    /// The request ids of its messages, its first one first.
+    public let messages: [String]
+    public let answer: Answer?
+    /// A task of it is open.
+    public let open: Bool
+    /// When it moved last: a message of it, its newest answer, or (for one with an open task) its first message.
+    public let moved: Double
+    /// The row had the shape that this app reads.
+    public let isValid: Bool
+
+    private enum CodingKeys: String, CodingKey { case id, event_id, agent, name, created, messages, answer, open, moved }
+
+    public init(from decoder: Decoder) throws {
+        let row = try? decoder.container(keyedBy: CodingKeys.self)
+        let id = (try? row?.decode(String.self, forKey: .id)) ?? ""
+        self.id = id
+        event_id = (try? row?.decode(Int.self, forKey: .event_id)) ?? 0
+        agent = (try? row?.decode(String.self, forKey: .agent)) ?? ""
+        name = ((try? row?.decode(String.self, forKey: .name)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let created = (try? row?.decode(Double.self, forKey: .created)) ?? .nan
+        self.created = created
+        // Its first message stands first, whatever the list says, and once.
+        let listed = (try? row?.decode([String].self, forKey: .messages)) ?? []
+        messages = [id] + listed.filter { $0.caseInsensitiveCompare(id) != .orderedSame }
+        answer = (try? row?.decodeIfPresent(Answer.self, forKey: .answer)) ?? nil
+        open = (try? row?.decode(Bool.self, forKey: .open)) ?? false
+        moved = (try? row?.decode(Double.self, forKey: .moved)) ?? created
+        isValid = row != nil && !id.isEmpty && !agent.isEmpty && !name.isEmpty && created.isFinite && moved.isFinite
+            && answer?.at.isFinite != false
+    }
+
+    /// A row of the list, for a test of the rules that read it.
+    public init(id: String, agent: String, name: String, created: Double, messages: [String] = [], answer: Answer? = nil,
+                open: Bool = false, moved: Double? = nil, event_id: Int = 0) {
+        self.id = id
+        self.event_id = event_id
+        self.agent = agent
+        self.name = name
+        self.created = created
+        self.messages = [id] + messages.filter { $0.caseInsensitiveCompare(id) != .orderedSame }
+        self.answer = answer
+        self.open = open
+        self.moved = moved ?? max(created, answer?.at ?? 0)
+        isValid = !id.isEmpty && !agent.isEmpty && !name.isEmpty
     }
 }
 

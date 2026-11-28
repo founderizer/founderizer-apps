@@ -2514,6 +2514,16 @@
         }
       }
     },
+    "%lld earlier" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld anteriores"
+          }
+        }
+      }
+    },
     "%lld failed" : {
       "localizations" : {
         "es" : {
@@ -4930,6 +4940,16 @@
         }
       }
     },
+    "Answer" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Responder"
+          }
+        }
+      }
+    },
     "Answer not confirmed" : {
       "localizations" : {
         "es" : {
@@ -5176,6 +5196,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Solicitado por %@"
+          }
+        }
+      }
+    },
+    "Asked by me" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lo que pedí"
           }
         }
       }
@@ -14256,6 +14286,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nota para el agente"
+          }
+        }
+      }
+    },
+    "Nothing asked yet" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no has pedido nada"
           }
         }
       }
@@ -30196,6 +30236,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "con la etiqueta %@"
+          }
+        }
+      }
+    },
+    "working" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "trabajando"
           }
         }
       }

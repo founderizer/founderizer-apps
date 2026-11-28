@@ -17,15 +17,38 @@ struct DetailCardTests {
         return row
     }
 
+    /// `asks`: his list "Asked by me" (`owner_asks`, owner feature `ask_follow_ups`).
     private func hub(_ tasks: [[String: Any]], needs: [[String: Any]] = [], duties: [[String: Any]] = [],
-                     db: String = "test-db") throws -> HubState {
+                     db: String = "test-db", asks: [[String: Any]]? = nil) throws -> HubState {
         let agents: [[String: Any]] = ["manager", "lead", "dev"].map {
             ["name": $0, "role": $0 == "manager" ? "manager" : $0 == "lead" ? "lead" : "worker", "runtime": "codex", "can": []]
         }
-        return try HubState.decode(JSONSerialization.data(withJSONObject: [
+        var state: [String: Any] = [
             "schema_version": 1, "db": db, "time": Self.now, "agents": agents, "tasks": tasks, "holds": [],
             "outcomes": [], "notes": [], "needs": needs, "permissions": [], "messages": [], "reports": [],
-            "responsibilities": duties]))
+            "responsibilities": duties]
+        state["owner_asks"] = asks
+        return try HubState.decode(JSONSerialization.data(withJSONObject: state))
+    }
+
+    /// The bug that this catches (owner feature `ask_follow_ups`): an ask's card closes at the next reading because no
+    /// job of the board has its id; a task that a row of the card opens loses its way back to the ask, or keeps a back
+    /// link to an ask that his list no longer has.
+    @Test func anAsksCardShowsWhileHisListHasItAndATaskFromItKeepsItUnder() throws {
+        let ask: [String: Any] = ["id": "a1", "event_id": 3, "agent": "lead", "name": "Refund the orders",
+                                  "created": Self.now - 900, "messages": ["a1"], "open": true, "moved": Self.now - 900]
+        let state = try hub([task(5, "working", ["ask": "a1", "works": true])], asks: [ask])
+        #expect(state.has(.ask("a1")) && !state.has(.ask("a2")))
+        let card = try #require(DetailCard(.ask("a1")).kept(in: state, before: state))
+        #expect(card.card == DetailCard(.ask("a1")) && card.levels.shown == nil)
+        let fromAsk = DetailCard.showing(.task(5), over: DetailCard(.ask("a1")), inCard: true)
+        #expect(fromAsk.under == .ask("a1") && fromAsk.back == DetailCard(.ask("a1")))
+        let kept = try #require(fromAsk.kept(in: state, before: state))
+        #expect(kept.card == fromAsk && kept.levels.backTitle == "Refund the orders")
+        // a reading whose list has the ask no more closes its card, and the task keeps no way back to it
+        let without = try hub([task(5, "working", ["ask": "a1", "works": true])], asks: [])
+        #expect(DetailCard(.ask("a1")).kept(in: without, before: state) == nil)
+        #expect(fromAsk.kept(in: without, before: state)?.card == DetailCard(.task(5)))
     }
 
     private func job(_ id: String, in state: HubState) throws -> Job { try #require(state.job(id, board: nil)) }
