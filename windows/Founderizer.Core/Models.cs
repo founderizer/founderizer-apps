@@ -88,8 +88,10 @@ public sealed record MobileAgent(
 
 public sealed record MobileUsageWindow(string? Label = null, double? UsedPercent = null, double? ResetsAt = null);
 
-/// <summary>The newest line of one conversation: who wrote it (`owner` or `agent`), when, and its first characters.</summary>
-public sealed record MobilePreview(double Ts, string Side, string Preview);
+/// <summary>The newest line of one conversation: who wrote it (`owner` or `agent`), when, and its first characters. On a hub
+/// with `message_hands` (owner API 1.332), his line's hand and its AI's program (<see cref="OwnerHand"/>); null on an
+/// agent's line, on a row from before owner API 1.289 and from a hub before the feature.</summary>
+public sealed record MobilePreview(double Ts, string Side, string Preview, string? Hand = null, string? Runtime = null);
 
 /// <summary>A task's head: no details, done-when or result, which come with the task itself (MobileTaskHead). `limit` is the
 /// usage-limit hold that keeps this task waiting now (owner API 1.330, feature `task_limit`), or null: read it through
@@ -128,7 +130,9 @@ public sealed record MobileTaskHead(
 public sealed record MobileChatPage(string Db, string Agent, IReadOnlyList<MobileChatItem> Items, double Cursor);
 
 /// <summary>One line of a conversation: a message of the owner, or a report of the agent (MobileChatItem). Its `id` is a
-/// message's request UUID or a report's number; <see cref="Key"/> holds either as text.</summary>
+/// message's request UUID or a report's number; <see cref="Key"/> holds either as text. A message's `hand` and `runtime`:
+/// the hand that sent it and the program of the AI session that sent it (owner feature `message_hands`,
+/// <see cref="OwnerHand"/>); null on a row from before owner API 1.289, from a hub without the feature, and on a report.</summary>
 public sealed record MobileChatItem(
     string Kind,
     double Ts,
@@ -142,7 +146,9 @@ public sealed record MobileChatItem(
     [property: JsonPropertyName("attachments")] IReadOnlyList<MessageAttachment>? RawAttachments = null,
     bool? Pushed = null,
     long? AnswerTo = null,
-    double? Edited = null)
+    double? Edited = null,
+    string? Hand = null,
+    string? Runtime = null)
 {
     /// <summary>A message's request UUID, or a report's number as text. Set by HubDecode.</summary>
     [JsonIgnore] public string Key { get; init; } = "";
@@ -427,8 +433,9 @@ public static class NeedClarify
 }
 
 /// <summary>One message of the talk under a card (FleetCore's NeedMessage): `who` is `owner` or the agent that replied.
-/// The hub's receipt of his message carries the card's talk too.</summary>
-public sealed record NeedMessage(string Who, string Text, double Ts)
+/// The hub's receipt of his message carries the card's talk too. His line's hand and its AI's program, as on his
+/// messages (owner feature `message_hands`, <see cref="OwnerHand"/>); null on an agent's reply.</summary>
+public sealed record NeedMessage(string Who, string Text, double Ts, string? Hand = null, string? Runtime = null)
 {
     [JsonIgnore] public bool FromOwner => Who == "owner";
 }
@@ -538,9 +545,10 @@ public sealed record EndedBlockEntry(long From, string Mark, long Tasks);
 /// and its mark of the same moment.</summary>
 public sealed record EndedBlock(string Db, long From, string Mark, IReadOnlyList<MobileTaskHead> Tasks);
 
-/// <summary>A task's guidance as the hub keeps it (FleetCore's TaskSteer).</summary>
+/// <summary>A task's guidance as the hub keeps it (FleetCore's TaskSteer), with the hand that sent it and its AI's program
+/// (owner feature `message_hands`, <see cref="OwnerHand"/>): an AI session steers through the owner tools too.</summary>
 public sealed record TaskSteer(long Id, long Task, long Attempt, string Text, double Created, string RequestId,
-                               string Client, double? ReadAt = null)
+                               string Client, double? ReadAt = null, string? Hand = null, string? Runtime = null)
 {
     public bool IsValid => Id > 0 && Task > 0 && Attempt > 0 && Text.Length > 0 && Text.Length <= 4000 &&
                            double.IsFinite(Created);

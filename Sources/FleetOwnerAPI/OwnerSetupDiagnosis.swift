@@ -26,7 +26,7 @@ public struct SetupDiagnosis: Equatable, Sendable {
     /// What a build's server is for (`CloudServerUse`).
     public static let uses = ["hub", "agent"]
     /// The VPS providers in the order of their cards (`CloudProvider`; `SetupFacts.providers` as a list).
-    public static let providers = ["hetzner", "digitalocean", "vultr", "akamai"]
+    public static let providers = ["hetzner", "digitalocean", "vultr", "akamai", "hostinger"]
     /// Where an install stands (`ReachFacts.InstallState`).
     public static let installStates = ["none", "running", "stopped", "done"]
     /// What an install installs (`ReachFacts.InstallKind`).

@@ -19,6 +19,12 @@ public protocol KeptRecord: Codable, Equatable, Sendable, Identifiable where ID 
     func cutOff() -> Self
     /// Posted on `NotificationCenter.default` after a write that changed a record of this kind.
     static var changed: Notification.Name { get }
+    /// A record that stays past the store's limit (`KeptRecords.write`).
+    var keepsAlways: Bool { get }
+}
+
+public extension KeptRecord {
+    var keepsAlways: Bool { false }
 }
 
 /// Where the app keeps its records: a folder of its own in `Application Support/Founderizer`.
@@ -116,8 +122,8 @@ public final class KeptRecords<Record: KeptRecord>: @unchecked Sendable {
         let changed = all[record.id] != record
         guard changed || !unsaved.isEmpty else { lock.unlock(); return }
         all[record.id] = record
-        // The oldest go, with their files; never one that this start of the app still runs.
-        let extra = Self.sorted(all.values).dropFirst(keeps).filter { !($0.runs && $0.launch == launch) }
+        // The oldest go, with their files; never one that this start of the app still runs, and never one that stays.
+        let extra = Self.sorted(all.values).dropFirst(keeps).filter { !($0.runs && $0.launch == launch) && !$0.keepsAlways }
         for old in extra where old.id != record.id {
             all[old.id] = nil
             removeFiles(old.id)

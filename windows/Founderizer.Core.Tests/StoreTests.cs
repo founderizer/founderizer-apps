@@ -246,7 +246,11 @@ public sealed class StoreTests
     [TestMethod]
     public async Task TheStoreKeepsItsReadingChatsSeenMarksDraftsAndWriteBetweenLaunches()
     {
-        hub.Chats["manager"] = SampleFleet.ChatPage("gen1", "manager", SampleFleet.Report(5, SampleFleet.Now - 480, "Yes."));
+        // an AI session's message keeps its hand (owner feature message_hands): after a launch it is no bubble of his
+        var ai = SampleFleet.Message("0b5f6c8e-1111-4222-8333-0000000000a1", SampleFleet.Now - 500, "Is the sale ready?");
+        ai["hand"] = "tool";
+        ai["runtime"] = "claude-code";
+        hub.Chats["manager"] = SampleFleet.ChatPage("gen1", "manager", ai, SampleFleet.Report(5, SampleFleet.Now - 480, "Yes."));
         await using (var first = await Store())
         {
             first.OpenChat("manager");
@@ -260,8 +264,10 @@ public sealed class StoreTests
         var s = second.State;
         Assert.AreEqual(hub.Address, s.Hub);
         Assert.AreEqual("gen1", s.Fleet!.Db);
-        Assert.AreEqual(1, s.Items("manager").Count);
-        Assert.AreEqual("report-5", s.Items("manager")[0].Id);
+        Assert.AreEqual(2, s.Items("manager").Count);
+        Assert.AreEqual("tool", s.Items("manager")[0].Hand);
+        Assert.AreEqual("claude-code", s.Items("manager")[0].Runtime);
+        Assert.AreEqual("report-5", s.Items("manager")[1].Id);
         Assert.AreEqual("Send it", s.Drafts["orla"]);
         Assert.AreEqual("Ship it", s.Pending!.Text);
         Assert.IsNotNull(s.Pending.Refusal);

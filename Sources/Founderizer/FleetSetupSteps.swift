@@ -71,6 +71,9 @@ extension SetupSteps {
         case .akamai:
             return SetupSteps([String(l10n: "Open [API Tokens](\(page)) in Akamai"), String(l10n: "Create a Personal Access Token"),
                                String(l10n: "Set Linodes and Firewalls to Read/Write"), String(l10n: "Create Token, then copy it")])
+        case .hostinger:
+            // The words of the mock-up of 25 November 2026, which wait for the owner's yes with Hostinger's card.
+            return SetupSteps([String(l10n: "Open [API](\(page)) in Hostinger's hPanel"), String(l10n: "New token, with Never expires, then copy it")])
         }
     }
 }
@@ -264,6 +267,7 @@ final class FleetCloudModel {
         case .digitalOcean: URL(string: "https://cloud.digitalocean.com/account/api/tokens")!
         case .vultr: URL(string: "https://my.vultr.com/settings/#settingsapi")!
         case .akamai: URL(string: "https://cloud.linode.com/profile/tokens")!
+        case .hostinger: URL(string: "https://hpanel.hostinger.com/api")!
         }
     }
 
@@ -671,12 +675,14 @@ struct SetupChoice<Mark: View>: View {
 /// show the same cards; `id` starts the accessibility name of each.
 struct CloudCards: View {
     let id: String
+    /// The providers whose cards show, in their order (`CloudProvider.shown`, `addServer`).
+    var providers: [CloudProvider] = CloudProvider.shown
     let choose: (CloudProvider) -> Void
     let other: () -> Void
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), spacing: 14) {
-            ForEach(CloudProvider.allCases, id: \.self) { provider in
+            ForEach(providers, id: \.self) { provider in
                 SetupChoice(title: provider.name, line: Self.line(provider), mark: { CloudMark(provider: provider) },
                             choose: { choose(provider) })
                     .accessibilityIdentifier("\(id)-cloud-\(provider.rawValue)")
@@ -693,6 +699,22 @@ struct CloudCards: View {
         case .digitalOcean: String(l10n: "Simple to use")
         case .vultr: String(l10n: "Many regions")
         case .akamai: String(l10n: "Formerly Linode")
+        // The mock-up's words of 25 November 2026, which wait for the owner's yes with the card.
+        case .hostinger: String(l10n: "Monthly plans")
+        }
+    }
+}
+
+/// **The link to a provider's step-by-step guide on founderizer.com**: one muted line under the field of its key (the
+/// owner's "Yes, as drawn" of 25 November 2026), in the language of the app's words. None for a provider whose guide is
+/// not on the site (`CloudProvider.guide`).
+struct GuideLink: View {
+    let provider: CloudProvider
+
+    var body: some View {
+        if let url = provider.guidePage {
+            SetupLink(String(l10n: "Step-by-step guide ↗")) { NSWorkspace.shared.open(url) }
+                .accessibilityIdentifier("cloud-token-guide")
         }
     }
 }
@@ -772,17 +794,23 @@ struct CloudChoice: View {
     var body: some View {
         if let offer = cloud.offer {
             VStack(spacing: SetupMetrics.gap) {
-                if cloud.existing.isEmpty { alone(offer) } else { list(offer) }
+                if cloud.existing.isEmpty && bought.isEmpty { alone(offer) } else { list(offer) }
                 // An account of many servers scrolls: the press stays in view (`SetupAction`).
                 SetupAction {
                     // Why the press made nothing (`FleetCloudModel.stop`), over the press: under the choice, a list
                     // that scrolls keeps the press at the window's bottom and would cover the line.
                     if cloud.stage == .choosing, let failure = cloud.failure { SetupWarning(failure) }
-                    Button(cloud.chosenServer == nil ? "Make the server" : "Use this server") {
+                    Button(press(offer)) {
                         if let server = cloud.chosenServer { use(server) } else { makeNew() }
                     }
                     .buttonStyle(FleetPrimaryButtonStyle()).keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("cloud-choice-press")
+                    // What a press that buys a server at a provider that bills by the month charges, and how it stops.
+                    if cloud.chosenServer == nil, let line = offer.chargeLine {
+                        Text(line).font(SetupMetrics.textFont).foregroundStyle(FleetStyle.muted)
+                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("cloud-choice-charge")
+                    }
                     if cloud.provider == .hetzner {
                         SetupLink(String(l10n: "Servers in another project?")) { cloud.askAnotherProject() }
                             .accessibilityIdentifier("cloud-choice-project")
@@ -792,12 +820,24 @@ struct CloudChoice: View {
         }
     }
 
+    /// **The servers that the account bought and did not set up** (Hostinger's `initial`): each is a row of its own, and
+    /// its press sets it up and charges nothing.
+    private var bought: [CloudOffer] { cloud.choices.filter(\.paid) }
+
+    /// The press's words: the account's server, a bought one, a new one that a provider that bills by the month sells,
+    /// or a new one.
+    private func press(_ offer: CloudOffer) -> String {
+        if cloud.chosenServer != nil { return String(l10n: "Use this server") }
+        if offer.paid { return String(l10n: "Set up this server") }
+        return offer.provider.billsMonthly ? String(l10n: "Buy the server") : String(l10n: "Make the server")
+    }
+
     /// The new server alone: what it is, where, and what it costs.
     private func alone(_ offer: CloudOffer) -> some View {
         FormSection {
             FormRow("Size") { value(offer.size) }
             FormRow("Location") { value(offer.place) }
-            FormRow("Price") { value(String(l10n: "\(offer.monthly), billed by \(offer.provider.name)")) }
+            FormRow("Price") { value(String(l10n: "\(offer.priceWords), billed by \(offer.provider.name)")) }
         }
         .accessibilityIdentifier("cloud-choice-new")
     }
@@ -816,7 +856,17 @@ struct CloudChoice: View {
                 row(server.name, detail: [server.summary, words].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
                     chosen: cloud.chosen == server.id, usable: why == nil || again) { cloud.chosen = server.id }
             }
-            row(String(l10n: "New server"), detail: offer.row, chosen: cloud.chosen == nil, usable: true) { cloud.chosen = nil }
+            ForEach(bought, id: \.key) { server in
+                row(server.label ?? server.plan ?? "VPS", detail: server.boughtRow, chosen: cloud.chosen == nil && cloud.offer == server,
+                    usable: true) { cloud.chosen = nil; cloud.choose(server) }
+            }
+            // The new server: the one that the press makes, or with a bought server chosen, the first one for sale.
+            if let fresh = offer.paid ? cloud.choices.first(where: { !$0.paid }) : offer {
+                row(String(l10n: "New server"), detail: fresh.row, chosen: cloud.chosen == nil && !offer.paid, usable: true) {
+                    cloud.chosen = nil
+                    cloud.choose(fresh)
+                }
+            }
         }
         .accessibilityIdentifier("cloud-choice-list")
     }
@@ -895,7 +945,7 @@ extension ServerBoxChoice {
         let types = shown.map {
             FleetOption(ServerBoxChoice.Pick.offer($0.key), $0.choice, detail: $0.amount, section: provider.name)
         }
-        let others = CloudProvider.allCases.filter { $0 != provider }.map { other in
+        let others = CloudProvider.shown.filter { $0 != provider }.map { other in
             FleetOption(ServerBoxChoice.Pick.provider(other), other.name,
                         detail: held.contains(other) ? nil : String(l10n: "asks for its token"),
                         section: String(l10n: "Another provider"))

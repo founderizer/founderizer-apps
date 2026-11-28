@@ -360,6 +360,11 @@ struct ServerPage: View {
     private var saysFailed: Bool { failed && store.pageReadingIsOld(failedSince: failedSince) }
     @State private var removing = false
     @State private var error: String?
+    /// The question before the remove of a server that this Mac bought at a provider that bills by the month.
+    @State private var bought: BoughtRemoval?
+    /// The provider's ids of the servers whose renewal this page ended: a press after the hub's refusal asks the hub
+    /// alone.
+    @State private var renewalOff: Set<String> = []
     /// The hub's words when it refused Try again on a deleted agent's removal.
     @State private var againRefused: String?
     private var time: Double { store.state?.time ?? 0 }
@@ -690,7 +695,7 @@ struct ServerPage: View {
     /// the same as its button, and no line under it (D-2).
     @ViewBuilder private func removal(_ server: ServerEntry) -> some View {
         VStack(alignment: .leading, spacing: FleetSpace.inside) {
-            Button("Remove server") { Task { await remove(server) } }.buttonStyle(FleetDangerButtonStyle())
+            Button("Remove server") { Task { await ask(server) } }.buttonStyle(FleetDangerButtonStyle())
                 .disabled(removing || !store.canWrite || server.job?.isOpen == true)
                 .help("It leaves Founderizer. Its files stay on the server, and it can join again with a new line.")
                 .accessibilityIdentifier("server-remove")
@@ -698,6 +703,69 @@ struct ServerPage: View {
                 Text(error).font(FormMetrics.detail).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .fleetModal(item: $bought) { removal in
+            BoughtRemovalCard(removal: removal, canWrite: store.canWrite) { bought = nil } remove: {
+                await removeBought(server, removal)
+            }
+        }
+    }
+
+    /// **Remove server**: a server that this Mac bought at a provider that bills by the month asks first, with the date
+    /// until which it is paid (the owner's "Remove ends the renewal" of 25 November 2026); any other goes at once.
+    private func ask(_ server: ServerEntry) async {
+        // The press waits while the provider is read: a second press would start a second remove.
+        removing = true
+        let found: (CloudProvider, String)?
+        do {
+            found = try await Self.boughtAt(server.name, hub: store.hub)
+        } catch {
+            // A server that may be one that this Mac bought, at a provider that cannot be read now: no remove, so that
+            // the fleet never loses a server whose renewal goes on.
+            removing = false
+            self.error = String(l10n: "This server may renew each month, and its provider cannot be read now: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription) Try again.")
+            return
+        }
+        removing = false
+        guard let (provider, id) = found else { return await remove(server) }
+        bought = BoughtRemoval(name: server.name, provider: provider, serverID: id)
+        let until = try? await CloudServers(provider: provider).paidUntil(id: id)
+        if bought?.serverID == id { bought?.until = until }
+    }
+
+    /// **Where a server of this name was bought monthly for this hub**: by its build's record and the id that the
+    /// provider gave. A purchase of this hub whose provider gave no id (a payment that it still took, say) is found by
+    /// its name at that record's provider alone: a name is no proof of a server that this Mac bought, so no other
+    /// provider and no other hub's server is read.
+    private static func boughtAt(_ name: String, hub: URL) async throws -> (CloudProvider, String)? {
+        let records = BuildRecords.shared.all()
+        if let record = BoughtServers.record(named: name, hub: hub, in: records), let id = record.serverID {
+            return (record.provider, id)
+        }
+        let lower = name.lowercased()
+        guard let unanswered = BoughtServers.unanswered(named: name, hub: hub, in: records) else { return nil }
+        let listed = try await CloudServers(provider: unanswered.provider).servers()
+        return listed.first { $0.name.lowercased() == lower || $0.name.lowercased().hasPrefix(lower + ".") }
+            .map { (unanswered.provider, $0.id) }
+    }
+
+    /// The renewal ends at the provider first, then the hub removes the server: a provider that refuses leaves the
+    /// server in the fleet, and nothing is paid for a server that is gone from it. nil, or the words of the stop.
+    private func removeBought(_ server: ServerEntry, _ removal: BoughtRemoval) async -> String? {
+        if !renewalOff.contains(removal.serverID) {
+            do {
+                _ = try await CloudServers(provider: removal.provider).deleteServer(id: removal.serverID)
+                renewalOff.insert(removal.serverID)
+            } catch {
+                let why = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                // The page's own line says it too: a card that was closed meanwhile shows nothing.
+                self.error = String(l10n: "\(removal.provider.name) did not end the renewal: \(why)")
+                return self.error
+            }
+        }
+        await remove(server)
+        guard let refused = self.error else { bought = nil; return nil }
+        self.error = String(l10n: "The renewal is off at \(removal.provider.name). \(refused)")
+        return self.error
     }
 
     /// Try again on a deleted agent's removal that stopped: the hub gives its server the job again.
@@ -875,5 +943,57 @@ struct AgentAccountLine: View {
                 }
             }
         }
+    }
+}
+
+/// **The question before the remove of a server that this Mac bought monthly**, as the owner drew it on 25 November
+/// 2026: its name, until when its provider keeps it paid, and Cancel or Remove, in a card over the page
+/// (`fleetModal`).
+struct BoughtRemoval: Identifiable {
+    let name: String
+    let provider: CloudProvider
+    let serverID: String
+    /// Until when the provider keeps it paid, once read; nil until then, or where the provider does not say.
+    var until: Date?
+    var id: String { serverID }
+}
+
+struct BoughtRemovalCard: View {
+    let removal: BoughtRemoval
+    let canWrite: Bool
+    let close: () -> Void
+    let remove: () async -> String?
+    @State private var busy = false
+    @State private var refusal: String?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("Remove \(removal.name)?").font(FormMetrics.title).accessibilityAddTraits(.isHeader)
+            Text(BoughtServers.line(removal.provider, until: removal.until)).foregroundStyle(FleetStyle.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let refusal {
+                Text(refusal).foregroundStyle(.orange).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("bought-remove-refusal")
+            }
+            HStack(spacing: 8) {
+                Button("Cancel") { close() }.buttonStyle(FleetOutlineButtonStyle()).keyboardShortcut(.cancelAction)
+                    .disabled(busy)
+                if busy {
+                    ShimmeringWords(text: String(l10n: "Removing")).accessibilityElement().accessibilityLabel("Removing")
+                } else if canWrite {
+                    Button("Remove", role: .destructive) {
+                        Task {
+                            busy = true; refusal = nil
+                            refusal = await remove()
+                            busy = false
+                        }
+                    }
+                    .buttonStyle(FleetDangerButtonStyle()).accessibilityIdentifier("bought-remove-confirm")
+                }
+            }.padding(.top, 4)
+        }
+        .multilineTextAlignment(.center)
+        .padding(22).frame(width: 360)
+        .font(FleetStyle.body).foregroundStyle(FleetStyle.text)
     }
 }

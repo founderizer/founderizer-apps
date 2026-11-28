@@ -316,7 +316,11 @@ public enum StartAgain {
         /// The press of the page.
         public static var press: String { String(l10n: "Delete and start again") }
 
-        public static func deletedAt(_ provider: CloudProvider) -> String { String(l10n: "Deleted at \(provider.name)") }
+        /// A provider that bills by the month deletes no server on a call: its renewal goes off, and the provider
+        /// deletes the server at the end of its paid period.
+        public static func deletedAt(_ provider: CloudProvider) -> String {
+            provider.billsMonthly ? String(l10n: "Renewal off at \(provider.name)") : String(l10n: "Deleted at \(provider.name)")
+        }
 
         /// "Your fleet's server · CX23 · €5.49 a month": what the server is for, then its type and its price a month,
         /// each only when the app knows it.

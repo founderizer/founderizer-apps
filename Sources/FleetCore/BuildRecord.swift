@@ -44,7 +44,8 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
         /// held the server that it made, by the call's own mark, and this app deleted it (`CloudServers.madeMeanwhile`);
         /// every other end of such an answer, and of a call with no answer, is `notKnown` (`CloudError.unsure`, `unread`,
         /// `unreachable`; finding 3 of the checked audit of 24 November 2026), and the app reads on for that server for
-        /// an hour (`CloudServers.followUp`, `followReads`; the PC readers' point 7 of 26 November 2026).
+        /// an hour (`CloudServers.followUp`, `followReads`; the PC readers' point 7 of 26 November 2026), but at
+        /// Hostinger, which deletes no VPS: there the record only keeps the name taken (`CloudServers.hostingerSetUp`).
         case nothing
         /// A step failed after the provider made something, and the app could not delete all of it: the server, its
         /// firewall, or both (`CloudError.leftBehind`).
@@ -63,9 +64,12 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
             guard let error = error as? CloudError else { return .notKnown }
             switch error {
             case .leftBehind: return .leftBehind
-            case .unreachable, .notUnderstood, .unsure, .unread: return .notKnown
+            // A server that the account bought stays at the provider, paid, whatever step after the purchase failed.
+            case .paidNotReady: return .server
+            // A payment that the provider still takes can end in a server that waits to be set up.
+            case .unreachable, .notUnderstood, .unsure, .unread, .paymentPending: return .notKnown
             case .notAToken, .noToken, .tokenNotAccepted, .readOnlyToken, .rateLimited, .refused, .takenBack, .unreadTakenBack, .noRoom,
-                 .full, .taken, .notReady, .notAServerName, .notAPublicKey, .notAnAuthKey: return .nothing
+                 .full, .taken, .notReady, .notAServerName, .notAPublicKey, .notAnAuthKey, .noPaymentMethod: return .nothing
             }
         }
     }
@@ -136,7 +140,14 @@ public struct BuildRecord: Codable, Equatable, Sendable, Identifiable {
     public mutating func callEnded(with error: Error) {
         guard outcome == .running, stage == .making else { return }
         atProvider = .after(error)
+        // A server that the account bought and that did not come up is at the provider by its id: a remove and Start
+        // again end its renewal by that id.
+        if case .paidNotReady(_, _, let id?) = error as? CloudError { serverID = id }
     }
+
+    /// **A record that the store never cuts**: the one of a server that this Mac bought at a provider that bills by the
+    /// month, by which its remove ends its renewal (`BoughtServers`).
+    public var keepsAlways: Bool { provider.billsMonthly && serverID?.isEmpty == false }
 
     /// This Mac saw the server on the private network: its install goes on from here. Also for a server that a later
     /// install proved (`KeptRecords.noteJoined`): a server that joined is at the provider, whatever was known before.

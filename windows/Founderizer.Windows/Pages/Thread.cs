@@ -420,12 +420,17 @@ internal sealed class StampRowView : RowView
     protected override void DrawRow(ThreadItem item) => words.Text = ((ChatRow)item.Model).Text;
 }
 
-/// <summary>His message in his bubble (OwnerBubble): at the right, at most 72 % of the column, a corner of 16.</summary>
+/// <summary>His message in his bubble (OwnerBubble): at the right, at most 72 % of the column, a corner of 16. Words that
+/// another hand sent for him stand in the bubble's outline, and an AI session's have its mark at the bubble's lower left
+/// corner (owner feature `message_hands`, <see cref="ChatRow.Hand"/>).</summary>
 internal sealed class OwnRowView : RowView
 {
+    private static readonly Thickness Room = new(16, 12, 16, 12);
     private readonly IThreadContext? context;
     private readonly TextBlock words = Blocks.Selectable("", lineHeight: 20);
     private readonly Border bubble;
+    private readonly AiSessionMark mark = new();
+    private readonly Grid bubbleCell;
     private readonly StackPanel files = new() { Spacing = 8, Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Right };
     private readonly MessageFooter footer = new(right: true);
 
@@ -436,12 +441,12 @@ internal sealed class OwnRowView : RowView
         {
             Background = Look.OwnBrush,
             CornerRadius = new CornerRadius(16),
-            Padding = new Thickness(16, 12, 16, 12),
-            HorizontalAlignment = HorizontalAlignment.Right,
+            Padding = Room,
             MaxWidth = 692 * 0.72,
             Child = words,
         };
-        Children.Add(new StackPanel { Children = { bubble, files, footer } });
+        bubbleCell = new Grid { HorizontalAlignment = HorizontalAlignment.Right, Children = { bubble, mark } };
+        Children.Add(new StackPanel { Children = { bubbleCell, files, footer } });
         PointerEntered += (_, _) => footer.Pointer(true);
         PointerExited += (_, _) => footer.Pointer(false);
     }
@@ -457,7 +462,10 @@ internal sealed class OwnRowView : RowView
             string asks => asks,
             _ => "",
         };
-        bubble.Visibility = words.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        bubbleCell.Visibility = words.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        var hand = item.Model switch { OwnRow own => own.Row.Hand, ChatRow row => row.Hand, _ => HandLook.His };
+        Look.OwnBubble(bubble, hand, Room);
+        mark.Show(hand.Mark);
         if (item.Model is OwnRow { Row: var chatRow }) footer.Show(chatRow);
         else if (item.Model is ChatRow plain) footer.Show(plain);
         else footer.Hide();

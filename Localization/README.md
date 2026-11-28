@@ -14,7 +14,9 @@ The plan: `~/dev/founderizer-plans/app-localization-plan.md`.
   of the app and of the Share extension, so Xcode compiles it into both (proved with `xcodebuild` on 14 November 2026:
   the build does not write into the catalog). Xcode takes every language of the catalog, whatever `knownRegions` says,
   so **the table holds words only in the languages of `shipped`**; `check` fails on any other language. The notification
-  extensions have no words of their own and no table.
+  extensions have no words of their own, and `NeedActions` has no table. One key has its English in the table too:
+  `shared-reply`, the words of a ping to a member's phone (B9), which iOS draws by the ping's `loc-key` from the app's
+  table; `NeedSeal` carries the table for the same words, which it writes only when iOS gave none.
 - `l10n.py`: `keys` lists the compiler's keys, `sync` adds new keys to the table and removes keys that no code uses,
   `check` finds the faults, `compile` puts the shipped tables into an app (`run.sh`, `release.sh`). Each of the first
   three builds the Mac app in `.build/l10n` first; `--ios` also builds the iPhone app.

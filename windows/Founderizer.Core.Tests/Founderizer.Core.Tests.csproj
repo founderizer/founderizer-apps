@@ -26,8 +26,13 @@
     <!-- The Swift views whose words the library gives the screens (SwiftWordsTests): their literals are the words. -->
     <None Include="../../Sources/Founderizer/NeedRequestCard.swift;../../Sources/Founderizer/AttachmentViews.swift;../../Sources/Founderizer/FleetView.swift;../../Sources/Founderizer/AgentStatusPanel.swift;../../Sources/Founderizer/ThreadViews.swift;../../Sources/Founderizer/SecretRequestViews.swift" Link="sources/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../ios/Sources/AgentPage.swift;../../ios/Sources/ChatPage.swift" Link="sources/ios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The window's own source, whose rules WindowRulesTests reads: WinUI, which it calls, loads in no test. -->
-    <None Include="../Founderizer.Windows/**/*.cs;../Founderizer.Windows/**/*.xaml" Exclude="../Founderizer.Windows/bin/**;../Founderizer.Windows/obj/**" Link="sources/windows/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The providers' logos that the window reads an AI session's glyph from (OwnerHandTests), and the Mac's string
+         catalog that holds the Spanish of the mark's words. -->
+    <None Include="../Founderizer.Windows/Assets/claude.png;../Founderizer.Windows/Assets/codex.png;../Founderizer.Windows/Assets/grok.png;../Founderizer.Windows/Assets/opencode-mark.png" Link="assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../Localization/Localizable.xcstrings" Link="catalog/Localizable.xcstrings" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The window's own source and project, whose rules WindowRulesTests and OwnerHandTests read: WinUI, which it calls,
+         loads in no test. -->
+    <None Include="../Founderizer.Windows/**/*.cs;../Founderizer.Windows/**/*.xaml;../Founderizer.Windows/Founderizer.Windows.csproj" Exclude="../Founderizer.Windows/bin/**;../Founderizer.Windows/obj/**" Link="sources/windows/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- The launcher's source: WindowRulesTests holds the starts of a program in it and in the window's. -->
     <None Include="../Founderizer.Launcher/**/*.cs" Exclude="../Founderizer.Launcher/bin/**;../Founderizer.Launcher/obj/**" Link="sources/launcher/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

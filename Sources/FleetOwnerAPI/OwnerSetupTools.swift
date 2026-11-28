@@ -155,7 +155,7 @@ public enum OwnerSetupTools {
             server opened in this run of the app), or with stage: token, choosing, making, joining; stopped_at: \
             null, or the stage at which the last try stopped, one of the same four; stop_shows (the model still \
             holds that stop; its page can be closed); use: hub, agent; provider: hetzner, digitalocean, vultr, \
-            akamai, or null; seconds_in_stage (null at token). stopped_at is kept after the page cleared its stop, \
+            akamai, hostinger (Add server only), or null; seconds_in_stage (null at token). stopped_at is kept after the page cleared its stop, \
             until a new try starts or the app quits; stop_shows then says false. \
             install: this app's own install of a server, never one that another Mac ran, or null when it has no work \
             and no result: state: none, running, stopped, done (none: steps of an install that neither runs, nor \
@@ -359,7 +359,7 @@ public struct SetupFacts: Equatable, Sendable {
     }
 
     /// The VPS providers by the names that `setup_state` gives (`CloudProvider`'s raw values; a test holds them).
-    public static let providers: Set<String> = ["hetzner", "digitalocean", "vultr", "akamai"]
+    public static let providers: Set<String> = ["hetzner", "digitalocean", "vultr", "akamai", "hostinger"]
     /// The programs by the names that `setup_state` gives, for `AgentPrograms.Program`'s cases (a test holds them).
     public static let programNames = ["claudeCode": "claude_code", "codex": "codex"]
 

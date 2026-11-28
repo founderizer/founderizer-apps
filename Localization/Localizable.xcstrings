@@ -13,6 +13,16 @@
         }
       }
     },
+    "%@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@"
+          }
+        }
+      }
+    },
     "%@\n%@" : {},
     "%@ %@ stay." : {
       "localizations" : {
@@ -425,6 +435,16 @@
         }
       }
     },
+    "%@ charges the card on your account %@ now and %@ each month after that. To stop it, remove the server in Founderizer: it then runs until its paid month ends." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ cobra a la tarjeta de tu cuenta %2$@ ahora y %3$@ cada mes después. Para pararlo, quita el servidor en Founderizer: seguirá funcionando hasta que termine su mes pagado."
+          }
+        }
+      }
+    },
     "%@ closed the SSH connection before any login. Check that it lets this Mac in." : {
       "localizations" : {
         "es" : {
@@ -531,6 +551,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no respondió a la comprobación. Indica un usuario que pueda ejecutar comandos allí."
+          }
+        }
+      }
+    },
+    "%@ did not come up at %@ in time. It stays in your account, paid: choose it here when it runs, or see it at %@." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ no arrancó a tiempo en %2$@. Sigue en tu cuenta, pagado: elígelo aquí cuando funcione, o míralo en %3$@."
+          }
+        }
+      }
+    },
+    "%@ did not end the renewal: %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ no terminó la renovación: %2$@"
           }
         }
       }
@@ -695,6 +735,16 @@
         }
       }
     },
+    "%@ first month, then %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ el primer mes, después %2$@"
+          }
+        }
+      }
+    },
     "%@ for %@" : {
       "localizations" : {
         "es" : {
@@ -821,6 +871,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ no tiene acceso"
+          }
+        }
+      }
+    },
+    "%@ has no default card that it can charge in your account. Set one at %@, then try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ no tiene en tu cuenta ninguna tarjeta predeterminada que pueda cobrar. Elige una en %2$@ y vuelve a intentarlo."
           }
         }
       }
@@ -1435,6 +1495,26 @@
         }
       }
     },
+    "%@ keeps the server until %@ and charges nothing more; then it deletes it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ mantiene el servidor hasta el %2$@ y no cobra nada más; después lo borra."
+          }
+        }
+      }
+    },
+    "%@ keeps the server until its paid month ends and charges nothing more; then it deletes it." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ mantiene el servidor hasta que termina su mes pagado y no cobra nada más; después lo borra."
+          }
+        }
+      }
+    },
     "%@ made %@, but this app cannot read its answer, so this app deleted %@." : {
       "localizations" : {
         "es" : {
@@ -1861,6 +1941,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ aún lo tiene"
+          }
+        }
+      }
+    },
+    "%@ still takes the payment. When it ends, %@ may set up the server by itself; if it does not, the server shows here as bought and not set up: choose it then." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ todavía cobra el pago. Cuando termine, %2$@ puede configurar el servidor por sí mismo; si no lo hace, el servidor aparece aquí como comprado y sin configurar: elígelo entonces."
           }
         }
       }
@@ -5420,6 +5510,16 @@
         }
       }
     },
+    "Bought, not set up" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprado, sin configurar"
+          }
+        }
+      }
+    },
     "Browser" : {
       "localizations" : {
         "es" : {
@@ -5476,6 +5576,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ocupado: %@."
+          }
+        }
+      }
+    },
+    "Buy the server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprar el servidor"
           }
         }
       }
@@ -10400,6 +10510,26 @@
         }
       }
     },
+    "Hostinger answered with a fault of its own (%@), so it may still set up %@ on your VPS. Wait a few minutes: if the VPS still shows here as bought and not set up, choose it again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hostinger respondió con un fallo propio (%1$@), así que aún puede configurar %2$@ en tu VPS. Espera unos minutos: si el VPS sigue apareciendo aquí como comprado y sin configurar, elígelo de nuevo."
+          }
+        }
+      }
+    },
+    "Hostinger did not answer the call that sets up %@, so it may still set it up on your VPS. Wait a few minutes: if the VPS still shows here as bought and not set up, choose it again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hostinger no respondió a la llamada que configura %@, así que aún puede configurarlo en tu VPS. Espera unos minutos: si el VPS sigue apareciendo aquí como comprado y sin configurar, elígelo de nuevo."
+          }
+        }
+      }
+    },
     "How it was checked" : {
       "localizations" : {
         "es" : {
@@ -12680,6 +12810,16 @@
         }
       }
     },
+    "Monthly plans" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planes mensuales"
+          }
+        }
+      }
+    },
     "More %@ actions" : {
       "localizations" : {
         "es" : {
@@ -12966,6 +13106,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Las sesiones nuevas usan esto. Una tarea de escritorio usa el modelo de escritorio."
+          }
+        }
+      }
+    },
+    "New token, with Never expires, then copy it" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pulsa New token con Never expires y cópialo"
           }
         }
       }
@@ -14860,6 +15010,16 @@
         }
       }
     },
+    "Open [API](%@) in Hostinger's hPanel" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre [API](%@) en el hPanel de Hostinger"
+          }
+        }
+      }
+    },
     "Open [API](%@) in Vultr" : {
       "localizations" : {
         "es" : {
@@ -15476,6 +15636,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Propietario"
+          }
+        }
+      }
+    },
+    "Paid" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pagado"
           }
         }
       }
@@ -16880,6 +17050,16 @@
         }
       }
     },
+    "Remove %@?" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Quitar %@?"
+          }
+        }
+      }
+    },
     "Remove bot" : {
       "localizations" : {
         "es" : {
@@ -17080,6 +17260,16 @@
         }
       }
     },
+    "Removing" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitando"
+          }
+        }
+      }
+    },
     "Removing %@ from %@" : {
       "localizations" : {
         "es" : {
@@ -17146,6 +17336,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cambiando el nombre…"
+          }
+        }
+      }
+    },
+    "Renewal off at %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Renovación desactivada en %@"
           }
         }
       }
@@ -19070,6 +19270,16 @@
         }
       }
     },
+    "Set up this server" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configurar este servidor"
+          }
+        }
+      }
+    },
     "Setting up %@" : {
       "localizations" : {
         "es" : {
@@ -19856,6 +20066,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Paso a paso"
+          }
+        }
+      }
+    },
+    "Step-by-step guide ↗" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guía paso a paso ↗"
           }
         }
       }
@@ -23450,6 +23670,16 @@
         }
       }
     },
+    "The renewal is off at %@. %@" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La renovación ya está desactivada en %1$@. %2$@"
+          }
+        }
+      }
+    },
     "The report did not reach us." : {
       "localizations" : {
         "es" : {
@@ -25806,6 +26036,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Este servidor está en otra red de Tailscale, %@. Ejecuta tailscale logout en él y vuelve a comprobarlo."
+          }
+        }
+      }
+    },
+    "This server may renew each month, and its provider cannot be read now: %@ Try again." : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este servidor puede renovarse cada mes, y ahora no se puede leer su proveedor: %@ Vuelve a intentarlo."
           }
         }
       }
@@ -29886,6 +30126,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "compartida con %@"
+          }
+        }
+      }
+    },
+    "shared-reply" : {
+      "comment" : "B9: the words of a ping to a member's phone, which iOS draws by the ping's loc-key from this table; so it has its English too",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New reply in a shared chat"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nueva respuesta en un chat compartido"
           }
         }
       }

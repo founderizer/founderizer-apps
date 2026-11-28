@@ -48,6 +48,28 @@ internal static class Look
     public static SolidColorBrush OwnBrush => own ??= new(Own);
     public static SolidColorBrush SelectBrush => select ??= new(Select);
 
+    private static SolidColorBrush? ownOutline, markRing, clear;
+    /// <summary>No colour, but a fill that takes the pointer: an outlined bubble's inside stays part of its row's hover.</summary>
+    public static SolidColorBrush Clear => clear ??= new(Color.FromArgb(0, 0, 0, 0));
+    /// <summary>The outline of his bubble of words that another hand sent for him: white at 16 %, one pixel (the Mac's
+    /// <c>FleetStyle.hairline(0.16)</c>, owner feature `message_hands`).</summary>
+    public static SolidColorBrush OwnOutline => ownOutline ??= new(White(0.16));
+    /// <summary>The ring of the small round tile of a mark on a bubble's corner: white at 14 % (the Mac's ChatAppMark).</summary>
+    public static SolidColorBrush MarkRing => markRing ??= new(White(0.14));
+
+    /// <summary>**His bubble by the hand that sent its words** (<see cref="OwnerHand"/>; the Mac's <c>OwnerBubble</c>): his
+    /// own words filled with his bubble's grey; words that another hand sent for him in the bubble's outline, with a clear
+    /// fill (not none: a bubble with no fill takes no pointer inside its edge, and its row's hover went off there, so the
+    /// footer's time and "Copy message" flickered), and the same room around the words (<paramref name="room"/>, the
+    /// outline's pixel inside it).</summary>
+    public static void OwnBubble(Border bubble, HandLook hand, Thickness room)
+    {
+        bubble.Background = hand.Outlined ? Clear : OwnBrush;
+        bubble.BorderBrush = hand.Outlined ? OwnOutline : null;
+        bubble.BorderThickness = new Thickness(hand.Outlined ? 1 : 0);
+        bubble.Padding = hand.Outlined ? new Thickness(room.Left - 1, room.Top - 1, room.Right - 1, room.Bottom - 1) : room;
+    }
+
     /// <summary>The pictures' type: Segoe UI Variable's Text instance for all words, its Display instance for titles.
     /// Named, so that small words do not take a smaller optical size than the pictures have.</summary>
     public static readonly FontFamily TextFont = new("Segoe UI Variable Text");

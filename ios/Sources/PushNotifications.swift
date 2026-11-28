@@ -25,6 +25,10 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     }
     /// A tap on a ping started the app before its window existed.
     private(set) var openNeeds = false
+    /// B9: the phone's own record of its links to companies, from the member's store (m4); nil on a phone with none.
+    var memberLinks: (any MemberLinkRecords)?
+    /// B9: the last tap on a member ping, until the member's pages (m6) take its route (`takeMemberRoute`).
+    private(set) var memberTap: MemberTap?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -63,14 +67,21 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
-        let info = response.notification.request.content.userInfo
-        let need = (info["need"] as? NSNumber)?.intValue
-        let options = info["options"] as? [String] ?? []
+        nonisolated(unsafe) let info = response.notification.request.content.userInfo
         let action = response.actionIdentifier
         // The ping's own title names the agent that asks.
         let agent = response.notification.request.content.title
         nonisolated(unsafe) let done = completionHandler
-        Self.onMain({ await self.respond(need: need, options: options, action: action, agent: agent) }, then: done)
+        Self.onMain({ await self.received(info, action: action, agent: agent) }, then: done)
+    }
+
+    /// **What a press or a tap on a ping does, by its form.** B9: a member's ping is no item of the owner's hub, so
+    /// nothing on it is pressed and a tap opens its link's chat (`memberTapped`); every other ping is the owner's.
+    func received(_ info: [AnyHashable: Any], action: String, agent: String,
+                  seals: () -> [LinkSeal] = { LinkSealKeys().all() }) async {
+        if PingForm.of(info) == .member { return memberTapped(info, action: action, seals: seals) }
+        await respond(need: (info["need"] as? NSNumber)?.intValue, options: info["options"] as? [String] ?? [],
+                      action: action, agent: agent)
     }
 
     /// The press answers the item, once; the tap opens Needs you.
@@ -80,6 +91,23 @@ final class PushDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCen
         } else if action == UNNotificationDefaultActionIdentifier, need != nil {
             showNeeds()
         }
+    }
+
+    /// **A tap on a member ping** (B9, b9-phone-members.md 10.10) opens its part with the links' keys and keeps what
+    /// opened: the link and the chat, or nothing when no one link's key opened it. Any other action does nothing: a
+    /// member ping has no button, and nothing of it reaches `NeedPress` or Needs you.
+    func memberTapped(_ info: [AnyHashable: Any], action: String, seals: () -> [LinkSeal] = { LinkSealKeys().all() }) {
+        guard action == UNNotificationDefaultActionIdentifier else { return }
+        memberTap = MemberTap(ping: MemberPing.open(info, seals: seals()))
+    }
+
+    /// **The route of the last tap on a member ping, once** (for m6): the chat of its link by the record of now, or
+    /// Chats (`MemberPing.route`). On a cold start the store comes after the tap (`MobileApp`'s `.task`), so the record
+    /// is read here and not at the tap; the record gives only an active link, so a link that ended since gives Chats.
+    func takeMemberRoute() -> MemberRoute? {
+        guard let tap = memberTap else { return nil }
+        memberTap = nil
+        return MemberPing.route(tap.ping, records: memberLinks)
     }
 
     /// Runs `work` on the main actor, then `done` there too: what iOS hands a delegate to call when it is finished must

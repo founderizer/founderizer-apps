@@ -393,8 +393,23 @@ public sealed partial class SampleSource
                 Agent("orla")["limit"] = new JsonObject { ["since"] = now - 600, ["until"] = now + 3600, ["reset_known"] = true };
                 Agent("pax")["last_seen"] = now - 3600;
                 break;
+            case "ai-session" or "ai-session-marks":
+                // The AI session's mark (owner feature message_hands; the owner's "B, go ahead" of 24 November 2026): a hub
+                // that gives the hand, no open request in the manager's chat, and the manager's reply to the AI session's
+                // message as its last line.
+                mobile["ui_features"]!.AsArray().Add((JsonNode)OwnerHand.Feature);
+                mobile["needs"]!.AsArray().Clear();
+                Agent("manager")["last"] = new JsonObject { ["preview"] = AiSessionReply, ["side"] = "agent", ["ts"] = now - 180 };
+                break;
         }
     }
+
+    /// <summary>The message that the owner's AI session (Claude Code) sent to the manager in the state "ai-session", and
+    /// the manager's reply there and in "ai-session-marks".</summary>
+    private const string AiSessionAsks =
+        "The owner asked today whether the spring sale email is ready. Marketing finished it on Thursday, but nobody sent " +
+        "the test email to the shop's address. Please send the test now and tell me when it is out.";
+    private const string AiSessionReply = "I sent the test email to the shop's address. It arrived at 15:08.";
 
     /// <summary>DevOps's reply of picture 4 of the third set, in Markdown, as agents write it.</summary>
     private const string MarkdownReply =
@@ -432,6 +447,24 @@ public sealed partial class SampleSource
             message["attachments"] = new JsonArray { Attachment(701, "spring-sale.png", "image/png", 11690), Attachment(702, "spring-prices.csv", "text/csv", 12 * 1024) };
             message["read_at"] = now - 110;
             chat["items"]!.AsArray().Add(message);
+        }
+        if (pictureState is "ai-session" or "ai-session-marks" && agent == "manager")
+        {
+            // His own message and the manager's reply of the sample, then what an AI session sent in his name through the
+            // owner tools (Claude Code's message; or one of each program that has a mark) and the manager's reply to it.
+            (string Runtime, string Words)[] sent = pictureState == "ai-session"
+                ? [("claude-code", AiSessionAsks)]
+                : [("claude-code", "Please send the test email now."), ("codex", "Send it to the shop's address."),
+                   ("grok", "Then tell me when it is out."), ("opencode", "The owner reads it this afternoon.")];
+            for (int i = 0; i < sent.Length; i++)
+            {
+                var asks = Message($"00000000-0000-0000-0000-0000000000f{i + 2}", sent[i].Words, now - 240 + i * 10);
+                asks["hand"] = "tool";
+                asks["runtime"] = sent[i].Runtime;
+                asks["client"] = "example-tool";
+                chat["items"]!.AsArray().Add(asks);
+            }
+            chat["items"]!.AsArray().Add(Report(41, AiSessionReply, now - 180));
         }
         if (pictureState == "answered" && agent == "manager")
         {

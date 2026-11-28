@@ -7,13 +7,16 @@ import UserNotifications
 /// title and, when the item has options, the category whose content extension (`NeedActions`) draws one button for
 /// each. The item that a press answers is the one that the sealed part names. A part that does not open leaves the
 /// banner as it came, and a tap opens the app. It has no network and no key to the hub.
+///
+/// B9: a ping to a member's phone (`PingForm.member`) gets the approved words and no button, and the owner's key never
+/// touches it (`SealedPing.showByForm`); a tap opens it in the app with the key of its link (`MemberPing`).
 final class NotificationService: UNNotificationServiceExtension {
     override func didReceive(_ request: UNNotificationRequest,
                              withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         guard let content = request.content.mutableCopy() as? UNMutableNotificationContent else {
             return contentHandler(request.content)
         }
-        SealedPing.show(in: content, key: SealKey().read())
+        SealedPing.showByForm(in: content) { SealKey().read() }
         contentHandler(content)
     }
 }

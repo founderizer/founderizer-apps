@@ -263,21 +263,23 @@ internal sealed class AnswerParts
 
     /// <summary>One line of the talk (the Mac's NeedTalkLines): his message at the trailing side in his chat's bubble,
     /// 48 in from the leading edge; the agent's reply at the leading side after its 16-pixel mark, 48 in from the
-    /// trailing edge. Plain text, which he can select.</summary>
+    /// trailing edge. Plain text, which he can select. A line that an AI session sent for him is in the bubble's outline
+    /// with the AI's mark, as in the chat (owner feature `message_hands`, <see cref="TalkLine.Hand"/>).</summary>
     private FrameworkElement TalkRow(TalkLine line)
     {
         var words = Blocks.Selectable(line.Text, size: step ? 15 : 14, lineHeight: step ? 21 : 20);
         FrameworkElement row;
         if (line.Own)
         {
-            row = new Border
+            var bubble = new Border { CornerRadius = new CornerRadius(16), Child = words };
+            Look.OwnBubble(bubble, line.Hand, new Thickness(12, 7, 12, 7));
+            var mark = new AiSessionMark();
+            mark.Show(line.Hand.Mark);
+            row = new Grid
             {
-                Background = Look.OwnBrush,
-                CornerRadius = new CornerRadius(16),
-                Padding = new Thickness(12, 7, 12, 7),
                 Margin = new Thickness(48, 0, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Child = words,
+                Children = { bubble, mark },
             };
         }
         else

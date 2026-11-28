@@ -448,6 +448,296 @@ struct SealedPingTests {
     }
 }
 
+/// **A ping to a member's phone** (B9, b9-phone-members.md section 5 and 10.10): the hub's own vectors
+/// (`app/vectors/agent-sharing-vectors.json`, `member`, made by `teams_links.member_ping`), opened with the key of the
+/// link that they belong to on a phone that holds several companies, drawn with the approved words and no button, and
+/// tapped into the chat of that link by the phone's own record of it.
+@Suite("A member's ping", .serialized)
+struct MemberPingTests {
+    static let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("vectors").appendingPathComponent("agent-sharing-vectors.json")
+    static let costa = UUID(uuidString: "3F2504E0-4F89-41D3-9A0C-0305E82C3301")!
+    static let garcia = UUID(uuidString: "9B1DEB4D-3B7D-4BAD-9BDD-2B0D7B3DCB6D")!
+    static let service = "com.founderizer.mobile.link-seal-check"
+
+    struct Records: MemberLinkRecords {
+        let held: [UUID: MemberLinkRecord]
+        func memberLink(_ link: UUID) -> MemberLinkRecord? { held[link] }
+    }
+
+    static let records = Records(held: [costa: MemberLinkRecord(company: "Costa Studio", chats: ["atlas", "sales"]),
+                                        garcia: MemberLinkRecord(company: "García SL", chats: ["atlas"])])
+
+    static func member() throws -> [String: Any] {
+        let data = try Data(contentsOf: file)
+        let vectors = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return try #require(vectors["member"] as? [String: Any])
+    }
+
+    static func payload(_ json: Any?) throws -> [AnyHashable: Any] {
+        let text = try #require(json as? String)
+        return try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [AnyHashable: Any])
+    }
+
+    /// The vectors' member ping, and its form with a `need`, options and a title in the part.
+    static func pings() throws -> [[AnyHashable: Any]] {
+        let member = try member()
+        let withNeed = try #require(member["with_need"] as? [String: Any])
+        let form = try #require(withNeed["member_form"] as? [String: Any])
+        return [try payload(member["payload_json"]), try payload(form["payload_json"])]
+    }
+
+    /// The phone's keys: Costa Studio's link holds the vectors' key, García SL's link the vectors' other link's key.
+    static func seals() throws -> [LinkSeal] {
+        let member = try member()
+        return [LinkSeal(link: costa, key: SealedPingTests.bytes(try #require(member["seal_key"] as? String))),
+                LinkSeal(link: garcia, key: SealedPingTests.bytes(try #require(member["another_seal_key"] as? String)))]
+    }
+
+    /// A member ping whose part a hub sealed with `key`: `said`, padded with spaces as the hub pads it.
+    static func ping(_ said: [String: Any], key: Data) throws -> [AnyHashable: Any] {
+        var plain = try JSONSerialization.data(withJSONObject: said, options: [.sortedKeys])
+        plain.append(contentsOf: [UInt8](repeating: 0x20, count: (256 - plain.count % 256) % 256))
+        let sealed = try ChaChaPoly.seal(plain, using: SymmetricKey(data: key)).combined
+        return ["aps": ["alert": ["loc-key": "shared-reply"], "mutable-content": 1], "sealed": sealed.base64EncodedString()]
+    }
+
+    /// What `NeedSeal` shows; `body` is what iOS drew from the `loc-key` before the extension ran (none here).
+    static func drawn(_ info: [AnyHashable: Any], ownerKey: Data? = nil, body: String = "") -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.userInfo = info
+        content.body = body
+        SealedPing.showByForm(in: content) { ownerKey }
+        return content
+    }
+
+    /// Bug: the phone's word or form is not the hub's (a `loc-key` of its own, the pad read as part of the JSON), and a
+    /// member's phone opens none of its company's pings; or the extension carries a part's `need` and options to the
+    /// banner, whose button would answer as the owner.
+    @Test("Each member ping of the vectors opens with its link's key, and shows the approved words with no button")
+    func theVectorsOpenWithTheirLinksKey() throws {
+        let seals = try Self.seals()
+        for info in try Self.pings() {
+            #expect(PingForm.of(info) == .member)
+            #expect(MemberPing.open(info, seals: seals) == MemberPing(link: Self.costa, agent: "atlas"))
+            let content = Self.drawn(info, ownerKey: Data(repeating: 7, count: 32))
+            #expect(content.title.isEmpty && content.subtitle.isEmpty)
+            #expect(content.body == "New reply in a shared chat")
+            #expect(content.categoryIdentifier.isEmpty)
+            for field in ["need", "db", "options", "no_button", "title"] { #expect(content.userInfo[field] == nil) }
+            #expect(content.userInfo["sealed"] as? String == info["sealed"] as? String)
+        }
+    }
+
+    /// Bug: the loc-key's English is missing from the app's table (iOS then shows "shared-reply" on the lock screen), or
+    /// its Spanish is not the approved one; or `NeedSeal` has no table, and its words are English on a Spanish phone.
+    @Test("The app's and NeedSeal's tables give the approved words for the vectors' loc-key, in English and in Spanish")
+    func theTableHasTheApprovedWords() throws {
+        let pings = try Self.pings()
+        let aps = try #require(pings[0]["aps"] as? [String: Any])
+        let word = try #require((aps["alert"] as? [String: Any])?["loc-key"] as? String)
+        #expect(word == PingForm.memberWord)
+        let extensionURL = try #require(Bundle.main.builtInPlugInsURL).appendingPathComponent("NeedSeal.appex")
+        let needSeal = try #require(Bundle(url: extensionURL))
+        for bundle in [Bundle.main, needSeal] {
+            func words(_ language: String) throws -> String {
+                let path = try #require(bundle.path(forResource: language, ofType: "lproj"))
+                return try #require(Bundle(path: path)).localizedString(forKey: word, value: "missing", table: "Localizable")
+            }
+            #expect(try words("en") == "New reply in a shared chat")
+            #expect(try words("es") == "Nueva respuesta en un chat compartido")
+        }
+    }
+
+    /// Bug: `NeedSeal` writes its own words over the ones that iOS drew in the phone's language, so a Spanish phone shows
+    /// another text than the approved Spanish.
+    @Test("The words that iOS drew for a member ping stay, in any language")
+    func theWordsThatIOSDrewStay() throws {
+        for info in try Self.pings() {
+            let content = Self.drawn(info, body: "Nueva respuesta en un chat compartido")
+            #expect(content.body == "Nueva respuesta en un chat compartido")
+        }
+    }
+
+    /// Bug: the phone takes a member ping with a badge, which no hub may set on a member's icon, or with another sound
+    /// than the platform's member route sends (b9-phone-members.md 10.7; the platform's `MEMBER_APS`).
+    @Test("A member ping with a badge or another sound than the default is no member ping")
+    func aBadgeIsNoMemberPing() throws {
+        let info = try Self.pings()[0]
+        let aps = try #require(info["aps"] as? [String: Any])
+        func with(_ extra: [String: Any]) -> [AnyHashable: Any] {
+            var changed = info
+            changed["aps"] = aps.merging(extra) { _, new in new }
+            return changed
+        }
+        #expect(PingForm.of(with(["sound": "default"])) == .member)
+        #expect(PingForm.of(with(["badge": 3])) == .other)
+        #expect(PingForm.of(with(["sound": "default", "badge": 0])) == .other)
+        #expect(PingForm.of(with(["sound": "alarm.caf"])) == .other)
+        #expect(MemberPing.open(with(["badge": 3]), seals: try Self.seals()) == nil)
+    }
+
+    /// Bug: the first key that opens a part names its company. ChaChaPoly commits to no key, and a phone whose links
+    /// share one key (each link must make its own) would open every company's ping as the first company's.
+    @Test("A ping for another link's key opens nothing, and a part that two links' keys open names no company")
+    func anotherLinksKeyOpensNothing() throws {
+        let seals = try Self.seals()
+        for info in try Self.pings() {
+            #expect(MemberPing.open(info, seals: [seals[1]]) == nil)
+            #expect(MemberPing.route(info, seals: [seals[1]], records: Self.records) == .chats)
+            #expect(MemberPing.open(info, seals: []) == nil)
+            let shared = [seals[0], LinkSeal(link: Self.garcia, key: seals[0].key)]
+            #expect(MemberPing.open(info, seals: shared) == nil)
+            #expect(MemberPing.route(info, seals: shared, records: Self.records) == .chats)
+        }
+    }
+
+    /// Bug: the extension tries the link keys on every sealed ping, so the owner's form, which only his hub sends, is
+    /// read as a company's.
+    @Test("The owner's form opens with the owner's key as before, and never with a link's key")
+    func theOwnersFormIsUnchanged() throws {
+        let owner = SealedPingTests.ping(SealedPingTests.bytes(SealedPingTests.sealed))
+        #expect(PingForm.of(owner) == .owner)
+        let content = Self.drawn(owner, ownerKey: SealedPingTests.key)
+        #expect(content.title == "Atlas" && content.categoryIdentifier == "need")
+        #expect(content.userInfo["options"] as? [String] == ["Yes, restart", "Not tonight"])
+        let withNeed = try #require(try Self.member()["with_need"] as? [String: Any])
+        let linkSealed = try Self.payload((withNeed["owner_form"] as? [String: Any])?["payload_json"])
+        let seals = try Self.seals()
+        #expect(PingForm.of(linkSealed) == .owner)
+        #expect(MemberPing.open(linkSealed, seals: seals) == nil)
+        #expect(MemberPing.route(linkSealed, seals: seals, records: Self.records) == nil)
+        let closed = Self.drawn(linkSealed, ownerKey: SealedPingTests.key)
+        #expect(closed.title.isEmpty && closed.categoryIdentifier.isEmpty && closed.userInfo["sealed"] != nil)
+    }
+
+    /// Bug: the extension gives a member ping to the owner's opener, and a part in the owner's layout, sealed with a key
+    /// that the owner's opener holds, gets his banner and buttons on a member's notification.
+    @Test("A member ping never opens with the owner's key, and gets its own words with no button")
+    func theOwnersKeyNeverOpensAMemberPing() throws {
+        // the owner's own sealed part, which his key opens, in a member ping's open part
+        let info: [AnyHashable: Any] = ["aps": ["alert": ["loc-key": "shared-reply"], "mutable-content": 1],
+                                        "sealed": SealedPingTests.bytes(SealedPingTests.sealed).base64EncodedString()]
+        #expect(PingForm.of(info) == .member)
+        #expect(SealedPing.open(info, key: SealedPingTests.key) == nil)
+        let content = Self.drawn(info, ownerKey: SealedPingTests.key)
+        #expect(content.title.isEmpty && content.body == "New reply in a shared chat")
+        #expect(content.categoryIdentifier.isEmpty && content.userInfo["need"] == nil && content.userInfo["options"] == nil)
+        var other = info                    // a key that the member form does not have is no member ping
+        other["need"] = 23
+        #expect(PingForm.of(other) != .member)
+        var titled = info
+        titled["aps"] = ["alert": ["loc-key": "shared-reply", "title": "Your bank"], "mutable-content": 1]
+        #expect(PingForm.of(titled) == .other && MemberPing.route(titled, seals: [], records: nil) == nil)
+    }
+
+    /// Bug: the phone takes the chat's company or link from the part, which the company's hub writes, and not from its
+    /// own record of the link whose key opened it; or it opens a chat that the link does not have.
+    @Test("A tap opens the chat of the link whose key opened the part, with that link's company from the phone's record")
+    func theCompanyComesFromThePhonesRecord() throws {
+        let seals = try Self.seals()
+        let lying: [String: Any] = ["t": "news", "agent": "atlas", "n": 5, "company": "Other Co",
+                                    "link": Self.garcia.uuidString.lowercased(), "name": "Ana"]
+        let info = try Self.ping(lying, key: seals[0].key)
+        #expect(MemberPing.route(info, seals: seals, records: Self.records)
+                == .chat(link: Self.costa, company: "Costa Studio", agent: "atlas"))
+        let elsewhere = try Self.ping(["t": "news", "agent": "orion", "n": 5], key: seals[0].key)
+        #expect(MemberPing.route(elsewhere, seals: seals, records: Self.records) == .chats)
+        #expect(MemberPing.route(info, seals: seals, records: Records(held: [:])) == .chats)
+        #expect(MemberPing.route(info, seals: seals, records: nil) == .chats)
+    }
+
+    /// Bug: the delegate's branch by form is wrong, so a member ping reaches Needs you or the owner's press, or an
+    /// owner's ping is read as a member's; or a dismiss also opens a chat at the next start. Through `received`, the one
+    /// function that iOS's `didReceive` calls.
+    @Test("Only a tap on a member ping opens its chat, and it opens nothing of the owner's")
+    @MainActor
+    func aTapOpensTheChat() async throws {
+        let delegate = PushDelegate()
+        delegate.memberLinks = Self.records
+        let info = try Self.pings()[0]
+        let seals = try Self.seals()
+        await delegate.received(info, action: UNNotificationDismissActionIdentifier, agent: "") { seals }
+        #expect(delegate.memberTap == nil && delegate.takeMemberRoute() == nil)
+        await delegate.received(info, action: UNNotificationDefaultActionIdentifier, agent: "") { seals }
+        #expect(!delegate.openNeeds)
+        #expect(delegate.takeMemberRoute() == .chat(link: Self.costa, company: "Costa Studio", agent: "atlas"))
+        #expect(delegate.takeMemberRoute() == nil)          // once
+        await delegate.received(["need": 7], action: UNNotificationDefaultActionIdentifier, agent: "") { seals }
+        #expect(delegate.openNeeds && delegate.memberTap == nil)
+    }
+
+    /// Bug: the route is found at the tap with the record of that moment; on a cold start the store and its record come
+    /// after the tap, so the usual tap opens Chats and not its chat.
+    @Test("A tap before the phone's record is there opens its chat once the record is there")
+    @MainActor
+    func aColdStartTapFindsItsChat() async throws {
+        let delegate = PushDelegate()
+        let seals = try Self.seals()
+        let info = try Self.pings()[0]
+        await delegate.received(info, action: UNNotificationDefaultActionIdentifier, agent: "") { seals }
+        delegate.memberLinks = Self.records
+        #expect(delegate.takeMemberRoute() == .chat(link: Self.costa, company: "Costa Studio", agent: "atlas"))
+        await delegate.received(info, action: UNNotificationDefaultActionIdentifier, agent: "") { seals }
+        delegate.memberLinks = Records(held: [Self.garcia: MemberLinkRecord(company: "García SL", chats: ["atlas"])])
+        #expect(delegate.takeMemberRoute() == .chats)       // its link is no longer active
+    }
+
+    /// Bug: a link's key is readable before the first unlock, goes into a backup to another phone, or syncs to the
+    /// person's other devices through iCloud Keychain.
+    @Test("A link's seal key is kept after first unlock, on this phone only, and never synced")
+    func aLinksKeyStaysOnThisPhone() throws {
+        let keys = LinkSealKeys(service: Self.service)
+        defer { keys.remove(Self.costa) }
+        keys.remove(Self.costa)
+        _ = try #require(keys.make(Self.costa))
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: Self.service,
+                                    kSecAttrAccount as String: LinkSealKeys.account(Self.costa),
+                                    kSecAttrAccessGroup as String: SealKey.group,
+                                    kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
+                                    kSecReturnAttributes as String: true]
+        var found: CFTypeRef?
+        #expect(SecItemCopyMatching(query as CFDictionary, &found) == errSecSuccess)
+        let item = try #require(found as? [String: Any])
+        #expect(item[kSecAttrAccessible as String] as? String == kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+        #expect((item[kSecAttrSynchronizable as String] as? NSNumber)?.boolValue != true)
+    }
+
+    /// Bug: the links' keys are one keychain item (as the owner's one `SealKey`), so every company gets the same key; or
+    /// the owner's key is among them; or `device` gives the key in standard base64, which the hub's `unb64u` refuses.
+    @Test("Each link makes its own seal key and keeps it, the owner's key is none of them, and device gives it in b64u")
+    func eachLinkHasItsOwnKey() throws {
+        let keys = LinkSealKeys(service: Self.service)
+        let owner = SealKey(account: "seal-key-member-check")
+        defer { keys.remove(Self.costa); keys.remove(Self.garcia); owner.remove() }
+        keys.remove(Self.costa)
+        keys.remove(Self.garcia)
+        #expect(keys.all().isEmpty && keys.read(Self.costa) == nil)
+        let ownerKey = try #require(owner.current())
+        let costa = try #require(keys.make(Self.costa))
+        let garcia = try #require(keys.make(Self.garcia))
+        #expect(costa.count == 32 && garcia.count == 32 && costa != garcia && costa != ownerKey && garcia != ownerKey)
+        #expect(keys.make(Self.costa) == costa && keys.read(Self.garcia) == garcia)
+        #expect(Set(keys.all().map(\.link)) == [Self.costa, Self.garcia])
+        #expect(keys.all().first { $0.link == Self.costa }?.key == costa)
+        keys.remove(Self.costa)
+        #expect(keys.all() == [LinkSeal(link: Self.garcia, key: garcia)] && owner.read() == ownerKey)
+        let vectorKey = try #require(try Self.member()["seal_key"] as? String)
+        let device = try #require(try Self.deviceRequest())
+        #expect(LinkSealKeys.wire(SealedPingTests.bytes(vectorKey)) == device["seal"] as? String)
+    }
+
+    /// The vectors' `device` request of a member's phone (`messages`, "device").
+    static func deviceRequest() throws -> [String: Any]? {
+        let data = try Data(contentsOf: file)
+        let vectors = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let messages = try #require(vectors["messages"] as? [[String: Any]])
+        let json = try #require(messages.first { $0["name"] as? String == "device" }?["json"] as? String)
+        return try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+    }
+}
+
 /// This phone's own signing key (owner feature `door_calls`, UI-API 1.81). The simulator has no Secure Enclave, so these
 /// checks hold the software key; both keep the same statement and the same signature format.
 @Suite("This phone's signing key", .serialized)

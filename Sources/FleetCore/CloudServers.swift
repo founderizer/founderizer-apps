@@ -94,6 +94,9 @@ public struct CloudServers: Sendable {
         case .akamai:
             // Any token of the account may read its own profile, whatever products it was given.
             _ = try await call.send("GET", "profile")
+        case .hostinger:
+            // A Hostinger token has the rights of the user that made it, so a read is the whole check.
+            _ = try await hostingerList("vps/v1/virtual-machines", call)
         }
         for path in provider.writeProbes {
             let probe = try await call.answer("POST", path, body: [:])
@@ -122,6 +125,7 @@ public struct CloudServers: Sendable {
         case .digitalOcean: return try await digitalOcean(made, use: use, key: key, userData: userData, offer: offer, call)
         case .vultr: return try await vultr(made, use: use, key: key, userData: userData, offer: offer, call)
         case .akamai: return try await akamai(made, use: use, key: key, userData: userData, offer: offer, call)
+        case .hostinger: return try await hostinger(made, use: use, key: key, userData: userData, offer: offer, call)
         }
     }
 
@@ -159,7 +163,8 @@ public struct CloudServers: Sendable {
         guard !each.isEmpty else { throw CloudError.noRoom(provider) }
         return each.map {
             CloudOffer(provider: provider, type: $0.type, location: $0.location, cores: $0.cores, memoryGB: $0.memoryGB,
-                       diskGB: $0.diskGB, monthlyPrice: $0.price, currency: $0.currency, dedicated: $0.dedicated)
+                       diskGB: $0.diskGB, monthlyPrice: $0.price, currency: $0.currency, dedicated: $0.dedicated,
+                       plan: $0.plan, firstPrice: $0.firstPrice, city: $0.city, paid: $0.paid, label: $0.label)
         }
     }
 
@@ -174,7 +179,8 @@ public struct CloudServers: Sendable {
     }
 
     static func kind(_ provider: CloudProvider, type: String, cores: Int?, memoryGB: Double?, dedicated: Bool) -> String {
-        provider == .hetzner ? type : "\(cores ?? 0) \(memoryGB ?? 0) \(dedicated)"
+        // A Hostinger row is one VPS that the account bought, or one plan of the catalog: its type names it.
+        [.hetzner, .hostinger].contains(provider) ? type : "\(cores ?? 0) \(memoryGB ?? 0) \(dedicated)"
     }
 
     /// Every offer of this provider for what the server is for, the one to show first first.
@@ -184,6 +190,7 @@ public struct CloudServers: Sendable {
         case .digitalOcean: try await digitalOceanOffers(use, call)
         case .vultr: try await vultrOffers(use, call)
         case .akamai: try await akamaiOffers(use, call)
+        case .hostinger: try await hostingerOffers(use, call)
         }
     }
 
@@ -199,6 +206,7 @@ public struct CloudServers: Sendable {
         case .digitalOcean: return try await digitalOceanServers(call)
         case .vultr: return try await vultrServers(call)
         case .akamai: return try await akamaiServers(call)
+        case .hostinger: return try await hostingerServers(call)
         }
     }
 
@@ -962,6 +970,385 @@ public struct CloudServers: Sendable {
         do { return try await call.send("GET", path) } catch CloudError.unreachable, CloudError.rateLimited { return nil }
     }
 
+    // MARK: - Hostinger
+
+    /// How often, and how many times, a Hostinger server is read while Hostinger sets it up: a setup takes some
+    /// minutes, longer than a server of the providers that bill by the hour.
+    static let slowStep = Duration.seconds(10)
+    static let slowReads = 90
+
+    /// **A server at Hostinger, which bills by the month** (the owner's "Also buy from the app", 25 November 2026). The
+    /// offer is a VPS that the account bought and did not set up yet (Hostinger's state `initial`), which costs nothing
+    /// more, or a plan of Hostinger's catalog, which Hostinger charges to the account's default card when it is bought
+    /// (`hostingerBuy`, which charges once at most). Either is set up with Ubuntu 24.04, this app's key and the first
+    /// boot's script, which goes as a post-install script of the account because it holds the single-use key.
+    ///
+    /// **Nothing is taken back.** Hostinger's API deletes no VPS, and a VPS that was bought is paid: a step that fails
+    /// after the purchase or the setup leaves it in the account, and the error says so with its id (`paidNotReady`),
+    /// which the build's record keeps, so that a remove and Start again can end its renewal. A VPS whose setup was not
+    /// taken stays `initial`, so the next list offers it again at no cost.
+    ///
+    /// **The script**: one that Hostinger did not take goes at once, outside a cancel of the page; one of a server that
+    /// was set up, or of a call whose end Hostinger did not say (`KeptScript`), stays until a later build sweeps it
+    /// (`hostingerSweep`), in case Hostinger runs it after the wait.
+    ///
+    /// **No provider firewall yet**: no proof says that Hostinger's firewall with no rule lets a server's own outbound
+    /// connections answer, and a server that cannot reach Tailscale never joins. The install's own firewall stands
+    /// from the install on.
+    private func hostinger(_ made: Made, use: CloudServerUse, key: SSHPublicKey, userData: String, offer: CloudOffer?,
+                           _ call: CloudCall) async throws -> CloudServer {
+        let template = try await hostingerTemplate(call)
+        guard let chosen = Self.only(offer, in: try await hostingerOffers(use, call)).first else {
+            throw Self.none(of: offer, at: provider)
+        }
+        guard let center = Int(chosen.location) else { throw CloudError.notUnderstood(provider) }
+        await hostingerSweep(call)
+        let script = try await call.send("POST", "vps/v1/post-install-scripts",
+                                         body: ["name": made.firewallName, "content": userData])
+        guard let scriptID = script["id"] as? Int else { throw CloudError.notUnderstood(provider) }
+        let setup: [String: Any] = [
+            "template_id": template, "data_center_id": center, "post_install_script_id": scriptID,
+            "hostname": made.name, "ssh_keys": [key.line], "enable_backups": false, "install_monarx": false]
+        var machine: Int?
+        do {
+            if let bought = Self.hostingerBought(chosen.type) {
+                try await hostingerSetUp(bought, name: made.name, setup: setup, call)
+                machine = bought
+            } else {
+                machine = try await hostingerBuy(chosen, setup: setup, name: made.name, call)
+            }
+            guard let machine else { throw CloudError.notUnderstood(provider) }
+            let ipv4 = try await hostingerWait(machine, name: made.name, call)
+            return CloudServer(provider: provider, id: String(machine), name: made.name, ipv4: ipv4, type: chosen.type,
+                               location: chosen.location, monthlyPrice: chosen.price, currency: chosen.currency, firewallID: "")
+        } catch {
+            guard let machine else {
+                // A call whose end Hostinger did not say keeps the script for the sweep: Hostinger can still run it.
+                if let kept = error as? KeptScript { throw kept.error }
+                await Task { _ = try? await call.answer("DELETE", "vps/v1/post-install-scripts/\(scriptID)") }.value
+                throw error
+            }
+            if case .paidNotReady = error as? CloudError { throw error }
+            throw CloudError.paidNotReady(provider, made.name, String(machine))
+        }
+    }
+
+    /// How many times the account's VPS are read for a purchase or a setup whose answer did not say what happened.
+    static let findReads = 6
+
+    /// **A purchase or a setup whose end Hostinger did not say** (a payment that waits, an answer that said nothing):
+    /// Hostinger can still set the VPS up with this build's first-boot script, so the script is not deleted at once, and
+    /// a later build's sweep takes it after the single-use key's hour (`hostingerSweep`), as it takes the script of a
+    /// server that was set up (the Setup area's create after a 5xx or no answer, a945ec353: nothing is taken back while
+    /// the end is not known). `error` is what the press says.
+    private struct KeptScript: Error {
+        let error: CloudError
+    }
+
+    /// **The setup of a VPS that the account bought**, which charges nothing. An answer that does not say what happened
+    /// (none, or the provider's own fault) can follow a setup that Hostinger took: the VPS is read again by its own id,
+    /// outside a cancel of the page, and one that left `initial` with this build's name is being set up. Else the end is
+    /// not known (`unsure`, which the build's record keeps as not known, so that its name stays taken and a server that
+    /// comes later is still this build's), and the script stays (`KeptScript`), since Hostinger can still take the setup.
+    private func hostingerSetUp(_ id: Int, name: String, setup: [String: Any], _ call: CloudCall) async throws {
+        let says: String?
+        do {
+            let answer = try await call.answer("POST", "vps/v1/virtual-machines/\(id)/setup", body: setup)
+            if answer.ok { return }
+            guard answer.status >= 500 else { throw call.failure(answer) }
+            let fault = call.failure(answer)
+            var words = if case .refused(_, let said) = fault { said } else { fault.errorDescription ?? "" }
+            while words.hasSuffix(".") { words.removeLast() }       // the line's own brackets end it
+            says = words
+        } catch CloudError.unreachable {
+            says = nil
+        }
+        if await Task(operation: { await self.hostingerTookSetup(id, name: name, call) }).value { return }
+        throw KeptScript(error: .unsure(provider, says: says, server: name, mark: String(id)))
+    }
+
+    /// Whether Hostinger took this build's setup of the VPS: it left the state `initial` (not set up) and carries this
+    /// build's name, which a setup of another build or of the owner's own in hPanel does not. Read a few times while
+    /// Hostinger starts the setup; a read that fails is read again.
+    private func hostingerTookSetup(_ id: Int, name: String, _ call: CloudCall) async -> Bool {
+        for read in 0..<Self.findReads {
+            if read > 0 { try? await pause(Self.slowStep) }
+            guard let machine = try? await call.send("GET", provider.serverPath(String(id))),
+                  let state = machine["state"] as? String else { continue }
+            if state != "initial", Self.hostingerNamed(machine, name) { return true }
+        }
+        return false
+    }
+
+    /// Whether a VPS carries this build's name, which the setup gives it (Hostinger can add a domain to it).
+    static func hostingerNamed(_ machine: [String: Any], _ name: String) -> Bool {
+        let host = ((machine["hostname"] as? String) ?? "").lowercased()
+        return host == name || host.hasPrefix(name + ".")
+    }
+
+    /// **The purchase of a new VPS, charged once at most.** Only the account's default card is charged (`hostingerCard`),
+    /// and no purchase starts while one of an earlier press still waits for its payment (`hostingerPending`). An answer
+    /// that does not say what happened (none, the provider's own fault, or one with no server) can follow a purchase
+    /// that went through: the account's VPS are read again, outside a cancel of the page, and a new one is the server;
+    /// with none, the payment counts as pending, which keeps the name and starts no second purchase. The mark of this
+    /// press is a VPS that the list read just before the purchase did not hold, with this build's name: Hostinger keeps
+    /// no tag or label of a VPS, and the purchase makes no firewall that a server could stand behind.
+    private func hostingerBuy(_ chosen: Offer, setup: [String: Any], name: String, _ call: CloudCall) async throws -> Int {
+        let card = try await hostingerCard(call)
+        let machines = try await hostingerList("vps/v1/virtual-machines", call)
+        try await hostingerPending(machines, call)
+        let before = Set(machines.compactMap { $0["id"] as? Int })
+        var answer: CloudCall.Answer?
+        do {
+            answer = try await call.answer("POST", "vps/v1/virtual-machines",
+                                           body: ["item_id": chosen.type, "payment_method_id": card, "setup": setup])
+        } catch CloudError.unreachable {
+            answer = nil
+        }
+        if let answer {
+            if answer.status == 202 { throw KeptScript(error: .paymentPending(provider)) }
+            if !answer.ok, answer.status < 500 { throw call.failure(answer) }
+            if answer.ok, let id = (answer.object["virtual_machine"] as? [String: Any])?["id"] as? Int { return id }
+        }
+        guard let found = await Task(operation: { await self.hostingerFind(name, before: before, call) }).value else {
+            throw KeptScript(error: .paymentPending(provider))
+        }
+        return found
+    }
+
+    /// The VPS that is new since `before` and has this build's name (Hostinger can add a domain to it): the purchase's
+    /// setup gives the name, and a VPS that the owner bought at the same time in hPanel has another one. Read a few
+    /// times while Hostinger makes it; nil when none comes.
+    private func hostingerFind(_ name: String, before: Set<Int>, _ call: CloudCall) async -> Int? {
+        for read in 0..<Self.findReads {
+            if read > 0 { try? await pause(Self.slowStep) }
+            guard let machines = try? await hostingerList("vps/v1/virtual-machines", call) else { continue }
+            let new = machines.filter { ($0["id"] as? Int).map { !before.contains($0) } ?? false }
+            let named = new.first { Self.hostingerNamed($0, name) }
+            if let id = named?["id"] as? Int { return id }
+        }
+        return nil
+    }
+
+    /// **A purchase of an earlier press that still waits for its payment** stops a new one: a VPS subscription of the
+    /// account of less than a day, active, that no VPS of the list holds yet. An older one (an add-on, a VPS that has
+    /// no subscription id) never stops a purchase for good.
+    private func hostingerPending(_ machines: [[String: Any]], _ call: CloudCall) async throws {
+        let held = Set(machines.compactMap { $0["subscription_id"] as? String })
+        let plain = ISO8601DateFormatter(), fine = ISO8601DateFormatter()
+        fine.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let day = Date().addingTimeInterval(-86_400)
+        let waiting = try await hostingerList("billing/v1/subscriptions", call).contains {
+            let name = (($0["name"] as? String) ?? "").lowercased()
+            let made = ($0["created_at"] as? String).flatMap { plain.date(from: $0) ?? fine.date(from: $0) }
+            return (name.contains("vps") || name.contains("kvm")) && (made.map { $0 > day } ?? false)
+                && ["active", "in_trial", "future"].contains($0["status"] as? String ?? "")
+                && !held.contains(($0["id"] as? String) ?? "")
+        }
+        if waiting { throw CloudError.paymentPending(provider) }
+    }
+
+    /// **The first boot's scripts of earlier builds** go: each post-install script that this app named for a server
+    /// (`firewallName`) and that is more than an hour old, when the single-use key in it is dead. A script that cannot
+    /// be read or deleted stays for the next sweep.
+    private func hostingerSweep(_ call: CloudCall) async {
+        guard let scripts = try? await hostingerList("vps/v1/post-install-scripts", call) else { return }
+        let plain = ISO8601DateFormatter(), fine = ISO8601DateFormatter()
+        fine.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let hour = Date().addingTimeInterval(-TimeInterval(Self.joinKeyLife))
+        for script in scripts {
+            guard let id = script["id"] as? Int, (script["name"] as? String)?.hasPrefix("founderizer-") == true,
+                  let made = (script["created_at"] as? String).flatMap({ plain.date(from: $0) ?? fine.date(from: $0) }),
+                  made < hour else { continue }
+            _ = try? await call.answer("DELETE", "vps/v1/post-install-scripts/\(id)")
+        }
+    }
+
+    /// The id of a VPS that the account bought, from its offer's type (`vm-<id>`); nil for a plan of the catalog.
+    static func hostingerBought(_ type: String) -> Int? {
+        type.hasPrefix("vm-") ? Int(type.dropFirst(3)) : nil
+    }
+
+    /// **Hostinger's offers**: first each VPS that the account bought and did not set up, which costs nothing more,
+    /// then each KVM plan of the catalog that fits, cheapest first, by what each month costs after the first. All go
+    /// to the data center nearest the Mac, by Hostinger's own list; a bought VPS that has its data center keeps it.
+    private func hostingerOffers(_ use: CloudServerUse, _ call: CloudCall) async throws -> [Offer] {
+        let centers = Self.hostingerNear(try await hostingerList("vps/v1/data-centers", call), zone)
+        guard let near = centers.first else { return [] }
+        let cities = Dictionary(centers.map { ($0.id, $0.city) }, uniquingKeysWith: { first, _ in first })
+        let need = use == .hub ? ServerCheck.hubMemory : ServerCheck.agentMemory
+        var bought: [Offer] = []
+        for machine in try await hostingerList("vps/v1/virtual-machines", call) where machine["state"] as? String == "initial" {
+            guard let id = machine["id"] as? Int, let memory = machine["memory"] as? Int, memory >= need.megabytes else { continue }
+            let center = (machine["data_center_id"] as? Int).flatMap { cities[$0] == nil ? nil : $0 } ?? near.id
+            bought.append(Offer(type: "vm-\(id)", location: String(center), price: 0, currency: "",
+                                cores: machine["cpus"] as? Int, memoryGB: Double(memory) / 1024,
+                                diskGB: (machine["disk"] as? Int).map { $0 / 1024 }, plan: machine["plan"] as? String,
+                                city: cities[center], paid: true,
+                                label: (machine["hostname"] as? String).map { String($0.split(separator: ".").first ?? Substring($0)) }))
+        }
+        let items = try await hostingerList("billing/v1/catalog", call, query: [URLQueryItem(name: "category", value: "VPS")])
+        let plans = items.compactMap { item -> Offer? in
+            guard let name = item["name"] as? String, let size = Self.hostingerSize(name),
+                  Int(size.memoryGB * 1024) >= need.megabytes,
+                  let price = Self.hostingerMonthly(item["prices"] as? [[String: Any]]) else { return nil }
+            return Offer(type: price.id, location: String(near.id), price: price.each, currency: price.currency,
+                         cores: size.cores, memoryGB: size.memoryGB, diskGB: size.diskGB, plan: name,
+                         firstPrice: price.first == price.each ? nil : price.first, city: near.city)
+        }
+        return bought + plans.enumerated().sorted { ($0.element.price, $0.offset) < ($1.element.price, $1.offset) }.map(\.element)
+    }
+
+    /// What a KVM plan of Hostinger is made of, by its name: the catalog's own data for it has no form that Hostinger
+    /// documents. A name that is not one of these plans is no offer.
+    static func hostingerSize(_ name: String) -> (cores: Int, memoryGB: Double, diskGB: Int)? {
+        switch name.trimmingCharacters(in: .whitespaces) {
+        case "KVM 1": (1, 4, 50)
+        case "KVM 2": (2, 8, 100)
+        case "KVM 4": (4, 16, 200)
+        case "KVM 8": (8, 32, 400)
+        default: nil
+        }
+    }
+
+    /// A plan's price for one month at a time: its price item's id, what each month costs and what the first one costs
+    /// (Hostinger's prices are in cents), and the currency. A plan with no such price is no offer.
+    static func hostingerMonthly(_ prices: [[String: Any]]?) -> (id: String, each: Decimal, first: Decimal, currency: String)? {
+        guard let price = (prices ?? []).first(where: {
+            $0["period"] as? Int == 1 && $0["period_unit"] as? String == "month" && (($0["price"] as? Int) ?? 0) > 0
+        }), let id = price["id"] as? String, let each = price["price"] as? Int, let currency = price["currency"] as? String
+        else { return nil }
+        let first = (price["first_period_price"] as? Int).flatMap { $0 > 0 ? $0 : nil } ?? each
+        return (id, Decimal(each) / 100, Decimal(first) / 100, currency)
+    }
+
+    /// Hostinger's data centers, the nearest to the Mac first, each with its city and country. Its list gives each one's
+    /// country by code: the standard offset of each country where Hostinger has one, and of its continent for another.
+    static func hostingerNear(_ centers: [[String: Any]], _ zone: TimeZone) -> [(id: Int, city: String)] {
+        let countries: [String: Double] = ["nl": 1, "de": 1, "fr": 1, "lt": 2, "gb": 0, "uk": 0, "us": -5, "br": -3,
+                                           "in": 5.5, "id": 7, "sg": 8, "my": 8]
+        let continents: [String: Double] = ["Europe": 1, "North America": -6, "South America": -3, "Asia": 7, "Oceania": 10]
+        let found = centers.compactMap { center -> (id: Int, city: String, hours: Double)? in
+            guard let id = center["id"] as? Int, let city = center["city"] as? String else { return nil }
+            let code = ((center["location"] as? String) ?? "").lowercased()
+            let hours = countries[code] ?? continents[(center["continent"] as? String) ?? ""] ?? 0
+            let country = Locale(identifier: "en_US").localizedString(forRegionCode: code == "uk" ? "GB" : code.uppercased())
+            return (id, country.map { "\(city), \($0)" } ?? city, hours)
+        }
+        return found.enumerated()
+            .sorted { (CloudProvider.apart(zone, $0.element.hours), $0.offset) < (CloudProvider.apart(zone, $1.element.hours), $1.offset) }
+            .map { ($0.element.id, $0.element.city) }
+    }
+
+    /// Hostinger's id of Ubuntu 24.04, from its own list of templates: the plain system, not one with an app on it.
+    private func hostingerTemplate(_ call: CloudCall) async throws -> Int {
+        let templates = try await hostingerList("vps/v1/templates", call)
+        let plain = templates.first { ["\(provider.image) LTS", provider.image].contains($0["name"] as? String ?? "") }
+            ?? templates.first {
+                let name = $0["name"] as? String ?? ""
+                return name.hasPrefix(provider.image + " ") && !name.localizedCaseInsensitiveContains(" with ")
+            }
+        guard let id = plain?["id"] as? Int else { throw CloudError.notUnderstood(provider) }
+        return id
+    }
+
+    /// The card that Hostinger charges for a new server: the account's default one, and only when it can be charged.
+    /// The owner chose no other card, so no other one is charged.
+    private func hostingerCard(_ call: CloudCall) async throws -> Int {
+        let methods = try await hostingerList("billing/v1/payment-methods", call)
+        guard let card = methods.first(where: { $0["is_default"] as? Bool == true }),
+              card["is_expired"] as? Bool != true, card["is_suspended"] as? Bool != true,
+              let id = card["id"] as? Int else { throw CloudError.noPaymentMethod(provider) }
+        return id
+    }
+
+    /// Reads the server until it runs with its public IPv4 address, for at most `slowReads` reads. A server whose
+    /// setup ends in `error` stops the wait at once. Either stop leaves a paid server in the account.
+    private func hostingerWait(_ id: Int, name: String, _ call: CloudCall) async throws -> String {
+        for _ in 0..<Self.slowReads {
+            let machine = try await read(provider.serverPath(String(id)), call)
+            if machine?["state"] as? String == "error" { throw CloudError.paidNotReady(provider, name, String(id)) }
+            if machine?["state"] as? String == "running", let ipv4 = Self.hostingerIPv4(machine?["ipv4"]) { return ipv4 }
+            try await pause(Self.slowStep)
+        }
+        throw CloudError.paidNotReady(provider, name, String(id))
+    }
+
+    /// The first public IPv4 address of Hostinger's list of a server's addresses.
+    static func hostingerIPv4(_ addresses: Any?) -> String? {
+        ((addresses as? [[String: Any]]) ?? []).compactMap { $0["address"] as? String }.first(where: isIPv4)
+    }
+
+    /// **Hostinger's servers that run or ran**: a VPS that was bought and not set up is an offer, not a server
+    /// (`hostingerOffers`), one that Hostinger destroyed is gone, and one whose renewal is off is going: Hostinger
+    /// deletes it at the end of its paid period, so no agent goes on it.
+    private func hostingerServers(_ call: CloudCall) async throws -> [CloudExisting] {
+        let ending = Set(((try? await hostingerList("billing/v1/subscriptions", call)) ?? [])
+            .filter { $0["is_auto_renewed"] as? Bool == false }.compactMap { $0["id"] as? String })
+        let machines = try await hostingerList("vps/v1/virtual-machines", call)
+            .filter { !ending.contains(($0["subscription_id"] as? String) ?? "") }
+        let centers = (try? await hostingerList("vps/v1/data-centers", call)) ?? []
+        let cities = Dictionary(centers.compactMap { center -> (Int, String)? in
+            guard let id = center["id"] as? Int, let city = center["city"] as? String else { return nil }
+            return (id, city)
+        }, uniquingKeysWith: { first, _ in first })
+        return machines.compactMap { machine in
+            guard let id = machine["id"] as? Int, let name = machine["hostname"] as? String,
+                  !["initial", "destroying", "destroyed"].contains(machine["state"] as? String ?? "") else { return nil }
+            // "Ubuntu 24.04 LTS" and "Debian 12": the system, then its version.
+            let words = (((machine["template"] as? [String: Any])?["name"] as? String) ?? "").split(separator: " ").map(String.init)
+            return CloudExisting(
+                id: String(id), name: name, ipv4: Self.hostingerIPv4(machine["ipv4"]), type: (machine["plan"] as? String) ?? "",
+                memoryMB: machine["memory"] as? Int, system: words.first?.lowercased(), version: words.count > 1 ? words[1] : nil,
+                place: (machine["data_center_id"] as? Int).flatMap { cities[$0] }, running: machine["state"] as? String == "running",
+                project: nil, madeFor: nil)
+        }
+    }
+
+    /// **A remove at Hostinger ends the server's renewal**: Hostinger's API deletes no VPS, so the server runs to the
+    /// end of the period that was paid, and Hostinger charges nothing more. A server that Hostinger does not know for
+    /// this token is not there, as a 404 is at the other providers.
+    private func hostingerEnd(_ id: String, accepted: (@Sendable () -> Void)?, _ call: CloudCall) async throws -> CloudDeletion {
+        let found = try await call.answer("GET", provider.serverPath(id))
+        if found.status == 404 { return .notThere(call.failure(found)) }
+        guard found.ok else { throw call.failure(found) }
+        guard let subscription = found.object["subscription_id"] as? String,
+              (1...128).contains(subscription.utf8.count),
+              subscription.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") })
+        else { throw CloudError.notUnderstood(provider) }
+        // A renewal that is off already (an earlier remove that the hub then refused) is not asked again.
+        let row = try await hostingerList("billing/v1/subscriptions", call).first { $0["id"] as? String == subscription }
+        if row?["is_auto_renewed"] as? Bool != false {
+            let answer = try await call.answer("DELETE", "billing/v1/subscriptions/\(subscription)/auto-renewal/disable")
+            guard answer.ok else { throw call.failure(answer) }
+        }
+        accepted?()
+        return .deleted
+    }
+
+    /// **Until when a server at a provider that bills by the month is paid**, for the question before its remove (the
+    /// owner's "Remove ends the renewal" of 25 November 2026): the end of its paid period by the provider's own record.
+    /// nil where the provider does not say.
+    public func paidUntil(id: String) async throws -> Date? {
+        guard provider == .hostinger, Self.isID(id) else { return nil }
+        let call = try heldCall()
+        guard let subscription = try await call.send("GET", provider.serverPath(id))["subscription_id"] as? String else {
+            return nil
+        }
+        let row = try await hostingerList("billing/v1/subscriptions", call).first { $0["id"] as? String == subscription }
+        guard let text = (row?["expires_at"] as? String) ?? (row?["next_billing_at"] as? String) else { return nil }
+        let plain = ISO8601DateFormatter(), fine = ISO8601DateFormatter()
+        fine.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return plain.date(from: text) ?? fine.date(from: text)
+    }
+
+    /// One of Hostinger's lists: its answers are a list, or a page of one under `data`.
+    private func hostingerList(_ path: String, _ call: CloudCall, query: [URLQueryItem] = []) async throws -> [[String: Any]] {
+        let answer = try await call.answer("GET", path, query: query)
+        guard answer.ok else { throw call.failure(answer) }
+        return answer.items.isEmpty ? ((answer.object["data"] as? [[String: Any]]) ?? []) : answer.items
+    }
+
     // MARK: - Taking back what one call made
 
     /// What one call has made so far.
@@ -1035,6 +1422,10 @@ public struct CloudServers: Sendable {
                       entity["label"] as? String == made.name else { return nil }
                 return (entity["id"] as? Int).map(String.init)
             }
+        case .hostinger:
+            // Hostinger's purchase reads its own unclear answers (`hostingerFind`), and it makes no firewall: no call of
+            // it goes through `create`.
+            return []
         }
     }
 
@@ -1202,6 +1593,7 @@ public struct CloudServers: Sendable {
     public func deleteServer(id: String, accepted: (@Sendable () -> Void)? = nil) async throws -> CloudDeletion {
         guard Self.isID(id) else { throw CloudError.notUnderstood(provider) }
         let call = try heldCall()
+        if provider == .hostinger { return try await hostingerEnd(id, accepted: accepted, call) }
         let answer = try await call.answer("DELETE", provider.serverPath(id))
         if answer.status == 404 { return .notThere(call.failure(answer)) }
         guard answer.ok else { throw call.failure(answer) }
@@ -1302,6 +1694,9 @@ public struct CloudServers: Sendable {
                 page += 1
             }
             return found
+        case .hostinger:
+            // This app makes no firewall at Hostinger (`hostinger`).
+            return []
         }
     }
 
@@ -1382,6 +1777,10 @@ public struct CloudServers: Sendable {
                 .first(where: { Self.sameKey($0["ssh_key"] as? String, key) })?["id"] as? String, Self.isID(id) else { return }
             path = "ssh-keys/\(id)"
         case .akamai: return
+        case .hostinger:
+            guard let id = try await hostingerList("vps/v1/public-keys", call)
+                .first(where: { Self.sameKey($0["key"] as? String, key) })?["id"] as? Int else { return }
+            path = "vps/v1/public-keys/\(id)"
         }
         let answer = try await call.answer("DELETE", path)
         guard answer.ok || answer.status == 404 else { throw call.failure(answer) }
@@ -1391,14 +1790,43 @@ public struct CloudServers: Sendable {
     static func isSet(_ value: Any?) -> Bool { value != nil && !(value is NSNull) }
 }
 
-/// Hetzner Cloud, DigitalOcean, Vultr and Akamai: the providers a server can be made at from this Mac, in the order
-/// their cards stand.
+/// Hetzner Cloud, DigitalOcean, Vultr, Akamai and Hostinger: the providers a server can be made at from this Mac, in the
+/// order their cards stand.
 public enum CloudProvider: String, CaseIterable, Codable, Sendable {
     case hetzner
     case digitalOcean = "digitalocean"
     case vultr
     /// Akamai Cloud, which was Linode: its API and its console keep Linode's names.
     case akamai
+    /// Hostinger's VPS, which bill by the month or longer (the owner, 25 November 2026: "we also need to add support
+    /// for Contabo and Hostinger", and his "Also buy from the app").
+    case hostinger
+
+    /// **The providers whose card the owner's screen shows**, in their order. A provider joins it only after the
+    /// owner's yes to its card (AGENTS.md, "The owner's screen"): Hostinger's waits for his answer to the mock-up of
+    /// 25 November 2026 (`~/dev/founderizer-plans/providers-contabo-hostinger-2026-11-25`).
+    public static let shown: [CloudProvider] = [.hetzner, .digitalOcean, .vultr, .akamai]
+
+    /// **The cards of Add server**: the first run's, and Hostinger after them (the owner's "Yes, as drawn" of 25
+    /// November 2026, and his "Buy in the app demo"). The first run's page, which can make two servers at once, takes it
+    /// in a step of its own.
+    public static let addServer: [CloudProvider] = shown + [.hostinger]
+
+    /// **Its step-by-step guide on founderizer.com**, in the language of the app's words (the owner's "Yes, as drawn" of
+    /// 25 November 2026 to the link under each key page's field): nil for a provider whose guide is not on the site.
+    public func guide(language: String?) -> URL? {
+        // Hostinger's guide joins once its page is live on the site.
+        guard [.hetzner, .digitalOcean, .vultr, .akamai].contains(self) else { return nil }
+        let spanish = language.map { $0 == "es" || $0.hasPrefix("es-") || $0.hasPrefix("es_") } == true
+        return URL(string: "https://founderizer.com\(spanish ? "/es" : "")/guides/\(rawValue)")
+    }
+
+    /// Its guide for the words that the app shows now (`Localized.bundle`), as `ErrorReports.privacyPage` is.
+    public var guidePage: URL? { guide(language: AgentPrompt.language(of: Localized.bundle)) }
+
+    /// **A provider that bills by the month or longer**, where a server that this app makes is bought, and a remove
+    /// ends its renewal in place of a delete.
+    public var billsMonthly: Bool { self == .hostinger }
 
     public var name: String {
         switch self {
@@ -1406,6 +1834,7 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
         case .digitalOcean: "DigitalOcean"
         case .vultr: "Vultr"
         case .akamai: "Akamai"
+        case .hostinger: "Hostinger"
         }
     }
 
@@ -1420,6 +1849,7 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
         case .digitalOcean: URL(string: "https://api.digitalocean.com/v2")!
         case .vultr: URL(string: "https://api.vultr.com/v2")!
         case .akamai: URL(string: "https://api.linode.com/v4")!
+        case .hostinger: URL(string: "https://developers.hostinger.com/api")!
         }
     }
 
@@ -1431,6 +1861,8 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
         case .digitalOcean: "ubuntu-\(CloudServers.ubuntu.replacingOccurrences(of: ".", with: "-"))-x64"
         case .vultr: "Ubuntu \(CloudServers.ubuntu)"
         case .akamai: "linode/ubuntu\(CloudServers.ubuntu)"
+        // The start of the template's name in Hostinger's list ("Ubuntu 24.04 LTS"), whose id is read there.
+        case .hostinger: "Ubuntu \(CloudServers.ubuntu)"
         }
     }
 
@@ -1443,6 +1875,8 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
         case .digitalOcean: ["account/keys"]
         case .vultr: ["ssh-keys"]
         case .akamai: ["linode/instances", "networking/firewalls"]
+        // A Hostinger token has the rights of the user that made it: no token of it can only read.
+        case .hostinger: []
         }
     }
 
@@ -1453,10 +1887,17 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
         case .digitalOcean: "droplets/\(id)"
         case .vultr: "instances/\(id)"
         case .akamai: "linode/instances/\(id)"
+        case .hostinger: "vps/v1/virtual-machines/\(id)"
         }
     }
 
-    func firewallPath(_ id: String) -> String { self == .akamai ? "networking/firewalls/\(id)" : "firewalls/\(id)" }
+    func firewallPath(_ id: String) -> String {
+        switch self {
+        case .akamai: "networking/firewalls/\(id)"
+        case .hostinger: "vps/v1/firewall/\(id)"
+        default: "firewalls/\(id)"
+        }
+    }
 
     /// DigitalOcean's droplet for each use: its smallest that the server check takes, 2 GB for both since 21 November
     /// 2026. Hetzner's type comes from Hetzner's own list (`CloudServers.fits`).
@@ -1470,6 +1911,8 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
         case .digitalOcean: [("fra1", 1), ("ams3", 1), ("lon1", 0), ("nyc3", -5), ("sfo3", -8), ("sgp1", 8)]
         case .vultr: [("fra", 1), ("ams", 1), ("lhr", 0), ("ewr", -5), ("sjc", -8), ("sgp", 8)]
         case .akamai: [("eu-central", 1), ("nl-ams", 1), ("eu-west", 0), ("us-east", -5), ("us-west", -8), ("ap-south", 8)]
+        // Hostinger's data centers come from its own list, with their cities (`CloudServers.hostingerNear`).
+        case .hostinger: []
         }
     }
 
@@ -1489,21 +1932,25 @@ public enum CloudProvider: String, CaseIterable, Codable, Sendable {
     /// The locations nearest this Mac first: by how far each location's time zone is from the Mac's around the clock, in
     /// standard time, so a summer does not move a Mac to another location.
     func near(_ zone: TimeZone, at date: Date = Date()) -> [String] {
-        let here = (Double(zone.secondsFromGMT(for: date)) - zone.daylightSavingTimeOffset(for: date)) / 3600
-        func distance(_ hours: Double) -> Double {
-            let apart = abs(here - hours).truncatingRemainder(dividingBy: 24)
-            return min(apart, 24 - apart)
-        }
-        return locations.enumerated()
-            .sorted { (distance($0.element.hours), $0.offset) < (distance($1.element.hours), $1.offset) }
+        locations.enumerated()
+            .sorted { (Self.apart(zone, $0.element.hours, at: date), $0.offset) < (Self.apart(zone, $1.element.hours, at: date), $1.offset) }
             .map(\.element.name)
+    }
+
+    /// How many hours a place of this standard offset from UTC is from the Mac's zone around the clock, in standard time.
+    static func apart(_ zone: TimeZone, _ hours: Double, at date: Date = Date()) -> Double {
+        let here = (Double(zone.secondsFromGMT(for: date)) - zone.daylightSavingTimeOffset(for: date)) / 3600
+        let apart = abs(here - hours).truncatingRemainder(dividingBy: 24)
+        return min(apart, 24 - apart)
     }
 
     /// A pasted token, trimmed, or the reason it is not one. Nothing goes to the provider before this.
     func token(_ given: String) throws -> String {
         let token = given.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Hostinger does not say the form of its tokens: a `|` between an id and the secret is let through too.
+        let form = self == .hostinger ? "^[A-Za-z0-9_|.-]+$" : "^[A-Za-z0-9_-]+$"
         guard (20...256).contains(token.count), !token.hasPrefix("tskey-"),
-              token.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else { throw CloudError.notAToken(self) }
+              token.range(of: form, options: .regularExpression) != nil else { throw CloudError.notAToken(self) }
         return token
     }
 }
@@ -1572,6 +2019,16 @@ struct Offer: Equatable, Sendable {
     var diskGB: Int? = nil
     /// Its cores are its own (Hetzner's `cpu_type` "dedicated"), not shared with other servers.
     var dedicated = false
+    /// The provider's own name of the plan, where the row shows it ("KVM 2" at Hostinger).
+    var plan: String? = nil
+    /// What the first month costs, where it is not what each month after it costs (Hostinger's first-period price).
+    var firstPrice: Decimal? = nil
+    /// Its city and country, where the provider's own list says it (Hostinger's data centers).
+    var city: String? = nil
+    /// A server that the account bought already and did not set up: making it costs nothing more.
+    var paid = false
+    /// Such a server's own name at the provider ("srv123456"), the title of its row.
+    var label: String? = nil
 }
 
 /// **The server this app would make**: its type and what it is made of, where, and what it costs a month, as the
@@ -1588,9 +2045,19 @@ public struct CloudOffer: Equatable, Sendable {
     public let currency: String
     /// Its cores are its own, not shared with other servers (Hetzner's dedicated types).
     public var dedicated = false
+    /// The provider's own name of the plan ("KVM 2" at Hostinger), where the row shows it.
+    public var plan: String? = nil
+    /// What the first month costs where it differs from `monthlyPrice` (Hostinger's first-period price).
+    public var firstPrice: Decimal? = nil
+    /// Its city and country from the provider's own list, where this app has no words of its own for the location.
+    public var city: String? = nil
+    /// **A server that the account bought already and did not set up**: the press sets it up and charges nothing.
+    public var paid = false
+    /// Such a server's own name at the provider ("srv123456"), the title of its row.
+    public var label: String? = nil
 
     /// The city and country of its location, in this app's own words ("Nuremberg, Germany").
-    public var place: String { provider.place(location) }
+    public var place: String { city ?? provider.place(location) }
 
     /// Its name in a set of offers (`CloudServers.offer(use:except:)`).
     public var key: String { CloudServers.key(type, location) }
@@ -1684,7 +2151,8 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
     /// not answer it at all (`says` nil), and can have made it all the same** (`CloudServers.madeMeanwhile`): this Mac
     /// does not know whether `server` is there, and looks for it for an hour while this app runs (followUp). `mark` is
     /// the call's own firewall, or at DigitalOcean its tag, by which the owner tells that server from another of the
-    /// same name in the provider's own pages (the Door area's read of b7214a0df).
+    /// same name in the provider's own pages (the Door area's read of b7214a0df). At Hostinger, the setup of a VPS that
+    /// the account bought (`hostingerSetUp`): `mark` is that VPS's id, and nothing is looked for or deleted.
     case unsure(CloudProvider, says: String?, server: String, mark: String)
     /// The provider answered that call with a fault of its own (`says`), or not at all (nil), and had made `server` all
     /// the same; this app deleted it, with what else the call made (the validation of 2be411f3b: "refused" was untrue).
@@ -1712,6 +2180,13 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
     case notAServerName, notAPublicKey, notAnAuthKey
     /// A step failed, and this app could not delete all it had made: `left` says what is still there.
     case leftBehind(CloudProvider, reason: String, left: [String])
+    /// The account has no card that the provider can charge for a new server.
+    case noPaymentMethod(CloudProvider)
+    /// The provider still takes the payment for a new server, which it sets up only after that.
+    case paymentPending(CloudProvider)
+    /// A server that the account bought did not come up in time, by its name and, when the provider gave it, its id. It
+    /// stays in the account, paid: nothing deletes it, and its record keeps the id (`BuildRecord.callEnded`).
+    case paidNotReady(CloudProvider, String, String?)
 
     /// A call's own mark in the words of the provider's own pages: the firewall that its server stands behind, or at
     /// DigitalOcean the tag that its droplet carries.
@@ -1736,6 +2211,11 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
         case .rateLimited(let provider): String(l10n: "\(provider.name) asks this Mac to wait. Try again in a minute.")
         case .unreachable(let provider): String(l10n: "\(provider.name) could not be reached. Check this Mac's connection to the internet.")
         case .refused(let provider, let says): String(l10n: "\(provider.name) refused: \(says)")
+        // Hostinger's setup of a VPS that the account bought (`hostingerSetUp`): nothing there to look for or delete.
+        case .unsure(.hostinger, let says?, let server, _):
+            String(l10n: "Hostinger answered with a fault of its own (\(says)), so it may still set up \(server) on your VPS. Wait a few minutes: if the VPS still shows here as bought and not set up, choose it again.")
+        case .unsure(.hostinger, nil, let server, _):
+            String(l10n: "Hostinger did not answer the call that sets up \(server), so it may still set it up on your VPS. Wait a few minutes: if the VPS still shows here as bought and not set up, choose it again.")
         case .unsure(let provider, let says?, let server, let mark):
             String(l10n: "\(provider.name) answered with a fault of its own (\(says)), so it may have made \(server) all the same. While this app is open, it looks for \(server) for an hour and deletes it if it comes. If you quit it sooner, delete the \(server) \(Self.marked(mark, at: provider)) at \(provider.name) if it is there.")
         case .takenBack(let provider, let says?, let server):
@@ -1761,6 +2241,12 @@ public enum CloudError: LocalizedError, Equatable, Sendable {
             left.count == 2
                 ? String(l10n: "\(reason) This app could not delete \(left[0]) and \(left[1]): delete it at \(provider.name).")
                 : String(l10n: "\(reason) This app could not delete \(left.joined(separator: " and ")): delete it at \(provider.name).")
+        case .noPaymentMethod(let provider):
+            String(l10n: "\(provider.name) has no default card that it can charge in your account. Set one at \(provider.name), then try again.")
+        case .paymentPending(let provider):
+            String(l10n: "\(provider.name) still takes the payment. When it ends, \(provider.name) may set up the server by itself; if it does not, the server shows here as bought and not set up: choose it then.")
+        case .paidNotReady(let provider, let name, _):
+            String(l10n: "\(name) did not come up at \(provider.name) in time. It stays in your account, paid: choose it here when it runs, or see it at \(provider.name).")
         }
     }
 }

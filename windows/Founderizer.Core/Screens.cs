@@ -80,7 +80,7 @@ public static partial class Screens
         {
             var status = s.StatusOf(agent.Name, now);
             var (request, newest) = WaitingRequest(s, agent);
-            var preview = request?.Title ?? ChatLine.Preview(agent.Name, agent.Last, fleet!.Tasks);
+            var preview = request?.Title ?? ChatLine.Preview(agent.Name, agent.Last, fleet!.Tasks, fleet!.UiFeatures);
             var at = request is not null ? ChatLine.RequestTime(request, newest) : ChatLine.LastTime(agent.Last);
             // While it works, its line says what it does now (hub 1.148), as on the Mac and the iPhone.
             var action = status is { State: AgentState.Working, Old: false } ? ChatLine.ActionNow(agent.Name, fleet!.Tasks) : null;
@@ -307,6 +307,7 @@ public static partial class Screens
             Read = item.ReadAt is not null,
             Files = ValueList.Of(item.Attachments),
             Pushed = item.IsPushed,
+            Hand = item.Look(s.Fleet),
         };
     }
 
@@ -379,10 +380,11 @@ public static partial class Screens
 
     /// <summary>**The talk under a card** (owner feature `need_clarify`, the Mac's NeedTalkLines): his messages at the
     /// trailing side in his chat's bubble, the agent's replies at the leading side after its mark, oldest first, plain
-    /// text (<see cref="StoreState.TalkOf"/>).</summary>
+    /// text (<see cref="StoreState.TalkOf"/>). A line that an AI session sent for him is in the bubble's outline with the
+    /// AI's mark, as in the chat (owner feature `message_hands`, <see cref="OwnerHand"/>).</summary>
     private static ValueList<TalkLine> Talk(StoreState s, OwnerNeed need) =>
         ValueList.Of(s.TalkOf(need).Select(m => m.FromOwner
-            ? new TalkLine(true, m.Text, "owner", "You", null)
+            ? new TalkLine(true, m.Text, "owner", "You", null) { Hand = m.Look(s.Fleet) }
             : new TalkLine(false, m.Text, m.Who, s.Names.Label(m.Who), MarkLook.Of(s.MarkOf(m.Who), AgentState.Online, moves: false))));
 
     /// <summary>**Needs clarification** under the answers, or null where the hub says that the card takes no message
@@ -1060,7 +1062,7 @@ public static partial class Screens
             LimitWords = !task.IsTerminal && !ownerChecks && hold is null && limit is not null
                 ? TaskLimitWords(s, fleet, task.Owner, limit, now, context) : null,
             Notes = ValueList.Of(thread),
-            Thread = ValueList.Of(Thread(page, task, stopped, now, context)),
+            Thread = ValueList.Of(Thread(page, task, stopped, now, context, s.Fleet)),
             ThreadTopRows = page.Activity?.TopRows.Count ?? 0,
             ActivityError = s.IsFresh(now) && s.Offers("thread_events") ? page.ActivityError : null,
             OfflineWords = s.IsFresh(now) ? null : StepWords.Offline,
@@ -1119,7 +1121,7 @@ public static partial class Screens
     /// <summary>A task's thread (RuntimeActivity.entries): runs of steps, what the agent said (a message, an error, the
     /// record's cut), its notes, the permissions that wait or were refused, and the owner's guidance, in one order.</summary>
     private static IEnumerable<ThreadRowModel> Thread(TaskPageState page, FleetTask task, long? stopped, DateTimeOffset now,
-                                                      ScreenContext context)
+                                                      ScreenContext context, MobileSnapshot? fleet)
     {
         var activity = page.Activity;
         var top = (IReadOnlyList<ShownRow>?)activity?.TopRows ?? [];
@@ -1153,7 +1155,10 @@ public static partial class Screens
                 yield return new ThreadRowModel
                 {
                     Key = "steer-" + g.Id, Kind = ThreadRowKind.Guidance,
-                    Guidance = new SteerRowModel(g.Text, StepWords.Guidance(g, task.Attempt), TimeWords.DateAndTime(g.ReadAt ?? g.Created, context)),
+                    Guidance = new SteerRowModel(g.Text, StepWords.Guidance(g, task.Attempt), TimeWords.DateAndTime(g.ReadAt ?? g.Created, context))
+                    {
+                        Hand = g.Look(fleet),
+                    },
                 };
         }
     }
@@ -1501,6 +1506,11 @@ public sealed record ChatRow
     public bool Pushed { get; init; }
     public ValueList<MessageAttachment> Files { get; init; } = ValueList<MessageAttachment>.Empty;
     public RequestCard? Request { get; init; }
+    /// <summary>**Whose hand sent his message** (owner feature `message_hands`, <see cref="OwnerHand"/>): words that another
+    /// hand sent for him stand in the bubble's outline, still at the right, and an AI session's have its mark at the
+    /// bubble's lower left corner (the Mac's <c>OwnerBubble.hand</c>). His own words, and every row that is no message of
+    /// his, keep the filled bubble.</summary>
+    public HandLook Hand { get; init; } = HandLook.His;
 }
 
 public sealed record WaitingLineModel(ChatWaiting Line, bool Shows);
@@ -1781,8 +1791,13 @@ public sealed record RequestCard
 /// bubble at the trailing side, or the agent's reply at the leading side after its <see cref="Mark"/>.</summary>
 public sealed record TalkLine(bool Own, string Text, string Agent, string AgentLabel, MarkLook? Mark)
 {
-    /// <summary>What an assistive app reads: who wrote it, and its words.</summary>
-    public string Spoken => $"{AgentLabel}: {Text}";
+    /// <summary>What an assistive app reads: who wrote it, and its words. A line of his that another hand sent does not
+    /// start with "You": an AI session's starts with the mark's words ("Sent by your AI session"), another hand's is its
+    /// words alone (owner feature `message_hands`).</summary>
+    public string Spoken => Own ? Hand.Spoken(Text) : $"{AgentLabel}: {Text}";
+    /// <summary>The look of his line's bubble (<see cref="OwnerHand"/>): an AI session's in the outline with its mark; an
+    /// agent's reply is no bubble.</summary>
+    public HandLook Hand { get; init; } = HandLook.His;
 }
 
 /// <summary>**Needs clarification** under the answers of a card (owner feature `need_clarify`; the owner's "Yes, as
@@ -2165,7 +2180,12 @@ public enum PlanState { ToDo, Running, Done }
 
 /// <summary>The owner's guidance in the thread: his words in his bubble, and under it, muted, "Guidance · Attempt 1 ·
 /// Read" with the time it was read (else sent) on hover.</summary>
-public sealed record SteerRowModel(string Text, string Line, string Hover);
+public sealed record SteerRowModel(string Text, string Line, string Hover)
+{
+    /// <summary>The look of its bubble (<see cref="OwnerHand"/>): an AI session's guidance in the outline with its mark, as
+    /// in his chat (the Mac's RuntimeActivity .steer).</summary>
+    public HandLook Hand { get; init; } = HandLook.His;
+}
 
 /// <summary>A child agent's thread: Back (one level up), its name, its attempt, and its rows.</summary>
 public sealed record ChildThreadModel

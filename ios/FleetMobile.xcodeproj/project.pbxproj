@@ -38,6 +38,7 @@
 		AC00000000000000000031 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AB00000000000000000031 /* PrivacyInfo.xcprivacy */; };
 		AC000000000000000000F1 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F0 /* Localizable.xcstrings */; };
 		AC000000000000000000F2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F0 /* Localizable.xcstrings */; };
+		AC000000000000000000F3 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F0 /* Localizable.xcstrings */; };
 		AC000000000000000000F6 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F5 /* InfoPlist.xcstrings */; };
 		AC000000000000000000F7 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000F5 /* InfoPlist.xcstrings */; };
 		AC0000000000000000001A /* MobileKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000001A /* MobileKeyTests.swift */; };
@@ -381,6 +382,7 @@
 			buildPhases = (
 				AA00000000000000000057 /* Sources */,
 				AA00000000000000000058 /* Frameworks */,
+				AA00000000000000000059 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -465,6 +467,14 @@
 				AC00000000000000000031 /* PrivacyInfo.xcprivacy in Resources */,
 				AC000000000000000000F1 /* Localizable.xcstrings in Resources */,
 				AC000000000000000000F6 /* InfoPlist.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA00000000000000000059 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC000000000000000000F3 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

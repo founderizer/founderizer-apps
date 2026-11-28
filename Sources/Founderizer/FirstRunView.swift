@@ -1517,7 +1517,7 @@ struct FirstRunView: View {
         model.managersRefusal = words
         if managerCloud.accountFull { model.managersFull.insert(provider) }
         if managerCloud.accountFull,
-           let other = CloudProvider.allCases.first(where: {
+           let other = CloudProvider.shown.first(where: {
                !model.managersFull.contains($0) && CloudServers(provider: $0).isHeld
            }) {
             managersAt(other)
@@ -1634,6 +1634,7 @@ struct FirstRunView: View {
             managerCloud.sendToken(other, use: .agent, lists: false)
         }
         .accessibilityIdentifier("first-run-managers-token")
+        GuideLink(provider: other)
     }
 
     private func token(_ provider: CloudProvider) -> some View {
@@ -1669,6 +1670,7 @@ struct FirstRunView: View {
                     cloud.sendToken(provider, use: .hub)
                 }
                 .accessibilityIdentifier("first-run-cloud-token")
+                GuideLink(provider: provider)
             }
             if model.managersToken != nil {
                 if let failure = managerCloud.failure { SetupWarning(failure) }

@@ -260,8 +260,8 @@ struct SetupWordsVectorsTests {
         let startAgain: [String: Any] = [
             "fixed": ["start": StartAgain.Words.start, "starting": StartAgain.Words.starting, "press": StartAgain.Words.press,
                       "still_costs": StartAgain.Words.stillCosts],
-            "deleted_at": CloudProvider.allCases.map { ["provider": $0.rawValue, "words": StartAgain.Words.deletedAt($0)] },
-            "firewalls": CloudProvider.allCases.flatMap { provider in [1, 2].map { count -> [String: Any] in
+            "deleted_at": CloudProvider.shown.map { ["provider": $0.rawValue, "words": StartAgain.Words.deletedAt($0)] },
+            "firewalls": CloudProvider.shown.flatMap { provider in [1, 2].map { count -> [String: Any] in
                 ["provider": provider.rawValue, "count": count, "words": StartAgain.Words.firewalls(count, at: provider),
                  "made_for": StartAgain.Words.madeFor(count, at: provider),
                  "title": StartAgain.Words.title(of: .firewalls(provider, servers: Array(repeating: StartAgain.Server(

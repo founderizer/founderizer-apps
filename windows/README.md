@@ -346,6 +346,18 @@ renamed or removed without a word to the screens lane.
     does not stand.
   - The proofs' sample state `clarify` puts the feature on the hub, `clarify` on the manager's cards, and a question and
     a reply under the card about the email.
+- **An AI session's words are no filled bubble of his** (owner feature `message_hands`, owner API 1.332; the owner's "B,
+  go ahead" of 24 November 2026, and "Match the Mac"): `ChatRow.Hand`, `TalkLine.Hand` and `SteerRowModel.Hand`
+  (`HandLook`, from `OwnerHand.Of`). While `Outlined`, draw his bubble in its outline with a clear fill, never with none
+  (`Look.OwnBubble`): a bubble with no fill takes no pointer inside its edge, and its row's hover goes off there. While
+  `Mark` is set, put `Marks/AiSessionMark` in the bubble's cell after the bubble (`Show(mark)`), which draws the AI's
+  glyph in its tile at the bubble's lower left corner, at the screen's pixels (`GlyphMask.Scaled`) and on whole ones
+  (`ScreenPixels`), with "Sent by your AI session" (`OwnerHand.Words`). Four programs have a mark: Claude Code, Codex,
+  Grok and OpenCode (`OwnerHand.MarkOf`). OpenCode's logo is `Assets/opencode-mark.png`, not `opencode.png`: the panel
+  beside a chat shows `Assets/<runtime>.png`, and no logo of OpenCode stands there. `TalkLine.Spoken` reads no "You: "
+  before such a line. The pane's and Search's line has no "You: " before such words (`ChatLine.Preview`). The proofs'
+  sample state `ai-session` puts the feature on the hub, clears the requests, and adds Claude Code's message and the
+  manager's reply to his chat; `ai-session-marks` adds one message of each of the four programs.
 - **Words that look like a key wait for his choice** (UI-API 1.249; the Mac's `KeyHoldBanner`; the owner's "Yes, as
   drawn" of 22 November 2026 to `windows-key-hold-2026-11-22.png`, and his "Yes, as shown (Recommended)" of the same
   day to `windows-key-hold-card-2026-11-22.png` and `windows-key-hold-clarify-2026-11-22.png`): in the chat's

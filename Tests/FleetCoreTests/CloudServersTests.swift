@@ -61,9 +61,10 @@ struct CloudServersTests {
         #expect(CloudProvider.akamai.keychain.item.service == "com.founderizer.cloud.akamai")
         #expect(CloudProvider.vultr.api.absoluteString == "https://api.vultr.com/v2")
         #expect(CloudProvider.akamai.api.absoluteString == "https://api.linode.com/v4")
-        // The cards stand in this order.
-        #expect(CloudProvider.allCases == [.hetzner, .digitalOcean, .vultr, .akamai])
-        #expect(CloudProvider.allCases.map(\.name) == ["Hetzner", "DigitalOcean", "Vultr", "Akamai"])
+        // The cards stand in this order, and a provider's card shows only after the owner's yes to it.
+        #expect(CloudProvider.shown == [.hetzner, .digitalOcean, .vultr, .akamai])
+        #expect(CloudProvider.allCases == [.hetzner, .digitalOcean, .vultr, .akamai, .hostinger])
+        #expect(CloudProvider.allCases.map(\.name) == ["Hetzner", "DigitalOcean", "Vultr", "Akamai", "Hostinger"])
     }
 
     /// **The first boot waits for apt's lock, then joins the private network once.** Tailscale's installer runs apt-get

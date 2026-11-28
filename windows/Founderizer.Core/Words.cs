@@ -824,8 +824,12 @@ public static partial class ChatLine
     }
 
     /// <summary>The line (ChatList.preview): the task it is doing when one of its open tasks moved at or after its last
-    /// line, else its last line, the owner's with "You: ". Null before the first line.</summary>
-    public static string? Preview(string agent, MobilePreview? last, IEnumerable<MobileTaskHead> tasks)
+    /// line, else its last line, the owner's with "You: ". Null before the first line. **"You: " only before his own
+    /// words** (the iPhone's ChatsPage.lastLine, owner API 1.332: the chat list follows <see cref="OwnerHand"/>): words
+    /// that another hand sent for him, which his chat draws in the bubble's outline, stand alone, on a hub that gives the
+    /// hand (<paramref name="features"/>).</summary>
+    public static string? Preview(string agent, MobilePreview? last, IEnumerable<MobileTaskHead> tasks,
+                                  IReadOnlyList<string>? features = null)
     {
         var heads = tasks as IReadOnlyCollection<MobileTaskHead> ?? tasks.ToList();
         if (DoingNow(agent, heads) is { } doing && MovedAt(agent, heads) is { } moved && moved >= (last?.Ts ?? 0))
@@ -833,7 +837,8 @@ public static partial class ChatLine
         if (last is null) return null;
         var words = Plain(last.Preview);
         if (words is null) return null;
-        return last.Side == "agent" ? words : "You: " + words;
+        var his = last.Side != "agent" && !OwnerHand.Of(features, last.Hand, last.Runtime).Outlined;
+        return his ? "You: " + words : words;
     }
 
     /// <summary>How many of a chat's newest items a row reads to find where its newest card stands (ChatList.rowReads).</summary>

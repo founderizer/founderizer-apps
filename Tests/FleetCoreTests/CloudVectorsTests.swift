@@ -867,6 +867,9 @@ struct CloudVectorsTests {
         case .notAnAuthKey: named["case"] = "not_an_auth_key"
         case .leftBehind(_, let reason, let left):
             named["case"] = "left_behind"; named["says"] = shown(reason); named["left"] = left.map(shown)
+        case .noPaymentMethod: named["case"] = "no_payment_method"
+        case .paymentPending: named["case"] = "payment_pending"
+        case .paidNotReady(_, let name, _): named["case"] = "paid_not_ready"; named["says"] = shown(name)
         }
         return named
     }
@@ -874,7 +877,8 @@ struct CloudVectorsTests {
     // MARK: - The pure rules
 
     static func rules() -> [String: Any] {
-        let providers = CloudProvider.allCases
+        // The providers whose cards the apps show: a provider joins the vectors, and so the PC's twin, with its card.
+        let providers = CloudProvider.shown
         let offsets: [Double] = [-11, -8, -5, -3.5, 0, 1, 2, 5.5, 8, 9, 12]
         let tokens = ["", "  \(token)\n", "short", String(repeating: "a", count: 20), String(repeating: "a", count: 257),
                       "has spaces in it that make it no token", authKey, "tskey-api-0123456789abcdefghij", "abc_DEF-0123456789xyz"]

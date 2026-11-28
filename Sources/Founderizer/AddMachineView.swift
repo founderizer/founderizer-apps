@@ -567,7 +567,7 @@ struct AddServerView: View {
     /// only have ssh access to that server.. with nothing else installed"). The old form of address, user, port and SSH
     /// key went with them: the address takes a name of `~/.ssh/config` with its user, port and key.
     private var providers: some View {
-        CloudCards(id: "add-server", choose: choose) { vps.reset(); page = .vps }
+        CloudCards(id: "add-server", providers: CloudProvider.addServer, choose: choose) { vps.reset(); page = .vps }
     }
 
     /// A provider whose token this Mac holds makes the server at once; else its token page asks for it. A Mac that holds
@@ -765,6 +765,7 @@ struct AddServerView: View {
                 cloud.sendToken(provider, use: .agent)
             }
             .accessibilityIdentifier("add-server-cloud-token")
+            GuideLink(provider: provider)
         }
         // While the list shows, its own press carries the line (`CloudChoice`).
         if let failure = cloud.failure, cloud.stage != .choosing || cloud.offer == nil { SetupWarning(failure) }

@@ -583,25 +583,29 @@ internal sealed class LineRowView : RowView
 }
 
 /// <summary>His guidance in the thread (fifth set, 5; the Mac's RuntimeActivity .steer): his words in his bubble at the
-/// right, and under it, 5 lower, "Guidance · Attempt 1 · Read" muted, with when it was read on hover.</summary>
+/// right, and under it, 5 lower, "Guidance · Attempt 1 · Read" muted, with when it was read on hover. An AI session's
+/// guidance is in the bubble's outline with its mark, as in his chat (owner feature `message_hands`).</summary>
 internal sealed class GuidanceRowView : RowView
 {
+    private static readonly Thickness Room = new(16, 12, 16, 12);
     private readonly TextBlock words = Blocks.Selectable("", lineHeight: 20);
     private readonly TextBlock line = Look.Words("", 12, 16, Look.Muted, wrap: false);
+    private readonly Border bubble;
+    private readonly AiSessionMark mark = new();
 
     public GuidanceRowView()
     {
         line.HorizontalAlignment = HorizontalAlignment.Right;
-        var bubble = new Border
+        bubble = new Border
         {
             Background = Look.OwnBrush,
             CornerRadius = new CornerRadius(16),
-            Padding = new Thickness(16, 12, 16, 12),
-            HorizontalAlignment = HorizontalAlignment.Right,
+            Padding = Room,
             MaxWidth = 692 * 0.72,
             Child = words,
         };
-        Children.Add(new StackPanel { Spacing = 5, Children = { bubble, line } });
+        var cell = new Grid { HorizontalAlignment = HorizontalAlignment.Right, Children = { bubble, mark } };
+        Children.Add(new StackPanel { Spacing = 5, Children = { cell, line } });
     }
 
     public override RowKind Kind => RowKind.Guidance;
@@ -609,6 +613,8 @@ internal sealed class GuidanceRowView : RowView
     protected override void DrawRow(ThreadItem item)
     {
         var steer = ((GuidanceRow)item.Model).Steer;
+        Look.OwnBubble(bubble, steer.Hand, Room);
+        mark.Show(steer.Hand.Mark);
         words.Text = steer.Text;
         line.Text = steer.Line;
         ToolTipService.SetToolTip(line, steer.Hover);

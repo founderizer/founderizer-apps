@@ -283,6 +283,44 @@ public enum MadeServers {
     }
 }
 
+/// **A server that this Mac bought for a hub at a provider that bills by the month** (the owner's "Remove ends the
+/// renewal" of 25 November 2026): its build's record, by the hub and the server's name, once the provider gave its id.
+/// A remove of such a server from the fleet ends its renewal at the provider too. nil for any other server. `records`
+/// come newest first (`KeptRecords.all`): a name that came back is the newest server's, at any provider, so an older
+/// purchase of the same name is never the one that a remove ends.
+public enum BoughtServers {
+    /// The newest build of this hub with this name, at any provider.
+    public static func newest(named name: String, hub: URL, in records: [BuildRecord]) -> BuildRecord? {
+        records.first { $0.hub == hub.absoluteString && $0.name.lowercased() == name.lowercased() }
+    }
+
+    public static func record(named name: String, hub: URL, in records: [BuildRecord]) -> BuildRecord? {
+        newest(named: name, hub: hub, in: records).flatMap { $0.provider.billsMonthly && $0.serverID?.isEmpty == false ? $0 : nil }
+    }
+
+    /// **The newest build of this name, a purchase whose provider gave no id** (a payment that it still took, say):
+    /// its server is found by its name at that provider alone. nil when the newest build of the name is another, or one
+    /// that the provider refused, which bought nothing.
+    public static func unanswered(named name: String, hub: URL, in records: [BuildRecord]) -> BuildRecord? {
+        newest(named: name, hub: hub, in: records).flatMap {
+            $0.provider.billsMonthly && ($0.serverID ?? "").isEmpty && $0.atProvider != .nothing ? $0 : nil
+        }
+    }
+
+    /// **The question's line before such a remove**, as drawn: the provider keeps the server, paid, to the end of its
+    /// period, then deletes it. Remove shows only for a server with no agent, so the drawing's "Its agents stop now"
+    /// is not said.
+    public static func line(_ provider: CloudProvider, until: Date?) -> String {
+        guard let until else {
+            return String(l10n: "\(provider.name) keeps the server until its paid month ends and charges nothing more; then it deletes it.")
+        }
+        // The date in the language of the app's words: "25 December 2026", "25 de diciembre de 2026".
+        let language = AgentPrompt.language(of: Localized.bundle) ?? "en"
+        let day = until.formatted(Date.FormatStyle(date: .long, time: .omitted, locale: Locale(identifier: language)))
+        return String(l10n: "\(provider.name) keeps the server until \(day) and charges nothing more; then it deletes it.")
+    }
+}
+
 /// **The installs that this Mac saw end, by server and hub**, with the address that the install reached: written only
 /// where an install from this Mac ran to its last step. A server of the hub's list is one whose install ended only
 /// while the hub has it at that address (`CloudExisting.reuse`'s `finished`): a new server under the name of a removed
@@ -384,14 +422,48 @@ extension CloudOffer {
         return format.string(from: monthlyPrice as NSDecimalNumber) ?? "\(monthlyPrice) \(currency)"
     }
 
-    /// The new server's row in the list: "CX23 · 4 GB · Nuremberg · €5.49 a month".
+    /// The new server's row in the list: "CX23 · 4 GB · Nuremberg · €5.49 a month", and at a provider that bills by
+    /// the month its plan and the first month's price: "KVM 2 · 8 GB · Frankfurt · $8.99 first month, then $17.99".
     public var row: String {
         var parts: [String] = []
         if provider == .hetzner { parts.append(type.uppercased()) }
+        if let plan, !paid { parts.append(plan) }
         if let memoryGB { parts.append(CloudExisting.size(Int((memoryGB * 1024).rounded()))) }
         parts.append(String(place.split(separator: ",").first ?? Substring(place)))
-        parts.append(monthly)
+        parts.append(priceWords)
         return parts.joined(separator: " · ")
+    }
+
+    /// **What the server costs, in a row's words**: "€5.49 a month"; "$8.99 first month, then $17.99" where the first
+    /// month costs less; "Paid" for a server that the account bought already and that this app only sets up.
+    public var priceWords: String {
+        if paid { return String(l10n: "Paid") }
+        guard let firstPrice else { return monthly }
+        return String(l10n: "\(Self.money(firstPrice, currency)) first month, then \(amount)")
+    }
+
+    /// **The line under the press that buys a server at a provider that bills by the month** (the owner's "Yes, as
+    /// drawn" of 25 November 2026): what the provider charges now and each month after, and how it stops. nil for a
+    /// provider that bills by the hour and for a server that the account bought already.
+    public var chargeLine: String? {
+        guard provider.billsMonthly, !paid else { return nil }
+        let now = Self.money(firstPrice ?? monthlyPrice, currency)
+        return String(l10n: "\(provider.name) charges the card on your account \(now) now and \(amount) each month after that. To stop it, remove the server in Founderizer: it then runs until its paid month ends.")
+    }
+
+    /// The words under a server that the account bought and did not set up, whose own name is the row's title, as
+    /// drawn: its plan, what it is made of, that, and that it is paid.
+    public var boughtRow: String {
+        [label == nil ? nil : plan, memoryGB.map { CloudExisting.size(Int(($0 * 1024).rounded())) },
+         String(l10n: "Bought, not set up"), priceWords].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func money(_ value: Decimal, _ currency: String) -> String {
+        let format = NumberFormatter()
+        format.numberStyle = .currency
+        format.currencyCode = currency
+        format.maximumFractionDigits = 2
+        return format.string(from: value as NSDecimalNumber) ?? "\(value) \(currency)"
     }
 
     /// **The line under a server on the first run's page "Your fleet"** (slice 2 of the one wizard): "CX23 · €5.49 a

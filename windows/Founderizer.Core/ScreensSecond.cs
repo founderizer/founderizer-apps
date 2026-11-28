@@ -73,7 +73,7 @@ public static partial class Screens
                 ? new SearchAgentRow(a.Name, s.Names.Label(a.Name), request.Title,
                                      MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false))
                   { NeedsYou = true, Role = s.Names.Role(a.Name) }
-                : new SearchAgentRow(a.Name, s.Names.Label(a.Name), ChatLine.Preview(a.Name, a.Last, fleet!.Tasks),
+                : new SearchAgentRow(a.Name, s.Names.Label(a.Name), ChatLine.Preview(a.Name, a.Last, fleet!.Tasks, fleet!.UiFeatures),
                                      MarkLook.Of(s.MarkOf(a.Name), s.StatusOf(a.Name, now).MarkState, moves: false))
                   { Role = s.Names.Role(a.Name) })
             .ToList();

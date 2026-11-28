@@ -1010,7 +1010,7 @@ final class OwnerGuideTests {
                                   "server_joined", "first_run_build", "add_server_build", "stage", "stopped_at",
                                   "stop_shows", "seconds_in_stage", "install", "state", "step", "stop", "kind",
                                   "app_build", "waits_for_network", "cause", "last_install", "outcome", "seconds_ago",
-                                  "builds", "unjoined", "newest_seconds_ago", "tries", "retried"]
+                                  "builds", "unjoined", "newest_seconds_ago", "tries", "retried", "provider"]
         // The pages of the first run that this section names are names of `setup_state` and `setup_show`.
         let pages = [FirstRunPage.welcome.rawValue, FirstRunPage.paste.rawValue, FirstRunPage.name.rawValue, "front"]
         #expect(SetupShow.pages.contains("front") && SetupShow.pages.contains(FirstRunPage.name.rawValue))
@@ -1020,7 +1020,7 @@ final class OwnerGuideTests {
                          + SetupDiagnosis.installStops + SetupDiagnosis.installKinds + SetupAppBuild.states
                          + SetupDiagnosis.installCauses
                          + SetupDiagnosis.lastInstallKinds + SetupDiagnosis.lastInstallOutcomes
-                         + SetupDiagnosis.unjoinedBuilds + pages)
+                         + SetupDiagnosis.unjoinedBuilds + SetupDiagnosis.providers + pages)
         #expect(words.count > 30)
         for word in words { #expect(facts.contains(word) || values.contains(word), "the guide quotes \(word)") }
         // Every value of each list has its sentence.

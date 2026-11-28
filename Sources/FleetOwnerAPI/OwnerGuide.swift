@@ -762,6 +762,12 @@ public enum OwnerGuide {
           With "stage" "choosing", nothing of that try is left, and the page shows the list again with its line: the
           next free server and its price when the one shown was taken meanwhile. Nothing is made before the owner
           presses "Make the server" or "Make 2 servers" again.
+          - With "provider" "hostinger" (Add server only), nothing is taken back: Hostinger deletes no server, and
+            one that it sold is paid. When the page's words say one of these three: a server that did not come up and
+            stays in the account, paid; a payment that Hostinger still takes; or a setup that Hostinger may still take,
+            the owner buys NO new server for it: when that VPS shows in the page's list as bought and not set up,
+            choosing it charges nothing. Any other stop there (a refusal, no default card) bought nothing. Say only what
+            the page says.
         - "stopped_at" "joining": "The server was made at your provider. It did not join your network, or this Mac does
           not see it yet." It exists, and the provider bills it. The owner makes NO new server.
           - For "add_server_build": when the hub answers again, the list on Add server can offer that server. A row
